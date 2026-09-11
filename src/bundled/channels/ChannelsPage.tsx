@@ -6,6 +6,7 @@ import {
   isBuzzLink,
 } from "../../features/navigation/buzz-links";
 import { UnreadBadge, UnreadOptions } from "./UnreadBadge";
+import { ChannelActivityPopover } from "./ChannelActivityPopover";
 import { SidebarUnread } from "./SidebarUnread";
 import type { ConversationExtensions } from "../../features/conversation/contracts";
 import {
@@ -156,8 +157,10 @@ function ChannelWorkspace({
   const [selected, setSelected] = useState<string | undefined>(() =>
     readView(scope, "selected-channel", undefined),
   );
-  const select = useCallback(
+  const navigate = useCallback(
     (id: string) => {
+      setSelected(id);
+      writeView(scope, "selected-channel", id);
       if (navigator && viewer) {
         void navigator.open({
           version: 1,
@@ -169,8 +172,6 @@ function ChannelWorkspace({
           },
         });
       }
-      setSelected(id);
-      writeView(scope, "selected-channel", id);
     },
     [navigator, viewer, scope],
   );
@@ -178,6 +179,13 @@ function ChannelWorkspace({
     channelId: string;
     messageId: string;
   }>();
+  const select = useCallback(
+    (id: string) => {
+      navigate(id);
+      setThread(undefined);
+    },
+    [navigate],
+  );
   const threadTrigger = useRef<HTMLElement | null>(null);
   const [sent, setSent] = useState<{ channelId: string; id: string }>();
   const sidebar = useSidebarView(
@@ -347,6 +355,33 @@ function ChannelWorkspace({
     },
     [currentId, navigator, viewer, scope, open],
   );
+  const openActivityThread = useCallback(
+    (channelId: string, rootId: string) => {
+      threadTrigger.current =
+        sidebar.list.current?.querySelector<HTMLElement>(
+          `[data-channel-id="${CSS.escape(channelId)}"]`,
+        ) ?? null;
+      if (navigator && viewer) {
+        setThread(undefined);
+        void navigator.open({
+          version: 1,
+          kind: "conversation",
+          channelId,
+          messageId: rootId,
+          threadRootId: rootId,
+          scope: {
+            viewer,
+            communityOrigin: scope.slice(0, -(viewer.length + 1)),
+          },
+        });
+      } else {
+        navigate(channelId);
+        setThread({ channelId, messageId: rootId });
+      }
+      open(undefined);
+    },
+    [navigate, navigator, viewer, scope, sidebar.list, open],
+  );
   const closeThread = () => {
     if (showingThread?.navigation && current) select(current.id);
     setThread(undefined);
@@ -512,24 +547,42 @@ function ChannelWorkspace({
                       : MessageCircle
                     : Hash;
                 return (
-                  <button
+                  <ChannelActivityPopover
                     key={channel.id}
-                    type="button"
-                    title={channel.name}
-                    data-channel-id={channel.id}
-                    aria-current={
-                      current?.id === channel.id ? "page" : undefined
+                    session={queries}
+                    channelId={channel.id}
+                    channelName={channel.name}
+                    onOpenThread={(item) =>
+                      openActivityThread(item.channelId, item.rootId)
                     }
-                    onPointerEnter={() =>
-                      queries.channels.prepare?.(channel.id)
+                    trigger={
+                      <button
+                        type="button"
+                        title={channel.name}
+                        data-channel-id={channel.id}
+                        data-channel-type={channel.channelType}
+                        aria-current={
+                          current?.id === channel.id ? "page" : undefined
+                        }
+                        onPointerEnter={() =>
+                          queries.channels.prepare?.(channel.id)
+                        }
+                        onFocus={() => queries.channels.prepare?.(channel.id)}
+                        onClick={() => select(channel.id)}
+                      >
+                        <Icon size={17} />
+                        <span className={styles.channelLabel}>
+                          {channel.name}
+                        </span>
+                        <UnreadBadge
+                          session={queries}
+                          channelId={channel.id}
+                          dm={channel.channelType === "dm"}
+                          dmParticipantId={channel.participants?.[0]}
+                        />
+                      </button>
                     }
-                    onFocus={() => queries.channels.prepare?.(channel.id)}
-                    onClick={() => select(channel.id)}
-                  >
-                    <Icon size={17} />
-                    <span className={styles.channelLabel}>{channel.name}</span>
-                    <UnreadBadge session={queries} channelId={channel.id} />
-                  </button>
+                  />
                 );
               })}
             </details>

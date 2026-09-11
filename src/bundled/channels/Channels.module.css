@@ -94,6 +94,10 @@
   letter-spacing: var(--text-caption--letter-spacing);
   font-weight: var(--type-weight-medium);
   cursor: pointer;
+  transition:
+    background-color 160ms ease,
+    color 160ms ease,
+    border-color 160ms ease;
 }
 .sidebar .unreadEdge[data-attention="true"] {
   border-color: transparent;

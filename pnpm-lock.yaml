@@ -4,6 +4,9 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  virtua@0.51.0: 14ff685d9bc68b34d1a7c6b0042d6000e4b07a9746088fc3842c89c4a995ca9d
+
 importers:
 
   .:
@@ -76,7 +79,7 @@ importers:
         version: 4.0.1
       virtua:
         specifier: 0.51.0
-        version: 0.51.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 0.51.0(patch_hash=14ff685d9bc68b34d1a7c6b0042d6000e4b07a9746088fc3842c89c4a995ca9d)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
     devDependencies:
       '@biomejs/biome':
         specifier: 2.5.12
@@ -2956,7 +2959,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  virtua@0.51.0(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  virtua@0.51.0(patch_hash=14ff685d9bc68b34d1a7c6b0042d6000e4b07a9746088fc3842c89c4a995ca9d)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     optionalDependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)

@@ -48,7 +48,16 @@ async function link(page, app, target) {
     }),
   );
   app.append("primary", "alpha", `Please review ${target}`);
-  await page.getByRole("link", { name: target, exact: true }).click();
+  const trigger = page.getByRole("link", { name: target, exact: true });
+  await expect(trigger).toBeVisible();
+  await trigger.scrollIntoViewIfNeeded();
+  // Appending and bringing an offscreen link into view can both scroll Virtua.
+  // These are panel-layout checks, not clicks during an in-flight correction.
+  await settle(page);
+  await expect(
+    page.getByRole("region", { name: "Channel message history" }).locator("ol"),
+  ).toHaveCSS("pointer-events", "auto");
+  await trigger.click();
   await expect(
     panel(page).getByRole("heading", { name: "A useful change" }),
   ).toBeVisible();

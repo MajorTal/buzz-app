@@ -1,3 +1,4 @@
+import { stripVTControlCharacters } from "node:util";
 import { test, expect } from "./fixture.mjs";
 import { contentionTests, confirmedSend } from "./presence-contention.mjs";
 import { open } from "./timeline.mjs";
@@ -116,14 +117,22 @@ test("send confirmation rejects an optimistic row without verified relay observa
     await expect(composer).toHaveValue("");
     // The same assertion used by the measurement must reject this tempting false
     // positive. The default bounded expect timeout is unchanged.
-    await expect(confirmedSend(page, submitted)).rejects.toThrow(
-      "Outbox · 0 items",
+    const failure = await confirmedSend(page, submitted).then(
+      () => undefined,
+      (error) => stripVTControlCharacters(error.message),
     );
+    expect(failure).toContain('Expected: "Outbox · 0 items"');
+    expect(failure).toContain('Received: "Outbox · 1 items"');
+    const reconciliation = app.report.queries.filter(
+      ({ filter }) => filter.ids?.[0] === submitted.id,
+    );
+    expect(reconciliation.length).toBeGreaterThan(0);
     expect(app.report.publications).toHaveLength(0);
     app.report.unconfirmedControl = {
       eventId: submitted.id,
       optimisticRowVisible: true,
       confirmationRejected: true,
+      reconciliationReads: reconciliation.length,
     };
   } finally {
     release();

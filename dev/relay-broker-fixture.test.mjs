@@ -19,7 +19,7 @@ async function until(check) {
 // Execute the actual browser fixture's server, instrumentation, teardown and
 // final assertions. Only the unused browser shell is inert; HTTP/broker/WS policy
 // and the 503 are real. No browser engine, live identity, or frontend build needed.
-async function fixture(use) {
+async function fixture(use, overrides = {}) {
   const directory = await mkdtemp(join(tmpdir(), "presence-fixture-check-"));
   await writeFile(join(directory, "index.html"), "<!doctype html>");
   const page = new EventEmitter();
@@ -34,6 +34,7 @@ async function fixture(use) {
     await browserFixtures.app(
       {
         ...options,
+        ...overrides,
         page,
         context: { route: async () => {}, routeWebSocket: async () => {} },
         browserName: "chromium",
@@ -228,4 +229,30 @@ test("passive completion evidence preserves Server-Timing and distinguishes an u
     server.closeAllConnections();
     await new Promise((resolve) => server.close(resolve));
   }
+});
+
+test("composer reconciliation returns only retained events from the queried community", async () => {
+  await fixture(
+    async (app) => {
+      const retained = app.histories.get("primary/alpha")[0];
+      const lookup = async (community, id) => {
+        const response = await fetch(
+          `${app.origin}/api/relay/${community}/query`,
+          {
+            method: "POST",
+            headers: { Origin: app.origin, "Content-Type": "application/json" },
+            body: JSON.stringify([{ ids: [id], limit: 1 }]),
+          },
+        );
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      expect(await lookup("primary", retained.id)).toEqual([
+        JSON.parse(JSON.stringify(retained)),
+      ]);
+      expect(await lookup("secondary", retained.id)).toEqual([]);
+      expect(await lookup("primary", "f".repeat(64))).toEqual([]);
+    },
+    { composerPublication: true },
+  );
 });

@@ -402,6 +402,17 @@ export const browserFixtures = {
               ]
             : []),
         ];
+      if (composerPublication && filter.ids) {
+        expect(filter).toEqual({
+          ids: [expect.stringMatching(/^[0-9a-f]{64}$/)],
+          limit: 1,
+        });
+        return channels.flatMap((channel) =>
+          histories
+            .get(`${community}/${channel}`)
+            .filter((event) => filter.ids.includes(event.id)),
+        );
+      }
       if (threadUnread && filter.ids)
         return [...histories.values()]
           .flat()

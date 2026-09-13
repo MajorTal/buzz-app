@@ -9,7 +9,11 @@ beforeEach(() => {
   vi.setSystemTime(1000000);
 });
 afterEach(() => vi.useRealTimers());
-function fixture() {
+function fixture(
+  options: { presence?: boolean | undefined; live?: boolean } = {
+    presence: true,
+  },
+) {
   const relay = keypair(),
     viewer = keypair(),
     author = keypair();
@@ -35,16 +39,21 @@ function fixture() {
     {
       ...wire.transport,
       agentActivity: true,
-      subscribe(value) {
-        callbacks = value;
-        return {
-          update() {},
-          retry() {},
-          dispose() {},
-          observe,
-          presence: { update, publish },
-        };
-      },
+      ...(options.presence === undefined ? {} : { presence: options.presence }),
+      ...(options.live === false
+        ? {}
+        : {
+            subscribe(value: LiveCallbacks) {
+              callbacks = value;
+              return {
+                update() {},
+                retry() {},
+                dispose() {},
+                observe,
+                presence: { update, publish },
+              };
+            },
+          }),
     },
     { presenceActivity: source },
   );
@@ -198,3 +207,28 @@ it("merged session keeps observer telemetry and presence independently owned acr
   expect(view.snapshot().events).toEqual([]);
   view.dispose();
 });
+
+it.each([{ presence: false }, {}, { presence: true, live: false }])(
+  "unsupported transport starts no presence reads, controls, publisher or renewals (%j)",
+  async (options) => {
+    const f = fixture(options);
+    try {
+      if (options.live !== false) f.mount();
+      else f.owner.session.presence.demand().update([f.author.pubkey]);
+      f.activity({ status: "away", visible: false });
+      f.activity({ status: "online", visible: true });
+      f.callbacks?.presenceState?.({
+        status: "ready",
+        authors: [f.author.pubkey],
+      });
+      await vi.advanceTimersByTimeAsync(180000);
+      expect(f.wire.pending).toEqual([]);
+      expect(f.update).not.toHaveBeenCalled();
+      expect(f.publish).not.toHaveBeenCalled();
+      expect(f.owner.diagnostics().presence.publisher).toBeUndefined();
+      expect(f.owner.session.presence.get(f.author.pubkey)).toBe("unknown");
+    } finally {
+      f.owner.dispose();
+    }
+  },
+);

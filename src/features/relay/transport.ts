@@ -38,6 +38,8 @@ export interface RelayWriter {
 export interface ReadTransport {
   /** Purpose-bound observer decoding on the shared host live stream. */
   readonly agentActivity?: boolean;
+  /** Snapshot admission and same-socket presence controls are both supported. */
+  readonly presence?: boolean;
   /** Host-projected local library; display only, never relay authority. */
   readonly readAgentLibrary?: AgentLibraryReader;
   /** Host-only decoder of the viewer's two signed sidebar preference coordinates. */

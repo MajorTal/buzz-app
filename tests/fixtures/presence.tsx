@@ -22,6 +22,7 @@ const report = {
   currentAuthors: [] as string[],
 };
 const owner = createRelaySession({
+  presence: true,
   viewer: viewer.pubkey,
   relayAuthor: relay.pubkey,
   media: () => undefined,

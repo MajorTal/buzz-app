@@ -80,15 +80,17 @@ export function createRelaySession(
     options.profiling ?? transport?.profiling ?? createRelayProfiler();
   const requests = createRelayReader(transport, { profiling });
   let traffic: LiveSubscription | undefined;
+  const presenceSupported =
+    transport?.presence === true && !!transport.subscribe;
   const presence = createPresenceDirectory({
     reader: requests.reader,
     relayAuthor: transport?.relayAuthor ?? "",
-    supported: !!transport?.subscribe,
+    supported: presenceSupported,
     updateInterests: (authors) => traffic?.presence?.update(authors),
     notify: (listener) => notify(listener),
   });
   const presencePublisher =
-    options.presenceActivity && transport
+    options.presenceActivity && transport && presenceSupported
       ? createPresencePublisher({
           activity: options.presenceActivity,
           publish: (status, signal) => {

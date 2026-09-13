@@ -10,6 +10,12 @@ The profile panel also displays the status text; all indicators have an accessib
 
 ## Ownership and traffic
 
+The session requires explicit transport `presence: true` and live support before
+starting observation or publishing. The production broker supplies both snapshot
+admission and shared-socket controls. Ordinary direct-signed reads remain supported,
+but that alternate adapter does not enable partial presence through its generic
+subscription. Unsupported transports stay Unknown and start no publisher/renewals.
+
 - A timeline or thread owns one demand handle for its viewport plus a 160px margin;
   the profile panel owns its selected author. Avatar indicators only subscribe to
   per-author values. Repeated authors share work. Without IntersectionObserver,
@@ -65,10 +71,13 @@ Server API cooldown remains shared by ordinary and optional HTTP work; WS cooldo
 remains shared across ordinary/presence work and streams. HTTP and WS quota families
 remain independent. Presence must not bypass a real shared quota rejection.
 
-Eight shared callers saturating the production dispatch paths in a controlled model
-stay at 132 HTTP starts/min, at most 26 combined REQ/EVENT starts per 5s, and 12
-presence EVENTs/min. This bounds the modeled client-owned traffic, not all requests
-from other devices or hosts. It is below the inspected reference defaults
+The combined-budget test drives eight production broker transports over real local
+HTTP for a full minute. The existing modeled relay charges all attempts across
+callers and enforces first-call-anchored quota windows. Assertions allow at most
+134 API charges/min, 27 combined REQ/EVENT charges per 5s, and 13 presence EVENTs/min
+including setup and drain; lower throughput bounds prevent a vacuous pass. Exact
+500ms/250ms/1s/5s start clocks are tested deterministically at their admission owners.
+This bounds the modeled client-owned traffic, not requests from other devices or hosts. It is below the inspected reference defaults
 (API300/min, WS50/5s, Messages60/min), not a deployed configuration guarantee. The
 normal publisher still renews only every 60–65s, not every 5s. No local scheduler can
 promise zero CPU, signer-provider, network, SQL/Redis cost or end-user latency.
@@ -145,8 +154,8 @@ lock/activity handoff) and `presence-integration.spec.mjs` (production conversat
 broker, snapshots, conflict repair, and route teardown). The paired
 `presence-contention.spec.mjs` / `presence-control.spec.mjs` measure real composer
 send and cold-open admission with a held snapshot versus equivalent no-presence
-owners. Colocated reader, broker, live and signed-transport tests separately hold
-capacity/signing work and exercise the combined eight-caller budgets; browser
+owners. Colocated reader, broker and live tests separately hold capacity/signing
+work; `dev/relay-broker-fixture.test.mjs` exercises combined eight-caller budgets; browser
 journeys alone do not establish those bounds. `dev/policy-relay.test.mjs` proves that
 the numerical quota fixture rejects deliberate overload. Channel-opening measurements
 retain their existing warm-switch budget.

@@ -1,3 +1,4 @@
+import { useReading } from "./use-reading";
 import { beforeEach, expect, it, vi } from "vitest";
 import { isValidElement, type ReactElement, type ReactNode } from "react";
 import { ThreadPanel } from "./ThreadPanel";
@@ -10,6 +11,9 @@ import type { ChannelMessage } from "../relay/contracts";
 
 // Shallow production-boundary checks. These invoke returned handlers and effect
 // lifetimes; they do not claim browser layout, focus, or React StrictMode validation.
+// Reading geometry/dwell has its own real-hook boundary suite. This fixture
+// deliberately supplies only the DOM shape needed for positioning.
+vi.mock("./use-reading", () => ({ useReading: vi.fn() }));
 const hooks = vi.hoisted(() => ({
   refs: [] as { current: unknown }[],
   ref: 0,
@@ -225,7 +229,14 @@ it("loads history automatically with error-only retry and no routine history con
   hooks.effects = [];
   hooks.refs = [];
   hooks.states = [];
+  vi.mocked(useReading).mockClear();
   const tree = render();
+  expect(useReading).toHaveBeenCalledWith({
+    session: h.session,
+    channelId: "channel",
+    scroller: expect.objectContaining({ current: null }),
+    settled: expect.objectContaining({ current: false }),
+  });
   h.effects();
   expect(h.ensure).toHaveBeenCalledExactlyOnceWith(
     [row.authorId],

@@ -141,13 +141,21 @@ test("required gate executes its real shell and rejects every unsuccessful lane"
   assert.doesNotMatch(required, /^ {8}if:/m);
   assert.match(
     required,
-    /^ {4}needs: \[javascript, native, measurements, browser\]$/m,
+    /^ {4}needs: \[javascript, native, windows-native, measurements, browser\]$/m,
   );
   assert.doesNotMatch(required, /continue-on-error/);
-  const lanes = ["JAVASCRIPT", "NATIVE", "MEASUREMENTS", "BROWSER"];
+  const lanes = [
+    "JAVASCRIPT",
+    "NATIVE",
+    "WINDOWS_NATIVE",
+    "MEASUREMENTS",
+    "BROWSER",
+  ];
   for (const lane of lanes)
     assert.ok(
-      required.includes(`${lane}: \${{ needs.${lane.toLowerCase()}.result }}`),
+      required.includes(
+        `${lane}: \${{ needs.${lane.toLowerCase().replaceAll("_", "-")}.result }}`,
+      ),
     );
   const script = required.match(/^ {8}run: \|\n((?: {10}.+\n?)+)/m)?.[1];
   assert.ok(script, "required shell must exist");

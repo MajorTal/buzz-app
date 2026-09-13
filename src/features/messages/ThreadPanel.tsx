@@ -1,5 +1,6 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: The thread region supports keyboard scrolling and Escape.
 import {
+  useCallback,
   useEffect,
   useLayoutEffect,
   useMemo,
@@ -16,6 +17,8 @@ import { MessageRow } from "./MessageRow";
 import { MessageComposer } from "./MessageComposer";
 import styles from "./Messages.module.css";
 import { useReading } from "./use-reading";
+import { useMessageReveal } from "./use-message-reveal";
+import type { PageNavigation } from "../navigation/service";
 import { messageViewKey } from "./view-key";
 
 export type ThreadPanelProps = {
@@ -25,6 +28,7 @@ export type ThreadPanelProps = {
   channelName: string;
   channelId: string;
   messageId: string;
+  navigation?: PageNavigation | undefined;
   close(): void;
   onOpenLink(url: string): boolean;
   canOpenLink?: ((target: string) => boolean) | undefined;
@@ -51,6 +55,7 @@ function OwnedThreadPanel({
   channelName,
   channelId,
   messageId,
+  navigation,
   close,
   onOpenLink,
   canOpenLink,
@@ -66,15 +71,27 @@ function OwnedThreadPanel({
   // biome-ignore lint/correctness/useExhaustiveDependencies: attempt is explicit recovery after view allocation fails.
   useEffect(() => {
     try {
-      const owned = session.thread(channelId, messageId);
+      if (navigation?.signal.aborted) return;
+      const owned = navigation
+        ? session.thread(channelId, messageId, { exact: true })
+        : session.thread(channelId, messageId);
+      const cancel = () => {
+        owned.dispose();
+        setView(undefined);
+      };
       setError(undefined);
       setView(owned);
+      navigation?.signal.addEventListener("abort", cancel, { once: true });
       void owned.refresh();
-      return () => owned.dispose();
+      return () => {
+        navigation?.signal.removeEventListener("abort", cancel);
+        owned.dispose();
+      };
     } catch (error) {
       setError(String(error));
+      navigation?.complete({ status: "failed", reason: "unavailable" });
     }
-  }, [session, channelId, messageId, attempt]);
+  }, [session, channelId, messageId, attempt, navigation]);
   return (
     <aside
       className={styles.thread}
@@ -115,6 +132,8 @@ function OwnedThreadPanel({
           channelId={channelId}
           channelName={channelName}
           view={view}
+          navigation={navigation}
+          messageId={messageId}
           onOpenLink={onOpenLink}
           canOpenLink={canOpenLink}
         />
@@ -133,6 +152,8 @@ function ThreadMessages({
   channelId,
   channelName,
   view,
+  navigation,
+  messageId,
   onOpenLink,
   canOpenLink,
 }: {
@@ -142,6 +163,8 @@ function ThreadMessages({
   channelId: string;
   channelName: string;
   view: ThreadView;
+  messageId: string;
+  navigation?: PageNavigation | undefined;
   onOpenLink(url: string): boolean;
   canOpenLink?: ((target: string) => boolean) | undefined;
 }) {
@@ -170,6 +193,42 @@ function ThreadMessages({
   const scroller = useRef<HTMLElement>(null);
   const positioned = useRef(false);
   const follow = useRef(true);
+  const targetAnchor = useRef<number | undefined>(undefined);
+  const selectedRow = useCallback(
+    () =>
+      [
+        ...(scroller.current?.querySelectorAll<HTMLElement>(
+          "[data-message-id]",
+        ) ?? []),
+      ].find((row) => row.dataset.messageId === messageId),
+    [messageId],
+  );
+  const completeTarget = useCallback(() => {
+    // Exact lookup can finish before context. Preserve this row's reading
+    // position through prepended history without refocusing it after opening.
+    targetAnchor.current = selectedRow()?.offsetTop;
+    navigation?.complete({ status: "opened" });
+  }, [navigation, selectedRow]);
+  const prepareTarget = useCallback(() => {
+    follow.current = false;
+  }, []);
+  const revealed = useMessageReveal({
+    scroller,
+    settled: positioned,
+    messageId,
+    signal: navigation?.signal,
+    ready:
+      snapshot.targetStatus === "ready" && snapshot.target?.id === messageId,
+    complete: completeTarget,
+    prepare: prepareTarget,
+  });
+  useEffect(() => {
+    if (!navigation || navigation.signal.aborted) return;
+    if (snapshot.targetStatus === "unavailable")
+      navigation.complete({ status: "failed", reason: "not-found" });
+    else if (snapshot.targetStatus === "error")
+      navigation.complete({ status: "failed", reason: "unavailable" });
+  }, [navigation, snapshot.targetStatus]);
   useReading({ session, channelId, scroller, settled: positioned });
   const [sent, setSent] = useState<string>();
   // The bridge walks oldest-first. Finish its bounded range automatically, rather
@@ -183,16 +242,37 @@ function ThreadMessages({
     const element = scroller.current;
     if (
       !element ||
+      (navigation && revealed.current !== navigation.signal) ||
       (!positioned.current &&
         (snapshot.status !== "ready" || snapshot.canLoadMore))
     )
       return;
+    if (targetAnchor.current !== undefined) {
+      const row = selectedRow();
+      if (row) {
+        element.scrollTop += row.offsetTop - targetAnchor.current;
+        targetAnchor.current = row.offsetTop;
+        follow.current = false;
+      }
+      if (snapshot.status !== "loading" && !snapshot.canLoadMore)
+        targetAnchor.current = undefined;
+    }
     // Initial positioning waits for automatic history loading. User intent wins;
     // subsequent live changes follow only while the reader is at the bottom.
     if (follow.current) element.scrollTop = element.scrollHeight;
     positioned.current = true;
-  }, [snapshot.status, snapshot.canLoadMore, rows, profiles, sent]);
+  }, [
+    snapshot.status,
+    snapshot.canLoadMore,
+    rows,
+    profiles,
+    sent,
+    navigation,
+    revealed,
+    selectedRow,
+  ]);
   const keepReadingPosition = () => {
+    targetAnchor.current = undefined;
     if (positioned.current) return;
     positioned.current = true;
     follow.current = false;
@@ -271,11 +351,14 @@ function ThreadMessages({
           (snapshot.status === "ready" && snapshot.canLoadMore)) && (
           <p role="status">Loading thread…</p>
         )}
+        {snapshot.targetStatus === "unavailable" && (
+          <p role="status">Selected message unavailable.</p>
+        )}
         {snapshot.error && <p role="alert">{snapshot.error}</p>}
         {snapshot.limited && !snapshot.error && (
           <p className={styles.threadNote}>Thread history limit reached.</p>
         )}
-        {snapshot.error && (
+        {(snapshot.error || snapshot.targetStatus === "unavailable") && (
           <div className={styles.threadHistoryControls}>
             <button type="button" onClick={() => void view.refresh()}>
               Retry thread
@@ -293,6 +376,7 @@ function ThreadMessages({
           channelName={channelName}
           threadRootId={snapshot.root.id}
           onSend={(id) => {
+            targetAnchor.current = undefined;
             positioned.current = true;
             follow.current = true;
             setSent(id);

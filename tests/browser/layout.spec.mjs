@@ -337,14 +337,51 @@ readingTest(
     await button(page, "Close channel panel").focus();
     await button(page, "Close channel panel").click();
     const trigger = page.getByRole("link", { name: target, exact: true });
+    await settle(page);
     await expect(trigger).toBeFocused();
     expect(await page.evaluate(() => window.panelFocusScrollDelta)).toBe(0);
-    await settle(page);
     await expectAnchor(page, saved);
     await page.setViewportSize({ width: 1200, height: 700 });
     await settle(page);
     await expectAnchor(page, saved);
     await expectNonPaging(page, app);
+  },
+);
+
+readingTest(
+  "a focused message stays mounted until focus leaves the timeline",
+  async ({ page, app }) => {
+    await open(page, app);
+    await settle(page);
+    const target = "https://example.com/focused-message";
+    const previous = await page
+      .locator("[data-message-id]")
+      .last()
+      .getAttribute("data-message-id");
+    const message = app.append("primary", "alpha", `Keep focus on ${target}`);
+    const trigger = page.getByRole("link", { name: target, exact: true });
+    await expect(trigger).toBeInViewport();
+    await settle(page);
+    await trigger.evaluate((el) => el.focus({ preventScroll: true }));
+    await expect(trigger).toBeFocused();
+    const history = page.getByRole("region", {
+      name: "Channel message history",
+    });
+    await history.hover();
+    await page.mouse.wheel(0, -3500);
+    // The adjacent unpinned row proves that real virtualization has evicted this
+    // range; a timeout or a mocked virtualizer would not establish that boundary.
+    await expect(page.locator(`[data-message-id="${previous}"]`)).toHaveCount(
+      0,
+    );
+    await settle(page);
+    await expect(trigger).toBeFocused();
+    await expect(trigger).not.toBeInViewport();
+    await history.evaluate((el) => el.focus({ preventScroll: true }));
+    await expect(history).toBeFocused();
+    await expect(page.locator(`[data-message-id="${message.id}"]`)).toHaveCount(
+      0,
+    );
   },
 );
 

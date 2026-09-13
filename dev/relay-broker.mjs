@@ -5,6 +5,7 @@ import {
   signReadState,
   READ_STATE_DECODE_BYTES,
 } from "./read-state.mjs";
+import { READ_STATE_EVENT_BYTES } from "../src/features/relay/read-state-model.ts";
 import {
   isReadSnapshotFilter,
   readSnapshotText,
@@ -612,8 +613,9 @@ export function relayBrokerPlugin({
               async (event) => finalizeEvent(event, key),
               viewer,
               {
-                receive: (events) => {
-                  for (const event of events) write("", event);
+                receive: (events, provenance) => {
+                  for (const event of events)
+                    write("traffic", { event, provenance });
                 },
                 telemetry: (event, generation) => {
                   if (res.destroyed) return;
@@ -801,7 +803,8 @@ export function relayBrokerPlugin({
               if (readSigning)
                 return json(res, 200, signReadState(filters, key));
               // A valid own signature alone is not permission to publish arbitrary kind-30078 data.
-              decodeReadState([filters], key);
+              // Receive-only compatibility must not widen publication admission.
+              decodeReadState([filters], key, READ_STATE_EVENT_BYTES);
             } catch {
               return json(res, 400, {
                 error: "Read-state operation rejected",

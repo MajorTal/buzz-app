@@ -1,5 +1,6 @@
 // Regression controls contributed by Brain; see WS_RETRY_REVIEW_2026_09_09.
 import { assert, afterEach, expect, it, vi } from "vitest";
+import { keypair, message } from "./testing";
 import { connectBrokerTransport } from "./transport";
 function required<T>(value: T | undefined): T {
   assert.exists(value);
@@ -84,11 +85,18 @@ function fixture() {
     snapshots,
     accept,
     publish,
+    frame(kind: string, value: unknown) {
+      required(bodyControllers[0]).enqueue(
+        new TextEncoder().encode(
+          `event: ${kind}\ndata: ${JSON.stringify(value)}\n\n`,
+        ),
+      );
+    },
     callbacks: {
       state(s: unknown) {
         snapshots.push(s);
       },
-      receive() {},
+      receive: vi.fn(),
       established() {},
       denied() {},
     },
@@ -227,3 +235,51 @@ it("late observer 404 from a retired stream cannot interrupt its replacement", a
     owner.dispose();
   }
 });
+
+it("preserves validated replay/live provenance through production broker transport; legacy traffic stays unknown", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const t = await connectBrokerTransport();
+  const owner = required(t.subscribe)(f.callbacks);
+  try {
+    f.accept(0);
+    await tick();
+    const event = message(keypair(), "a", "incoming", 1700000000);
+    f.frame("message", event);
+    await tick();
+    expect(f.callbacks.receive).toHaveBeenLastCalledWith([event]);
+    for (const phase of ["replay", "live"]) {
+      f.frame("traffic", { event, provenance: { phase, channelId: "a" } });
+      await tick();
+      expect(f.callbacks.receive).toHaveBeenLastCalledWith([event], {
+        phase,
+        channelId: "a",
+      });
+    }
+    expect(f.callbacks.receive).toHaveBeenCalledTimes(3);
+  } finally {
+    owner.dispose();
+  }
+});
+it.each([undefined, { phase: "fresh" }, { phase: "live", channelId: ["a"] }])(
+  "rejects malformed traffic provenance instead of calling it fresh: %j",
+  async (provenance) => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const t = await connectBrokerTransport();
+    const owner = required(t.subscribe)(f.callbacks);
+    try {
+      f.accept(0);
+      await tick();
+      f.frame("traffic", {
+        event: message(keypair(), "a", "incoming", 1700000000),
+        provenance,
+      });
+      await tick();
+      expect(f.callbacks.receive).not.toHaveBeenCalled();
+      expect(f.snapshots.at(-1)).toMatchObject({ status: "retrying" });
+    } finally {
+      owner.dispose();
+    }
+  },
+);

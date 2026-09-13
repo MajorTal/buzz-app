@@ -46,7 +46,7 @@ jobs:
       - name: Tauri system libraries
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y libwebkit2gtk-4.1-dev build-essential libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
+          sudo apt-get install --no-install-recommends -y dbus-daemon libwebkit2gtk-4.1-dev build-essential libssl-dev librsvg2-dev libayatana-appindicator3-dev patchelf
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: native
@@ -60,6 +60,34 @@ jobs:
         run: cargo test --workspace --locked
       - name: All Node integration tests
         run: node --test tests/integration/*.test.mjs
+
+  windows-native:
+    name: Windows native notifications
+    runs-on: windows-2025
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Hermit does not run on Windows. Use the same repository Rust pin with
+      # the hosted runner's standard rustup, not a second floating toolchain.
+      - name: Select pinned Rust
+        shell: pwsh
+        run: |
+          $pins = @(Get-ChildItem bin/.rust-*.pkg)
+          if ($pins.Count -ne 1) { throw "Expected exactly one repository Rust pin" }
+          $version = $pins[0].Name -replace '^\.rust-(.*)\.pkg$', '$1'
+          rustup toolchain install $version --profile minimal --component clippy
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "RUSTUP_TOOLCHAIN=$version" >> $env:GITHUB_ENV
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: windows-native
+          save-if: ${{ github.event_name == 'push' }}
+      - name: Native lint including Windows backend
+        run: cargo clippy -p buzz-foundation --locked --all-targets -- -D warnings
+      - name: All native package tests
+        run: cargo test -p buzz-foundation --locked
 
   measurements:
     name: Browser measurements
@@ -127,7 +155,7 @@ jobs:
   required:
     name: CI required
     if: always()
-    needs: [javascript, native, measurements, browser]
+    needs: [javascript, native, windows-native, measurements, browser]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -135,9 +163,10 @@ jobs:
         env:
           JAVASCRIPT: ${{ needs.javascript.result }}
           NATIVE: ${{ needs.native.result }}
+          WINDOWS_NATIVE: ${{ needs.windows-native.result }}
           MEASUREMENTS: ${{ needs.measurements.result }}
           BROWSER: ${{ needs.browser.result }}
         run: |
-          for result in "$JAVASCRIPT" "$NATIVE" "$MEASUREMENTS" "$BROWSER"; do
+          for result in "$JAVASCRIPT" "$NATIVE" "$WINDOWS_NATIVE" "$MEASUREMENTS" "$BROWSER"; do
             test "$result" = success || exit 1
           done

@@ -43,8 +43,33 @@ export type LiveSnapshot = Readonly<{
   routes: readonly LiveRoute[];
   error?: string;
 }>;
+/** Transport provenance, not a history-completeness claim or permission to alert. */
+export type LiveProvenance = Readonly<{
+  phase: "replay" | "live";
+  channelId?: string;
+}>;
+export function liveProvenance(value: unknown): LiveProvenance {
+  if (!value || typeof value !== "object")
+    throw new Error("Invalid live provenance");
+  const input = value as Record<string, unknown>;
+  if (input.phase !== "replay" && input.phase !== "live")
+    throw new Error("Invalid live provenance");
+  if (
+    input.channelId !== undefined &&
+    (typeof input.channelId !== "string" ||
+      !/^[a-zA-Z0-9_-]{1,128}$/.test(input.channelId))
+  )
+    throw new Error("Invalid live provenance channel");
+  return Object.freeze({
+    phase: input.phase,
+    ...(typeof input.channelId === "string"
+      ? { channelId: input.channelId }
+      : {}),
+  });
+}
 export type LiveCallbacks = {
-  receive(events: readonly VerifiedEvent[]): void;
+  /** Legacy/missing provenance reconciles quietly; it is never implicitly fresh. */
+  receive(events: readonly VerifiedEvent[], provenance?: LiveProvenance): void;
   /** Host-only encrypted telemetry route; never ordinary history reconciliation. */
   telemetry?(event: VerifiedEvent, generation: number): void;
   /** Decoded host DTO on the browser transport. */
@@ -442,7 +467,13 @@ export function subscribeRelayTraffic(
           )
             callbacks.telemetry?.(incoming, observer);
         } else if (incoming.kind !== OBSERVER_KIND)
-          callbacks.receive([incoming]);
+          callbacks.receive(
+            [incoming],
+            Object.freeze({
+              phase: route.status === "live" ? "live" : "replay",
+              ...(route.channelId ? { channelId: route.channelId } : {}),
+            }),
+          );
       } else if (data[0] === "EOSE" && route.status === "pending") {
         clearTimeout(route.deadline);
         route.status = "live";

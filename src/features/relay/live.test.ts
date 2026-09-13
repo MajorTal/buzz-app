@@ -103,7 +103,15 @@ it("uses independent explicit channel routes and self-p globals; equal interests
   const event = message(keypair(), "a", "incoming", 1700000000);
   await h.first.receive(["EVENT", request[1], event]);
   await h.first.receive(["EOSE", request[1]]);
-  expect(h.callbacks.receive).toHaveBeenCalledWith([event]);
+  expect(h.callbacks.receive).toHaveBeenCalledWith([event], {
+    phase: "replay",
+    channelId: "a",
+  });
+  await h.first.receive(["EVENT", request[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "live",
+    channelId: "a",
+  });
   expect(h.callbacks.established).toHaveBeenCalledWith("a");
   expect(
     h.callbacks.state.mock.lastCall?.[0].routes.find(
@@ -571,8 +579,71 @@ it("requests community emoji on the existing profile route and delivers verified
     ],
   });
   await h.first.receive(["EVENT", req?.[1], event]);
-  expect(h.callbacks.receive).toHaveBeenCalledWith([event]);
+  expect(h.callbacks.receive).toHaveBeenCalledWith([event], {
+    phase: "replay",
+  });
   h.owner.dispose();
+});
+
+it("a reconnect starts a new replay phase even for previously established routes", async () => {
+  vi.useFakeTimers();
+  const h = setup(["a"]);
+  await h.first.auth();
+  await vi.advanceTimersByTimeAsync(750);
+  const request = h.first.requests()[2];
+  assert.exists(request);
+  await h.first.receive(["EOSE", request[1]]);
+  const event = message(keypair(), "a", "live", 1700000000);
+  await h.first.receive(["EVENT", request[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "live",
+    channelId: "a",
+  });
+  h.first.close();
+  await vi.advanceTimersByTimeAsync(500);
+  const socket = h.sockets[1];
+  assert.exists(socket);
+  await socket.auth();
+  await vi.advanceTimersByTimeAsync(750);
+  const replay = socket.requests()[2];
+  assert.exists(replay);
+  await socket.receive(["EVENT", replay[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "replay",
+    channelId: "a",
+  });
+  h.owner.dispose();
+});
+
+it("live channel provenance excludes observer telemetry while preserving membership traffic", async () => {
+  vi.useFakeTimers();
+  const h = setup(["a"]);
+  try {
+    await h.first.auth();
+    await vi.advanceTimersByTimeAsync(750);
+    const route = h.first.requests()[2];
+    assert.exists(route);
+    await h.first.receive(["EOSE", route[1]]);
+    const telemetry = signed(h.key, {
+      kind: 24200,
+      content: "opaque",
+      tags: [],
+    });
+    await h.first.receive(["EVENT", route[1], telemetry]);
+    expect(h.callbacks.receive).not.toHaveBeenCalled();
+    const membership = signed(h.key, {
+      kind: 40099,
+      content: "{}",
+      tags: [["h", "a"]],
+    });
+    await h.first.receive(["EVENT", route[1], membership]);
+    expect(h.callbacks.receive).toHaveBeenCalledExactlyOnceWith([membership], {
+      phase: "live",
+      channelId: "a",
+    });
+  } finally {
+    h.owner.dispose();
+  }
 });
 
 it("observer route is optional, live-only at dispatch/retry, separately fenced and never ordinary replay", async () => {

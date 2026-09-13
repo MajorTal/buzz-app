@@ -8,11 +8,13 @@ import type { PageProps } from "../../src/features/pages/service";
 import type { PageNavigation } from "../../src/features/navigation/service";
 import type { RelayData } from "../../src/features/relay/service";
 import type { PanelProps } from "../../src/features/panels/service";
+import type { NotificationInput } from "../../src/features/notifications/service";
 
 declare global {
   interface Window {
     stalePanelClose?: () => void;
     fixtureNavigation?: Navigation;
+    fixtureNotify?: (input: NotificationInput) => Promise<boolean>;
     fixturePageBroken?: boolean;
     delayFixture?: { started: boolean; release?: () => void };
     stopFixtureDependency?: () => Promise<void>;
@@ -80,6 +82,23 @@ function RetryPage() {
   );
 }
 export const fixturePlugins: readonly BundledPlugin[] = [
+  {
+    manifest: {
+      id: "fixture.notifications",
+      name: "Notification fixture",
+      apiVersion: 1,
+    },
+    module: {
+      inject: ["notifications"],
+      apply(ctx) {
+        const producer = ctx.notifications.register({
+          id: "updates",
+          label: "Fixture updates",
+        });
+        window.fixtureNotify = producer.submit;
+      },
+    },
+  },
   {
     manifest: {
       id: "fixture.dependency",

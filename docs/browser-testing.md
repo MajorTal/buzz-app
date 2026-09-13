@@ -344,3 +344,13 @@ focused visible dwell, non-reading opening/composer focus, individual markers,
 encrypted publication/readback, reload, cancellation and local manual-unread.
 The reload control holds network content so verified disk-restore wiring is required.
 This is not a deployed-relay, native signer or cross-device integration test.
+
+## Fixture server isolation
+
+Concurrent Vite fixture servers must own separate optimizer caches. Use
+`tests/browser/vite-server.mjs` for new fixtures; its `close()` releases the owned
+cache. The existing emoji and conversation fixtures retain their explicitly owned
+temporary caches. Do not share Vite's default `node_modules/.vite`: another server
+can invalidate dependency imports and leave a blank fixture with a 504
+`Outdated Optimize Dep`. Keep import failures visible; retries or longer UI waits
+do not repair module loading.

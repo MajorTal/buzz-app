@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { settle, anchor, expectAnchor } from "./timeline.mjs";
@@ -54,7 +54,6 @@ async function fixtureServer() {
 test("delayed and failed images preserve bottom and reading anchors across remounts", async ({
   page,
 }, testInfo) => {
-  const server = await fixtureServer();
   const pending = new Set();
   const requests = new Map();
   let held = true;
@@ -102,8 +101,9 @@ test("delayed and failed images preserve bottom and reading anchors across remou
         ),
       )
       .toBe(true);
-  await server.listen();
+  const server = await fixtureServer();
   try {
+    await server.listen();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/image-scroll.html`,
     );
@@ -180,9 +180,12 @@ test("delayed and failed images preserve bottom and reading anchors across remou
       expect(box.height).toBeGreaterThan(0);
     }
   } finally {
-    await release();
-    await page.unrouteAll({ behavior: "wait" });
-    await server.close();
+    try {
+      await release();
+      await page.unrouteAll({ behavior: "wait" });
+    } finally {
+      await server.close();
+    }
   }
 });
 
@@ -314,12 +317,12 @@ async function routeOriginals(page, requests) {
 test("blurhash visibility, decode swap, failure and retired source lifetimes", async ({
   page,
 }, testInfo) => {
-  const server = await fixtureServer();
   const requests = [];
   await holdDecodes(page);
   await routeOriginals(page, requests);
-  await server.listen();
+  const server = await fixtureServer();
   try {
+    await server.listen();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
     );
@@ -402,19 +405,22 @@ test("blurhash visibility, decode swap, failure and retired source lifetimes", a
       contentType: "application/json",
     });
   } finally {
-    await page.unrouteAll({ behavior: "wait" });
-    await server.close();
+    try {
+      await page.unrouteAll({ behavior: "wait" });
+    } finally {
+      await server.close();
+    }
   }
 });
 
 test("original ready first cannot regress on late visibility; missing and invalid hashes still load", async ({
   page,
 }) => {
-  const server = await fixtureServer();
   await holdDecodes(page, true);
   await routeOriginals(page, []);
-  await server.listen();
+  const server = await fixtureServer();
   try {
+    await server.listen();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
     );
@@ -433,19 +439,22 @@ test("original ready first cannot regress on late visibility; missing and invali
       await shown(page);
     }
   } finally {
-    await page.unrouteAll({ behavior: "wait" });
-    await server.close();
+    try {
+      await page.unrouteAll({ behavior: "wait" });
+    } finally {
+      await server.close();
+    }
   }
 });
 
 test("original decode rejection retains blur and the next source still recovers", async ({
   page,
 }) => {
-  const server = await fixtureServer();
   await holdDecodes(page);
   await routeOriginals(page, []);
-  await server.listen();
+  const server = await fixtureServer();
   try {
+    await server.listen();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
     );
@@ -463,8 +472,11 @@ test("original decode rejection retains blur and the next source still recovers"
     await shown(page);
     await expect(frame(page).locator("canvas")).toHaveCount(0);
   } finally {
-    await page.unrouteAll({ behavior: "wait" });
-    await server.close();
+    try {
+      await page.unrouteAll({ behavior: "wait" });
+    } finally {
+      await server.close();
+    }
   }
 });
 
@@ -472,7 +484,6 @@ for (const unavailable of ["canvas", "visibility"]) {
   test(`unavailable ${unavailable} keeps the placeholder and original loading`, async ({
     page,
   }) => {
-    const server = await fixtureServer();
     await holdDecodes(page);
     await page.addInitScript((unavailable) => {
       if (unavailable === "canvas")
@@ -480,8 +491,9 @@ for (const unavailable of ["canvas", "visibility"]) {
       else window.IntersectionObserver = undefined;
     }, unavailable);
     await routeOriginals(page, []);
-    await server.listen();
+    const server = await fixtureServer();
     try {
+      await server.listen();
       await page.goto(
         `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
       );
@@ -496,8 +508,11 @@ for (const unavailable of ["canvas", "visibility"]) {
       await shown(page);
       await expect(frame(page).locator("canvas")).toHaveCount(0);
     } finally {
-      await page.unrouteAll({ behavior: "wait" });
-      await server.close();
+      try {
+        await page.unrouteAll({ behavior: "wait" });
+      } finally {
+        await server.close();
+      }
     }
   });
 }

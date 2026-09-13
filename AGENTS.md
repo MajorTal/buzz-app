@@ -22,7 +22,11 @@ deviating from agreed scope or product behavior.
 Target **9/10+ for minimalness, elegance, and correctness**: the smallest complete
 solution, clear ownership, and no known material defects. Prefer existing patterns
 and subtraction. No opportunistic refactors, speculative abstractions, or new
-features disguised as fixes. If the fix keeps growing, revisit the cause and scope.
+features disguised as fixes. Before expanding into another shared subsystem or
+adding alternate-adapter support, show the human the scope change and smallest
+complete alternative. Require a current caller or explicit approval for adapter
+parity. Review necessity separately from correctness; passing tests do not justify
+scope growth. Split at real ownership boundaries, not by deleting safety coverage.
 
 Keep files cohesive and group modules and tests by owner. Treat size as a review
 signal, not a quota. Extract stable boundaries only when they simplify the

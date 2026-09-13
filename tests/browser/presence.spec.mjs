@@ -34,6 +34,17 @@ test("presence: viewport demand, equal-status silence, conflict repair and teard
     expect(initial.handles).toBe(1);
     expect(initial.authors).toBeGreaterThan(0);
     expect(initial.authors).toBeLessThanOrEqual(20);
+    const cohorts = await page.evaluate(() => window.presenceFixture.cohorts);
+    expect(initial.currentAuthors.length).toBeGreaterThan(0);
+    expect(
+      initial.currentAuthors.every((author) => cohorts[0].includes(author)),
+    ).toBe(true);
+    const onlineDot = timeline
+      .locator('[data-presence-status="online"] [data-status]')
+      .first();
+    await expect(onlineDot).toHaveCSS("border-radius", "50%");
+    await expect(onlineDot).toHaveCSS("width", "8px");
+    await expect(onlineDot).toHaveCSS("height", "8px");
     const before = initial.notifications;
     await page.evaluate(() => window.presenceFixture.heartbeat(10));
     const renewed = await page.evaluate(() => ({
@@ -42,6 +53,27 @@ test("presence: viewport demand, equal-status silence, conflict repair and teard
     }));
     expect(renewed.notifications).toBe(before);
     expect(renewed.reads).toBe(initial.reads);
+    await page.evaluate(() => {
+      window.presenceFixture.status("away");
+      window.presenceFixture.heartbeat(1, "away");
+    });
+    const awayDot = timeline
+      .locator('[data-presence-status="away"] [data-status]')
+      .first();
+    await expect(awayDot).toBeVisible();
+    // Test rendered geometry, not just status/ARIA text: Away must not be another circle.
+    for (const mode of ["light", "dark"]) {
+      await page.evaluate((value) => {
+        document.documentElement.dataset.colorMode = value;
+      }, mode);
+      await expect(awayDot).toHaveCSS("border-radius", "0px");
+      await expect(awayDot).toHaveCSS("width", "8px");
+      await expect(awayDot).toHaveCSS("height", "8px");
+      await testInfo.attach(`away-${mode}.png`, {
+        body: await timeline.locator("[data-message-id]").first().screenshot(),
+        contentType: "image/png",
+      });
+    }
     await page.evaluate(() => {
       window.presenceFixture.status("offline");
       window.presenceFixture.heartbeat(1, "offline");
@@ -56,6 +88,26 @@ test("presence: viewport demand, equal-status silence, conflict repair and teard
     await expect(
       timeline.locator('[data-presence-status="offline"]').first(),
     ).toBeVisible();
+    await timeline.evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const { report, cohorts } = window.presenceFixture;
+          return (
+            report.currentAuthors.length > 0 &&
+            report.currentAuthors.every((author) => cohorts[1].includes(author))
+          );
+        }),
+      )
+      .toBe(true);
+    const scrolled = await page.evaluate(
+      () => window.presenceFixture.report.currentAuthors,
+    );
+    expect(
+      scrolled.some((author) => initial.currentAuthors.includes(author)),
+    ).toBe(false);
     await page.getByRole("button", { name: "Toggle timeline" }).click();
     await expect(timeline).toHaveCount(0);
     const disposed = await page.evaluate(() =>
@@ -70,14 +122,6 @@ test("presence: viewport demand, equal-status silence, conflict repair and teard
         page.evaluate(() => window.presenceFixture.diagnostics().handles),
       )
       .toBe(1);
-    await timeline.evaluate((element) => {
-      element.scrollTop = 12000;
-    });
-    await expect
-      .poll(() =>
-        page.evaluate(() => window.presenceFixture.diagnostics().authors),
-      )
-      .toBeGreaterThan(0);
     await testInfo.attach("presence-counters.json", {
       body: JSON.stringify(
         {

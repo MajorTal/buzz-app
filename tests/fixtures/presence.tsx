@@ -10,11 +10,17 @@ import type { ChannelMessage } from "../../src/features/relay/contracts";
 import "../../src/shared/styles/globals.css";
 const relay = keypair(),
   viewer = keypair();
-const people = Array.from({ length: 20 }, () => keypair());
+const people = Array.from({ length: 40 }, () => keypair());
 let callbacks!: LiveCallbacks;
 let status = "online";
 let serial = 0;
-const report = { reads: 0, updates: 0, publishes: 0, maximumAuthors: 0 };
+const report = {
+  reads: 0,
+  updates: 0,
+  publishes: 0,
+  maximumAuthors: 0,
+  currentAuthors: [] as string[],
+};
 const owner = createRelaySession({
   viewer: viewer.pubkey,
   relayAuthor: relay.pubkey,
@@ -43,6 +49,7 @@ const owner = createRelaySession({
       presence: {
         update(authors) {
           report.updates++;
+          report.currentAuthors = [...authors];
           report.maximumAuthors = Math.max(
             report.maximumAuthors,
             authors.length,
@@ -61,10 +68,12 @@ const owner = createRelaySession({
     };
   },
 });
+// Disjoint top/bottom cohorts make observing every mounted row a test failure.
+const personIndex = (index: number) => (index < 500 ? 0 : 20) + (index % 20);
 function row(index: number): ChannelMessage {
   return {
     id: index.toString(16).padStart(64, "0"),
-    authorId: people[index % 20]?.pubkey ?? viewer.pubkey,
+    authorId: people[personIndex(index)]?.pubkey ?? viewer.pubkey,
     channelId: "fixture",
     createdAt: 1700000000 + index,
     content: `Message ${index}`,
@@ -90,7 +99,7 @@ function Surface() {
           key={row(index).id}
           row={row(index)}
           presence={owner.session.presence}
-          profile={{ name: `Person ${index % 20}` }}
+          profile={{ name: `Person ${personIndex(index)}` }}
           media={() => undefined}
           onOpenLink={() => false}
           day={false}
@@ -114,6 +123,9 @@ function App() {
 Object.assign(window, {
   presenceFixture: {
     report,
+    cohorts: [people.slice(0, 20), people.slice(20)].map((group) =>
+      group.map((person) => person.pubkey),
+    ),
     diagnostics: () => owner.diagnostics().presence,
     heartbeat(count = 1, value = status) {
       for (let n = 0; n < count; n++)

@@ -25,6 +25,7 @@
 .dot[data-status="away"] {
   color: var(--amber-11);
   background: currentColor;
+  border-radius: 0;
 }
 .dot[data-status="unknown"] {
   border-style: dotted;

@@ -4,6 +4,10 @@
 retention, generic event reconciliation, and the durable outbox. Its values are
 `online`, `away`, `offline`, and `unknown`. Unknown is not evidence of being offline.
 
+Message bylines distinguish status without color: Online is a filled circle, Away
+is a filled square, Offline is a hollow circle, and Unknown has a dotted outline.
+The profile panel also displays the status text; all indicators have an accessible label.
+
 ## Ownership and traffic
 
 - A timeline or thread owns one demand handle for its viewport plus a 160px margin;
@@ -81,6 +85,11 @@ Per-author lifetime/revision and session generation guards fence conflicts,
 removal/re-add, visibility changes, access/cache clearing, and disposal. They do
 not create a globally ordered snapshot/stream protocol. Exact expiry and perfectly
 current status cannot be inferred from the existing wire contract.
+
+Presence-only setup retries are bounded. After four failed attempts, unchanged
+nonempty demand can remain Unknown across an ordinary socket reconnect. Emptying
+and restoring demand resets that budget. Resetting it after fresh authentication
+is a recovery follow-up, not a guarantee of this version.
 
 ## Activity and publishing
 

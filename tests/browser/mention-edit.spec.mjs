@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 test("editing selected name plus pasting same name cannot transfer notification to pasted prose", async ({
@@ -13,8 +13,8 @@ test("editing selected name plus pasting same name cannot transfer notification 
     logLevel: "error",
     server: { host: "127.0.0.1", port: 0 },
   });
-  await server.listen();
   try {
+    await server.listen();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/mentions.html`,
     );

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
@@ -18,8 +18,8 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
   });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await server.listen();
   try {
+    await server.listen();
     const address = server.httpServer.address();
     await page.goto(
       `http://127.0.0.1:${address.port}/tests/fixtures/messages.html`,

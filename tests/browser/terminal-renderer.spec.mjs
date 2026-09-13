@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 

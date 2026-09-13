@@ -16,11 +16,27 @@ const heads = (app, channel) =>
       filter.until === undefined,
   );
 async function ready(page, app) {
-  await open(page, app);
-  await expect.poll(() => app.relay.hasRoute("primary", "alpha")).toBe(true);
-  // The first head may already start after stream establishment; a duplicate
-  // initial read is not required. Recovery below has its own positive gap control.
-  await expect.poll(() => heads(app, "alpha").length).toBeGreaterThanOrEqual(1);
+  // Force the pre-establishment read and its subsequent catch-up apart. Initial
+  // rows/EOSE alone do not prove that a queued startup head has reached the UI.
+  app.relay.holdEose("alpha");
+  try {
+    await open(page, app);
+    await expect.poll(() => app.relay.hasRoute("primary", "alpha")).toBe(true);
+    expect(heads(app, "alpha")).toHaveLength(1);
+    const missed = app.append(
+      "primary",
+      "alpha",
+      "Startup catch-up complete",
+      false,
+    );
+    app.relay.releaseEose("alpha");
+    await expect(
+      history(page).locator(`[data-message-id="${missed.id}"]`),
+    ).toBeVisible();
+    expect(heads(app, "alpha")).toHaveLength(2);
+  } finally {
+    app.relay.releaseEose("alpha");
+  }
   await expect.poll(() => app.relay.hasRoute("primary", "beta")).toBe(true);
   await expect(retry(page)).toHaveCount(0);
   await settle(page);

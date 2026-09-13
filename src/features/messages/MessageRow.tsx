@@ -4,6 +4,7 @@ import { profileTarget } from "../profiles/target";
 import { InlineText } from "../conversation/InlineText";
 import type { ConversationExtensions } from "../conversation/contracts";
 import type { ChannelMessage, Profile } from "../relay/contracts";
+import { AttachmentImage } from "./AttachmentImage";
 import { DeliveryNotice } from "./DeliveryNotice";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { safeMessageUrl } from "../relay/message-content";
@@ -124,38 +125,13 @@ export const MessageRow = memo(function MessageRow({
                 {attachment.video ? "Video attachment" : "Image attachment"} ↗
               </a>
             ) : (
-              <a
-                className={styles.attachmentImage}
-                style={
-                  attachment.dimensions
-                    ? {
-                        width: Math.min(
-                          360,
-                          attachment.dimensions.width,
-                          (320 * attachment.dimensions.width) /
-                            attachment.dimensions.height,
-                        ),
-                        aspectRatio: `${attachment.dimensions.width} / ${attachment.dimensions.height}`,
-                      }
-                    : undefined
-                }
+              <AttachmentImage
                 key={url}
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-                aria-label="Open image attachment"
-                onClick={(event) => {
-                  if (
-                    !event.metaKey &&
-                    !event.ctrlKey &&
-                    !event.shiftKey &&
-                    onOpenLink(url)
-                  )
-                    event.preventDefault();
-                }}
-              >
-                <img src={source} alt="" loading="lazy" />
-              </a>
+                attachment={attachment}
+                url={url}
+                source={source}
+                onOpenLink={onOpenLink}
+              />
             );
           })}
           {row.reactions.length > 0 && (

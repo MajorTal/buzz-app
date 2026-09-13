@@ -20,6 +20,8 @@ const events = Array.from({ length: 100 }, (_, i) =>
             "imeta",
             `url https://image.test/${i}.svg`,
             "m image/svg+xml",
+            "blurhash LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+            "thumb https://image.test/forbidden-thumbnail.svg",
             ...(i % 4 === 0 ? ["dim 700x900"] : []),
           ],
         ]

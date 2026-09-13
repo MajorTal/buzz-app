@@ -284,5 +284,14 @@ and 320px tall without upscaling. Missing/invalid dimensions use a stable 360:32
 that shrinks with the available width; the image is contained without cropping or
 upscaling. Unknown-size images may therefore have empty space in the frame. Loading,
 failure, or retry does not resize it or force an above-bottom reader to the newest row.
+Valid message-carried `imeta blurhash` is decoded locally into a 32×32 canvas in
+that same frame when it intersects the viewport. No thumbnail is fetched. The
+preview is removed entirely (including behind transparency) only after the lazy
+original decodes; failure retains the preview. Missing/invalid hashes or canvas
+failures keep the existing background. Syntax validation bounds hashes to 166
+base83 characters / 9×9 components; folding does no pixel work. Preview work is
+per-mounted-image and uncached, visibility-gated even in nonvirtualized threads.
+Without IntersectionObserver, only the ordinary placeholder/original is used.
+This favors bounded visible work over instant offscreen previews on scrolling.
 `tests/browser/image-scroll.spec.mjs` covers delayed/failed loads, actual remounts,
 bottom following, reading anchors and narrow layout in Chromium and WebKit.

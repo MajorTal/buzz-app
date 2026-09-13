@@ -334,3 +334,38 @@ it.each([
     { url: "https://x.test/legacy.png", video: false },
   ]);
 });
+
+it.each([
+  "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+  "000000", // 1x1
+  `|000${"00".repeat(81)}`, // maximum 9x9
+  undefined,
+  "",
+  "short",
+  "LEHV6nWB2yk8pyo0adR*.7kCMdn!", // invalid alphabet
+  "LEHV6nWB2yk8pyo0adR*.7kCMdn", // truncated
+  `~000${"00".repeat(18)}`, // illegal size flag, despite matching length
+  "0".repeat(10000),
+])("preserves only bounded valid attachment blurhash: %s", (hash) => {
+  const valid =
+    hash === "LEHV6nWB2yk8pyo0adR*.7kCMdnj" ||
+    hash === "000000" ||
+    hash?.startsWith("|");
+  const event = message(keypair(), "channel", "", 1, [
+    [
+      "imeta",
+      "url https://x.test/original.png",
+      "m image/png",
+      "thumb https://x.test/thumbnail.png",
+      ...(hash === undefined ? [] : [`blurhash ${hash}`]),
+    ],
+  ]);
+  expect(parseAttachments(event, ["https://x.test/legacy.png"])).toEqual([
+    {
+      url: "https://x.test/original.png",
+      video: false,
+      ...(valid ? { blurhash: hash } : {}),
+    },
+    { url: "https://x.test/legacy.png", video: false },
+  ]);
+});

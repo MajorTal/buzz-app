@@ -39,9 +39,7 @@ async function navigate(page, direction) {
   ).toBe(true);
 }
 
-test("delayed and failed images preserve bottom and reading anchors across remounts", async ({
-  page,
-}) => {
+async function fixtureServer() {
   const server = await createServer({
     root: fileURLToPath(new URL("../../", import.meta.url)),
     configFile: false,
@@ -50,6 +48,13 @@ test("delayed and failed images preserve bottom and reading anchors across remou
     logLevel: "error",
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
+  return server;
+}
+
+test("delayed and failed images preserve bottom and reading anchors across remounts", async ({
+  page,
+}, testInfo) => {
+  const server = await fixtureServer();
   const pending = new Set();
   const requests = new Map();
   let held = true;
@@ -105,6 +110,7 @@ test("delayed and failed images preserve bottom and reading anchors across remou
     await expect.poll(() => pending.size).toBeGreaterThan(0);
     await settle(page);
     expect(await gap()).toBeLessThan(4);
+    await expect(feed.locator("canvas").last()).toBeVisible();
     const before = await feed.evaluate((el) => el.scrollHeight);
     await release();
     await loaded();
@@ -145,6 +151,15 @@ test("delayed and failed images preserve bottom and reading anchors across remou
       [...requests.values()].some((count) => count > 1),
       "images actually remounted and reloaded",
     ).toBe(true);
+    expect(
+      [...requests.keys()].every((url) =>
+        /^https:\/\/image.test\/\d+\.svg$/.test(url),
+      ),
+    ).toBe(true);
+    await testInfo.attach("original-only-request-ledger", {
+      body: JSON.stringify([...requests], null, 2),
+      contentType: "application/json",
+    });
     // Responsive reservation stays bounded, including missing-metadata fallback.
     await page.setViewportSize({ width: 420, height: 950 });
     await settle(page);
@@ -208,3 +223,281 @@ test("image navigation handles partial gestures and rejects blocked input", asyn
     page.mouse.wheel = wheel;
   }
 });
+
+// Control decode completion rather than just HTTP completion: an original must
+// not cover the preview until decoded, and retired promises must do nothing.
+async function holdDecodes(page, holdVisibility = false) {
+  await page.addInitScript(
+    ({ holdVisibility }) => {
+      const realDecode = HTMLImageElement.prototype.decode;
+      const pending = new Map();
+      const paints = [];
+      const realPaint = CanvasRenderingContext2D.prototype.putImageData;
+      CanvasRenderingContext2D.prototype.putImageData = function (...args) {
+        paints.push({ width: args[0].width, height: args[0].height });
+        return realPaint.apply(this, args);
+      };
+      HTMLImageElement.prototype.decode = async function () {
+        await realDecode.call(this);
+        if (!this.src.startsWith("https://image.test/")) return;
+        const key = this.src;
+        await new Promise((resolve, reject) => {
+          const list = pending.get(key) ?? [];
+          list.push({ resolve, reject });
+          pending.set(key, list);
+        });
+      };
+      const observers = [];
+      if (holdVisibility) {
+        window.IntersectionObserver = class {
+          constructor(callback) {
+            this.callback = callback;
+            observers.push(this);
+          }
+          observe(target) {
+            this.target = target;
+          }
+          disconnect() {}
+        };
+      }
+      window.imageTest = {
+        paints,
+        waiting: (name) => pending.has(`https://image.test/${name}.svg`),
+        release(name) {
+          const key = `https://image.test/${name}.svg`;
+          for (const item of pending.get(key) ?? []) item.resolve();
+          pending.delete(key);
+        },
+        reject(name) {
+          const key = `https://image.test/${name}.svg`;
+          for (const item of pending.get(key) ?? [])
+            item.reject(new Error("held decode rejected"));
+          pending.delete(key);
+        },
+        intersect() {
+          for (const observer of observers)
+            observer.callback([
+              { isIntersecting: true, target: observer.target },
+            ]);
+        },
+      };
+    },
+    { holdVisibility },
+  );
+}
+
+const frame = (page) =>
+  page.getByRole("link", { name: "Open image attachment" });
+const shown = (page) =>
+  expect(frame(page).locator("img")).toHaveCSS("visibility", "visible");
+const waiting = (page, name) =>
+  expect
+    .poll(() => page.evaluate((name) => window.imageTest.waiting(name), name))
+    .toBe(true);
+const releaseDecode = (page, name) =>
+  page.evaluate((name) => window.imageTest.release(name), name);
+
+async function routeOriginals(page, requests) {
+  await page.route("https://image.test/**", async (route) => {
+    requests.push(route.request().url());
+    await route.fulfill(
+      route.request().url().endsWith("/failed.svg")
+        ? { status: 404, body: "missing" }
+        : {
+            contentType: "image/svg+xml",
+            body: '<svg xmlns="http://www.w3.org/2000/svg" width="20" height="10"><rect width="10" height="10" fill="orange"/></svg>',
+          },
+    );
+  });
+}
+
+test("blurhash visibility, decode swap, failure and retired source lifetimes", async ({
+  page,
+}, testInfo) => {
+  const server = await fixtureServer();
+  const requests = [];
+  await holdDecodes(page);
+  await routeOriginals(page, requests);
+  await server.listen();
+  try {
+    await page.goto(
+      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
+    );
+    // Mounted but offscreen (as in a long thread) must not spend pixel work.
+    await page.waitForTimeout(150);
+    expect(await page.evaluate(() => window.imageTest.paints)).toEqual([]);
+    await page.getByRole("button", { name: "Reveal", exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.imageTest.paints.length))
+      .toBe(1);
+    const bounds = await frame(page).boundingBox();
+    await waiting(page, "first");
+    await expect(frame(page).locator("img")).toHaveCSS("visibility", "hidden");
+    expect(
+      await frame(page)
+        .locator("canvas")
+        .evaluate((canvas) =>
+          [...canvas.getContext("2d").getImageData(0, 0, 1, 1).data].some(
+            (x) => x > 0,
+          ),
+        ),
+    ).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath("held-blurhash.png") });
+    await releaseDecode(page, "first");
+    await shown(page);
+    // Transparent/small original must expose only the frame, never old colors.
+    await expect(frame(page).locator("canvas")).toHaveCount(0);
+    await expect(frame(page).locator("img")).toHaveCSS(
+      "object-fit",
+      "scale-down",
+    );
+    expect(await frame(page).boundingBox()).toEqual(bounds);
+    await page.screenshot({
+      path: testInfo.outputPath("transparent-original.png"),
+    });
+    await page.getByRole("button", { name: "Retarget", exact: true }).click();
+    await waiting(page, "next");
+    await expect(frame(page).locator("img")).toHaveCSS("visibility", "hidden");
+    await expect(frame(page).locator("canvas")).toHaveCount(1);
+    await page
+      .getByRole("button", { name: "Fail original", exact: true })
+      .click();
+    await expect
+      .poll(() =>
+        frame(page)
+          .locator("img")
+          .evaluate((img) => img.complete),
+      )
+      .toBe(true);
+    await releaseDecode(page, "next"); // late callback for a retired source
+    await expect(frame(page).locator("img")).toHaveCSS("visibility", "hidden");
+    await expect(frame(page).locator("canvas")).toHaveCount(1);
+    expect(await frame(page).boundingBox()).toEqual(bounds);
+    await page.getByRole("button", { name: "Retarget", exact: true }).click();
+    await waiting(page, "next");
+    await page
+      .getByRole("button", { name: "Toggle mount", exact: true })
+      .click();
+    await releaseDecode(page, "next"); // late callback after unmount
+    await expect(frame(page)).toHaveCount(0);
+    await page
+      .getByRole("button", { name: "Toggle mount", exact: true })
+      .click();
+    await waiting(page, "next");
+    await expect(frame(page).locator("img")).toHaveCSS("visibility", "hidden");
+    await releaseDecode(page, "next");
+    await shown(page);
+    expect(
+      await page.evaluate(() =>
+        window.imageTest.paints.every((p) => p.width === 32 && p.height === 32),
+      ),
+    ).toBe(true);
+    expect(
+      requests.every((url) =>
+        /^https:\/\/image.test\/(first|next|failed)\.svg$/.test(url),
+      ),
+    ).toBe(true);
+    await testInfo.attach("original-only-request-ledger", {
+      body: JSON.stringify(requests, null, 2),
+      contentType: "application/json",
+    });
+  } finally {
+    await page.unrouteAll({ behavior: "wait" });
+    await server.close();
+  }
+});
+
+test("original ready first cannot regress on late visibility; missing and invalid hashes still load", async ({
+  page,
+}) => {
+  const server = await fixtureServer();
+  await holdDecodes(page, true);
+  await routeOriginals(page, []);
+  await server.listen();
+  try {
+    await page.goto(
+      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
+    );
+    await page.getByRole("button", { name: "Reveal", exact: true }).click();
+    await waiting(page, "first");
+    await releaseDecode(page, "first");
+    await shown(page);
+    await page.evaluate(() => window.imageTest.intersect());
+    expect(await page.evaluate(() => window.imageTest.paints)).toEqual([]);
+    await expect(frame(page).locator("canvas")).toHaveCount(0);
+    for (const name of ["No hash", "Invalid hash"]) {
+      await page.getByRole("button", { name, exact: true }).click();
+      await waiting(page, "first");
+      await expect(frame(page).locator("canvas")).toHaveCount(0);
+      await releaseDecode(page, "first");
+      await shown(page);
+    }
+  } finally {
+    await page.unrouteAll({ behavior: "wait" });
+    await server.close();
+  }
+});
+
+test("original decode rejection retains blur and the next source still recovers", async ({
+  page,
+}) => {
+  const server = await fixtureServer();
+  await holdDecodes(page);
+  await routeOriginals(page, []);
+  await server.listen();
+  try {
+    await page.goto(
+      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
+    );
+    await page.getByRole("button", { name: "Reveal", exact: true }).click();
+    await expect
+      .poll(() => page.evaluate(() => window.imageTest.paints.length))
+      .toBe(1);
+    await waiting(page, "first");
+    await page.evaluate(() => window.imageTest.reject("first"));
+    await expect(frame(page).locator("img")).toHaveCSS("visibility", "hidden");
+    await expect(frame(page).locator("canvas")).toHaveCount(1);
+    await page.getByRole("button", { name: "Retarget", exact: true }).click();
+    await waiting(page, "next");
+    await releaseDecode(page, "next");
+    await shown(page);
+    await expect(frame(page).locator("canvas")).toHaveCount(0);
+  } finally {
+    await page.unrouteAll({ behavior: "wait" });
+    await server.close();
+  }
+});
+
+for (const unavailable of ["canvas", "visibility"]) {
+  test(`unavailable ${unavailable} keeps the placeholder and original loading`, async ({
+    page,
+  }) => {
+    const server = await fixtureServer();
+    await holdDecodes(page);
+    await page.addInitScript((unavailable) => {
+      if (unavailable === "canvas")
+        HTMLCanvasElement.prototype.getContext = () => null;
+      else window.IntersectionObserver = undefined;
+    }, unavailable);
+    await routeOriginals(page, []);
+    await server.listen();
+    try {
+      await page.goto(
+        `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
+      );
+      await page.getByRole("button", { name: "Reveal", exact: true }).click();
+      await waiting(page, "first");
+      expect(await page.evaluate(() => window.imageTest.paints)).toEqual([]);
+      await expect(frame(page).locator("img")).toHaveCSS(
+        "visibility",
+        "hidden",
+      );
+      await releaseDecode(page, "first");
+      await shown(page);
+      await expect(frame(page).locator("canvas")).toHaveCount(0);
+    } finally {
+      await page.unrouteAll({ behavior: "wait" });
+      await server.close();
+    }
+  });
+}

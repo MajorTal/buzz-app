@@ -1,3 +1,4 @@
+import { validatedBlurhash } from "./blurhash";
 import { threadReference } from "./thread-reference";
 import { emojiTags } from "./emoji";
 import { objectBody } from "./body";
@@ -31,8 +32,10 @@ export function parseAttachments(
     const dim = /^(\d{1,6})x(\d{1,6})$/.exec(fields.dim ?? "");
     const width = Number(dim?.[1]),
       height = Number(dim?.[2]);
+    const blurhash = validatedBlurhash(fields.blurhash);
     result.push({
       url,
+      ...(blurhash ? { blurhash } : {}),
       video: fields.m?.startsWith("video/") ?? false,
       ...(width > 0 && height > 0 ? { dimensions: { width, height } } : {}),
     });

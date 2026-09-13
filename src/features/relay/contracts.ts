@@ -24,6 +24,8 @@ export type Attachment = Readonly<{
   url: string;
   video: boolean;
   dimensions?: Readonly<{ width: number; height: number }>;
+  /** Validated message-carried BlurHash; decoded locally only for presentation. */
+  blurhash?: string;
 }>;
 /** Relay-authored membership activity, not a membership grant or user message. */
 export type MembershipChange = Readonly<{

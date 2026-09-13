@@ -24,6 +24,43 @@ const open = async (page) => {
   );
   return page.getByRole("textbox", { name: "Message #General" });
 };
+const expectAvatarShape = async (target, shape) => {
+  await expect(target.locator("[data-avatar-shape]")).toHaveAttribute(
+    "data-avatar-shape",
+    shape,
+  );
+};
+test("mention completion distinguishes exact agent identity without reshaping a namesake human", async ({
+  page,
+}) => {
+  const input = await open(page);
+  const keys = await page.evaluate(() => ({
+    human: window.mentionFixture.first,
+    agent: window.mentionFixture.second,
+  }));
+  await input.fill("@Ho");
+  await expectAvatarShape(
+    page.getByRole("option", { name: `Honey ${keys.human}`, exact: true }),
+    "circle",
+  );
+  await expectAvatarShape(
+    page.getByRole("option", { name: `Honey ${keys.agent}`, exact: true }),
+    "squircle",
+  );
+  await input.fill("");
+  await page
+    .getByRole("button", { name: "Mention a member", exact: true })
+    .click();
+  const picker = page.getByRole("region", { name: "Mention a channel member" });
+  await expectAvatarShape(
+    picker.getByRole("button", { name: `Honey ${keys.human}`, exact: true }),
+    "circle",
+  );
+  await expectAvatarShape(
+    picker.getByRole("button", { name: `Honey ${keys.agent}`, exact: true }),
+    "squircle",
+  );
+});
 test("typeahead replaces only the query and publishes selected namesake identity, including replies", async ({
   page,
 }) => {

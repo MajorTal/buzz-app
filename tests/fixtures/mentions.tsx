@@ -52,7 +52,7 @@ const owner = createRelaySession(
         metadata(relay, "other", "Other"),
         profile(viewer, { name: "Viewer" }),
         profile(first, { name: delayed ? "Mary Jane" : "Honey" }),
-        profile(second, { name: "Honey" }),
+        profile(second, { name: "Honey", is_agent: true }),
         ...publications,
       ];
       return events.filter((event) =>

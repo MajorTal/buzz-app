@@ -35,6 +35,7 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
       exact: true,
     });
     await expect(avatar).toHaveCount(1);
+    await expect(avatar).toHaveAttribute("data-avatar-shape", "circle");
     await avatar.focus();
     await avatar.press("Enter");
     await expect(key).toHaveText(npubs.viewer);
@@ -74,6 +75,10 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
     });
     await mention.click();
     await expect(key).toHaveText(npubs.mic);
+    await expect(panel.locator("[data-avatar-shape]")).toHaveAttribute(
+      "data-avatar-shape",
+      "circle",
+    );
     await panel.getByRole("button", { name: "Close channel panel" }).click();
     await expect(mention).toBeFocused();
     await mention.press("Space");
@@ -103,6 +108,10 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
     await expect(threadMention).toBeVisible();
     await threadMention.click();
     await expect(key).toHaveText(npubs.pinky);
+    await expect(panel.locator("[data-avatar-shape]")).toHaveAttribute(
+      "data-avatar-shape",
+      "squircle",
+    );
     await expect(
       panel.getByText("Agent profile", { exact: true }),
     ).toBeVisible();

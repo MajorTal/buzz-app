@@ -28,8 +28,14 @@ test("Channels renders grouped history and live membership without turning activ
   await expect(groups.locator("button")).toHaveCount(0);
   const avatars = groups.first().locator("[data-avatar-shape]");
   await expect(avatars).toHaveCount(2);
-  await expect(avatars.nth(0)).toHaveAttribute("data-avatar-shape", "circle");
-  await expect(avatars.nth(1)).toHaveAttribute("data-avatar-shape", "squircle");
+  await expect(avatars.filter({ hasText: "PI" })).toHaveAttribute(
+    "data-avatar-shape",
+    "circle",
+  );
+  await expect(avatars.filter({ hasText: "BR" })).toHaveAttribute(
+    "data-avatar-shape",
+    "squircle",
+  );
   const centered = await groups.first().evaluate((row) => {
     const content = row.querySelector("p");
     const avatars = row.querySelector('[aria-hidden="true"]');

@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 // thread reader and durable outbox. No developer env, broker, credentials or relay.
 test("shared thread UI auto-loads, follows live replies, retries and isolates retargeted drafts", async ({
   page,
-}) => {
+}, testInfo) => {
   const server = await createServer({
     root: fileURLToPath(new URL("../../", import.meta.url)),
     configFile: false,
@@ -55,6 +55,13 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
       exact: true,
     });
     const history = panel.getByRole("region", { name: "Thread messages" });
+    const feedAuthorAvatar = feed.locator(
+      '[data-message-id="ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"] [data-avatar-shape]',
+    );
+    await expect(feedAuthorAvatar).toHaveAttribute(
+      "data-avatar-shape",
+      "circle",
+    );
     const draft = panel.getByRole("textbox", {
       name: "Reply to thread",
       exact: true,
@@ -110,6 +117,46 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
     await expect(
       history.getByRole("heading", { name: "Agent Markdown", level: 3 }),
     ).toBeVisible();
+    const threadAgentAvatar = history
+      .getByRole("heading", { name: "Agent Markdown" })
+      .locator("xpath=ancestor::*[@data-message-id][1]")
+      .locator("[data-avatar-shape]")
+      .first();
+    await expect(threadAgentAvatar).toHaveAttribute(
+      "data-avatar-shape",
+      "squircle",
+    );
+    const threadHumanAvatar = history
+      .getByText("First root", { exact: true })
+      .locator("xpath=ancestor::*[@data-message-id][1]")
+      .locator("[data-avatar-shape]")
+      .first();
+    await expect(threadHumanAvatar).toHaveAttribute(
+      "data-avatar-shape",
+      "circle",
+    );
+    await page.evaluate(() => {
+      document.documentElement.dataset.colorMode = "dark";
+    });
+    const evidence = testInfo.outputPath("human-agent-thread-avatars.png");
+    const humanBox = await threadHumanAvatar.boundingBox();
+    const agentBox = await threadAgentAvatar.boundingBox();
+    const panelBox = await panel.boundingBox();
+    if (!humanBox || !agentBox || !panelBox)
+      throw new Error("Missing avatar evidence bounds");
+    const top = Math.max(0, Math.min(humanBox.y, agentBox.y) - panelBox.y - 36);
+    const bottom =
+      Math.max(humanBox.y + humanBox.height, agentBox.y + agentBox.height) -
+      panelBox.y +
+      72;
+    await panel.screenshot({
+      path: evidence,
+      clip: { x: 0, y: top, width: 440, height: bottom - top },
+    });
+    await testInfo.attach("human-agent-thread-avatars", {
+      path: evidence,
+      contentType: "image/png",
+    });
     await expect(
       history.getByText("Rendered from an agent envelope", { exact: true }),
     ).toHaveCSS("font-weight", /^(650|700)$/);

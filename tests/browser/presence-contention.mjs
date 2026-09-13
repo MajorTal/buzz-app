@@ -18,6 +18,17 @@ const headRequest = (request) =>
         f.until === undefined,
     );
 
+// Optimistic text alone is not delivery: only verified observation removes the
+// exact event from the outbox. Keep this same criterion in the race controls.
+export async function confirmedSend(page, event) {
+  await expect(page.locator(`[data-message-id="${event.id}"]`)).toContainText(
+    event.content,
+  );
+  await expect(
+    page.locator("summary").filter({ hasText: /^Outbox ·/ }),
+  ).toHaveText("Outbox · 0 items");
+}
+
 export function contentionTests(withoutPresence) {
   test.describe(
     withoutPresence ? "no-presence control" : "held presence",
@@ -69,16 +80,42 @@ export function contentionTests(withoutPresence) {
               ? headRequest
               : (request) =>
                   new URL(request.url()).pathname.endsWith("/publish");
-          const response = page.waitForResponse((response) =>
-            requestMatch(response.request()),
-          );
-          let browserRequestObservedAt;
+          // A verified live echo legitimately aborts an outstanding send ACK.
+          // Reads still require the response; sends prove delivery independently.
+          const response =
+            action === "open"
+              ? page.waitForResponse((response) =>
+                  requestMatch(response.request()),
+                )
+              : undefined;
+          let browserRequestObservedAt, browserRequestUrl;
+          const browserOutcomes = [];
           const observe = (request) => {
-            if (requestMatch(request))
+            if (requestMatch(request)) {
               browserRequestObservedAt = performance.now();
+              browserRequestUrl = request.url();
+            }
+          };
+          const received = (reply) => {
+            if (requestMatch(reply.request()))
+              browserOutcomes.push({
+                status: reply.status(),
+                at: performance.now(),
+              });
+          };
+          const failed = (request) => {
+            if (requestMatch(request))
+              browserOutcomes.push({
+                error: request.failure()?.errorText,
+                at: performance.now(),
+              });
           };
           page.on("request", observe);
+          page.on("response", received);
+          page.on("requestfailed", failed);
           const priorBroker = app.report.brokerRequests.length;
+          const priorPublications = app.report.publications.length;
+          let sentEvent;
           try {
             if (action === "send") {
               await composer.evaluate((input) => {
@@ -100,7 +137,14 @@ export function contentionTests(withoutPresence) {
                 });
             }
             const reply = await response;
-            expect(reply.status()).toBe(200);
+            if (reply) expect(reply.status()).toBe(200);
+            if (action === "send") {
+              await expect
+                .poll(() => app.report.publications.length)
+                .toBe(priorPublications + 1);
+              sentEvent = app.report.publications[priorPublications].event;
+              await confirmedSend(page, sentEvent);
+            }
             const candidates = app.report.brokerRequests
               .slice(priorBroker)
               .filter(({ url }) =>
@@ -120,27 +164,42 @@ export function contentionTests(withoutPresence) {
                       filter.top_level &&
                       filter["#h"]?.[0] === "beta",
                   );
-            const serverTiming = await reply.headerValue("server-timing");
+            // Host completion survives browser cancellation, without claiming
+            // that a closed socket or an optimistic row means acceptance.
+            await expect.poll(() => broker.finish?.finished).toBe(true);
+            expect(broker.finish.status).toBe(200);
+            const serverTiming = broker.finish.serverTiming;
+            if (reply)
+              expect(await reply.headerValue("server-timing")).toBe(
+                serverTiming,
+              );
             const admissionMs = Number(
               serverTiming?.match(/(?:^|,\s*)admission;dur=([\d.]+)/)?.[1],
             );
-            const browserTiming = await page.evaluate((url) => {
-              const intent = performance
-                .getEntriesByName("presence-foreground-intent")
-                .at(-1).startTime;
-              const resource = performance.getEntriesByName(url).at(-1);
-              return {
-                intent,
-                requestStart: resource?.startTime,
-                responseEnd: resource?.responseEnd,
-                intentToRequestMs: resource
-                  ? resource.startTime - intent
-                  : null,
-                intentToResponseMs: resource
-                  ? resource.responseEnd - intent
-                  : null,
-              };
-            }, reply.url());
+            const browserTiming = await page.evaluate(
+              ({ url, received }) => {
+                const intent = performance
+                  .getEntriesByName("presence-foreground-intent")
+                  .at(-1).startTime;
+                const resource = performance.getEntriesByName(url).at(-1);
+                return {
+                  intent,
+                  requestStart: resource?.startTime,
+                  responseEnd: resource?.responseEnd,
+                  intentToRequestMs: resource
+                    ? resource.startTime - intent
+                    : null,
+                  intentToResponseMs:
+                    received && resource ? resource.responseEnd - intent : null,
+                };
+              },
+              {
+                url: browserRequestUrl,
+                received: browserOutcomes.some(
+                  (outcome) => outcome.status === 200,
+                ),
+              },
+            );
             app.report.measurements.push({
               action,
               withoutPresence,
@@ -154,6 +213,9 @@ export function contentionTests(withoutPresence) {
               admissionMs,
               serverTiming,
               browserTiming,
+              browserOutcomes,
+              hostResponse: { ...broker.finish },
+              ...(sentEvent ? { confirmedEventId: sentEvent.id } : {}),
               held: held && { ...held },
             });
             // This phase check is crucial: arriving after 500 ms would make old code pass.
@@ -208,6 +270,14 @@ export function contentionTests(withoutPresence) {
             app.report.relayTimings = JSON.parse(
               await readFile(await (await download).path(), "utf8"),
             );
+            if (sentEvent)
+              expect(app.report.relayTimings).toContainEqual(
+                expect.objectContaining({
+                  id: sentEvent.id,
+                  stage: "send.delivery",
+                  outcome: "ok",
+                }),
+              );
             if (withoutPresence) {
               expect(snapshots(app)).toHaveLength(0);
               expect(app.report.presencePublications).toHaveLength(0);
@@ -219,6 +289,8 @@ export function contentionTests(withoutPresence) {
             }
           } finally {
             page.off("request", observe);
+            page.off("response", received);
+            page.off("requestfailed", failed);
             app.relay.releasePresence();
           }
         });

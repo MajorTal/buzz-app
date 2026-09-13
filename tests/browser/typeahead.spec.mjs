@@ -534,7 +534,8 @@ test("current custom catalog drives typeahead and signed tags across community r
   await expect(input).toHaveValue(":party-parrot ");
   await input.press("ControlOrMeta+z");
   await expect(input).toHaveValue(":party-parrot: ");
-  await input.press("End");
+  // macOS End scrolls the document; use its caret shortcut when overscroll is off.
+  await input.press(process.platform === "darwin" ? "Meta+ArrowRight" : "End");
   await input.pressSequentially("hello");
   await expect(input).toHaveValue(":party-parrot: hello");
   await input.press("Enter");

@@ -13,7 +13,12 @@ async function navigate(page, direction) {
   const reached = (distance) =>
     direction < 0 ? distance > 5000 : distance < 4;
   await feed.hover();
-  for (let gesture = 0; gesture < 8; gesture++) {
+  // Traverse to the setup condition, not a fixed wheel-count budget. WebKit and
+  // virtualized remeasurement can apply only part of a requested displacement.
+  // The existing test deadline bounds traversal; every gesture must make settled
+  // progress. This runs only while image responses are held, never during the
+  // preservation assertions that follow their release.
+  while (true) {
     const before = await gap();
     if (reached(before)) break;
     const remaining = direction < 0 ? 6000 - before : before;
@@ -32,11 +37,12 @@ async function navigate(page, direction) {
       await pendingRead;
     }
     await settle(page);
+    expect(
+      direction * (before - (await gap())),
+      "image navigation retains progress after settling",
+    ).toBeGreaterThan(0);
   }
-  expect(
-    reached(await gap()),
-    "bounded image navigation reaches its setup",
-  ).toBe(true);
+  expect(reached(await gap()), "image navigation reaches its setup").toBe(true);
 }
 
 async function fixtureServer() {
@@ -202,16 +208,14 @@ test("image navigation handles partial gestures and rejects blocked input", asyn
   let gestures = 0;
   page.mouse.wheel = (x, y) => {
     gestures++;
-    return wheel(x, Math.sign(y) * Math.min(1800, Math.abs(y)));
+    return wheel(x, Math.sign(y) * Math.min(400, Math.abs(y)));
   };
   try {
     await navigate(page, 1);
-    expect(gestures).toBeGreaterThan(1);
-    expect(gestures).toBeLessThanOrEqual(8);
+    expect(gestures).toBeGreaterThan(8);
     gestures = 0;
     await navigate(page, -1);
-    expect(gestures).toBeGreaterThan(1);
-    expect(gestures).toBeLessThanOrEqual(8);
+    expect(gestures).toBeGreaterThan(8);
     await page.getByRole("region").evaluate((element) => {
       element.addEventListener("wheel", (event) => event.preventDefault(), {
         passive: false,

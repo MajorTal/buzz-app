@@ -211,8 +211,20 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await expect(search).toBeFocused();
   await expect(search).toHaveValue("hello");
   await draft.fill("unfinished draft");
+  // Observe the real key's browser-default boundary, not a guessed network delay.
+  await search.evaluate((input) => {
+    window.gifEnter = { prevented: false, submits: 0 };
+    input.form.addEventListener("submit", () => window.gifEnter.submits++);
+    window.addEventListener("keydown", (event) => {
+      if (event.target === input && event.key === "Enter")
+        window.gifEnter.prevented = event.defaultPrevented;
+    });
+  });
   await search.press("Enter");
-  await page.waitForTimeout(600);
+  expect(await page.evaluate(() => window.gifEnter)).toEqual({
+    prevented: true,
+    submits: 0,
+  });
   await expect(draft).toHaveValue("unfinished draft");
   expect(signRequests).toBe(0);
   await draft.evaluate((element) => {

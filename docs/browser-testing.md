@@ -270,6 +270,15 @@ that setup; same-ID/Y <4px and bottom <4px assertions remain unchanged. No retri
 or additional WebKit exclusions are used. The underlying Linux WebKit single-wheel
 shortfall remains unattributed; this setup change does not fix or explain it.
 
+`image-scroll.spec.mjs` separately holds image responses while real wheel input
+establishes its reading/bottom setup. Traversal ends at the observed settled target,
+not a fixed gesture count: virtualizer remeasurement and native input may apply
+only part of a requested displacement. Every gesture must make directional
+progress that remains after settling, and the existing test deadline bounds the
+operation. A 400px partial-input control requires more than eight gestures; blocked
+input must fail on its first gesture. Once image responses are released, no
+corrective scrolling is allowed during the strict image/anchor assertions.
+
 These checks do not persist measured geometry or guarantee smoothness. A live edit
 to a partly clipped, still-visible row can move the following visible messages:
 Virtua's native stationary/upward-scroll compensation applies to wholly offscreen

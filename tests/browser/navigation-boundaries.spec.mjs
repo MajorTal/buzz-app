@@ -8,7 +8,7 @@ test("cold destination waits for its enabled provider to activate", async ({
   app,
 }) => {
   await page.addInitScript(() => {
-    window.delayFixture = true;
+    window.delayFixture = { started: false };
   });
   const target = {
     version: 1,
@@ -16,18 +16,39 @@ test("cold destination waits for its enabled provider to activate", async ({
     pluginId: "fixture.delayed",
     pageId: "slow",
   };
-  await page.goto(
-    `${app.origin}/#buzz=${encodeURIComponent(JSON.stringify(target))}`,
-  );
-  await expect(
-    page.getByRole("button", { name: "Delayed fixture", exact: true }).first(),
-  ).toBeVisible();
-  await expect(
-    page.getByText("Delayed destination presented", { exact: true }),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(() => window.fixtureNavigation.snapshot().status),
-  ).toBe("opened");
+  try {
+    await page.goto(
+      `${app.origin}/#buzz=${encodeURIComponent(JSON.stringify(target))}`,
+    );
+    await expect
+      .poll(() => page.evaluate(() => window.delayFixture.started))
+      .toBe(true);
+    await expect(page.getByRole("status")).toHaveText("Opening destination…");
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.fixtureNavigation?.snapshot().status),
+      )
+      .toBe("opening");
+    const launcher = page.getByRole("button", {
+      name: "Delayed fixture",
+      exact: true,
+    });
+    const destination = page.getByText("Delayed destination presented", {
+      exact: true,
+    });
+    await expect(launcher).toHaveCount(0);
+    await expect(destination).toHaveCount(0);
+    await page.evaluate(() => window.delayFixture.release());
+    await expect(launcher.first()).toBeVisible();
+    await expect(destination).toBeVisible();
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.fixtureNavigation.snapshot().status),
+      )
+      .toBe("opened");
+  } finally {
+    await page.evaluate(() => window.delayFixture?.release?.());
+  }
 });
 
 test("Messages default resolution returns opened to cold and warm callers without an extra visit", async ({

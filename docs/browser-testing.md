@@ -199,16 +199,6 @@ The separate `channel-opening.test.ts` exercises catch-up ownership and terminal
 retry states through the production session. A held-response reproducer establishes
 a failure mechanism; it does not on its own identify a live incident's cause.
 
-## Fixture server isolation
-
-Concurrent Vite fixture servers must own separate optimizer caches. Use
-`tests/browser/vite-server.mjs` for new fixtures; its `close()` releases the owned
-cache. The existing emoji and conversation fixtures retain their explicitly owned
-temporary caches. Do not share Vite's default `node_modules/.vite`: another server
-can invalidate dependency imports and leave a blank fixture with a 504
-`Outdated Optimize Dep`. Keep import failures visible; retries or longer UI waits
-do not repair module loading.
-
 ## Presence contention controls
 
 `presence-contention.spec.mjs` forces a real signed presence conflict through the
@@ -312,6 +302,15 @@ that setup; same-ID/Y <4px and bottom <4px assertions remain unchanged. No retri
 or additional WebKit exclusions are used. The underlying Linux WebKit single-wheel
 shortfall remains unattributed; this setup change does not fix or explain it.
 
+`image-scroll.spec.mjs` separately holds image responses while real wheel input
+establishes its reading/bottom setup. Traversal ends at the observed settled target,
+not a fixed gesture count: virtualizer remeasurement and native input may apply
+only part of a requested displacement. Every gesture must make directional
+progress that remains after settling, and the existing test deadline bounds the
+operation. A 400px partial-input control requires more than eight gestures; blocked
+input must fail on its first gesture. Once image responses are released, no
+corrective scrolling is allowed during the strict image/anchor assertions.
+
 These checks do not persist measured geometry or guarantee smoothness. A live edit
 to a partly clipped, still-visible row can move the following visible messages:
 Virtua's native stationary/upward-scroll compensation applies to wholly offscreen
@@ -386,3 +385,13 @@ focused visible dwell, non-reading opening/composer focus, individual markers,
 encrypted publication/readback, reload, cancellation and local manual-unread.
 The reload control holds network content so verified disk-restore wiring is required.
 This is not a deployed-relay, native signer or cross-device integration test.
+
+## Fixture server isolation
+
+Concurrent Vite fixture servers must own separate optimizer caches. Use
+`tests/browser/vite-server.mjs` for new fixtures; its `close()` releases the owned
+cache. The existing emoji and conversation fixtures retain their explicitly owned
+temporary caches. Do not share Vite's default `node_modules/.vite`: another server
+can invalidate dependency imports and leave a blank fixture with a 504
+`Outdated Optimize Dep`. Keep import failures visible; retries or longer UI waits
+do not repair module loading.

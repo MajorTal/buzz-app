@@ -30,23 +30,15 @@ export async function buildApp(
                 transform(code, id) {
                   if (id !== join(root, "src/features/relay/session.ts"))
                     return;
-                  // Equivalent app, connection and read paths. Disable only the two
-                  // optional presence owners; no reader/transport admission substitutes.
-                  for (const text of [
-                    "supported: !!transport?.subscribe,",
-                    "options.presenceActivity && transport",
-                  ])
-                    if (code.split(text).length !== 2)
-                      throw new Error(`Missing presence control seam: ${text}`);
-                  return code
-                    .replace(
-                      "supported: !!transport?.subscribe,",
-                      "supported: false,",
-                    )
-                    .replace(
-                      "options.presenceActivity && transport",
-                      "false && options.presenceActivity && transport",
+                  // Equivalent app, connection and read paths. Disable both optional
+                  // owners through their shared support decision, not admission substitutes.
+                  const support =
+                    "transport?.presence === true && !!transport.subscribe";
+                  if (code.split(support).length !== 2)
+                    throw new Error(
+                      `Missing presence control seam: ${support}`,
                     );
+                  return code.replace(support, "false");
                 },
               },
             ]

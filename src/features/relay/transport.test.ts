@@ -1,9 +1,15 @@
+import { createHash } from "node:crypto";
+import type { EventTemplate } from "nostr-tools";
 import { assert, afterEach, expect, it, vi } from "vitest";
 import { connectBrokerTransport, connectSignedTransport } from "./transport";
 import { PublishRejected } from "./outbox";
 import { keypair, signed } from "./testing";
 const key = keypair();
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.useRealTimers();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
 it("publishes the unchanged signed event to /events with request-bound NIP-98 auth", async () => {
   const event = signed(key, { kind: 9, content: "hello", tags: [["h", "c"]] });
   const fetcher = vi.fn(async () =>
@@ -183,4 +189,72 @@ it("uses each signed transport's own origin for protected media, never a deploym
     "https://images.example/public.png",
   );
   expect(a.media("http://images.example/insecure.png")).toBeUndefined();
+});
+
+it.each([
+  [true, true, true],
+  [true, false, false],
+  [false, true, false],
+  [undefined, true, false],
+  ["true", true, false],
+])(
+  "presence requires explicit host support (%s) and live support (%s)",
+  async (presence, live, supported) => {
+    vi.stubGlobal("fetch", async () =>
+      Response.json({
+        viewer: key.pubkey,
+        relayAuthor: key.pubkey,
+        presence,
+        live,
+      }),
+    );
+    const transport = await connectBrokerTransport();
+    expect(transport.presence).toBe(supported);
+  },
+);
+
+async function setup() {
+  vi.useFakeTimers();
+  // Keep hashing real but immediate: no native-worker scheduling in a fake-time admission model.
+  vi.spyOn(crypto.subtle, "digest").mockImplementation(
+    async (_algorithm, data) =>
+      Uint8Array.from(
+        createHash("sha256")
+          .update(new Uint8Array(data as ArrayBuffer))
+          .digest(),
+      ).buffer,
+  );
+  const key = keypair();
+  const signer = {
+    getPublicKey: async () => key.pubkey,
+    signEvent: vi.fn(async (event: EventTemplate) => signed(key, event)),
+  };
+  const transport = await connectSignedTransport(
+    signer,
+    "https://presence-admission.test",
+    key.pubkey,
+  );
+  expect(transport.presence).toBeUndefined();
+  return { key, signer, transport };
+}
+const ordinary = [{ kinds: [9], limit: 1 }];
+it("runtime priority spoofing cannot give ordinary signed queries optional admission", async () => {
+  const h = await setup();
+  const starts: number[] = [];
+  vi.stubGlobal("fetch", async () => {
+    starts.push(performance.now());
+    return Response.json([]);
+  });
+  await h.transport.query(ordinary);
+  const spoofed = h.transport.query(
+    ordinary,
+    undefined,
+    "spoof",
+    "presence" as "foreground",
+  );
+  await vi.advanceTimersByTimeAsync(499);
+  expect(starts).toEqual([0]);
+  await vi.advanceTimersByTimeAsync(1);
+  await spoofed;
+  expect(starts).toEqual([0, 500]);
 });

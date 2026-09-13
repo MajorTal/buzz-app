@@ -520,6 +520,7 @@ export function relayBrokerPlugin({
               readState: true,
               agentLibrary: true,
               live: true,
+              presence: true,
               agentActivity: true,
             });
           if (

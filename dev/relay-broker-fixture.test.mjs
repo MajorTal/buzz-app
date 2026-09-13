@@ -1,4 +1,5 @@
-import { test, expect } from "vitest";
+import { test, expect, vi } from "vitest";
+import { connectBrokerTransport } from "../src/features/relay/transport.ts";
 import { EventEmitter } from "node:events";
 import { createServer } from "node:http";
 import { mkdtemp, rm, writeFile } from "node:fs/promises";
@@ -256,3 +257,203 @@ test("composer reconciliation returns only retained events from the queried comm
     { composerPublication: true },
   );
 });
+
+// No alternate adapter or clock injection: real HTTP -> broker -> policy relay.
+// Keep demand queued for a full reference quota window; measure actual upstream
+// starts across all eight callers, not independent per-socket budgets.
+test("eight broker callers share combined API/REQ/EVENT budgets and correlated WS cooldown", async () => {
+  await fixture(
+    async ({ origin, report, relay }) => {
+      const realFetch = globalThis.fetch;
+      // Node has no browser Origin header. Supply only that browser boundary;
+      // request bodies, streaming, signing and upstream admission remain real.
+      vi.stubGlobal("fetch", (url, init) =>
+        realFetch(url, {
+          ...init,
+          headers: { ...init?.headers, Origin: origin },
+        }),
+      );
+      const stop = new AbortController();
+      const streams = [];
+      const states = new Map();
+      const pending = [];
+      const failures = [];
+      let running = true;
+      try {
+        const transports = await Promise.all(
+          Array.from({ length: 8 }, () => connectBrokerTransport(origin)),
+        );
+        expect(transports.every((t) => t.presence === true)).toBe(true);
+        for (const t of transports) {
+          const stream = t.subscribe({
+            receive() {},
+            established() {},
+            state(snapshot) {
+              states.set(t, snapshot);
+            },
+            denied() {},
+          });
+          streams.push(stream);
+        }
+        for (const stream of streams) {
+          // Enough real channel work to keep the ordinary shared setup lane busy
+          // throughout measurement, without reconnecting/replacing a socket.
+          stream.update(Array.from({ length: 40 }, (_, i) => `load-${i}`));
+        }
+        await until(
+          () =>
+            relay.sockets.filter((s) => s.authenticated && s.readyState === 1)
+              .length === 8,
+        );
+        const start = performance.now();
+        const loop = (operation) =>
+          (async () => {
+            while (running) {
+              try {
+                await operation();
+              } catch (error) {
+                if (running) throw error;
+              }
+            }
+          })().catch((error) => {
+            failures.push(error);
+          });
+        // Four ordinary readers keep demand ready, below the broker's six-slot
+        // bound. Rotate across all eight transport objects on completion.
+        let next = 0;
+        for (let i = 0; i < 4; i++)
+          pending.push(
+            loop(() =>
+              transports[next++ % 8].query(
+                [{ kinds: [0], limit: 1 }],
+                stop.signal,
+              ),
+            ),
+          );
+        pending.push(
+          loop(() =>
+            transports[next++ % 8].query(
+              [{ kinds: [20001], authors: ["a".repeat(64)], limit: 1 }],
+              stop.signal,
+            ),
+          ),
+        );
+        // One outstanding publication keeps the shared optional lane saturated
+        // without manufacturing publication-deadline failures in the fixture.
+        const publishing = loop(async () => {
+          // Budget measurement is steady-state, not a cold-publication deadline
+          // test. Drive EOSE-established owners rather than AUTH-only owners
+          // whose foreground globals are still waiting behind shared traffic.
+          const ready = transports
+            .map((t, i) => ({ state: states.get(t), stream: streams[i] }))
+            .filter(({ state }) => {
+              const globals =
+                state?.routes.filter((route) => !route.channelId) ?? [];
+              return (
+                globals.length === 2 &&
+                globals.every((route) => route.status === "live")
+              );
+            });
+          if (!ready.length) {
+            await delay(20);
+            return;
+          }
+          await ready[next++ % ready.length].stream.presence.publish(
+            "online",
+            new AbortController().signal,
+          );
+        });
+        pending.push(publishing);
+        for (let second = 0; second < 60; second++) {
+          for (const stream of streams)
+            stream.presence.update([
+              (second + 1).toString(16).padStart(64, "0"),
+            ]);
+          await delay(1000);
+          if (failures.length) {
+            throw new Error("Broker load driver failed", {
+              cause: {
+                errors: failures.map(String),
+                responses: report.presencePublicationResponses,
+              },
+            });
+          }
+        }
+        const end = start + 60000;
+        running = false;
+        stop.abort();
+        await Promise.all(pending);
+        expect(failures).toEqual([]);
+        const during = (rows) =>
+          rows.filter((row) => row.at >= start && row.at < end);
+        const ordinary = during(report.liveRequests).filter(
+          (r) => r.route !== "presence",
+        );
+        const presence = during(report.liveRequests).filter(
+          (r) => r.route === "presence",
+        );
+        const events = during(report.presencePublications);
+        const api = during(report.queries);
+        // Real scheduling can delay starts. Lower bounds prove this is a loaded
+        // run, not a vacuous "no quota rejection" pass. Exact admission-clock
+        // spacing is covered with fake time in live/http-admission tests; this
+        // fixture measures actual aggregate arrivals after signing/HTTP overhead.
+        expect(ordinary.length).toBeGreaterThanOrEqual(200);
+        expect(presence.length).toBeGreaterThanOrEqual(50);
+        expect(events.length).toBeGreaterThanOrEqual(11);
+        expect(api.length).toBeGreaterThanOrEqual(120);
+        expect(
+          api.filter((r) => r.filter.kinds?.[0] === 20001).length,
+        ).toBeGreaterThanOrEqual(11);
+        // The existing first-call-anchored relay counters charge combined callers
+        // before acceptance, including rejected work. Do not count only successes.
+        for (const [category, maximum] of [
+          ["ApiCalls", 134],
+          ["WsEvents", 27],
+          ["Messages", 13],
+        ]) {
+          const charges = report.quotaCharges.filter(
+            (r) => r.category === category,
+          );
+          expect(charges.length).toBeGreaterThan(0);
+          expect(Math.max(...charges.map((r) => r.count))).toBeLessThanOrEqual(
+            maximum,
+          );
+          expect(charges.every((r) => r.accepted)).toBe(true);
+        }
+        expect(report.quotaRefusals).toEqual([]);
+        // A correlated presence CLOSED must stop every WS caller, while ordinary
+        // API reads remain independent. Recovery occurs only after the margin.
+        relay.failRoute(
+          "primary",
+          "presence",
+          "rate-limited: quota exceeded; retry in 3s",
+        );
+        const before = report.quotaCharges.filter(
+          (r) => r.category === "WsEvents",
+        ).length;
+        for (const stream of streams) stream.presence.update(["b".repeat(64)]);
+        const recovery = streams[0].presence.publish(
+          "away",
+          new AbortController().signal,
+        );
+        await transports[0].query([{ kinds: [0], limit: 1 }]);
+        await delay(3200);
+        expect(
+          report.quotaCharges.filter((r) => r.category === "WsEvents"),
+        ).toHaveLength(before);
+        await recovery;
+        expect(
+          report.quotaCharges.filter((r) => r.category === "WsEvents").length,
+        ).toBeGreaterThan(before);
+      } finally {
+        running = false;
+        stop.abort();
+        for (const stream of streams) stream.dispose();
+        await Promise.allSettled(pending);
+        vi.unstubAllGlobals();
+      }
+    },
+    { enforceQuotas: true },
+  );
+}, 90000);

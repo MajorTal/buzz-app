@@ -17,6 +17,7 @@ export type MessageRowProps = {
   extensions?: ConversationExtensions | undefined;
   profile: Profile | undefined;
   participantProfiles?: ReadonlyMap<string, Profile> | undefined;
+  agentPubkeys?: ReadonlySet<string> | undefined;
   canOpenLink?: ((target: string) => boolean) | undefined;
   media(url: string): string | undefined;
   onOpenLink(url: string): boolean;
@@ -37,6 +38,7 @@ export const MessageRow = memo(function MessageRow({
   retry,
   onOpenThread,
   participantProfiles,
+  agentPubkeys,
 }: MessageRowProps) {
   const threadUnread = useThreadUnread(
     row.replyCount > 0 && onOpenThread ? unread : undefined,
@@ -73,6 +75,9 @@ export const MessageRow = memo(function MessageRow({
       <div className={styles.message}>
         <AvatarTag
           className={styles.avatar}
+          data-avatar-shape={
+            agentPubkeys?.has(row.authorId) ? "squircle" : "circle"
+          }
           {...(clickable
             ? {
                 type: "button" as const,
@@ -177,6 +182,9 @@ export const MessageRow = memo(function MessageRow({
                       <span
                         key={id}
                         className={styles.threadAvatar}
+                        data-avatar-shape={
+                          agentPubkeys?.has(id) ? "squircle" : "circle"
+                        }
                         title={name}
                       >
                         {name.slice(0, 2).toUpperCase()}

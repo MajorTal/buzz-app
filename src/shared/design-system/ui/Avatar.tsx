@@ -36,11 +36,13 @@ export function Avatar({
   alt,
   fallback,
   size = "default",
+  shape = "circle",
 }: {
   src?: string | null;
   alt: string;
   fallback: string;
   size?: AvatarSize;
+  shape?: "circle" | "squircle";
 }) {
   const initial = fallback.slice(0, 1).toUpperCase();
   return (
@@ -48,6 +50,7 @@ export function Avatar({
       data-buzz-ui=""
       className="buzz-avatar"
       data-size={size}
+      data-avatar-shape={shape}
       role="img"
       aria-label={alt}
     >

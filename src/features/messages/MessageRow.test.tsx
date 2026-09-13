@@ -287,3 +287,20 @@ it("does not bypass the session media resolver to paint an inaccessible attachme
   expect(html).not.toContain("<canvas");
   expect(html).not.toContain("<img");
 });
+
+it("uses the reviewed SVG squircle only for identities classified as agents", () => {
+  const agent = "a".repeat(64);
+  const html = renderToStaticMarkup(
+    <MessageRow
+      row={{ ...row, authorId: agent }}
+      profile={{ name: "Carl" }}
+      agentPubkeys={new Set([agent])}
+      media={() => undefined}
+      onOpenLink={() => false}
+      day={false}
+      retry={undefined}
+    />,
+  );
+  expect(html).toContain('data-avatar-shape="squircle"');
+  expect(render({}, 0).html).toContain('data-avatar-shape="circle"');
+});

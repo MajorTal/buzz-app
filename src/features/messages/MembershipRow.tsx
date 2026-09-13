@@ -9,12 +9,14 @@ export const MembershipRow = memo(function MembershipRow({
   profiles,
   viewer,
   media,
+  agentPubkeys,
   day,
 }: {
   row: TimelineRow;
   profiles: ReadonlyMap<string, Profile>;
   viewer?: string | undefined;
   media(url: string): string | undefined;
+  agentPubkeys?: ReadonlySet<string> | undefined;
   day: boolean;
 }) {
   const { targets, text, title } = membershipDescription(
@@ -44,7 +46,13 @@ export const MembershipRow = memo(function MembershipRow({
               ? media(profile.picture)
               : undefined;
             return (
-              <span className={styles.membershipAvatar} key={id}>
+              <span
+                className={styles.membershipAvatar}
+                data-avatar-shape={
+                  agentPubkeys?.has(id) ? "squircle" : "circle"
+                }
+                key={id}
+              >
                 {name.slice(0, 2).toUpperCase()}
                 {picture && (
                   <img

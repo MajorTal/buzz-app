@@ -7,6 +7,7 @@ import {
 } from "react";
 import { IconCopy } from "@tabler/icons-react";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
+import { useKnownAgentPubkeys } from "../../features/agents/use-known";
 import { Button } from "../../shared/design-system/ui/Button";
 import { activityTarget } from "../../features/agents/activity-target";
 import type { PanelProps } from "../../features/panels/service";
@@ -49,11 +50,12 @@ function ProfileDetails({
     () => selectProfiles(session.profiles, [pubkey]),
     [session.profiles, pubkey],
   );
-  const profile = useSyncExternalStore(
+  const profiles = useSyncExternalStore(
     selection.subscribe,
     selection.snapshot,
     selection.snapshot,
-  ).get(pubkey);
+  );
+  const profile = profiles.get(pubkey);
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
@@ -80,6 +82,7 @@ function ProfileDetails({
       active = false;
     };
   }, [session, pubkey, attempt]);
+  const agentPubkeys = useKnownAgentPubkeys(session, profiles);
   const npub = profileTarget(pubkey)?.slice(6) ?? pubkey;
   const name = profile?.name ?? "Unknown profile";
   const activity = activityTarget(pubkey, context?.channelId);
@@ -99,6 +102,7 @@ function ProfileDetails({
           alt={`${name} avatar`}
           fallback={profile?.name ?? "?"}
           size="large"
+          shape={agentPubkeys.has(pubkey) ? "squircle" : "circle"}
         />
         <h2 className="text-heading">{name}</h2>
       </div>

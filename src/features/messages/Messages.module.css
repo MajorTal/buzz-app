@@ -710,3 +710,9 @@ button.avatar:focus-visible,
   height: 100%;
   object-fit: cover;
 }
+
+.avatar[data-avatar-shape="squircle"],
+.threadAvatar[data-avatar-shape="squircle"],
+.membershipAvatar[data-avatar-shape="squircle"] {
+  clip-path: path("M .5 0 C .93 0 1 .07 1 .5 C 1 .93 .93 1 .5 1 C .07 1 0 .93 0 .5 C 0 .07 .07 0 .5 0 Z");
+}

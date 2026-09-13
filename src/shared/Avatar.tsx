@@ -5,10 +5,12 @@ export function Avatar({
   name,
   src,
   className = "",
+  shape = "circle",
 }: {
   name: string;
   src?: string | undefined;
   className?: string;
+  shape?: "circle" | "squircle";
 }) {
   const [failed, setFailed] = useState<string>();
   const initials =
@@ -21,6 +23,7 @@ export function Avatar({
       .toUpperCase() || "?";
   return (
     <span
+      data-avatar-shape={shape}
       className={`relative inline-grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-[#ece9f4] font-semibold text-[#675780] ${className}`}
       aria-hidden="true"
     >

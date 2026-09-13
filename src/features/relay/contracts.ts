@@ -19,6 +19,8 @@ export type Profile = Readonly<{
   name: string;
   picture?: string;
   about?: string;
+  /** Self-authored profile metadata; additive to the local agent library. */
+  isAgent?: true;
 }>;
 export type Attachment = Readonly<{
   url: string;

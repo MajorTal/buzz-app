@@ -377,6 +377,7 @@ export const test = base.extend({
                 [],
                 JSON.stringify({
                   name: key === membershipKeys[0] ? "Pinky" : "Brain",
+                  ...(key === membershipKeys[1] ? { is_agent: true } : {}),
                 }),
                 key,
               ),

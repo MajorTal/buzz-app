@@ -2,7 +2,7 @@ import { expect, it } from "vitest";
 import { foldProfiles } from "./profiles";
 import { createProfileDirectory } from "./profile-directory";
 import { createRelayReader } from "./reader";
-import { keypair, profile, scriptedTransport } from "./testing";
+import { keypair, profile, scriptedTransport, signed } from "./testing";
 const user = keypair();
 it("projects about safely and publishes an about-only replacement/removal", () => {
   const wire = scriptedTransport(user.pubkey, keypair().pubkey);
@@ -28,4 +28,16 @@ it("projects about safely and publishes an about-only replacement/removal", () =
     directory.dispose();
     reader.dispose();
   }
+});
+
+it("retains self-authored agent metadata without inferring it from display names", () => {
+  const author = keypair();
+  const profiles = foldProfiles([
+    signed(author, {
+      kind: 0,
+      content: JSON.stringify({ name: "Agent-looking human", is_agent: true }),
+      tags: [],
+    }),
+  ]);
+  expect(profiles.get(author.pubkey)?.isAgent).toBe(true);
 });

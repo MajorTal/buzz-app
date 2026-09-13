@@ -736,8 +736,11 @@ test("recovery is a keyboard-selectable action without transferring editor focus
         window.completionFixture.fail(index, withChoice),
       { index, withChoice },
     );
-    if (withChoice) await input.press("ArrowUp");
     const retry = page.getByRole("option", { name: "Retry suggestions" });
+    // Publishing updates React state; wait for the options and keyboard handler
+    // to commit before ArrowUp, or the browser moves the caret instead.
+    await expect(retry).toBeVisible();
+    if (withChoice) await input.press("ArrowUp");
     await expect(retry).toHaveAttribute("aria-selected", "true");
     await input.press("Enter");
     await expect(page.getByRole("option", { name: "Recovered" })).toBeVisible();

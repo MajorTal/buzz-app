@@ -18,6 +18,7 @@ test("real xterm retains output across detach, handles input and resize, and rel
   page.on("pageerror", (e) => errors.push(String(e)));
   try {
     await server.listen();
+    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/terminal.html`,
     );
@@ -25,7 +26,9 @@ test("real xterm retains output across detach, handles input and resize, and rel
     const input = page.getByLabel("Input", { exact: true });
     const splash = page.locator("[data-terminal-splash]");
     await expect(splash).toHaveCount(0); // Wait for actual shell output.
+    await page.clock.pauseAt(new Date("2026-01-01T01:00:00Z"));
     await button("Paint terminal").click();
+    await page.clock.runFor(50); // Let xterm parse/paint, then hold the welcome open.
     await expect(splash).toBeVisible();
     await expect(splash.locator('[data-layer="head"]')).not.toHaveCount(0);
     await page.evaluate(() => document.fonts.ready);
@@ -129,6 +132,7 @@ test("real xterm retains output across detach, handles input and resize, and rel
       window.retainedTerminal = document.querySelector(".xterm");
     });
     await button("Toggle theme").click();
+    await page.clock.runFor(50); // Flush xterm's theme repaint under the held clock.
     await expect
       .poll(() => xterm.evaluate((el) => getComputedStyle(el).backgroundColor))
       .not.toBe(lightBackground);
@@ -151,6 +155,7 @@ test("real xterm retains output across detach, handles input and resize, and rel
     await page.locator(".xterm-helper-textarea").focus();
     await page.keyboard.type("hello");
     await expect(splash).toHaveCount(0);
+    await page.clock.resume();
 
     await page.keyboard.press("Control+c");
     await expect(input).toHaveText('"hello\\u0003"');
@@ -204,25 +209,32 @@ test("real xterm retains output across detach, handles input and resize, and rel
     // Fresh dark startup, bounded static splash (including reduced motion).
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
+    await page.clock.pauseAt(new Date("2026-01-01T02:00:00Z"));
     await button("Toggle theme").click();
     await button("Paint terminal").click();
+    await page.clock.runFor(50);
     await expect(splash).toBeVisible();
     await expect(splash).toHaveCSS("animation-name", "none");
-    await page.waitForTimeout(2000);
+    await page.clock.runFor(2000);
     await expect(splash).toBeVisible();
-    await expect(splash).toHaveCount(0, { timeout: 1700 }); // 3s, not the old 4.5s.
+    await page.clock.runFor(1000);
+    await expect(splash).toHaveCount(0); // 3s, not the old 4.5s.
+    await page.clock.resume();
     await expect(page.locator(".xterm-rows")).toContainText(
       "BUZZ_RENDERER_READY",
     );
     // Small terminals retain readable branding instead of clipped block art.
     await page.setViewportSize({ width: 400, height: 600 });
     await page.reload();
+    await page.clock.pauseAt(new Date("2026-01-01T03:00:00Z"));
     await button("Paint terminal").click();
+    await page.clock.runFor(50);
     await expect(splash).toHaveText("buzz term");
     await button("Toggle mount").click();
     await button("Toggle theme").click();
     await button("Toggle mount").click();
     await expect(splash).toHaveCount(0);
+    await page.clock.resume();
     expect(errors).toEqual([]);
   } finally {
     await server.close();
@@ -244,6 +256,7 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
   page.on("pageerror", (error) => errors.push(String(error)));
   try {
     await server.listen();
+    await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/terminal-panel.html`,
     );
@@ -288,10 +301,21 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     // Pointer focus is quiet; keyboard navigation paints the actual control.
     await button("Enlarge text").click();
     await expect(restart).toHaveCSS("font-size", "21px");
-    await restart.click();
-    await expect(restart).toBeDisabled();
-    await expectToken(restart, "color", "--text-disabled");
-    await expect(restart).toHaveCSS("outline-style", "none");
+    // Keep the operation pending while its disabled color finishes animating.
+    // A short fixture delay can expire between Playwright's assertion samples.
+    await page.evaluate(() => window.terminalPanel.holdClose());
+    try {
+      await restart.click();
+      await expect
+        .poll(() => page.evaluate(() => window.terminalPanel.closePending()))
+        .toBe(true);
+      await expect(restart).toBeDisabled();
+      await expectToken(restart, "color", "--text-disabled");
+      await expect(restart).toHaveCSS("outline-style", "none");
+    } finally {
+      await page.evaluate(() => window.terminalPanel.releaseClose());
+    }
+    await expect(restart).toBeEnabled();
     await expect(drawer.locator(".xterm-rows")).toContainText(
       "FIXTURE_SHELL_READY",
     );
@@ -312,7 +336,21 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
         );
         if (width === 1280) {
           const splash = drawer.locator("[data-terminal-splash]");
-          await restart.click();
+          await page.evaluate(() => window.terminalPanel.holdClose());
+          try {
+            await restart.click();
+            await expect
+              .poll(() =>
+                page.evaluate(() => window.terminalPanel.closePending()),
+              )
+              .toBe(true);
+            await page.clock.pauseAt(
+              new Date(`2026-01-01T0${mode === "light" ? 1 : 2}:00:00Z`),
+            );
+          } finally {
+            await page.evaluate(() => window.terminalPanel.releaseClose());
+          }
+          await page.clock.runFor(50);
           await expect(splash.locator('[data-layer="head"]')).toHaveCount(151);
           const bounds = await splash.evaluate((el) => {
             const frame = el.getBoundingClientRect();
@@ -325,6 +363,7 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
             );
           });
           expect(bounds).toBe(true);
+          await page.clock.resume();
         }
         await expect(restart).toBeInViewport();
         expect(

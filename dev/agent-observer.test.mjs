@@ -7,9 +7,10 @@ import {
 } from "nostr-tools";
 import { decodeAgentObserver } from "./agent-observer.mjs";
 
+const now = 1700000000;
 // Keep frame construction and validation in the same second at the ±300s boundary.
 beforeEach(() => {
-  vi.spyOn(Date, "now").mockReturnValue(1700000000999);
+  vi.spyOn(Date, "now").mockReturnValue(now * 1000 + 999);
 });
 afterEach(() => vi.restoreAllMocks());
 
@@ -24,7 +25,7 @@ const raw = JSON.stringify({
   sessionId: null,
   turnId: null,
   seq: 1,
-  timestamp: new Date().toISOString(),
+  timestamp: new Date(now * 1000).toISOString(),
   payload: { text: "<script>not markup</script>" },
 });
 function frame(patch = {}, plaintext = raw) {

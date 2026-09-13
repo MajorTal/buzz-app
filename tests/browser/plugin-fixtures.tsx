@@ -14,7 +14,7 @@ declare global {
     stalePanelClose?: () => void;
     fixtureNavigation?: Navigation;
     fixturePageBroken?: boolean;
-    delayFixture?: boolean;
+    delayFixture?: { started: boolean; release?: () => void };
     stopFixtureDependency?: () => Promise<void>;
     startFixtureDependency?: () => void;
     capturedPendingRequest?: PageNavigation | undefined;
@@ -153,8 +153,12 @@ export const fixturePlugins: readonly BundledPlugin[] = [
     module: {
       inject: ["pages"],
       async apply(ctx) {
-        if (window.delayFixture)
-          await new Promise((resolve) => setTimeout(resolve, 1000));
+        const gate = window.delayFixture;
+        if (gate)
+          await new Promise<void>((resolve) => {
+            gate.started = true;
+            gate.release = resolve;
+          });
         ctx.pages.register({
           id: "slow",
           title: "Delayed fixture",

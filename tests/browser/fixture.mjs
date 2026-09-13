@@ -27,10 +27,12 @@ export const historySize = 640;
 export const browserFixtures = {
   productionBroker: [false, { option: true }],
   composerPublication: [false, { option: true }],
+  compactHistory: [false, { option: true }],
   enforceQuotas: [false, { option: true }],
   withoutPresence: [false, { option: true, scope: "worker" }],
   readState: [false, { option: true }],
   threadUnread: [false, { option: true }],
+  exactMessages: [false, { option: true }],
   sidebarUnread: [false, { option: true }],
   savedSidebar: [false, { option: true }],
   expectedPageFailure: [false, { option: true }],
@@ -49,10 +51,12 @@ export const browserFixtures = {
       browser,
       productionBroker,
       composerPublication,
+      compactHistory,
       enforceQuotas,
       withoutPresence,
       readState,
       threadUnread,
+      exactMessages,
       sidebarUnread,
       savedSidebar,
       expectedPageFailure,
@@ -92,7 +96,8 @@ export const browserFixtures = {
         forged ? userKey : relayKey,
         time,
       );
-    const peerKey = dmLabels || readState ? generateSecretKey() : undefined;
+    const peerKey =
+      dmLabels || readState || exactMessages ? generateSecretKey() : undefined;
     const communityIds = {
       primary: "01234567-89ab-cdef-0123-456789abcdef",
       secondary: "11234567-89ab-cdef-0123-456789abcdef",
@@ -165,7 +170,13 @@ export const browserFixtures = {
         histories.set(
           `${community}/${channel}`,
           Array.from(
-            { length: channel === "alpha" ? historySize : 80 },
+            {
+              length: compactHistory
+                ? 1
+                : channel === "alpha"
+                  ? historySize
+                  : 80,
+            },
             (_, i) =>
               sign(
                 9,
@@ -178,6 +189,48 @@ export const browserFixtures = {
         );
     for (const community of ["primary", "secondary"])
       for (const id of dmIds) histories.set(`${community}/${id}`, []);
+    const targetEvents = [];
+    let exact;
+    if (exactMessages) {
+      const root = histories.get("primary/alpha")[2];
+      const replies = Array.from({ length: 80 }, (_, i) =>
+        sign(
+          9,
+          [
+            ["h", "alpha"],
+            ["e", root.id, "", "reply"],
+            ["p", getPublicKey(peerKey)],
+          ],
+          `Old thread reply ${i} · Hello @Alice Fixture`,
+          userKey,
+          root.created_at + i + 1,
+        ),
+      );
+      const target = replies.at(-1);
+      const edit = sign(
+        40003,
+        [["e", target.id]],
+        "**Exact reply edited** · Hello @Alice Fixture",
+        userKey,
+        target.created_at + 1,
+      );
+      const reaction = sign(
+        7,
+        [["e", target.id]],
+        "+",
+        userKey,
+        target.created_at + 2,
+      );
+      const deletion = sign(
+        5,
+        [["e", reaction.id]],
+        "",
+        userKey,
+        target.created_at + 3,
+      );
+      targetEvents.push(...replies, edit, reaction, deletion);
+      exact = { root, target, replies, edit, reaction, deletion };
+    }
     if (membershipActivity) {
       const history = histories.get("primary/alpha");
       history.push(
@@ -193,7 +246,9 @@ export const browserFixtures = {
     }
     // Opt-in upstream thread evidence: no client cache/read-state injection.
     // Uppercase signed references exercise canonical thread/unread parity.
-    const threadReplies = new Map();
+    const threadReplies = new Map(
+      exact ? [[exact.root.id, exact.replies]] : [],
+    );
     const threadSummaries = [];
     if (threadUnread) {
       const history = histories.get("primary/alpha");
@@ -402,23 +457,56 @@ export const browserFixtures = {
               ]
             : []),
         ];
-      if (composerPublication && filter.ids) {
+      if (composerPublication && filter.ids)
         expect(filter).toEqual({
           ids: [expect.stringMatching(/^[0-9a-f]{64}$/)],
           limit: 1,
         });
-        return channels.flatMap((channel) =>
-          histories
-            .get(`${community}/${channel}`)
-            .filter((event) => filter.ids.includes(event.id)),
-        );
-      }
-      if (threadUnread && filter.ids)
-        return [...histories.values()]
-          .flat()
-          .filter((event) => filter.ids.includes(event.id));
-      if (threadUnread && filter.depth_limit)
-        return (threadReplies.get(filter["#e"]?.[0]) ?? [])
+      if (filter.ids)
+        return [...histories.entries()]
+          .filter(([key]) => key.startsWith(`${community}/`))
+          .flatMap(([, events]) => events)
+          .concat(community === "primary" ? targetEvents : [])
+          .filter(
+            (event) =>
+              filter.ids.includes(event.id) &&
+              (!filter["#h"] ||
+                event.tags.some(
+                  ([key, value]) => key === "h" && filter["#h"].includes(value),
+                )),
+          )
+          .slice(0, filter.limit);
+      if (
+        filter["#e"] &&
+        filter.kinds?.every((kind) => [5, 7, 9005, 39005, 40003].includes(kind))
+      )
+        return (community === "primary" ? targetEvents : [])
+          .filter(
+            (event) =>
+              filter.kinds.includes(event.kind) &&
+              event.tags.some(
+                ([key, value]) => key === "e" && filter["#e"].includes(value),
+              ),
+          )
+          .toSorted(
+            (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
+          )
+          .slice(0, filter.limit);
+      if (filter.depth_limit) {
+        const rootId = filter["#e"]?.[0];
+        const candidates = [
+          ...(community === "primary" ? (threadReplies.get(rootId) ?? []) : []),
+          ...(histories.get(`${community}/${filter["#h"]?.[0]}`) ?? []),
+        ].filter((event) => {
+          const refs = event.tags.filter(([key]) => key === "e");
+          const root =
+            refs.find((tag) => tag[3] === "root") ??
+            refs.find((tag) => tag[3] === "reply");
+          return root?.[1]?.toLowerCase() === rootId;
+        });
+        const rows = [
+          ...new Map(candidates.map((event) => [event.id, event])).values(),
+        ]
           .filter(
             (event) =>
               filter.thread_cursor === undefined ||
@@ -426,7 +514,29 @@ export const browserFixtures = {
               (event.created_at === filter.thread_cursor &&
                 event.id > filter.thread_cursor_id),
           )
+          .toSorted(
+            (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
+          )
           .slice(0, filter.limit);
+        const ids = new Set(rows.map((event) => event.id));
+        const aux = [];
+        if (filter.include_aux && community === "primary")
+          for (let hop = 0; hop < 2; hop++)
+            for (const event of targetEvents) {
+              if (
+                ids.has(event.id) ||
+                ![5, 7, 9005, 39005, 40003].includes(event.kind)
+              )
+                continue;
+              if (
+                event.tags.some(([key, value]) => key === "e" && ids.has(value))
+              ) {
+                aux.push(event);
+                ids.add(event.id);
+              }
+            }
+        return [...rows, ...aux];
+      }
       // Unread evidence is not a top-level window, even for a one-ID final batch.
       if (
         filter.kinds?.includes(9) &&
@@ -624,10 +734,19 @@ export const browserFixtures = {
           throw new Error(
             `Unexpected fixture request: ${request.method} ${request.url}`,
           );
-        expect(body).toHaveLength(1);
+        expect(body.length).toBeGreaterThan(0);
+        expect(body.length).toBeLessThanOrEqual(2);
         const filter = body[0];
-        report.queries.push({ community, filter });
-        const result = answer(community, filter);
+        const result = [
+          ...new Map(
+            body
+              .flatMap((filter) => {
+                report.queries.push({ community, filter });
+                return answer(community, filter);
+              })
+              .map((event) => [event.id, event]),
+          ).values(),
+        ];
         if (filter.until !== undefined) {
           pending.push({
             community,
@@ -733,6 +852,7 @@ export const browserFixtures = {
         report,
         pending,
         histories,
+        exact,
         membership(
           type,
           targetIndex,
@@ -826,6 +946,20 @@ export const browserFixtures = {
               client.write(`data: ${JSON.stringify(event)}\n\n`);
           }
           return event;
+        },
+        deleteTarget() {
+          const event = sign(
+            5,
+            [
+              ["h", "alpha"],
+              ["e", exact.target.id],
+            ],
+            "",
+            userKey,
+            exact.target.created_at + 100,
+          );
+          targetEvents.push(event);
+          relay.publish("primary", event);
         },
         reply(rootId, own = false) {
           const replies = threadReplies.get(rootId);

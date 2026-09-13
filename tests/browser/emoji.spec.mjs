@@ -677,10 +677,32 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(region.getByRole("alert")).toContainText(
       "Fixture catalog offline",
     );
-    await page.evaluate(() => window.emojiFixture.fail(false));
-    await page
-      .getByRole("button", { name: "Retry emoji", exact: true })
-      .click();
+    await page.evaluate(() => {
+      window.emojiFixture.fail(false);
+      window.emojiFixture.holdCatalog();
+    });
+    try {
+      await page
+        .getByRole("button", { name: "Retry emoji", exact: true })
+        .click();
+      await expect
+        .poll(() => page.evaluate(() => window.emojiFixture.status("a")))
+        .toBe("loading");
+      // A usable Unicode-only picker during loading is not the recovered mount.
+      await expect(search).toHaveAttribute("data-buzz-search-ready", "true");
+      await expect(
+        page.locator('em-emoji-picker [data-id="buzz-custom"]'),
+      ).toHaveCount(0);
+    } finally {
+      await page.evaluate(() => window.emojiFixture.releaseCatalog());
+    }
+    await expect
+      .poll(() => page.evaluate(() => window.emojiFixture.status("a")))
+      .toBe("ready");
+    await expect(
+      page.locator('em-emoji-picker [data-id="buzz-custom"]'),
+    ).toHaveCount(1);
+    await expect(search).toHaveAttribute("data-buzz-search-ready", "true");
     await search.fill("party");
     await expect(insert).toBeVisible();
     await draft().fill(":broken: readable");

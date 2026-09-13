@@ -1,0 +1,55 @@
+diff --git a/lib/index.js b/lib/index.js
+--- a/lib/index.js
++++ b/lib/index.js
+@@ -7,1 +7,5 @@
+ import { flushSync as f } from "react-dom";
++
++// WebKit can restore a stale native scroll offset after an instant correction.
++// Interrupt only the corrected axis; observer-inferred idle is not native idle.
++const isMacWebKit = () => typeof navigator !== "undefined" && !b() && navigator.platform === "MacIntel" && navigator.vendor === "Apple Computer, Inc.";
+@@ -249,7 +253,22 @@
+         o && o();
+     } ];
+ }, E = (e, t) => {
+-    let n, o, r = $(), i = !1;
++    let n, o, r = $(), i = !1, restoreOverflow;
++    const interruptMomentum = () => {
++        // Repeated corrections in one task share the original declaration.
++        restoreOverflow && restoreOverflow();
++        const style = n.style, property = t ? "overflow-x" : "overflow-y";
++        const value = style.getPropertyValue(property), priority = style.getPropertyPriority(property);
++        style.setProperty(property, "hidden", "important");
++        const restore = () => {
++            S(timer);
++            if (style.getPropertyValue(property) === "hidden" && style.getPropertyPriority(property) === "important") {
++                value ? style.setProperty(property, value, priority) : style.removeProperty(property);
++            }
++            restoreOverflow = void 0;
++        }, timer = p(restore);
++        restoreOverflow = restore;
++    };
+     const s = t ? "scrollLeft" : "scrollTop", l = t ? "left" : "top", c = t ? "overflowX" : "overflowY", [f, a] = O(e, () => r[0], (e, t) => {
+         n.scrollTo({
+             [l]: T(e, i),
+@@ -266,7 +285,8 @@
+     return {
+         D(f, u = f.parentElement) {
+             h.A(n = u), t && (i = "rtl" === getComputedStyle(u).direction), o = M(e, u, t, () => T(u[s], i), (t, n, o) => {
+-                if (o) {
++                if (isMacWebKit()) interruptMomentum();
++                else if (o) {
+                     const e = u.style, t = e[c];
+                     e[c] = "hidden", p(() => {
+                         e[c] = t;
+@@ -283,7 +303,7 @@
+             }), r[1](!0);
+         },
+         _() {
+-            h.X(), o && o.X(), r[1](!1), r = $();
++            restoreOverflow && restoreOverflow(), h.X(), o && o.X(), r[1](!1), r = $();
+         },
+         P: (e, t) => (d.set(e, t), h.A(e), () => {
+             d.delete(e), h.B(e);
+@@ -799,2 +819,1 @@
+ export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
+-//# sourceMappingURL=index.js.map

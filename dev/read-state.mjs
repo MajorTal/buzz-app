@@ -11,25 +11,38 @@ import {
 } from "../src/features/relay/read-state-model.ts";
 
 export const READ_STATE_DECODE_BYTES = 512 * 1024;
+// Original NIP-44 can expand 65,535 plaintext bytes to 87,472 base64 characters.
+// Receive old client records without raising our 64 KiB publication event cap.
+const READ_STATE_RECEIVE_EVENT_BYTES = 96 * 1024;
 /** Validate and copy wire bytes: never trust nostr-tools' cached verification symbol. */
-export function validReadStateEvent(raw, secret) {
+export function validReadStateEvent(
+  raw,
+  secret,
+  maxBytes = READ_STATE_EVENT_BYTES,
+) {
   const event = eventDto(raw);
   if (
     event.pubkey !== getPublicKey(secret) ||
     !readCoordinate(event) ||
-    Buffer.byteLength(JSON.stringify(event)) > READ_STATE_EVENT_BYTES
+    Buffer.byteLength(JSON.stringify(event)) > maxBytes
   )
     throw new Error("Invalid read-state event");
   return event;
 }
-export function decodeReadState(events, secret) {
+export function decodeReadState(
+  events,
+  secret,
+  maxEventBytes = READ_STATE_RECEIVE_EVENT_BYTES,
+) {
   if (
     !Array.isArray(events) ||
     events.length > 16 ||
     Buffer.byteLength(JSON.stringify(events)) > READ_STATE_DECODE_BYTES
   )
     throw new Error("Read-state decode capacity exceeded");
-  const verified = events.map((event) => validReadStateEvent(event, secret));
+  const verified = events.map((event) =>
+    validReadStateEvent(event, secret, maxEventBytes),
+  );
   const key = nip44.v2.utils.getConversationKey(secret, getPublicKey(secret));
   try {
     return verified.map((event) => {

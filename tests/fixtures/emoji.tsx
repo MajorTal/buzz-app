@@ -39,6 +39,8 @@ const sessions = ["a", "b"].map((community) => {
   let time = 1,
     fail = false;
   let live!: LiveCallbacks;
+  let catalogRead: Promise<void> | undefined;
+  let releaseCatalogRead: (() => void) | undefined;
   const makeSet = (empty = false) =>
     signed(member, {
       kind: 30030,
@@ -90,7 +92,7 @@ const sessions = ["a", "b"].map((community) => {
       async query(filters) {
         if (filters[0]?.kinds?.includes(30030)) {
           report.reads.push(community);
-          await new Promise((resolve) => setTimeout(resolve, 80));
+          await catalogRead;
           if (fail) throw new Error("Fixture catalog offline");
           return [catalog];
         }
@@ -152,6 +154,17 @@ const sessions = ["a", "b"].map((community) => {
     fail(value: boolean) {
       fail = value;
     },
+    holdCatalog() {
+      if (catalogRead) throw new Error("Catalog read already held");
+      catalogRead = new Promise<void>((resolve) => {
+        releaseCatalogRead = resolve;
+      });
+    },
+    releaseCatalog() {
+      releaseCatalogRead?.();
+      catalogRead = undefined;
+      releaseCatalogRead = undefined;
+    },
   };
 });
 Object.assign(window, {
@@ -161,6 +174,8 @@ Object.assign(window, {
     remove: () => sessions[0]?.replace(true),
     fail: (value: boolean) => sessions[0]?.fail(value),
     refresh: () => sessions[0]?.session.emoji.refresh(),
+    holdCatalog: () => sessions[0]?.holdCatalog(),
+    releaseCatalog: () => sessions[0]?.releaseCatalog(),
     status: (community: string) =>
       sessions
         .find((item) => item.community === community)

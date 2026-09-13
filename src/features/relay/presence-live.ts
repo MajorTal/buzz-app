@@ -8,6 +8,13 @@ import {
   type PresenceStatus,
 } from "./presence-contract.ts";
 
+export class PresenceOwnerDisposed extends Error {
+  constructor() {
+    super("Presence owner disposed");
+    this.name = "PresenceOwnerDisposed";
+  }
+}
+
 type Route = {
   wire: string;
   authors: string[];
@@ -308,7 +315,8 @@ export function createPresenceLive(host: {
       clearTimeout(timer);
       remove(candidate);
       remove(confirmed);
-      publication?.finish(new Error("Presence owner disposed"));
+      // finish owns the winner; later disposal cannot relabel an earlier failure.
+      publication?.finish(new PresenceOwnerDisposed());
     },
   };
 }

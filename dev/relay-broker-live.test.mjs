@@ -761,6 +761,7 @@ test("SSE close before publication POST close remains unconfirmed and replacemen
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
       error: "Presence publication unconfirmed",
+      code: "presence_owner_disposed",
     });
     expect(h.lifecycle).toEqual([
       { event: "stream-close", streamId },
@@ -794,7 +795,11 @@ test("SSE close before publication POST close remains unconfirmed and replacemen
   }
 });
 
-test("a genuine live-stream rejection has the same 503 body and is not retirement", async () => {
+test.each([
+  "restricted: publication refused",
+  "Presence owner disposed",
+  "presence_owner_disposed",
+])("live rejection %s stays unclassified after retirement", async (reason) => {
   const h = await harness();
   try {
     const stream = await h.post([]);
@@ -803,12 +808,7 @@ test("a genuine live-stream rejection has the same 503 body and is not retiremen
     const pending = h.publishPresence(streamId);
     await until(() => h.frames.some((frame) => frame.kind === "EVENT"));
     const frame = h.frames.find((entry) => entry.kind === "EVENT");
-    await frame.socket.receive([
-      "OK",
-      frame.id.id,
-      false,
-      "restricted: publication refused",
-    ]);
+    await frame.socket.receive(["OK", frame.id.id, false, reason]);
     const response = await pending;
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
@@ -825,6 +825,30 @@ test("a genuine live-stream rejection has the same 503 body and is not retiremen
       { event: "publication-finish", streamId, status: 503 },
       { event: "stream-close", streamId },
     ]);
+  } finally {
+    await h.close();
+  }
+});
+
+test("disposal after EVENT but before matching OK stays unconfirmed, not unsent or accepted", async () => {
+  const h = await harness();
+  try {
+    const stream = await h.post([]);
+    const streamId = stream.response.headers.get("x-buzz-live-id");
+    await until(() => h.requests.length === 2);
+    const pending = h.publishPresence(streamId);
+    await until(() => h.frames.some((entry) => entry.kind === "EVENT"));
+    const frame = h.frames.find((entry) => entry.kind === "EVENT");
+    stream.abort();
+    const response = await pending;
+    expect(response.status).toBe(503);
+    expect(await response.json()).toEqual({
+      error: "Presence publication unconfirmed",
+      code: "presence_owner_disposed",
+    });
+    await frame.socket.receive(["OK", frame.id.id, true]);
+    await delay(10);
+    expect(h.frames.filter((entry) => entry.kind === "EVENT")).toHaveLength(1);
   } finally {
     await h.close();
   }

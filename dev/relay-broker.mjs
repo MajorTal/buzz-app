@@ -1,3 +1,4 @@
+import { PresenceOwnerDisposed } from "../src/features/relay/presence-live.ts";
 import { isPresenceSnapshot } from "../src/features/relay/presence-contract.ts";
 import { decodeAgentObserver } from "./agent-observer.mjs";
 import { observerGeneration } from "../src/features/agents/observer.ts";
@@ -581,10 +582,13 @@ export function relayBrokerPlugin({
                   controller.signal,
                 );
                 if (!res.destroyed) return json(res, 200, { accepted: true });
-              } catch {
+              } catch (error) {
                 if (!res.destroyed)
                   return json(res, 503, {
                     error: "Presence publication unconfirmed",
+                    ...(error instanceof PresenceOwnerDisposed
+                      ? { code: "presence_owner_disposed" }
+                      : {}),
                   });
               } finally {
                 res.off("close", abort);

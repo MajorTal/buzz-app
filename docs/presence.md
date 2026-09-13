@@ -101,6 +101,22 @@ roughly every 60–65 seconds. It keeps one in-flight write and the latest desir
 status; missed renewals are not replayed. Acceptance requires the matching socket
 `OK`, not merely handing bytes to the broker.
 
+If stream disposal wins an in-flight publication's settlement, the development
+broker preserves that typed cause as `code: "presence_owner_disposed"` on its
+existing **503 / Presence publication unconfirmed** response. This describes why
+confirmation stopped, not whether an EVENT was sent or accepted. Earlier rejection,
+deadline, socket reset, caller abort, or local failure cannot be relabeled by later
+disposal. No new wait, retry, round trip, or successful browser outcome is added.
+
+Browser fixtures record each publication 503 at the host response boundary,
+including when browser cancellation hides its body or console diagnostic. Only
+the explicit disposal code with the unconfirmed body is classified; every other
+503 fails independently of console output. Classified responses permit at most
+one endpoint-qualified console diagnostic each, and all responses remain in the
+evidence. Host request completion records distinguish `finish` from `close` and
+retain status/Server-Timing; neither closing a response nor handing bytes to the
+host establishes relay delivery.
+
 Optional same-origin Web Locks coordinate one publisher per community/viewer;
 BroadcastChannel shares recent local input. Unsupported hosts can publish once per
 window. A frozen browser leader can miss renewals; neither mechanism coordinates

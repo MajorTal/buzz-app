@@ -8,6 +8,7 @@ import {
 } from "./live";
 import { connectSignedTransport } from "./transport";
 import { presenceAuthors } from "./presence-contract";
+import { PresenceOwnerDisposed } from "./presence-live";
 import { keypair, signed } from "./testing";
 
 class Socket {
@@ -366,16 +367,55 @@ it.each(["abort", "disconnect", "dispose", "timeout"])(
       await h.socket.globals();
       const controller = new AbortController();
       const promise = h.presence.publish("online", controller.signal);
-      const failed = expect(promise).rejects.toThrow();
+      const outcome = promise.catch((error: unknown) => error);
       await vi.advanceTimersByTimeAsync(0);
       if (finish === "abort") controller.abort();
       if (finish === "disconnect") h.socket.close();
       if (finish === "dispose") h.owner.dispose();
       if (finish === "timeout") await vi.advanceTimersByTimeAsync(10000);
-      await failed;
+      const error = await outcome;
+      expect(error).toBeInstanceOf(Error);
+      expect(error instanceof PresenceOwnerDisposed).toBe(finish === "dispose");
       release(signed(key, template));
       await vi.advanceTimersByTimeAsync(0);
       expect(h.socket.events()).toHaveLength(0);
+    } finally {
+      h.owner.dispose();
+    }
+    expect(vi.getTimerCount()).toBe(0);
+  },
+);
+
+it.each(["rejection", "deadline", "reset", "local", "abort"])(
+  "%s winning settlement cannot become owner disposal later",
+  async (first) => {
+    const h = setup();
+    try {
+      await h.socket.globals();
+      const local = new Error("Presence owner disposed");
+      if (first === "local") h.sign.mockRejectedValueOnce(local);
+      const controller = new AbortController();
+      const outcome = h.presence
+        .publish("online", controller.signal)
+        .catch((error: unknown) => error);
+      await vi.advanceTimersByTimeAsync(0);
+      if (first === "rejection") {
+        const event = h.socket.events()[0];
+        assert.exists(event);
+        await h.socket.receive([
+          "OK",
+          event.id,
+          false,
+          "Presence owner disposed",
+        ]);
+      } else if (first === "deadline") await vi.advanceTimersByTimeAsync(10000);
+      else if (first === "reset") h.socket.close();
+      else if (first === "abort") controller.abort();
+      h.owner.dispose();
+      const error = await outcome;
+      expect(error).toBeInstanceOf(Error);
+      expect(error).not.toBeInstanceOf(PresenceOwnerDisposed);
+      if (first === "local") expect(error).toBe(local);
     } finally {
       h.owner.dispose();
     }

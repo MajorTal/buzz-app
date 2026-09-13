@@ -12,6 +12,7 @@ import {
 } from "./presence-contract";
 import {
   liveChannels,
+  liveProvenance,
   type LiveCallbacks,
   type LiveSnapshot,
   type LiveSubscription,
@@ -152,6 +153,18 @@ export function subscribeBrokerTraffic(
                 // SSE already in transit can describe an older control's author set.
                 if (JSON.stringify(state.authors) === JSON.stringify(authors))
                   callbacks.presenceState?.(state);
+              } else if (kind === "traffic") {
+                if (
+                  !data ||
+                  typeof data !== "object" ||
+                  !("event" in data) ||
+                  !("provenance" in data)
+                )
+                  throw new Error("Invalid live traffic envelope");
+                const event = eventDto(data.event);
+                const provenance = liveProvenance(data.provenance);
+                if (event.kind !== 20001 && event.kind !== OBSERVER_KIND)
+                  callbacks.receive([event], provenance);
               } else if (kind === "observer") {
                 const record = data as {
                   frame?: unknown;

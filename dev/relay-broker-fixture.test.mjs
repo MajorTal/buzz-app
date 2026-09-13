@@ -41,6 +41,8 @@ async function fixture(use, overrides = {}) {
         browserName: "chromium",
         browser: { version: () => "HTTP-only fixture wiring check" },
         productionBroker: true,
+        // HTTP-only assertions need distinct retained records, not 1,440 signed rows.
+        compactHistory: true,
         compiledApp: {
           durationMs: 0,
           config: {
@@ -69,41 +71,50 @@ async function publication(app, dispose) {
   relay.holdEose("profiles");
   relay.holdEose("membership");
   const controller = new AbortController();
-  const headers = { Origin: origin, "Content-Type": "application/json" };
-  const response = await fetch(`${origin}/api/relay/primary/stream`, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ channels: [] }),
-    signal: controller.signal,
-  });
-  const streamId = response.headers.get("x-buzz-live-id");
-  const socket = relay.sockets.at(-1);
-  await until(() => socket.authenticated);
-  const endpoint = `${origin}/api/relay/primary/stream-presence-publish`;
-  const pending = fetch(endpoint, {
-    method: "POST",
-    headers,
-    body: JSON.stringify({ streamId, status: "online" }),
-    signal: AbortSignal.timeout(3000),
-  });
-  await until(() =>
-    report.brokerRequests.some((record) => record.streamId === streamId),
-  );
-  // Allow the real middleware's body continuation to install the publication.
-  await new Promise((resolve) => setImmediate(resolve));
-  if (dispose) controller.abort();
-  else {
-    // Reset is an actual failure; later retirement must not classify it.
-    socket.onclose();
+  const request = new AbortController();
+  let pending;
+  try {
+    const headers = { Origin: origin, "Content-Type": "application/json" };
+    const response = await fetch(`${origin}/api/relay/primary/stream`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ channels: [] }),
+      signal: controller.signal,
+    });
+    const streamId = response.headers.get("x-buzz-live-id");
+    const socket = relay.sockets.at(-1);
+    await until(() => socket.authenticated);
+    const endpoint = `${origin}/api/relay/primary/stream-presence-publish`;
+    pending = fetch(endpoint, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ streamId, status: "online" }),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(3000)]),
+    });
+    // Observe rejection immediately, even if setup fails before the awaited receipt.
+    void pending.catch(() => {});
+    await until(() =>
+      report.brokerRequests.some((record) => record.streamId === streamId),
+    );
+    // Allow the real middleware's body continuation to install the publication.
+    await new Promise((resolve) => setImmediate(resolve));
+    if (dispose) controller.abort();
+    else {
+      // Reset is an actual failure; later retirement must not classify it.
+      socket.onclose();
+    }
+    const failed = await pending;
+    expect(failed.status).toBe(503);
+    expect(await failed.json()).toEqual({
+      error: "Presence publication unconfirmed",
+      ...(dispose ? { code: "presence_owner_disposed" } : {}),
+    });
+    return endpoint;
+  } finally {
+    controller.abort();
+    request.abort();
+    await pending?.catch(() => {});
   }
-  const failed = await pending;
-  expect(failed.status).toBe(503);
-  expect(await failed.json()).toEqual({
-    error: "Presence publication unconfirmed",
-    ...(dispose ? { code: "presence_owner_disposed" } : {}),
-  });
-  controller.abort();
-  return endpoint;
 }
 
 const console503 = (page, url) =>
@@ -113,6 +124,37 @@ const console503 = (page, url) =>
       "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
     location: () => ({ url }),
   });
+
+test.each(["stream", "stream-presence-publish"])(
+  "%s failure is observed and closes its stream before fixture teardown",
+  async (route) => {
+    await fixture(async (app) => {
+      const realFetch = globalThis.fetch;
+      const failure = new Error("Fixture publication dispatch failed");
+      let wire;
+      vi.stubGlobal("fetch", (url, init) => {
+        if (!String(url).endsWith(`/${route}`)) return realFetch(url, init);
+        if (route === "stream")
+          return realFetch(url, init).then(() => {
+            throw failure;
+          });
+        // Dispatch through the real host so until() still waits for real evidence.
+        // Reject before that boundary to exercise immediate rejection ownership.
+        wire = realFetch(url, init).catch(() => {});
+        return Promise.reject(failure);
+      });
+      try {
+        await expect(publication(app, true)).rejects.toBe(failure);
+        await wire;
+        await until(() =>
+          app.relay.sockets.every((socket) => socket.readyState === 3),
+        );
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    });
+  },
+);
 
 test("actual fixture accounts disposal 503 without relying on browser response or console", async () => {
   await fixture(async (app) => {
@@ -235,6 +277,9 @@ test("passive completion evidence preserves Server-Timing and distinguishes an u
 test("composer reconciliation returns only retained events from the queried community", async () => {
   await fixture(
     async (app) => {
+      const records = [...app.histories.values()];
+      expect(records.map((rows) => rows.length)).toEqual([1, 1, 1, 1]);
+      expect(new Set(records.flat().map((event) => event.id)).size).toBe(4);
       const retained = app.histories.get("primary/alpha")[0];
       const lookup = async (community, id) => {
         const response = await fetch(

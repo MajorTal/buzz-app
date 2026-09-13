@@ -1,7 +1,7 @@
 // Regression controls contributed by Brain; see WS_RETRY_REVIEW_2026_09_09.
 import { assert, afterEach, expect, it, vi } from "vitest";
 import { connectBrokerTransport } from "./transport";
-import { keypair, signed } from "./testing";
+import { keypair, message, signed } from "./testing";
 function required<T>(value: T | undefined): T {
   assert.exists(value);
   return value;
@@ -107,7 +107,7 @@ function fixture() {
       state(s: unknown) {
         snapshots.push(s);
       },
-      receive() {},
+      receive: vi.fn(),
       established() {},
       denied() {},
     },
@@ -382,6 +382,11 @@ it("keeps simultaneous presence and observer startup controls and SSE deliveries
     };
     f.frame(0, "message", event);
     f.frame(0, "message", telemetry);
+    for (const special of [event, telemetry])
+      f.frame(0, "traffic", {
+        event: special,
+        provenance: { phase: "live", channelId: "a" },
+      });
     f.frame(0, "presence", event);
     f.frame(0, "observer", { frame, generation: 1 });
     await tick();
@@ -403,3 +408,51 @@ it("keeps simultaneous presence and observer startup controls and SSE deliveries
     owner.dispose();
   }
 });
+
+it("preserves validated replay/live provenance through production broker transport; legacy traffic stays unknown", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const t = await connectBrokerTransport();
+  const owner = required(t.subscribe)(f.callbacks);
+  try {
+    f.accept(0);
+    await tick();
+    const event = message(keypair(), "a", "incoming", 1700000000);
+    f.frame(0, "message", event);
+    await tick();
+    expect(f.callbacks.receive).toHaveBeenLastCalledWith([event]);
+    for (const phase of ["replay", "live"]) {
+      f.frame(0, "traffic", { event, provenance: { phase, channelId: "a" } });
+      await tick();
+      expect(f.callbacks.receive).toHaveBeenLastCalledWith([event], {
+        phase,
+        channelId: "a",
+      });
+    }
+    expect(f.callbacks.receive).toHaveBeenCalledTimes(3);
+  } finally {
+    owner.dispose();
+  }
+});
+it.each([undefined, { phase: "fresh" }, { phase: "live", channelId: ["a"] }])(
+  "rejects malformed traffic provenance instead of calling it fresh: %j",
+  async (provenance) => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const t = await connectBrokerTransport();
+    const owner = required(t.subscribe)(f.callbacks);
+    try {
+      f.accept(0);
+      await tick();
+      f.frame(0, "traffic", {
+        event: message(keypair(), "a", "incoming", 1700000000),
+        provenance,
+      });
+      await tick();
+      expect(f.callbacks.receive).not.toHaveBeenCalled();
+      expect(f.snapshots.at(-1)).toMatchObject({ status: "retrying" });
+    } finally {
+      owner.dispose();
+    }
+  },
+);

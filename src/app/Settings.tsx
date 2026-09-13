@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { RecoveryScreen } from "./RecoveryScreen";
-import { Blocks, Settings2, UserRound, Palette } from "lucide-react";
+import { Blocks, Settings2, UserRound, Palette, Bell } from "lucide-react";
 import type { PluginManager } from "../plugins/manager";
 import type { Communities } from "../features/communities/service";
 import { PluginImport } from "./PluginImport";
@@ -8,23 +8,28 @@ import { ProfileSettings } from "./ProfileSettings";
 
 import type { Appearance } from "../shared/theme/service";
 import { AppearanceSettings } from "./AppearanceSettings";
+import { NotificationSettings } from "./NotificationSettings";
+import type { NotificationsService } from "../features/notifications/service";
 
 const sections = [
   { id: "profile", label: "Profile", icon: UserRound },
   { id: "plugins", label: "Plugins", icon: Blocks },
   { id: "appearance", label: "Appearance", icon: Palette },
+  { id: "notifications", label: "Notifications", icon: Bell },
 ] as const;
 
 export function Settings({
   plugins,
   communities,
   appearance,
+  notifications,
   navigation,
   onSection,
 }: {
   plugins: PluginManager;
   communities: Communities;
   appearance: Appearance;
+  notifications: NotificationsService;
   navigation?:
     | import("../features/navigation/service").PageNavigation
     | undefined;
@@ -90,6 +95,9 @@ export function Settings({
           ))}
         </nav>
         <div className="min-w-0">
+          <div hidden={selected !== "notifications"}>
+            <NotificationSettings notifications={notifications} />
+          </div>
           <div hidden={selected !== "appearance"}>
             <AppearanceSettings appearance={appearance} />
           </div>

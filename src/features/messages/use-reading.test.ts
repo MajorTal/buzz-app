@@ -69,11 +69,16 @@ function setup({ supported = true, focused = true, settled = true } = {}) {
     },
   );
   const leases: {
+    view: ReturnType<typeof vi.fn>;
     observe: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   }[] = [];
   const reading = vi.fn(() => {
-    const lease = { observe: vi.fn(async () => {}), dispose: vi.fn() };
+    const lease = {
+      view: vi.fn(),
+      observe: vi.fn(async () => {}),
+      dispose: vi.fn(),
+    };
     leases.push(lease);
     return lease;
   });
@@ -127,8 +132,8 @@ it("reports only fully visible settled evidence after dwell, not mounted oversca
   vi.advanceTimersByTime(1);
   expect(h.leases[0]?.observe).toHaveBeenCalledExactlyOnceWith(["visible"]);
 });
-it.each([{ supported: false }, { focused: false }, { settled: false }])(
-  "does not allocate reading from unsupported/background/unsettled views: %j",
+it.each([{ focused: false }, { settled: false }])(
+  "does not allocate reading from background/unsettled views: %j",
   (options) => {
     const h = setup(options);
     vi.advanceTimersByTime(1000);
@@ -170,6 +175,28 @@ it("focus leaving the reading surface cancels pending evidence", () => {
   h.element.dispatchEvent(new Event("focusout"));
   vi.advanceTimersByTime(1000);
   expect(h.leases[0]?.observe).not.toHaveBeenCalled();
+});
+
+it("reports qualified viewing even without read sync, but never publishes read intent", () => {
+  const h = setup({ supported: false });
+  expect(h.leases[0]?.view).toHaveBeenCalledExactlyOnceWith(
+    ["visible"],
+    expect.any(Function),
+  );
+  vi.advanceTimersByTime(1000);
+  expect(h.leases[0]?.observe).not.toHaveBeenCalled();
+});
+it("the viewing validity callback rechecks focus and settled positioning synchronously", () => {
+  const h = setup();
+  const visible = h.leases[0]?.view.mock.calls[0]?.[1];
+  expect(visible()).toBe(true);
+  h.position.current = false;
+  expect(visible()).toBe(false);
+  h.position.current = true;
+  h.doc.activeElement = new EventTarget();
+  expect(visible()).toBe(false);
+  h.unmount();
+  expect(visible()).toBe(false);
 });
 
 it("membership activity cannot abort acknowledgment of a visible message below it", () => {

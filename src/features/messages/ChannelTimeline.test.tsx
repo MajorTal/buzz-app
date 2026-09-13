@@ -1,3 +1,4 @@
+import { useReading } from "./use-reading";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import { Virtualizer } from "virtua";
@@ -19,6 +20,9 @@ import type { ChannelMessage, ChannelWindow } from "../relay/contracts";
 // Boundary test, not a browser renderer. Capture this production component's
 // effects/refs and invoke its returned DOM handlers. Deliberately stale Virtua
 // metrics reproduce the event ordering measured separately in Chromium/WebKit.
+// Reading geometry/dwell has its own real-hook boundary suite. This fixture
+// deliberately supplies only the DOM shape needed for positioning.
+vi.mock("./use-reading", () => ({ useReading: vi.fn() }));
 const hooks = vi.hoisted(() => ({
   refs: [] as { current: unknown }[],
   states: [] as unknown[],
@@ -247,6 +251,8 @@ function setup({
     children: unknown[];
     onScroll: (event: unknown) => void;
     onWheel: () => void;
+    onFocus: (event: unknown) => void;
+    onBlur: (event: unknown) => void;
   }>;
   let section: Section;
   let channelId = "channel";
@@ -308,6 +314,29 @@ function setup({
   return {
     element,
     handle,
+    focus(id?: string) {
+      section.props.onFocus({
+        target: { closest: () => (id ? { dataset: { messageId: id } } : null) },
+      });
+      render();
+    },
+    blur(inside: boolean) {
+      section.props.onBlur({
+        currentTarget: { contains: () => inside },
+        relatedTarget: null,
+      });
+      render();
+    },
+    pinned() {
+      const virtualizer = section.props.children.find(
+        (child) =>
+          !!child &&
+          typeof child === "object" &&
+          "type" in child &&
+          child.type === Virtualizer,
+      ) as ReactElement<{ keepMounted: number[] }>;
+      return virtualizer.props.keepMounted;
+    },
     loadOlder,
     olderReads,
     flush,
@@ -400,6 +429,28 @@ function setup({
     },
   };
 }
+
+it("pins only the focused message by identity across prepend and releases on focus exit", () => {
+  const h = setup();
+  expect(h.pinned()).toEqual([]);
+  h.focus("last");
+  expect(h.pinned()).toEqual([1]);
+  h.prepend();
+  expect(h.pinned()).toEqual([2]);
+  h.blur(true);
+  expect(h.pinned()).toEqual([2]);
+  h.focus("first");
+  expect(h.pinned()).toEqual([1]);
+  h.blur(false);
+  expect(h.pinned()).toEqual([]);
+  h.focus("last");
+  h.focus(); // The history region itself is not a message row.
+  expect(h.pinned()).toEqual([]);
+  h.focus("last");
+  h.setRows([]);
+  expect(h.pinned()).toEqual([]);
+  h.unmount();
+});
 
 it("persists the event target's reading position at real component cleanup, not the previous virtualizer offset", () => {
   const h = setup();
@@ -1035,6 +1086,17 @@ it("an accepted button read retires earlier blocked gesture before verification"
   h.update({ freshness: "verified" });
   expect(h.olderReads).toHaveBeenCalledTimes(1);
   h.unmount();
+});
+
+it("wires the shared reading hook to its owned scroller and settled position", () => {
+  vi.mocked(useReading).mockClear();
+  setup();
+  expect(useReading).toHaveBeenCalledWith({
+    session: expect.any(Object),
+    channelId: "channel",
+    scroller: expect.objectContaining({ current: expect.anything() }),
+    settled: expect.objectContaining({ current: expect.any(Boolean) }),
+  });
 });
 
 const membershipRow = (id: string, time: number): ChannelMessage => ({

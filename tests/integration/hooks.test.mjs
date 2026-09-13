@@ -18,6 +18,9 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 const env = Object.fromEntries(
   Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_")),
 );
+// Borrow the installed tools without letting pnpm repair the shared symlink target.
+// This fixture intentionally has no workspace/patch config of its own.
+env.pnpm_config_verify_deps_before_run = "false";
 // These commits are disposable probe fixtures, never commits in the source checkout.
 env.GIT_CONFIG_NOSYSTEM = "1";
 env.GIT_CONFIG_GLOBAL = "/dev/null";
@@ -76,7 +79,12 @@ function fixture(t) {
   return { dir, sibling, run, git, write, read, install, commit };
 }
 
-test("installed hook formats and safely fixes staged files without including other work", (t) => {
+test("installed hook formats without rewriting borrowed dependencies or other work", (t) => {
+  const dependencies = () =>
+    [".modules.yaml", "virtua/lib/index.js"].map((file) =>
+      readFileSync(path.join(root, "node_modules", file), "utf8"),
+    );
+  const installed = dependencies();
   const f = fixture(t);
   f.write("nested/space name.ts", "export const answer={value:42}\n");
   f.write("safe.ts", "export function count(){let value=1; return value;}\n");
@@ -85,6 +93,7 @@ test("installed hook formats and safely fixes staged files without including oth
   f.write("untracked.ts", "export const doNotAdd={value:1}\n");
   const result = f.commit();
   assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.deepEqual(dependencies(), installed, "borrowed dependencies changed");
   assert.equal(
     f.git("show", "HEAD:nested/space name.ts"),
     "export const answer = { value: 42 };\n",

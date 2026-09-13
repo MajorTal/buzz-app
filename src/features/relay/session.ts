@@ -25,6 +25,8 @@ import {
   type ReadStateStorage,
 } from "./read-state-storage";
 import { createUnread } from "./unread";
+import type { IncomingListener, IncomingMessage } from "./incoming";
+import { objectBody } from "./body";
 import { readSidebarPreferences } from "./sidebar-preferences";
 import { createSidebarPreferencesStore } from "./sidebar-preferences-store";
 import { createEmojiDirectory } from "./emoji-directory";
@@ -129,6 +131,7 @@ export function createRelaySession(
     8 * 1024 * 1024,
   );
   const observations = new Set<(events: readonly RelayEvent[]) => void>();
+  const incomingListeners = new Set<IncomingListener>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const pendingConfirmation = new Set<string>();
   const refreshers = new Set<() => Promise<void>>();
@@ -620,6 +623,14 @@ export function createRelaySession(
     notify,
   );
   const session = Object.freeze({
+    /** Verified new live-route messages, after reconciliation. Never history or local intent. */
+    subscribeIncoming(listener: IncomingListener) {
+      if (closed) return () => {};
+      incomingListeners.add(listener);
+      return () => {
+        incomingListeners.delete(listener);
+      };
+    },
     unread: unread.capability,
     presence: presence.queries,
     sidebarPreferences: sidebarPreferences.queries,
@@ -635,7 +646,11 @@ export function createRelaySession(
       validateMentions,
     ),
     /** An owned bounded thread reader. Dispose on close; the session retains access/lifetime authority. */
-    thread(channelId: string, messageId: string) {
+    thread(
+      channelId: string,
+      messageId: string,
+      options?: { exact?: boolean },
+    ) {
       if (closed || views.size >= 64)
         throw new Error("Relay view capacity unavailable");
       if (!/^[0-9a-f]{64}$/.test(messageId))
@@ -644,7 +659,40 @@ export function createRelaySession(
         channelId,
         messageId,
         relayAuthor: transport?.relayAuthor ?? "",
-        reader: verified,
+        reader: options?.exact
+          ? {
+              async read(filters, settings) {
+                const epoch = accessEpoch;
+                let events: readonly RelayEvent[];
+                try {
+                  events = await requests.reader.read(filters, settings);
+                } catch (error) {
+                  if (
+                    !closed &&
+                    epoch === accessEpoch &&
+                    readErrorKind(error) === "denied"
+                  )
+                    channels.denyChannel(channelId, error);
+                  throw error;
+                }
+                if (closed || epoch !== accessEpoch)
+                  throw new DOMException("Stale thread target", "AbortError");
+                settings?.signal?.throwIfAborted();
+                // A capped raw target/overlay read cannot establish a safe fold.
+                if (
+                  !filters.some((filter) => filter.depth_limit) &&
+                  events.length >= 500
+                )
+                  throw new Error(
+                    "Selected message exceeded its evidence limit",
+                  );
+                // The thread owner admits the complete target fold atomically.
+                return events;
+              },
+            }
+          : verified,
+        exact: options?.exact ?? false,
+        admit: options?.exact ? (events) => accept(events, false) : undefined,
         seed: recent.peek(messageId)?.event,
         local: localViews,
         canAccess: () => !closed && canAccess(channelId),
@@ -652,6 +700,8 @@ export function createRelaySession(
         notify,
       });
       threads.add(thread);
+      if (options?.exact)
+        thread.receive(recent.entries().map(([, item]) => item.event));
       observations.add(thread.receive);
       const unsubscribe = localViews?.subscribe(thread.changed);
       const dispose = () => {
@@ -924,11 +974,31 @@ export function createRelaySession(
     presence: (events) => presence.receive(events),
     presenceState: (state) => presence.route(state),
     observer: (frame, generation) => activity.receive(frame, generation),
-    receive(events) {
+    receive(events, provenance) {
       if (closed) return;
       // Ephemeral traffic must never enter generic retention, even from a bad route.
       presence.receive(events.filter((event) => event.kind === 20001));
       events = events.filter((event) => event.kind !== 20001);
+      const candidates = new Set(
+        provenance?.phase === "live" && provenance.channelId
+          ? events
+              .filter((event) => {
+                const destinations = event.tags.filter(
+                  ([name]) => name === "h",
+                );
+                return (
+                  (event.kind === 9 || event.kind === 40002) &&
+                  event.pubkey !== transport.viewer &&
+                  destinations.length === 1 &&
+                  destinations[0]?.[1] === provenance.channelId &&
+                  !recent.peek(event.id) &&
+                  !unread.event(event.id) &&
+                  !rawLocal().some((item) => item.event.id === event.id)
+                );
+              })
+              .map((event) => event.id)
+          : [],
+      );
       // Signed membership notifications are hints, not roster authority. Schedule
       // before visibility filtering, because a newly granted channel may be denied locally.
       if (
@@ -942,7 +1012,34 @@ export function createRelaySession(
         )
       )
         refreshRoster();
-      accept(events);
+      const visible = accept(events);
+      if (closed || !candidates.size || !provenance?.channelId) return;
+      const epoch = accessEpoch;
+      const delivered = new Set<string>();
+      const incoming: readonly IncomingMessage[] = Object.freeze(
+        visible.flatMap((event) => {
+          if (!candidates.has(event.id) || delivered.has(event.id)) return [];
+          delivered.add(event.id);
+          const body =
+            event.kind === 40002 ? objectBody(event.content) : undefined;
+          const content =
+            typeof body?.content === "string" ? body.content : event.content;
+          return [
+            Object.freeze({
+              channelId: provenance.channelId as string,
+              messageId: event.id,
+              createdAt: event.created_at,
+              authorId: event.pubkey,
+              previewContent: content.slice(0, 4096),
+            }),
+          ];
+        }),
+      );
+      if (!incoming.length) return;
+      for (const listener of incomingListeners) {
+        if (closed || epoch !== accessEpoch) return;
+        listener(incoming);
+      }
     },
     state(snapshot) {
       if (closed) return;
@@ -1039,6 +1136,7 @@ export function createRelaySession(
       stopInterests();
       traffic?.dispose();
       liveListeners.clear();
+      incomingListeners.clear();
       observations.clear();
       for (const timer of timers) clearTimeout(timer);
       for (const dispose of [...views.keys()]) dispose();

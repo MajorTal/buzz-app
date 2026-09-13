@@ -26,6 +26,7 @@ import { Tabs } from "../../../../src/shared/design-system/ui/Tabs";
 
 import { ComponentAnatomy } from "./ComponentAnatomy";
 import { Panel } from "../../../../src/shared/design-system/ui/Panel";
+import { FullPageSurface } from "../../../../src/shared/design-system/ui/FullPageSurface";
 import { PreviewCard } from "../../../../src/shared/design-system/ui/PreviewCard";
 import type { ChipAddress } from "../../../../src/shared/design-system/chips/address";
 import { chipFaces } from "../../../../src/shared/design-system/chips/faceResolver";
@@ -328,6 +329,18 @@ function AvatarSpecimen() {
     </div>
   );
 }
+function FullPageSurfaceSpecimen() {
+  return (
+    <div className="component-specimen-stack">
+      <SpecimenGroup label="Single full-workspace surface">
+        <div className="component-single-surface-demo">
+          <FullPageSurface aria-label="Full page surface" />
+        </div>
+      </SpecimenGroup>
+    </div>
+  );
+}
+
 function PanelSpecimen() {
   return (
     <div className="component-specimen-stack">
@@ -840,6 +853,7 @@ export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
   avatar: AvatarSpecimen,
   "preview-card": PreviewCardSpecimen,
   "inline-chip": InlineChipSpecimen,
+  "full-page-surface": FullPageSurfaceSpecimen,
   panel: PanelSpecimen,
   tabs: TabsSpecimen,
   select: SelectSpecimen,

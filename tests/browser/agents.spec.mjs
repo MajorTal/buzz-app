@@ -29,31 +29,103 @@ test("My agents reads the existing library with exact linked keys and session-sa
       agents.getByRole("heading", { name: "A Brain", exact: true }),
     ).toHaveCount(2);
     const keys = await page.evaluate(() => window.agentFixture.agents);
-    await expect(agents.locator("img")).toHaveCount(1);
     await expect
       .poll(() => agents.locator("img").evaluate((image) => image.naturalWidth))
       .toBeGreaterThan(0);
+    await expect(agents.locator("img")).toHaveCSS("opacity", "1");
+    await expect(
+      agents.getByRole("img", { name: "A Brain", exact: true }),
+    ).toHaveCount(2);
+
     for (const key of keys)
       await expect(agents.getByText(key, { exact: true })).toBeHidden();
-    await agents.locator("summary").click();
+    await agents
+      .getByRole("button", { name: "A Brain: 2 identities", exact: true })
+      .click();
     for (const key of keys)
       await expect(agents.getByText(key, { exact: true })).toBeVisible();
     await expect(
       page.getByText(/current Buzz library, read-only/),
     ).toBeVisible();
+    const surface = page.getByRole("region", { name: "Agents", exact: true });
+    for (const mode of ["light", "dark"]) {
+      await page.evaluate((mode) => {
+        document.documentElement.dataset.colorMode = mode;
+      }, mode);
+      for (const width of [390, 800, 1600]) {
+        await page.setViewportSize({ width, height: 400 });
+        const frame = await page.locator("main").boundingBox();
+        const bounds = await surface.boundingBox();
+        expect(frame).not.toBeNull();
+        expect(bounds).not.toBeNull();
+        expect(Math.abs(frame.width - bounds.width)).toBeLessThan(2);
+        expect(Math.abs(frame.height - bounds.height)).toBeLessThan(2);
+        await expect(surface).toHaveCSS("overflow", "hidden");
+        expect(
+          await surface.evaluate((el) => {
+            const style = getComputedStyle(el);
+            const probe = document.createElement("div");
+            probe.style.cssText =
+              "background:var(--bg-panel);border-radius:var(--radius-panel);border:1px solid var(--border-primary);box-shadow:var(--shadow-xs)";
+            el.append(probe);
+            const reference = getComputedStyle(probe);
+            const matches = [
+              "backgroundColor",
+              "borderRadius",
+              "borderTopColor",
+              "boxShadow",
+            ].every((key) => style[key] === reference[key]);
+            probe.remove();
+            return matches;
+          }),
+        ).toBe(true);
+        const scroller = surface.locator(":scope > div");
+        const documentTop = await page.evaluate(
+          () => document.scrollingElement.scrollTop,
+        );
+        await scroller.evaluate((el) => {
+          el.scrollTop = 0;
+        });
+        expect(
+          await scroller.evaluate((el) => el.scrollHeight > el.clientHeight),
+        ).toBe(true);
+        await scroller.evaluate((el) => {
+          el.scrollTop = el.scrollHeight;
+        });
+        expect(await scroller.evaluate((el) => el.scrollTop)).toBeGreaterThan(
+          0,
+        );
+        await expect(
+          surface.getByText(/current Buzz library, read-only/),
+        ).toBeInViewport();
+        expect(await surface.evaluate((el) => el.scrollTop)).toBe(0);
+        expect(
+          await page.evaluate(() => document.scrollingElement.scrollTop),
+        ).toBe(documentTop);
+        expect(
+          await page.evaluate(() => document.documentElement.scrollWidth),
+        ).toBe(width);
+      }
+    }
+    await page.setViewportSize({ width: 1440, height: 950 });
     await page.screenshot({
       path: test.info().outputPath("my-agents.png"),
     });
     await page.evaluate(() => {
       document.documentElement.dataset.colorMode = "dark";
     });
-    await expect(
-      page.getByRole("region", { name: "Agents", exact: true }),
-    ).toHaveCSS("background-color", "rgb(27, 37, 43)");
-    await expect(agents.getByRole("heading").first()).toHaveCSS(
-      "color",
-      "rgb(230, 237, 240)",
-    );
+    expect(
+      await page
+        .getByRole("region", { name: "Agents", exact: true })
+        .evaluate((el) => {
+          const probe = document.createElement("div");
+          probe.style.backgroundColor = "var(--bg-panel)";
+          el.append(probe);
+          const expected = getComputedStyle(probe).backgroundColor;
+          probe.remove();
+          return getComputedStyle(el).backgroundColor === expected;
+        }),
+    ).toBe(true);
     await page.screenshot({
       path: test.info().outputPath("my-agents-dark.png"),
     });
@@ -102,7 +174,9 @@ test("My agents reads the existing library with exact linked keys and session-sa
       .getByRole("button", { name: "Refresh agents", exact: true })
       .click();
     await expect(agents.getByRole("article")).toHaveCount(2);
-    await agents.locator("summary").click();
+    await agents
+      .getByRole("button", { name: "A Brain: 2 identities", exact: true })
+      .click();
     for (const key of keys)
       await expect(agents.getByText(key, { exact: true })).toBeVisible();
     await expect(page.getByText(/Archive visibility is unknown/)).toBeVisible();

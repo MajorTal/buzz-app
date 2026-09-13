@@ -155,7 +155,7 @@ test("the app runtime exposes ready bundled pages and removes them on disable", 
     assert.equal(projects.layout, "workspace");
     assert.match(
       renderToStaticMarkup(createElement(projects.component)),
-      /^<section aria-label="Projects"[^>]*><h1[^>]*>Projects<\/h1><\/section>$/,
+      /^<div class="[^"]*"><section aria-label="Projects" data-buzz-ui="" class="panel"><div[^>]*><h1[^>]*>Projects<\/h1><\/div><\/section><\/div>$/,
     );
     await services.plugins.change("disable", "buzz.projects");
     assert.deepEqual(services.pages.snapshot(), []);

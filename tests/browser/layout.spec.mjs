@@ -567,9 +567,15 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
   ]) {
     await page.setViewportSize({ width, height });
     const bounds = await box(surface);
+    const workspace = await box(surface.locator("..").locator(".."));
     const heading = await box(title);
+    near(bounds.x, workspace.x);
+    near(bounds.y, workspace.y);
+    near(bounds.width, workspace.width);
+    near(bounds.height, workspace.height);
     near(heading.x + heading.width / 2, bounds.x + bounds.width / 2);
     near(heading.y + heading.height / 2, bounds.y + bounds.height / 2);
+    await expect(surface).toHaveCSS("overflow", "hidden");
     await shellFits(page, width);
     await page.screenshot({
       path: testInfo.outputPath(`projects-${width}.png`),

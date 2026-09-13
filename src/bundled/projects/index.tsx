@@ -1,4 +1,5 @@
 import type { PluginModule } from "../../plugins/api";
+import { FullPageSurface } from "../../shared/design-system/ui/FullPageSurface";
 
 export const inject = ["pages"];
 export const apply: PluginModule["apply"] = (ctx) => {
@@ -12,11 +13,12 @@ export const apply: PluginModule["apply"] = (ctx) => {
 
 function ProjectsPage() {
   return (
-    <section
-      aria-label="Projects"
-      className="flex h-full min-h-0 items-center justify-center rounded-3xl border border-line bg-surface p-6 text-center shadow-surface"
-    >
-      <h1 className="m-0 text-3xl font-medium tracking-tight">Projects</h1>
-    </section>
+    <div className="h-full min-h-0">
+      <FullPageSurface aria-label="Projects">
+        <div className="flex h-full min-h-0 items-center justify-center overflow-auto p-6 text-center">
+          <h1 className="m-0 text-3xl font-medium tracking-tight">Projects</h1>
+        </div>
+      </FullPageSurface>
+    </div>
   );
 }

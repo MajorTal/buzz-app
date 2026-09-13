@@ -260,3 +260,30 @@ it.each([
     expect(html).toContain('loading="lazy"');
   },
 );
+
+it("does not bypass the session media resolver to paint an inaccessible attachment", () => {
+  const media = vi.fn(() => undefined);
+  const html = renderToStaticMarkup(
+    <MessageRow
+      row={{
+        ...row,
+        attachments: [
+          {
+            url: "https://image.test/original.png",
+            video: false,
+            blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+          },
+        ],
+      }}
+      profile={undefined}
+      media={media}
+      onOpenLink={() => false}
+      day={false}
+      retry={undefined}
+    />,
+  );
+  expect(media).toHaveBeenCalledWith("https://image.test/original.png");
+  expect(html).toContain("Image attachment");
+  expect(html).not.toContain("<canvas");
+  expect(html).not.toContain("<img");
+});

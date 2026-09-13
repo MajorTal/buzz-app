@@ -1,5 +1,8 @@
-import { RefreshCw, Users } from "lucide-react";
-import { Avatar } from "../../shared/Avatar";
+import { IconRefresh, IconUsers } from "@tabler/icons-react";
+import { Button } from "../../shared/design-system/ui/Button";
+import { Avatar } from "../../shared/design-system/ui/Avatar";
+import { Accordion } from "../../shared/design-system/ui/Accordion";
+import { FullPageSurface } from "../../shared/design-system/ui/FullPageSurface";
 import { avatarSource } from "../../shared/avatar-source";
 import {
   groupAgentLibrary,
@@ -13,31 +16,30 @@ import { useRelayConnection } from "../../features/relay/react";
 export function AgentsPage({ relay }: { relay: RelayData }) {
   const connection = useRelayConnection(relay);
   return (
-    <section
-      aria-label="Agents"
-      className="h-full min-h-0 overflow-auto rounded-3xl border border-line bg-surface p-5 shadow-surface sm:p-8"
-    >
-      <h1 className="m-0 text-3xl font-medium tracking-tight">Agents</h1>
-      {connection.status === "ready" ? (
-        <MyAgents
-          key={`${connection.scope}:${connection.generation}`}
-          session={connection.session}
-        />
-      ) : (
-        <div className="mt-6">
-          <p>
-            {connection.status === "connecting"
-              ? "Connecting to your community…"
-              : "Connect to a community to browse your agents."}
-          </p>
-          {connection.status === "error" && (
-            <button type="button" onClick={() => relay.retry()}>
-              Retry connection
-            </button>
+    <div className="h-full min-h-0">
+      <FullPageSurface aria-label="Agents">
+        <div className="h-full min-h-0 overflow-auto p-5 text-body sm:p-8">
+          <h1 className="m-0 text-title text-primary">Agents</h1>
+          {connection.status === "ready" ? (
+            <MyAgents
+              key={`${connection.scope}:${connection.generation}`}
+              session={connection.session}
+            />
+          ) : (
+            <div className="mt-6">
+              <p className="text-body">
+                {connection.status === "connecting"
+                  ? "Connecting to your community…"
+                  : "Connect to a community to browse your agents."}
+              </p>
+              {connection.status === "error" && (
+                <Button onClick={() => relay.retry()}>Retry connection</Button>
+              )}
+            </div>
           )}
         </div>
-      )}
-    </section>
+      </FullPageSurface>
+    </div>
   );
 }
 function MyAgents({ session }: { session: RelaySession }) {
@@ -69,39 +71,49 @@ function MyAgents({ session }: { session: RelaySession }) {
   return (
     <div className="mx-auto mt-2 max-w-6xl space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="m-0 text-sm text-muted">Your agents from Buzz.</p>
-        <button
-          type="button"
-          className="inline-flex items-center gap-2 rounded-lg border-0 bg-soft px-3 py-2 text-xs"
+        <p className="m-0 text-body text-secondary">Your agents from Buzz.</p>
+        <Button
+          variant="quiet"
+          size="compact"
           disabled={loading || snapshot.status === "unavailable"}
           onClick={refresh}
         >
-          <RefreshCw size={14} aria-hidden="true" />
+          <IconRefresh size={16} stroke={2} aria-hidden="true" />
           {snapshot.status === "error" ? "Retry" : "Refresh agents"}
-        </button>
+        </Button>
       </div>
-      {loading && <p role="status">Reading your Buzz library…</p>}
+      {loading && (
+        <p className="text-body" role="status">
+          Reading your Buzz library…
+        </p>
+      )}
       {snapshot.status === "idle" && (
-        <p role="status">Library cleared. Refresh to read it again.</p>
+        <p className="text-body" role="status">
+          Library cleared. Refresh to read it again.
+        </p>
       )}
       {snapshot.status === "unavailable" && (
-        <p role="status">
+        <p className="text-body" role="status">
           The current Buzz library is available through the local live
           development host. See README for live setup.
         </p>
       )}
-      {snapshot.error && <p role="alert">{snapshot.error}</p>}
+      {snapshot.error && (
+        <p className="text-body" role="alert">
+          {snapshot.error}
+        </p>
+      )}
       {snapshot.status === "ready" && (
         <>
           <section aria-label="My agents" className="space-y-3">
-            <h2 className="m-0 flex items-center gap-2 text-sm font-semibold">
+            <h2 className="m-0 flex items-center gap-2 text-heading">
               My agents{" "}
-              <span className="rounded-md bg-soft px-2 py-0.5 text-xs font-normal text-muted">
+              <span className="rounded-md bg-neutral-2 px-2 py-0.5 text-body-sm font-normal text-secondary">
                 {groups.length}
               </span>
             </h2>
             {!groups.length && (
-              <p className="py-8 text-center text-sm text-muted">
+              <p className="py-8 text-center text-body text-secondary">
                 No selected agents in your Buzz library.
               </p>
             )}
@@ -119,7 +131,7 @@ function MyAgents({ session }: { session: RelaySession }) {
           </section>
           {!!custom.length && (
             <section aria-label="Custom agents" className="space-y-3">
-              <h2 className="m-0 text-sm font-semibold">Custom agents</h2>
+              <h2 className="m-0 text-heading">Custom agents</h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,180px),1fr))] gap-4">
                 {custom.map((identity) => (
                   <AgentCard
@@ -135,7 +147,7 @@ function MyAgents({ session }: { session: RelaySession }) {
           )}
           {!!unknown.length && (
             <section aria-label="Unknown agents" className="space-y-3">
-              <h2 className="m-0 text-sm font-semibold">Other identities</h2>
+              <h2 className="m-0 text-heading">Other identities</h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,180px),1fr))] gap-4">
                 {unknown.map((identity) => (
                   <AgentCard
@@ -150,12 +162,12 @@ function MyAgents({ session }: { session: RelaySession }) {
             </section>
           )}
           {archive.status !== "ready" && (
-            <p className="text-sm text-muted">
+            <p className="text-body text-secondary">
               Archive visibility is unknown. Library entries remain visible;
               this does not grant channel access.
             </p>
           )}
-          <p className="border-t border-line pt-4 text-xs text-muted">
+          <p className="border-t border-primary pt-4 text-body-sm text-secondary">
             Mention existing members with @ in a channel or thread. This is your
             current Buzz library, read-only; keep Buzz running for replies.
           </p>
@@ -182,40 +194,47 @@ function AgentCard({
       ? session.media(source)
       : undefined;
   return (
-    <article className="flex min-w-0 flex-col rounded-2xl border border-line bg-soft/70 p-4">
+    <article className="flex min-w-0 flex-col rounded-2xl border border-primary p-4">
       <div className="flex min-h-36 flex-1 items-center justify-center py-5">
-        <Avatar
-          name={name}
-          src={picture}
-          className="size-24 rounded-[28px] border-[3px] border-surface text-3xl shadow-sm"
-        />
+        <Avatar alt={name} fallback={name} src={picture ?? null} size="large" />
       </div>
-      <h3 className="m-0 truncate text-sm font-semibold" title={name}>
+      <h3 className="m-0 truncate text-body font-semibold" title={name}>
         {name}
       </h3>
       {identities.length ? (
-        <details className="mt-1 text-xs text-muted">
-          <summary
-            className="flex cursor-pointer list-none items-center gap-1.5 py-1 hover:text-ink"
-            aria-label={`Show identities for ${name}`}
-          >
-            <Users size={13} aria-hidden="true" />
-            {identities.length}{" "}
-            {identities.length === 1 ? "identity" : "identities"}
-          </summary>
-          <ul className="mt-2 space-y-3 border-t border-line pt-3">
-            {identities.map((identity) => (
-              <li key={identity.pubkey}>
-                <span className="font-medium text-ink">{identity.name}</span>
-                <p className="m-0 mt-1 select-all break-all font-mono text-[length:calc(10px*var(--buzz-text-scale,1))]">
-                  {identity.pubkey}
-                </p>
-              </li>
-            ))}
-          </ul>
-        </details>
+        <Accordion
+          items={[
+            {
+              value: "identities",
+              title: (
+                <span className="flex items-center gap-2">
+                  <IconUsers size={16} stroke={2} aria-hidden="true" />
+                  <span className="sr-only">{name}: </span>
+                  {identities.length}{" "}
+                  {identities.length === 1 ? "identity" : "identities"}
+                </span>
+              ),
+              content: (
+                <ul className="mt-2 space-y-3 border-t border-primary pt-3">
+                  {identities.map((identity) => (
+                    <li key={identity.pubkey}>
+                      <span className="font-semibold text-primary">
+                        {identity.name}
+                      </span>
+                      <p className="m-0 mt-1 select-all break-all text-mono-sm">
+                        {identity.pubkey}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ),
+            },
+          ]}
+        />
       ) : (
-        <p className="m-0 mt-1 text-xs text-muted">No linked identity</p>
+        <p className="m-0 mt-1 text-body-sm text-secondary">
+          No linked identity
+        </p>
       )}
     </article>
   );

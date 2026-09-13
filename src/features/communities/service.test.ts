@@ -53,7 +53,7 @@ it("opens an identity without touching a community and saves a local profile ind
     selected: null,
   });
   expect(requests).toEqual(["/api/relay/identity"]);
-  client.saveProfile({ name: "Local name", picture: "" });
+  client.saveProfile({ name: "Local name", picture: "" }, client.capture());
   expect(client.snapshot().profile.name).toBe("Local name");
   expect(requests).toHaveLength(1);
 });
@@ -63,12 +63,14 @@ it("retains separate sessions on A→B→A, and personal space does not reset th
   client.joined(
     { id: "primary", name: "Primary" },
     { name: "Local", picture: "" },
+    client.capture(),
   );
   await flush();
   const a = client.relay.snapshot();
   client.joined(
     { id: "secondary", name: "Secondary" },
     { name: "Different", picture: "" },
+    client.capture(),
   );
   await flush();
   const b = client.relay.snapshot();
@@ -128,6 +130,7 @@ it("a failing community does not replace its healthy sibling or the local profil
   client.joined(
     { id: "primary", name: "Primary" },
     { name: "Local", picture: "" },
+    client.capture(),
   );
   await flush();
   const healthy = client.relay.snapshot();
@@ -137,6 +140,7 @@ it("a failing community does not replace its healthy sibling or the local profil
   client.joined(
     { id: "secondary", name: "Secondary" },
     { name: "Community", picture: "" },
+    client.capture(),
   );
   await flush();
   expect(client.relay.snapshot().status).toBe("error");
@@ -151,10 +155,11 @@ it("keeps local actions and completed joins usable when storage writes fail", as
   vi.spyOn(localStorage, "setItem").mockImplementation(() => {
     throw new Error("Storage quota exceeded");
   });
-  client.saveProfile({ name: "Local", picture: "" });
+  client.saveProfile({ name: "Local", picture: "" }, client.capture());
   client.joined(
     { id: "primary", name: "Primary" },
     { name: "Remote", picture: "" },
+    client.capture(),
   );
   await flush();
   expect(client.snapshot()).toMatchObject({
@@ -196,12 +201,17 @@ it("persists arbitrary canonical origins, preserves legacy aliases, and restores
     "https://fourth.example",
     "wss://fifth.example:8443",
   ]) {
-    client.joined({ id, name: id }, { name: "Local", picture: "" });
+    client.joined(
+      { id, name: id },
+      { name: "Local", picture: "" },
+      client.capture(),
+    );
     await flush();
   }
   client.joined(
     { id: "https://third.example/", name: "Third renamed" },
     { name: "Other", picture: "" },
+    client.capture(),
   );
   await flush();
   expect(client.snapshot().memberships).toHaveLength(4);
@@ -251,6 +261,7 @@ it("normalizes old and new stored spellings without duplicates or unsafe automat
     client.joined(
       { id: "https://bad.example/path", name: "Bad" },
       { name: "Other", picture: "" },
+      client.capture(),
     ),
   ).toThrow();
   expect(client.snapshot()).toBe(before);
@@ -265,6 +276,7 @@ it("does not acquire a session after rejected registration and registers again o
   client.joined(
     { id: "wss://third.example", name: "Third" },
     { name: "Local", picture: "" },
+    client.capture(),
   );
   await flush();
   expect(client.relay.snapshot().status).toBe("error");
@@ -289,6 +301,7 @@ it("selects alternate URL spellings through the canonical retained session", asy
   client.joined(
     { id: "wss://third.example", name: "Third" },
     { name: "Local", picture: "" },
+    client.capture(),
   );
   await flush();
   await flush();
@@ -323,7 +336,7 @@ it("preserves unresolved saved aliases across profile saves and reloads without 
   });
   expect(requests).toEqual(["/api/relay/identity"]);
   expect(() => client.select(membership.id)).toThrow();
-  client.saveProfile({ name: "After", picture: "" });
+  client.saveProfile({ name: "After", picture: "" }, client.capture());
   const persisted = JSON.parse(
     localStorage.getItem(`buzz-client.v1:${viewer}`) ?? "null",
   );
@@ -333,7 +346,10 @@ it("preserves unresolved saved aliases across profile saves and reloads without 
   });
   const reloaded = setup(persisted);
   await flush();
-  reloaded.saveProfile({ name: "After reload", picture: "" });
+  reloaded.saveProfile(
+    { name: "After reload", picture: "" },
+    reloaded.capture(),
+  );
   const again = JSON.parse(
     localStorage.getItem(`buzz-client.v1:${viewer}`) ?? "null",
   );
@@ -379,6 +395,7 @@ it("retains unresolved memberships but honors an explicit Personal selection or 
   client.joined(
     { id: "primary", name: "New community" },
     { name: "After", picture: "" },
+    client.capture(),
   );
   await flush();
   persisted = JSON.parse(
@@ -408,7 +425,7 @@ it("keeps only valid unique unresolved aliases and never carries them to another
   };
   const client = setup(saved);
   await flush();
-  client.saveProfile({ name: "After", picture: "" });
+  client.saveProfile({ name: "After", picture: "" }, client.capture());
   const persisted = JSON.parse(
     localStorage.getItem(`buzz-client.v1:${viewer}`) ?? "null",
   );
@@ -418,7 +435,7 @@ it("keeps only valid unique unresolved aliases and never carries them to another
   expect(persisted.selected).toBeNull();
   const other = setup(saved, "c".repeat(64));
   await flush();
-  other.saveProfile({ name: "Other", picture: "" });
+  other.saveProfile({ name: "Other", picture: "" }, other.capture());
   expect(
     JSON.parse(localStorage.getItem(`buzz-client.v1:${viewer}`) ?? "null")
       .memberships,

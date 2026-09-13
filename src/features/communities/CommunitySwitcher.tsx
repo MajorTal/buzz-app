@@ -27,7 +27,8 @@ export function CommunitySwitcher({
     communities.subscribe,
     communities.snapshot,
   );
-  const [joining, setJoining] = useState(false);
+  const [joinEpoch, setJoinEpoch] = useState<number | null>(null);
+  const joining = joinEpoch === client.epoch;
   const dialog = useRef<HTMLDialogElement>(null);
   const trigger = useRef<HTMLButtonElement>(null);
   const wasJoining = useRef(false);
@@ -38,6 +39,7 @@ export function CommunitySwitcher({
   }, [joining]);
   const current = client.memberships.find((m) => m.id === client.selected);
   const select = (id: string | null) => {
+    if (communities.snapshot().epoch !== client.epoch) return;
     if (onSelect) onSelect(id);
     else communities.select(id);
     dialog.current?.close();
@@ -61,7 +63,12 @@ export function CommunitySwitcher({
         <span>{current?.name ?? "Personal space"}</span>
         <ChevronDown size={14} aria-hidden="true" />
       </button>
-      <dialog ref={dialog} className={styles.dialog} aria-label="Communities">
+      <dialog
+        key={client.epoch}
+        ref={dialog}
+        className={styles.dialog}
+        aria-label="Communities"
+      >
         <header>
           <h2>Communities</h2>
           <button
@@ -107,7 +114,7 @@ export function CommunitySwitcher({
             aria-label="Add a community"
             onClick={() => {
               dialog.current?.close();
-              setJoining(true);
+              setJoinEpoch(client.epoch);
             }}
           >
             <Plus size={22} aria-hidden="true" />
@@ -120,7 +127,7 @@ export function CommunitySwitcher({
           communities={communities}
           mode="join"
           onJoined={select}
-          close={() => setJoining(false)}
+          close={() => setJoinEpoch(null)}
         />
       )}
     </>

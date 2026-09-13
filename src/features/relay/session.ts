@@ -78,6 +78,9 @@ export function createRelaySession(
   let revoking = 0;
   const notifications = new Set<() => void>();
   const notify = (listener: () => void) => {
+    // The host publishes session replacement. A retired session must not call
+    // observers into partially disposed owners or let them interrupt cleanup.
+    if (closed) return;
     if (revoking) notifications.add(listener);
     else listener();
   };

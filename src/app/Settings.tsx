@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { RecoveryScreen } from "./RecoveryScreen";
-import { Blocks, Settings2, UserRound, Palette } from "lucide-react";
+import { Blocks, Settings2, UserRound, Palette, KeyRound } from "lucide-react";
 import type { PluginManager } from "../plugins/manager";
 import type { Communities } from "../features/communities/service";
 import { PluginImport } from "./PluginImport";
@@ -8,8 +8,11 @@ import { ProfileSettings } from "./ProfileSettings";
 
 import type { Appearance } from "../shared/theme/service";
 import { AppearanceSettings } from "./AppearanceSettings";
+import type { Identity } from "../features/identity/service";
+import { AccountSettings } from "./AccountSettings";
 
 const sections = [
+  { id: "account", label: "Account", icon: KeyRound },
   { id: "profile", label: "Profile", icon: UserRound },
   { id: "plugins", label: "Plugins", icon: Blocks },
   { id: "appearance", label: "Appearance", icon: Palette },
@@ -19,23 +22,28 @@ export function Settings({
   plugins,
   communities,
   appearance,
+  identity,
   navigation,
   onSection,
 }: {
   plugins: PluginManager;
   communities: Communities;
   appearance: Appearance;
+  identity: Identity;
   navigation?:
     | import("../features/navigation/service").PageNavigation
     | undefined;
   onSection?: (section: string) => void;
 }) {
-  const [selected, setSelected] =
-    useState<(typeof sections)[number]["id"]>("profile");
   const requestedSection =
     navigation?.target.kind === "settings"
       ? (navigation.target.section ?? "profile")
       : undefined;
+  const [selected, setSelected] = useState<(typeof sections)[number]["id"]>(
+    () =>
+      sections.find((section) => section.id === requestedSection)?.id ??
+      "profile",
+  );
   useEffect(() => {
     if (
       requestedSection &&
@@ -90,6 +98,13 @@ export function Settings({
           ))}
         </nav>
         <div className="min-w-0">
+          <div hidden={selected !== "account"}>
+            <AccountSettings identity={identity} />
+            <p className="notice">
+              Account setup is available here. Packaged community reads and
+              sends are not connected to native identity in this preview yet.
+            </p>
+          </div>
           <div hidden={selected !== "appearance"}>
             <AppearanceSettings appearance={appearance} />
           </div>
@@ -110,8 +125,8 @@ export function Settings({
                 <RecoveryScreen plugins={plugins} />
               ) : (
                 <p role="status">
-                  Plugin settings are unavailable. Profile and Appearance still
-                  work.
+                  Plugin settings are unavailable. Account, Profile and
+                  Appearance still work.
                 </p>
               )}
               <div className="overflow-hidden rounded-3xl border border-shell-edge/80 bg-surface shadow-surface">

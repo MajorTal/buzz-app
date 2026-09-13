@@ -1,3 +1,7 @@
+mod identity;
+use identity::{
+    identity_import_legacy, identity_sign_out, identity_status, identity_unlock_saved, Identity,
+};
 mod terminal;
 use tauri::Manager as _;
 use terminal::{
@@ -32,8 +36,8 @@ async fn prepare_import(
     .map_err(|e| e.to_string())?
 }
 #[tauri::command]
-async fn plugin_import_folder(
-    app: tauri::AppHandle,
+async fn plugin_import_folder<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
     imports: tauri::State<'_, Imports>,
 ) -> Result<Option<Preview>, String> {
     prepare_import(imports.inner().clone(), move || {
@@ -151,6 +155,31 @@ async fn plugin_recover(
 ) -> Result<InstallationResult, String> {
     with_manager(manager, |m| m.recover().map(|catalog| ready(&m, catalog))).await
 }
+// Shared by production and IPC tests, including all existing commands.
+fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
+    tauri::generate_handler![
+        identity_status,
+        identity_import_legacy,
+        identity_unlock_saved,
+        identity_sign_out,
+        terminal_create_owner,
+        terminal_spawn,
+        terminal_read,
+        terminal_write,
+        terminal_resize,
+        terminal_close,
+        terminal_close_owner,
+        plugin_import_folder,
+        plugin_import_git,
+        plugin_import_install,
+        plugin_import_discard,
+        plugin_catalog,
+        plugin_change,
+        plugin_module,
+        plugin_recover
+    ]
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -159,27 +188,13 @@ pub fn run() {
         .manage(Imports::default())
         .manage(Terminals::default())
         .manage(PluginManager(Manager::from_env()))
-        .invoke_handler(tauri::generate_handler![
-            terminal_create_owner,
-            terminal_spawn,
-            terminal_read,
-            terminal_write,
-            terminal_resize,
-            terminal_close,
-            terminal_close_owner,
-            plugin_import_folder,
-            plugin_import_git,
-            plugin_import_install,
-            plugin_import_discard,
-            plugin_catalog,
-            plugin_change,
-            plugin_module,
-            plugin_recover
-        ])
+        .manage(Identity::from_env())
+        .invoke_handler(commands())
         .build(tauri::generate_context!())
         .expect("failed to build Buzz Foundation")
         .run(|app, event| {
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<Identity>().shutdown();
                 if let Err(error) = app.state::<Terminals>().shutdown() {
                     eprintln!("Terminal shutdown failed: {error}");
                 }

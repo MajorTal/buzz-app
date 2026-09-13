@@ -94,12 +94,25 @@ export function App({ services }: { services: AppServices }) {
           <button type="button" onClick={() => select("home")}>
             Go Home
           </button>
+          <button
+            type="button"
+            onClick={() =>
+              void services.navigation.open({
+                version: 1,
+                kind: "settings",
+                section: "account",
+              })
+            }
+          >
+            Manage account
+          </button>
         </div>
       ) : settings ? (
         <Settings
           plugins={plugins}
           communities={services.communities}
           appearance={services.appearance}
+          identity={services.identity}
           navigation={route.request}
           onSection={(section) =>
             void services.navigation.open({

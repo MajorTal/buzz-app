@@ -10,8 +10,13 @@ import { PagesService } from "../features/pages/service";
 import { bundledPlugins } from "../bundled";
 import { createPluginManager } from "../plugins/manager";
 import { withTimeout } from "../plugins/timeout";
+import { createIdentity } from "../features/identity/service";
+import { createNativeIdentityBackend } from "../features/identity/native";
 
 export function createServices() {
+  // One renderer owner reconnects to process identity; Account mounts own no session.
+  const nativeIdentity = createNativeIdentityBackend();
+  const identity = createIdentity(nativeIdentity);
   const appearance = createAppearance();
   const ctx = new Context();
   const plugins = createPluginManager(ctx, {
@@ -25,7 +30,9 @@ export function createServices() {
   const conversation = new ConversationService(ctx);
   const communities = createCommunities(
     ctx,
-    import.meta.env.VITE_BUZZ_LIVE === "1",
+    // Never use a broker's potentially different key as native identity transport.
+    // Native read/send integration is the next slice; remain disconnected until then.
+    !nativeIdentity && import.meta.env.VITE_BUZZ_LIVE === "1",
   );
   const relay = communities.relay;
   let disposal: Promise<void> | undefined;
@@ -40,7 +47,9 @@ export function createServices() {
     relay,
     communities,
     appearance,
+    identity,
     dispose() {
+      identity.dispose(); // Renderer cleanup only. Native sign-out is an explicit action.
       appearance.dispose();
       // Start root cancellation without waiting for plugin-owned cleanup. Cordis
       // starts sibling effects independently; the runtime still owns replacement

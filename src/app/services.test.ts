@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Context } from "@deepseek-ai/cordis";
 import { createServices, type AppServices } from "./services";
+import type { IdentityBackend } from "../features/identity/contracts";
+const native = vi.hoisted(() => ({
+  backend: undefined as IdentityBackend | undefined,
+}));
+vi.mock("../features/identity/native", () => ({
+  createNativeIdentityBackend: () => native.backend,
+}));
 
 const plugin = vi.hoisted(() => ({
   cleanup: vi.fn<() => void | Promise<void>>(),
@@ -37,6 +44,7 @@ beforeEach(() => {
   vi.useFakeTimers();
   vi.stubEnv("VITE_BUZZ_LIVE", "1");
   plugin.cleanup.mockReset();
+  native.backend = undefined;
   const values = new Map<string, string>();
   storageReads = vi.fn((key: string) => values.get(key) ?? null);
   vi.stubGlobal("localStorage", {
@@ -106,11 +114,13 @@ async function openCommunities() {
   services.communities.joined(
     { id: "primary", name: "Primary" },
     { name: "Test", picture: "" },
+    services.communities.capture(),
   );
   await vi.advanceTimersByTimeAsync(0);
   services.communities.joined(
     { id: "secondary", name: "Other" },
     { name: "Test", picture: "" },
+    services.communities.capture(),
   );
   await vi.advanceTimersByTimeAsync(0);
   expect(services.relay.snapshot().status).toBe("ready");
@@ -218,4 +228,75 @@ it("joins cleanup already started by disabling a plugin", async () => {
   await disposal;
   expect(finished).toBe(true);
   expect(plugin.cleanup).toHaveBeenCalledTimes(1);
+});
+
+it("composes one native identity and never connects its separate development-broker identity", async () => {
+  await services.dispose();
+  vi.mocked(fetch).mockClear();
+  const status = {
+    state: "ready",
+    pubkey: "b".repeat(64),
+    generation: "2",
+    revocation: "00000000-0000-4000-8000-000000000001",
+    busy: false,
+    reason: null,
+  };
+  native.backend = {
+    status: vi.fn(async () => status),
+    unlockSaved: vi.fn(),
+    importLegacy: vi.fn(),
+    signOut: vi.fn(),
+  };
+  services = createServices();
+  const owner = services.identity;
+  await vi.advanceTimersByTimeAsync(0);
+  expect(owner.snapshot().identity?.pubkey).toBe(status.pubkey);
+  expect(native.backend.status).toHaveBeenCalledTimes(1);
+  expect(services.identity).toBe(owner);
+  expect(services.communities.snapshot().viewer).toBeUndefined();
+  expect(fetch).not.toHaveBeenCalled();
+  await services.dispose();
+  expect(owner.snapshot().identity).toBeNull();
+  expect(native.backend.signOut).not.toHaveBeenCalled();
+  // A fresh renderer reconnects without locking/changing the native authority.
+  services = createServices();
+  await vi.advanceTimersByTimeAsync(0);
+  expect(services.identity).not.toBe(owner);
+  expect(services.identity.snapshot().identity?.pubkey).toBe(status.pubkey);
+  expect(native.backend.status).toHaveBeenCalledTimes(2);
+});
+
+it("a missing initial native reply cannot trigger broker fallback or retain disposed renderer state", async () => {
+  await services.dispose();
+  vi.mocked(fetch).mockClear();
+  let respond!: (value: unknown) => void;
+  native.backend = {
+    status: vi.fn(
+      () =>
+        new Promise((resolve) => {
+          respond = resolve;
+        }),
+    ),
+    unlockSaved: vi.fn(),
+    importLegacy: vi.fn(),
+    signOut: vi.fn(),
+  };
+  services = createServices();
+  const owner = services.identity;
+  await vi.advanceTimersByTimeAsync(2_001);
+  expect(owner.snapshot().identity).toBeNull();
+  expect(owner.snapshot().error).toBe("unavailable");
+  expect(fetch).not.toHaveBeenCalled();
+  await services.dispose();
+  respond({
+    state: "ready",
+    pubkey: viewer,
+    generation: "2",
+    revocation: "00000000-0000-4000-8000-000000000001",
+    busy: false,
+    reason: null,
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  expect(owner.snapshot().identity).toBeNull();
+  expect(native.backend.signOut).not.toHaveBeenCalled();
 });

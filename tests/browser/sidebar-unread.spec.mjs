@@ -92,7 +92,25 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   page,
   app,
 }, info) => {
-  await open(page, app);
+  // Visible rows can precede the post-establishment catch-up. Force that late
+  // ordering, then account for its head read before measuring cue-triggered work.
+  app.relay.holdEose("alpha");
+  try {
+    await open(page, app);
+    const alphaHeads = () =>
+      heads(app).filter(
+        ({ community, filter }) =>
+          community === "primary" &&
+          filter["#h"][0] === "alpha" &&
+          filter.top_level === true &&
+          filter.until === undefined,
+      );
+    expect(alphaHeads()).toHaveLength(1);
+    app.relay.releaseEose("alpha");
+    await expect.poll(() => alphaHeads().length).toBe(2);
+  } finally {
+    app.relay.releaseEose("alpha");
+  }
   await expect(row(page, "dm-090").getByRole("img")).toHaveCount(1);
   await expect(cue(page, "below")).toBeVisible();
   await expect(cue(page, "above")).toHaveCount(0);

@@ -38,3 +38,21 @@ it("asynchronous preparation pins its principal until dispatch ownership is rele
   await preparing;
   expect(owner.api.idle()).toBe(true);
 });
+
+it("retains optional signing leases and optional clocks after the last stream closes", async () => {
+  vi.useFakeTimers();
+  const get = createHostAdmission();
+  const owner = get("relay", "viewer");
+  const release = owner.live.acquirePublication();
+  for (let i = 0; i < 80; i++) get(`idle-${i}`, "viewer");
+  expect(get("relay", "viewer")).toBe(owner);
+  expect(() => owner.live.acquirePublication()).toThrow("capacity");
+  owner.live.takePublish();
+  release();
+  release();
+  get("next", "viewer");
+  expect(get("relay", "viewer")).toBe(owner);
+  await vi.advanceTimersByTimeAsync(5000);
+  get("expired", "viewer");
+  expect(get("relay", "viewer")).not.toBe(owner);
+});

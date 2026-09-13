@@ -1,5 +1,15 @@
-import { observerFrame, observerGeneration } from "../agents/observer";
+import {
+  OBSERVER_KIND,
+  observerFrame,
+  observerGeneration,
+} from "../agents/observer";
 import { eventDto } from "./events";
+import {
+  presenceAuthors,
+  presenceStatus,
+  presenceState,
+  type PresenceStatus,
+} from "./presence-contract";
 import {
   liveChannels,
   type LiveCallbacks,
@@ -19,6 +29,11 @@ export function subscribeBrokerTraffic(
     attempts = 0;
   let channels: string[] = [];
   let priority: string[] = [];
+  let authors: string[] = [];
+  let presencePending = false;
+  let presenceTimer: ReturnType<typeof setTimeout> | undefined;
+  let presenceDue = 0;
+  let publishing = false;
   let priorityPending = false;
   let observer: number | null = null;
   let observerPending = false;
@@ -41,6 +56,9 @@ export function subscribeBrokerTraffic(
     streamId = undefined;
     controlPending = false;
     priorityPending = false;
+    presencePending = false;
+    clearTimeout(presenceTimer);
+    presenceTimer = undefined;
     observerPending = false;
     receiving = true;
     controller?.abort();
@@ -60,6 +78,7 @@ export function subscribeBrokerTraffic(
     };
     pulse();
     const startingPriority = JSON.stringify(priority);
+    const startingPresence = JSON.stringify(authors);
     const startingObserver = observer;
     void (async () => {
       try {
@@ -67,7 +86,7 @@ export function subscribeBrokerTraffic(
           method: "POST",
           credentials: "same-origin",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ channels, priority, observer }),
+          body: JSON.stringify({ channels, priority, authors, observer }),
           signal: owned.signal,
         });
         if (!valid()) return;
@@ -90,6 +109,7 @@ export function subscribeBrokerTraffic(
           throw new Error("Invalid live broker control identity");
         streamId = identity ?? undefined;
         if (startingPriority !== JSON.stringify(priority)) sendPriority();
+        if (startingPresence !== JSON.stringify(authors)) schedulePresence();
         if (startingObserver !== observer) sendObserver();
         const reader = response.body.getReader();
         const decoder = new TextDecoder();
@@ -119,8 +139,20 @@ export function subscribeBrokerTraffic(
               if (!lines.length) continue; // Keepalives carry no data.
               const data: unknown = JSON.parse(lines.join("\n"));
               if (!valid()) return;
-              if (kind === "message") callbacks.receive([eventDto(data)]);
-              else if (kind === "observer") {
+              if (kind === "message") {
+                const event = eventDto(data);
+                if (event.kind !== 20001 && event.kind !== OBSERVER_KIND)
+                  callbacks.receive([event]);
+              } else if (kind === "presence") {
+                const event = eventDto(data);
+                if (event.kind === 20001 && authors.includes(event.pubkey))
+                  callbacks.presence?.([event]);
+              } else if (kind === "presence-state") {
+                const state = presenceState(data);
+                // SSE already in transit can describe an older control's author set.
+                if (JSON.stringify(state.authors) === JSON.stringify(authors))
+                  callbacks.presenceState?.(state);
+              } else if (kind === "observer") {
                 const record = data as {
                   frame?: unknown;
                   generation?: unknown;
@@ -167,6 +199,7 @@ export function subscribeBrokerTraffic(
         retryTimer = setTimeout(start, 500 * 2 ** attempts++);
       } finally {
         if (current === generation) {
+          owned.abort();
           streamId = undefined;
           receiving = false;
           clearTimeout(heartbeat);
@@ -203,6 +236,51 @@ export function subscribeBrokerTraffic(
         if (sent !== JSON.stringify(priority)) sendPriority();
       });
   }
+  function schedulePresence() {
+    if (closed || presencePending || !streamId || presenceTimer) return;
+    // First dirty update fixes the deadline; scrolling only replaces authors.
+    presenceTimer = setTimeout(
+      () => {
+        presenceTimer = undefined;
+        sendPresence();
+      },
+      Math.max(100, presenceDue - performance.now()),
+    );
+  }
+  function sendPresence() {
+    if (closed || !streamId || presencePending) return;
+    const current = generation;
+    const sent = JSON.stringify(authors);
+    presencePending = true;
+    presenceDue = performance.now() + 1000;
+    void fetch(`${endpoint}/stream-presence`, {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ streamId, authors }),
+      signal: AbortSignal.any([
+        controller?.signal ?? new AbortController().signal,
+        AbortSignal.timeout(5000),
+      ]),
+    })
+      .then((response) => {
+        if (!closed && current === generation && !response.ok)
+          throw new Error(`Presence control failed (${response.status})`);
+      })
+      .catch((error) => {
+        if (!closed && current === generation)
+          callbacks.presenceState?.({
+            status: authors.length ? "error" : "idle",
+            authors: [...authors],
+            error: String(error),
+          });
+      })
+      .finally(() => {
+        if (current !== generation) return;
+        presencePending = false;
+        if (sent !== JSON.stringify(authors)) schedulePresence();
+      });
+  }
   function sendObserver() {
     if (closed || !streamId || observerPending) return;
     const current = generation;
@@ -237,6 +315,59 @@ export function subscribeBrokerTraffic(
   }
   start();
   return {
+    presence: {
+      update(input) {
+        const next = presenceAuthors(input);
+        if (closed || JSON.stringify(next) === JSON.stringify(authors)) return;
+        authors = next;
+        callbacks.presenceState?.({
+          status: authors.length ? "pending" : "idle",
+          authors: [...authors],
+        });
+        schedulePresence();
+      },
+      async publish(status: PresenceStatus, signal: AbortSignal) {
+        presenceStatus(status);
+        signal.throwIfAborted();
+        if (closed || !streamId) throw new Error("Presence stream unavailable");
+        if (publishing)
+          throw new Error("Presence publication already in flight");
+        const current = generation;
+        publishing = true;
+        try {
+          const response = await fetch(`${endpoint}/stream-presence-publish`, {
+            method: "POST",
+            credentials: "same-origin",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ streamId, status }),
+            signal: AbortSignal.any([
+              signal,
+              controller?.signal ?? new AbortController().signal,
+              AbortSignal.timeout(11000),
+            ]),
+          });
+          signal.throwIfAborted();
+          if (closed || current !== generation)
+            throw new Error("Presence stream replaced; outcome unknown");
+          if (!response.ok)
+            throw new Error(
+              `Presence publication unconfirmed (${response.status})`,
+            );
+          const receipt: unknown = await response.json();
+          signal.throwIfAborted();
+          if (
+            closed ||
+            current !== generation ||
+            !receipt ||
+            typeof receipt !== "object" ||
+            (receipt as { accepted?: unknown }).accepted !== true
+          )
+            throw new Error("Invalid presence receipt or replaced stream");
+        } finally {
+          publishing = false;
+        }
+      },
+    },
     observe(value) {
       const next = observerGeneration(value);
       if (closed || observer === next) return;
@@ -265,6 +396,7 @@ export function subscribeBrokerTraffic(
         start();
         return;
       }
+      schedulePresence(); // Retry a failed author control too, not just server-side routes.
       const current = generation;
       controlPending = true;
       void fetch(`${endpoint}/stream-retry`, {
@@ -301,6 +433,7 @@ export function subscribeBrokerTraffic(
       controller?.abort();
       clearTimeout(retryTimer);
       clearTimeout(heartbeat);
+      clearTimeout(presenceTimer);
     },
   };
 }

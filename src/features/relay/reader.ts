@@ -1,3 +1,4 @@
+import { isPresenceSnapshot } from "./presence-contract";
 import { yieldToHost } from "./yield";
 import { createRelayProfiler, type RelayProfiler } from "./profiling";
 import type { ReadFilter, RelayEvent } from "./events";
@@ -36,6 +37,7 @@ type Job = {
   timer: ReturnType<typeof setTimeout>;
   running: boolean;
   snapshot: boolean;
+  presence: boolean;
 };
 const cancelled = () => new DOMException("Relay read cancelled", "AbortError");
 
@@ -63,6 +65,8 @@ export function createRelayReader(
   let sequence = 0;
   const jobs = new Map<string, Job>();
   let closed = false;
+  // A cancelled consumer cannot release an unresolved optional transport.
+  let presenceRunning = false;
   let recovering = false;
   // Finite reads keep their existing deadlines during navigation. beforeunload
   // is reversible, so pause admission rather than disposing the session. Fetch
@@ -125,15 +129,24 @@ export function createRelayReader(
   function pump() {
     if (closed || suspended || recovering || !transport) return;
     while (!closed && !suspended && !recovering) {
-      const active = [...jobs.values()].filter((job) => job.running);
-      if (active.length >= 3) return;
+      const active = [...jobs.values()].filter(
+        (job) => job.running && !job.presence,
+      );
       const background = active.some((job) => job.priority === "background");
-      const queued = [...jobs.values()].filter((job) => !job.running);
+      const queued = [...jobs.values()].filter(
+        (job) => !job.running && !job.presence,
+      );
+      const optional = [...jobs.values()].find(
+        (job) => !job.running && job.presence,
+      );
       const job =
-        queued.find((job) => job.priority === "foreground") ??
-        (!background ? queued[0] : undefined);
+        (active.length < 3
+          ? (queued.find((job) => job.priority === "foreground") ??
+            (!background ? queued[0] : undefined))
+          : undefined) ?? (!presenceRunning ? optional : undefined);
       if (!job) return;
       job.running = true;
+      if (job.presence) presenceRunning = true;
       job.queued();
       job.fetched = profiling.start("read.fetch", job.id);
       // Catch synchronous adapter failures as well as rejected promises.
@@ -153,22 +166,32 @@ export function createRelayReader(
                 job.id,
                 job.priority,
               );
-        void query.then(
-          (events) => {
-            if (byteSize(events) > 8 * 1024 * 1024)
-              finish(
-                job,
-                undefined,
-                new ReadError(
-                  "invalid-response",
-                  "Relay response exceeds the read budget",
-                ),
-              );
-            else finish(job, Object.freeze([...events]));
-          },
-          (error) => failed(job, error),
-        );
+        const settled = () => {
+          if (job.presence) presenceRunning = false;
+        };
+        void query
+          .then(
+            (events) => {
+              settled();
+              if (byteSize(events) > 8 * 1024 * 1024)
+                finish(
+                  job,
+                  undefined,
+                  new ReadError(
+                    "invalid-response",
+                    "Relay response exceeds the read budget",
+                  ),
+                );
+              else finish(job, Object.freeze([...events]));
+            },
+            (error) => {
+              settled();
+              failed(job, error);
+            },
+          )
+          .finally(pump);
       } catch (error) {
+        if (job.presence) presenceRunning = false;
         failed(job, error);
       }
     }
@@ -236,10 +259,19 @@ export function createRelayReader(
         );
       key = `read-state-snapshot:${key}`;
     }
+    // Classify the original request too: canonicalization must not erase unknown keys.
+    const presence = !snapshot && isPresenceSnapshot(filters);
+    if (!snapshot && !presence && isPresenceSnapshot(requestFilters))
+      return Promise.reject(new Error("Ambiguous presence snapshot filters"));
     if (fresh) key = `${key}:fresh:${++sequence}`;
     let job = jobs.get(key);
     if (!job) {
-      if (jobs.size >= maxPending)
+      if (
+        presence
+          ? presenceRunning || [...jobs.values()].some((job) => job.presence)
+          : [...jobs.values()].filter((job) => !job.presence).length >=
+            maxPending
+      )
         return Promise.reject(
           new ReadError("unavailable", "Too many pending relay reads"),
         );
@@ -254,6 +286,7 @@ export function createRelayReader(
         consumers: new Set(),
         running: false,
         snapshot,
+        presence,
         timer: setTimeout(
           () =>
             finish(

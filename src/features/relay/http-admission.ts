@@ -1,4 +1,5 @@
 import { ReadError } from "./errors.ts";
+import { PRESENCE_WORK_INTERVAL_MS } from "./presence-contract.ts";
 
 /** Admission owns starts, not retries or delivery semantics. An admitted write is
  * still sent once; a lost response is never permission to repeat it. */
@@ -103,8 +104,9 @@ export async function readApiFailure(response: Response): Promise<ApiFailure> {
   }
 }
 
+export type ApiPriority = "foreground" | "background" | "presence";
 type Ticket = {
-  priority: "foreground" | "background";
+  priority: ApiPriority;
   signal?: AbortSignal | undefined;
   start(): void;
   reject(error: Error): void;
@@ -115,9 +117,12 @@ type Ticket = {
  * queued work explicitly instead of silently spending a read's 10s deadline. */
 export function createApiAdmission() {
   let next = 0,
+    nextPresence = 0,
     pausedUntil = 0,
     active = 0,
-    preparing = 0;
+    activePresence = 0,
+    preparing = 0,
+    preparingPresence = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const queue: Ticket[] = [];
   const pauseError = () =>
@@ -138,15 +143,34 @@ export function createApiAdmission() {
       }
       return;
     }
-    const wait = next - performance.now();
-    if (wait > 0) {
-      timer = setTimeout(pump, wait);
+    const ordinary =
+      queue.find((t) => t.priority === "foreground") ??
+      queue.find((t) => t.priority === "background");
+    const presence = queue.find((t) => t.priority === "presence");
+    const now = performance.now();
+    const ticket =
+      ordinary && next <= now
+        ? ordinary
+        : presence && nextPresence <= now
+          ? presence
+          : undefined;
+    if (!ticket) {
+      timer = setTimeout(
+        pump,
+        Math.max(
+          0,
+          Math.min(
+            ordinary ? next : Infinity,
+            presence ? nextPresence : Infinity,
+          ) - now,
+        ),
+      );
       return;
     }
-    const ticket = queue.find((t) => t.priority === "foreground") ?? queue[0];
-    if (!ticket) return;
     remove(ticket);
-    next = performance.now() + 500;
+    if (ticket.priority === "presence")
+      nextPresence = now + PRESENCE_WORK_INTERVAL_MS;
+    else next = now + 500;
     ticket.start();
     pump();
   }
@@ -154,21 +178,29 @@ export function createApiAdmission() {
     /** Retain bounded ownership across asynchronous auth and its final dispatch.
      * A cancelled unabortable signer keeps its slot until it settles: repeatedly
      * cancelling must not admit an unbounded number of outstanding sign prompts. */
-    async prepare<T>(work: () => Promise<T>): Promise<T> {
+    async prepare<T>(
+      work: () => Promise<T>,
+      priority: ApiPriority = "foreground",
+    ): Promise<T> {
       if (performance.now() < pausedUntil) throw pauseError();
-      if (preparing >= 128) throw new ApiCapacity();
-      preparing++;
+      const presence = priority === "presence";
+      if (presence ? preparingPresence >= 1 : preparing >= 128)
+        throw new ApiCapacity();
+      if (presence) preparingPresence++;
+      else preparing++;
       try {
         return await work();
       } finally {
-        preparing--;
+        if (presence) preparingPresence--;
+        else preparing--;
       }
     },
     idle: () =>
       !active &&
       !preparing &&
+      !preparingPresence &&
       !queue.length &&
-      performance.now() >= Math.max(next, pausedUntil),
+      performance.now() >= Math.max(next, nextPresence, pausedUntil),
     pause(milliseconds: number) {
       if (!Number.isFinite(milliseconds) || milliseconds < 0)
         throw new Error("Invalid API pause");
@@ -185,19 +217,38 @@ export function createApiAdmission() {
     ): Promise<T> {
       if (signal?.aborted) return Promise.reject(signal.reason);
       if (performance.now() < pausedUntil) return Promise.reject(pauseError());
-      if (queue.length >= 128) return Promise.reject(new ApiCapacity());
+      const presence = priority === "presence";
+      if (
+        presence
+          ? activePresence +
+              queue.filter((t) => t.priority === "presence").length >=
+            1
+          : queue.filter((t) => t.priority !== "presence").length >= 128
+      )
+        return Promise.reject(new ApiCapacity());
       return new Promise((resolve, reject) => {
         const ticket: Ticket = {
           priority,
           signal,
           start() {
             active++;
+            if (presence) activePresence++;
             const finish = () => {
               active--;
+              if (presence) activePresence--;
             };
             try {
               signal?.throwIfAborted();
-              Promise.resolve(work()).then(resolve, reject).finally(finish);
+              Promise.resolve(work()).then(
+                (value) => {
+                  finish();
+                  resolve(value);
+                },
+                (error) => {
+                  finish();
+                  reject(error);
+                },
+              );
             } catch (error) {
               finish();
               reject(error);

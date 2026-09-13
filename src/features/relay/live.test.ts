@@ -1,5 +1,6 @@
 import { assert, afterEach, expect, it, vi } from "vitest";
 import {
+  LIVE_CHANNEL_CAPACITY,
   createLiveAdmission,
   liveChannels,
   subscribeRelayTraffic,
@@ -185,19 +186,19 @@ it("bounds interests and exposes every omitted ID without exceeding 1024 subscri
   await h.first.auth();
   await vi.advanceTimersByTimeAsync(750);
   let index = 0;
-  while (index < 1024) {
+  while (index < LIVE_CHANNEL_CAPACITY + 2) {
     if (index >= h.first.requests().length)
       await vi.advanceTimersByTimeAsync(250);
     const request = h.first.requests()[index++];
     assert.exists(request);
     await h.first.receive(["EOSE", request[1]]);
   }
-  expect(h.first.requests()).toHaveLength(1024);
+  expect(h.first.requests()).toHaveLength(LIVE_CHANNEL_CAPACITY + 2);
   expect(
     h.callbacks.state.mock.lastCall?.[0].routes
       .filter((r) => r.status === "limited")
       .map((r) => r.channelId),
-  ).toEqual(ids.slice(1022));
+  ).toEqual(ids.slice(LIVE_CHANNEL_CAPACITY));
   expect(() => liveChannels([...ids, "excess"])).toThrow();
   for (const invalid of [[""], ["a b"], ["x".repeat(129)], [9], {}])
     expect(() => liveChannels(invalid)).toThrow();
@@ -623,5 +624,75 @@ it("observer route is optional, live-only at dispatch/retry, separately fenced a
   ).toBe(false);
   expect(h.sockets).toHaveLength(1);
   h.owner.dispose();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("keeps the combined 1024-wire ceiling during presence handover and observer toggles at full channel demand", async () => {
+  vi.useFakeTimers();
+  const ids = Array.from(
+    { length: 1024 },
+    (_, i) => `channel-${String(i).padStart(4, "0")}`,
+  );
+  const h = setup(ids);
+  const active = new Set<string>();
+  const send = h.first.send.bind(h.first);
+  vi.spyOn(h.first, "send").mockImplementation((text) => {
+    const [kind, wire] = JSON.parse(text);
+    if (kind === "REQ") active.add(wire);
+    if (kind === "CLOSE") active.delete(wire);
+    expect(active.size).toBeLessThanOrEqual(1024); // Every intermediate wire state.
+    send(text);
+  });
+  try {
+    await h.first.auth();
+    for (let i = 0; i < 1022; i++) {
+      const request = h.first.requests()[i];
+      assert.exists(request);
+      await h.first.receive(["EOSE", request[1]]);
+      await vi.advanceTimersByTimeAsync(250);
+    }
+    expect(active.size).toBe(1022); // 1020 channels + two globals.
+    const globals = h.first
+      .requests()
+      .slice(0, 2)
+      .map((r) => r[1]);
+    const presence = h.owner.presence;
+    assert.exists(presence);
+    presence.update(["a".repeat(64)]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const confirmed = h.first.requests().at(-1);
+    assert.exists(confirmed);
+    expect(confirmed[2].kinds).toEqual([20001]);
+    await h.first.receive(["EOSE", confirmed[1]]);
+    presence.update(["b".repeat(64)]);
+    await vi.advanceTimersByTimeAsync(1000);
+    const candidate = h.first.requests().at(-1);
+    assert.exists(candidate);
+    expect(candidate[2].kinds).toEqual([20001]);
+    expect(candidate[1]).not.toBe(confirmed[1]);
+    expect(active.size).toBe(1024);
+
+    for (const observer of [1, null, 2]) {
+      h.owner.observe?.(observer);
+      await vi.advanceTimersByTimeAsync(250);
+      expect(active.size).toBe(1024);
+      const snapshot = h.callbacks.state.mock.lastCall?.[0];
+      assert.exists(snapshot);
+      expect(
+        snapshot.routes.filter((r) => r.channelId && r.status !== "limited"),
+      ).toHaveLength(observer === null ? 1020 : 1019);
+      expect(active.has(confirmed[1]) && active.has(candidate[1])).toBe(true);
+      expect(globals.every((wire) => active.has(wire))).toBe(true);
+    }
+    await h.first.receive(["EOSE", candidate[1]]);
+    expect(active.has(confirmed[1])).toBe(false);
+    expect(active.has(candidate[1])).toBe(true);
+    expect(active.size).toBe(1023);
+    expect(h.sockets).toHaveLength(1);
+    presence.update([]);
+    expect(active.size).toBe(1022);
+  } finally {
+    h.owner.dispose();
+  }
   expect(vi.getTimerCount()).toBe(0);
 });

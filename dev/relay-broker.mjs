@@ -1,3 +1,5 @@
+import { PresenceOwnerDisposed } from "../src/features/relay/presence-live.ts";
+import { isPresenceSnapshot } from "../src/features/relay/presence-contract.ts";
 import { decodeAgentObserver } from "./agent-observer.mjs";
 import { observerGeneration } from "../src/features/agents/observer.ts";
 import {
@@ -17,6 +19,10 @@ import {
   SIDEBAR_UPLOAD_MS,
   SIDEBAR_UPLOAD_SLOTS,
 } from "./sidebar-preferences.mjs";
+import {
+  presenceAuthors,
+  presenceStatus,
+} from "../src/features/relay/presence-contract.ts";
 import { createHostAdmission } from "../src/features/relay/host-admission.ts";
 import { relayKlipySearchPath } from "../src/features/relay/gifs.ts";
 // Dev-only relay broker. Holds the local Buzz identity in this Node process and signs NIP-98 reads
@@ -318,6 +324,7 @@ export function relayBrokerPlugin({
       };
       const stats = { queries: 0, errors: 0, media: 0, connects: 0 };
       let inflight = 0;
+      let presenceInflight = 0;
       let sidebarUploads = 0;
       let libraryRead;
       const streams = new Map();
@@ -513,28 +520,39 @@ export function relayBrokerPlugin({
               readState: true,
               agentLibrary: true,
               live: true,
+              presence: true,
               agentActivity: true,
             });
           if (
             [
               "/api/relay/stream-retry",
               "/api/relay/stream-priority",
+              "/api/relay/stream-presence",
+              "/api/relay/stream-presence-publish",
               "/api/relay/stream-observer",
             ].includes(route) &&
             req.method === "POST"
           ) {
             const prioritizing = route === "/api/relay/stream-priority";
+            const observingPresence = route === "/api/relay/stream-presence";
+            const publishingPresence =
+              route === "/api/relay/stream-presence-publish";
             const observing = route === "/api/relay/stream-observer";
             let raw = "";
             for await (const part of req) {
               raw += part;
-              if (Buffer.byteLength(raw) > (prioritizing ? 9000 : 256))
+              if (
+                Buffer.byteLength(raw) >
+                (observingPresence ? 18000 : prioritizing ? 9000 : 256)
+              )
                 return json(res, 413, { error: "Live control too large" });
             }
-            let streamId, priority, observer;
+            let streamId, priority, authors, status, observer;
             try {
               const body = JSON.parse(raw);
               streamId = body.streamId;
+              if (observingPresence) authors = presenceAuthors(body.authors);
+              if (publishingPresence) status = presenceStatus(body.status);
               if (observing) observer = observerGeneration(body.observer);
               if (prioritizing) {
                 liveChannels(body.channels);
@@ -555,7 +573,35 @@ export function relayBrokerPlugin({
               return json(res, 404, {
                 error: "Live stream no longer available",
               });
-            if (prioritizing) stream.traffic.prioritize(priority);
+            if (publishingPresence) {
+              const controller = new AbortController();
+              const abort = () => controller.abort();
+              res.once("close", abort);
+              try {
+                await stream.traffic.presence.publish(
+                  status,
+                  controller.signal,
+                );
+                if (!res.destroyed) return json(res, 200, { accepted: true });
+              } catch (error) {
+                if (!res.destroyed)
+                  return json(res, 503, {
+                    error: "Presence publication unconfirmed",
+                    ...(error instanceof PresenceOwnerDisposed
+                      ? { code: "presence_owner_disposed" }
+                      : {}),
+                  });
+              } finally {
+                res.off("close", abort);
+              }
+              return;
+            }
+            if (observingPresence) {
+              stream.traffic.presence.update(authors);
+              // Reassert state on the ordered SSE lane even when the union is unchanged
+              // (e.g. A -> B -> A coalesced in the browser, or retry after a lost response).
+              stream.presence();
+            } else if (prioritizing) stream.traffic.prioritize(priority);
             else if (observing) stream.traffic.observe(observer);
             else stream.traffic.retry();
             return json(res, 200, { accepted: true });
@@ -567,10 +613,11 @@ export function relayBrokerPlugin({
               if (Buffer.byteLength(raw) > 150000)
                 return json(res, 413, { error: "Live interests too large" });
             }
-            let channels, priority, observer;
+            let channels, priority, authors, observer;
             try {
               const body = JSON.parse(raw);
               channels = liveChannels(body.channels);
+              authors = presenceAuthors(body.authors ?? []);
               observer = observerGeneration(body.observer ?? null);
               liveChannels(body.priority ?? []);
               if (body.priority?.length > 64)
@@ -607,6 +654,7 @@ export function relayBrokerPlugin({
                 `${kind ? `event: ${kind}\n` : ""}data: ${JSON.stringify(value)}\n\n`,
               );
             };
+            let presenceState = { status: "idle", authors: [] };
             const traffic = subscribeRelayTraffic(
               relay.replace(/^http/, "ws"),
               async (event) => finalizeEvent(event, key),
@@ -614,6 +662,13 @@ export function relayBrokerPlugin({
               {
                 receive: (events) => {
                   for (const event of events) write("", event);
+                },
+                presence: (events) => {
+                  for (const event of events) write("presence", event);
+                },
+                presenceState: (state) => {
+                  presenceState = state;
+                  write("presence-state", state);
                 },
                 telemetry: (event, generation) => {
                   if (res.destroyed) return;
@@ -638,6 +693,7 @@ export function relayBrokerPlugin({
             traffic.observe(observer);
             traffic.prioritize(priority);
             traffic.update(channels);
+            traffic.presence.update(authors);
             const keepAlive = setInterval(
               () => res.write(": keepalive\n\n"),
               15000,
@@ -652,7 +708,12 @@ export function relayBrokerPlugin({
               streams.delete(streamId);
               res.destroy();
             };
-            streams.set(streamId, { relay, traffic, close });
+            streams.set(streamId, {
+              relay,
+              traffic,
+              close,
+              presence: () => write("presence-state", presenceState),
+            });
             res.once("close", close);
             if (res.destroyed) close();
             return;
@@ -874,131 +935,146 @@ export function relayBrokerPlugin({
                 : policy
                   ? "/api/invites/accept-policy"
                   : "/query";
-          if (inflight >= MAX_INFLIGHT)
+          const presenceSnapshot =
+            route === "/api/relay/query" && isPresenceSnapshot(filters);
+          if (
+            presenceSnapshot ? presenceInflight >= 1 : inflight >= MAX_INFLIGHT
+          )
             return json(res, 429, {
               error: "Query concurrency limit",
               sent: false,
             });
-          inflight++;
+          if (presenceSnapshot) presenceInflight++;
+          else inflight++;
           try {
             const lane = admissions(relay, viewer).api;
-            const body = JSON.stringify(filters);
-            // A browser that gave up (the client's ten-second deadline) must also release
-            // this upstream request, or hung requests exhaust the inflight budget.
-            const cancel = new AbortController();
-            const release = () => cancel.abort();
-            res.once("close", release);
-            const admissionStart = performance.now();
-            let connectsBefore, upstreamStart;
-            let response;
-            try {
-              const requestSignal = AbortSignal.any([
-                cancel.signal,
-                AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
-              ]);
-              response = await admittedApiRequest(
-                lane,
-                () => {
-                  // Auth freshness and network timings begin at dispatch, not queue entry.
-                  requestSignal.throwIfAborted();
-                  timings.push(
-                    `admission;dur=${(performance.now() - admissionStart).toFixed(2)}`,
-                  );
-                  const authStart = performance.now();
-                  const auth = finalizeEvent(
-                    {
-                      kind: 27235,
-                      created_at: Math.floor(Date.now() / 1000),
-                      content: "",
-                      tags: [
-                        ["u", `${relay}${upstreamPath}`],
-                        ["method", "POST"],
-                        [
-                          "payload",
-                          createHash("sha256").update(body).digest("hex"),
-                        ],
-                        ["nonce", randomBytes(16).toString("hex")],
-                      ],
-                    },
-                    key,
-                  );
-                  timings.push(
-                    `auth;dur=${(performance.now() - authStart).toFixed(2)}`,
-                  );
-                  connectsBefore = upstream.connects();
-                  upstreamStart = performance.now();
-                  return fetchUpstream(`${relay}${upstreamPath}`, {
-                    method: "POST",
-                    headers: {
-                      "Content-Type": "application/json",
-                      Authorization:
-                        "Nostr " +
-                        Buffer.from(JSON.stringify(auth)).toString("base64"),
-                    },
-                    body,
-                    redirect: "error",
-                    signal: requestSignal,
-                  }).then((response) => {
-                    timings.push(
-                      `ttfb;dur=${(performance.now() - upstreamStart).toFixed(2)}`,
-                    );
-                    return response;
-                  });
-                },
-                requestSignal,
-                route === "/api/relay/query" &&
-                  req.headers["x-buzz-read-priority"] === "background"
-                  ? "background"
-                  : "foreground",
-              );
-              const text =
-                snapshot && response.ok
-                  ? await readSnapshotText(response)
-                  : await response.text();
-              // The relay's own service time separates server work from network time.
-              const relayMs = Number(
-                response.headers.get("x-envoy-upstream-service-time"),
-              );
-              timings.push(
-                ...upstream.connectTiming(connectsBefore),
-                ...(Number.isFinite(relayMs) &&
-                response.headers.has("x-envoy-upstream-service-time")
-                  ? [`relay;dur=${relayMs}`]
-                  : []),
-                `upstream;dur=${(performance.now() - upstreamStart).toFixed(2)}`,
-              );
-              res.setHeader("Server-Timing", timings.join(", "));
-              stats.queries++;
-              if (!response.ok) {
-                stats.errors++;
-                let failure;
+            await lane.prepare(
+              async () => {
+                const body = JSON.stringify(filters);
+                // A browser that gave up (the client's ten-second deadline) must also release
+                // this upstream request, or hung requests exhaust the inflight budget.
+                const cancel = new AbortController();
+                const release = () => cancel.abort();
+                res.once("close", release);
+                const admissionStart = performance.now();
+                let connectsBefore, upstreamStart;
+                let response;
                 try {
-                  failure = apiFailure(response.status, JSON.parse(text));
-                } catch {
-                  failure = apiFailure(response.status, undefined);
-                }
-                return json(res, response.status, failure);
-              }
-              if (profile) {
-                const receipt = JSON.parse(text);
-                if (
-                  receipt.event_id !== filters.id ||
-                  typeof receipt.accepted !== "boolean"
-                )
-                  return json(res, 502, {
-                    error: "Profile publication could not be confirmed",
+                  const requestSignal = AbortSignal.any([
+                    cancel.signal,
+                    AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+                  ]);
+                  response = await admittedApiRequest(
+                    lane,
+                    () => {
+                      // Auth freshness and network timings begin at dispatch, not queue entry.
+                      requestSignal.throwIfAborted();
+                      timings.push(
+                        `admission;dur=${(performance.now() - admissionStart).toFixed(2)}`,
+                      );
+                      const authStart = performance.now();
+                      const auth = finalizeEvent(
+                        {
+                          kind: 27235,
+                          created_at: Math.floor(Date.now() / 1000),
+                          content: "",
+                          tags: [
+                            ["u", `${relay}${upstreamPath}`],
+                            ["method", "POST"],
+                            [
+                              "payload",
+                              createHash("sha256").update(body).digest("hex"),
+                            ],
+                            ["nonce", randomBytes(16).toString("hex")],
+                          ],
+                        },
+                        key,
+                      );
+                      timings.push(
+                        `auth;dur=${(performance.now() - authStart).toFixed(2)}`,
+                      );
+                      connectsBefore = upstream.connects();
+                      upstreamStart = performance.now();
+                      return fetchUpstream(`${relay}${upstreamPath}`, {
+                        method: "POST",
+                        headers: {
+                          "Content-Type": "application/json",
+                          Authorization:
+                            "Nostr " +
+                            Buffer.from(JSON.stringify(auth)).toString(
+                              "base64",
+                            ),
+                        },
+                        body,
+                        redirect: "error",
+                        signal: requestSignal,
+                      }).then((response) => {
+                        timings.push(
+                          `ttfb;dur=${(performance.now() - upstreamStart).toFixed(2)}`,
+                        );
+                        return response;
+                      });
+                    },
+                    requestSignal,
+                    presenceSnapshot
+                      ? "presence"
+                      : route === "/api/relay/query" &&
+                          req.headers["x-buzz-read-priority"] === "background"
+                        ? "background"
+                        : "foreground",
+                  );
+                  const text =
+                    snapshot && response.ok
+                      ? await readSnapshotText(response)
+                      : await response.text();
+                  // The relay's own service time separates server work from network time.
+                  const relayMs = Number(
+                    response.headers.get("x-envoy-upstream-service-time"),
+                  );
+                  timings.push(
+                    ...upstream.connectTiming(connectsBefore),
+                    ...(Number.isFinite(relayMs) &&
+                    response.headers.has("x-envoy-upstream-service-time")
+                      ? [`relay;dur=${relayMs}`]
+                      : []),
+                    `upstream;dur=${(performance.now() - upstreamStart).toFixed(2)}`,
+                  );
+                  res.setHeader("Server-Timing", timings.join(", "));
+                  stats.queries++;
+                  if (!response.ok) {
+                    stats.errors++;
+                    let failure;
+                    try {
+                      failure = apiFailure(response.status, JSON.parse(text));
+                    } catch {
+                      failure = apiFailure(response.status, undefined);
+                    }
+                    return json(res, response.status, failure);
+                  }
+                  if (profile) {
+                    const receipt = JSON.parse(text);
+                    if (
+                      receipt.event_id !== filters.id ||
+                      typeof receipt.accepted !== "boolean"
+                    )
+                      return json(res, 502, {
+                        error: "Profile publication could not be confirmed",
+                      });
+                  }
+                  res.writeHead(200, {
+                    "Content-Type": "application/json",
+                    "Cache-Control": "no-store",
                   });
-              }
-              res.writeHead(200, {
-                "Content-Type": "application/json",
-                "Cache-Control": "no-store",
-              });
-              res.end(text);
-            } finally {
-              res.off("close", release);
-            }
+                  res.end(text);
+                } finally {
+                  res.off("close", release);
+                }
+              },
+              presenceSnapshot ? "presence" : "foreground",
+            );
           } finally {
-            inflight--;
+            if (presenceSnapshot) presenceInflight--;
+            else inflight--;
           }
         } catch (error) {
           if (res.destroyed) return; // The browser gave up first; nothing to answer.

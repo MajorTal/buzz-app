@@ -36,6 +36,8 @@ export interface RelayWriter {
 export interface ReadTransport {
   /** Purpose-bound observer decoding on the shared host live stream. */
   readonly agentActivity?: boolean;
+  /** Snapshot admission and same-socket presence controls are both supported. */
+  readonly presence?: boolean;
   /** Host-projected local library; display only, never relay authority. */
   readonly readAgentLibrary?: AgentLibraryReader;
   /** Host-only decoder of the viewer's two signed sidebar preference coordinates. */
@@ -145,6 +147,7 @@ export async function connectBrokerTransport(
     writeKinds?: number[];
     relayUrl?: string;
     live?: boolean;
+    presence?: boolean;
     sidebarPreferences?: boolean;
     agentLibrary?: boolean;
     agentActivity?: boolean;
@@ -166,6 +169,7 @@ export async function connectBrokerTransport(
   return {
     profiling,
     agentActivity: session.agentActivity === true && session.live === true,
+    presence: session.presence === true && session.live === true,
     ...(session.live
       ? {
           subscribe: (callbacks: LiveCallbacks) =>
@@ -436,7 +440,7 @@ export async function connectSignedTransport(
         profiling,
         requestId,
         principal().api,
-        priority,
+        priority === "background" ? "background" : "foreground",
       );
       if (!result.ok) {
         const failure = await readApiFailure(result);

@@ -407,3 +407,120 @@ test("both real sign and publish routes admit direct replies but reject arbitrar
     await h.close();
   }
 });
+
+const presenceSnapshot = [
+  { kinds: [20001], authors: ["a".repeat(64)], limit: 1 },
+];
+test("a held presence snapshot is additive to all six ordinary broker slots, not freed by browser abort", async () => {
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const h = await harness(async (call, count, event) => {
+    await held;
+    return success(call, count, event);
+  });
+  const controller = new AbortController();
+  const pending = [];
+  try {
+    const p = h.post("query", presenceSnapshot, controller.signal);
+    const stopped = expect(p).rejects.toThrow();
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1));
+    // Six ordinary requests truly reach the held upstream, not merely the admission queue.
+    for (let i = 0; i < 6; i++) pending.push(h.post("query", filters));
+    await vi.waitFor(() => expect(h.calls).toHaveLength(7), { timeout: 4000 });
+    expect(h.calls[1].at - h.calls[0].at).toBeLessThan(200);
+    const seventh = await h.post("publish", h.event);
+    expect(seventh.status).toBe(429);
+    expect(await seventh.json()).toEqual({
+      error: "Query concurrency limit",
+      sent: false,
+    });
+    controller.abort();
+    await stopped;
+    await delay(30);
+    // A different community still shares the process-wide additive snapshot cap.
+    const second = await fetch(`${h.base}/api/relay/secondary/query`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(presenceSnapshot),
+    });
+    expect(second.status).toBe(429);
+    expect(h.calls).toHaveLength(7);
+    release();
+    await Promise.all(pending.map(async (response) => (await response).text()));
+    const recovered = await h.post("query", filters);
+    expect(recovered.status).toBe(200);
+    await recovered.text();
+  } finally {
+    release();
+    controller.abort();
+    await h.close();
+  }
+}, 10000);
+
+test("broker optional classification ignores spoofed priority and rejects mixed/extra-key capacity bypass", async () => {
+  let release;
+  const held = new Promise((resolve) => {
+    release = resolve;
+  });
+  const h = await harness(async () => {
+    await held;
+    return Response.json([]);
+  });
+  const pending = [];
+  try {
+    for (let i = 0; i < 6; i++) pending.push(h.post("query", filters));
+    await vi.waitFor(() => expect(h.calls).toHaveLength(1));
+    await delay(30);
+    for (const value of [
+      filters,
+      [{ ...presenceSnapshot[0], kinds: [20001, 9] }],
+      [{ ...presenceSnapshot[0], kinds: [20001, 20001] }],
+      [{ ...presenceSnapshot[0], since: 0 }],
+      [
+        {
+          ...presenceSnapshot[0],
+          authors: ["a".repeat(64), "a".repeat(64)],
+          limit: 2,
+        },
+      ],
+    ]) {
+      const response = await h.post("query", value, undefined, "presence");
+      expect(response.status).toBe(429);
+      expect(await response.json()).toEqual({
+        error: "Query concurrency limit",
+        sent: false,
+      });
+    }
+    pending.push(h.post("query", presenceSnapshot, undefined, "foreground"));
+    await vi.waitFor(() =>
+      expect(h.calls.some((c) => c.body[0].kinds[0] === 20001)).toBe(true),
+    );
+    release();
+    await Promise.all(pending.map(async (response) => (await response).text()));
+  } finally {
+    release();
+    await h.close();
+  }
+}, 10000);
+
+test("broker presence quota evidence shares API cooldown with ordinary publication, not local capacity", async () => {
+  const h = await harness(() =>
+    Response.json(
+      { error: "rate-limited: quota exceeded; retry in 3s" },
+      { status: 429 },
+    ),
+  );
+  try {
+    const p = await h.post("query", presenceSnapshot);
+    expect(p.status).toBe(429);
+    expect(await p.json()).toMatchObject({ quota: "api", retryAfterMs: 4000 });
+    const f = await h.post("publish", h.event);
+    expect(f.status).toBe(429);
+    expect(await f.json()).toMatchObject({ paused: true, sent: false });
+    expect(h.calls).toHaveLength(1);
+  } finally {
+    await h.close();
+  }
+});

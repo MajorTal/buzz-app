@@ -15,6 +15,7 @@ import { execFileSync } from "node:child_process";
 import { relayBrokerPlugin } from "../../dev/relay-broker.mjs";
 import { policyRelay } from "./policy-relay.mjs";
 import { buildApp } from "./build.mjs";
+import { brokerEvidence } from "./broker-evidence.mjs";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 export const channels = ["alpha", "beta"];
@@ -23,8 +24,11 @@ export const historySize = 640;
 // The built app, React, services, verification, IndexedDB and Virtua stay real.
 // Layout journeys use synthetic broker HTTP; live journeys retain the production
 // broker/subscriber and model only the upstream relay policy with ephemeral keys.
-export const test = base.extend({
+export const browserFixtures = {
   productionBroker: [false, { option: true }],
+  composerPublication: [false, { option: true }],
+  enforceQuotas: [false, { option: true }],
+  withoutPresence: [false, { option: true, scope: "worker" }],
   readState: [false, { option: true }],
   threadUnread: [false, { option: true }],
   sidebarUnread: [false, { option: true }],
@@ -44,6 +48,9 @@ export const test = base.extend({
       browserName,
       browser,
       productionBroker,
+      composerPublication,
+      enforceQuotas,
+      withoutPresence,
       readState,
       threadUnread,
       sidebarUnread,
@@ -284,6 +291,8 @@ export const test = base.extend({
           encoding: "utf8",
         }),
         browserName,
+        withoutPresence,
+        enforceQuotas,
         developmentReact,
         pluginFixtures,
         compiledBuild: {
@@ -315,6 +324,7 @@ export const test = base.extend({
     };
     const pending = [];
     const retiredStreams = new Set();
+    const brokerResponses = brokerEvidence(report, retiredStreams);
     const observerFailures = [];
     const consoleLocations = new Map();
     const send = (response, body, status = 200) => {
@@ -392,6 +402,17 @@ export const test = base.extend({
               ]
             : []),
         ];
+      if (composerPublication && filter.ids) {
+        expect(filter).toEqual({
+          ids: [expect.stringMatching(/^[0-9a-f]{64}$/)],
+          limit: 1,
+        });
+        return channels.flatMap((channel) =>
+          histories
+            .get(`${community}/${channel}`)
+            .filter((event) => filter.ids.includes(event.id)),
+        );
+      }
       if (threadUnread && filter.ids)
         return [...histories.values()]
           .flat()
@@ -474,6 +495,9 @@ export const test = base.extend({
     const relay = productionBroker
       ? policyRelay({
           viewer,
+          enforceQuotas,
+          presenceSnapshot: (author, status) =>
+            sign(20001, [["p", author]], status),
           answer,
           report,
           pending,
@@ -488,9 +512,28 @@ export const test = base.extend({
                     max_bytes: 8388608,
                   },
                 }),
+              }
+            : {}),
+          ...(readState || composerPublication
+            ? {
                 acceptPublication: (community, event) => {
                   expect(verifyEvent(event)).toBe(true);
                   expect(event.pubkey).toBe(viewer);
+                  if (composerPublication && event.kind === 9) {
+                    const channel = event.tags.find(
+                      ([name]) => name === "h",
+                    )?.[1];
+                    expect(channels).toContain(channel);
+                    histories.get(`${community}/${channel}`).push(event);
+                    report.publications.push({
+                      community,
+                      event,
+                      at: performance.now(),
+                    });
+                    relay.publish(community, event);
+                    return;
+                  }
+                  expect(readState).toBe(true);
                   expect(event.kind).toBe(30078);
                   expect(event.tags).toContainEqual(["t", "read-state"]);
                   const blob = JSON.parse(
@@ -609,18 +652,7 @@ export const test = base.extend({
             async configurePreviewServer(server) {
               if (relay) {
                 report.brokerRequests = [];
-                server.middlewares.use((req, res, next) => {
-                  if (req.url?.startsWith("/api/relay/"))
-                    report.brokerRequests.push({
-                      url: req.url,
-                      at: performance.now(),
-                    });
-                  if (req.url?.endsWith("/stream"))
-                    res.once("close", () => {
-                      retiredStreams.add(res.getHeader("x-buzz-live-id"));
-                    });
-                  next();
-                });
+                server.middlewares.use(brokerResponses.middleware);
                 const broker = relayBrokerPlugin({
                   relayUrl: fixtureRelayUrl,
                   communityAliases: fixtureAliases,
@@ -727,6 +759,19 @@ export const test = base.extend({
         participants,
         viewer,
         relay,
+        presence(status, updateSnapshot = true) {
+          relay.presence(
+            "primary",
+            sign(
+              20001,
+              [],
+              status,
+              readState ? peerKey : userKey,
+              Math.floor(Date.now() / 1000),
+            ),
+            updateSnapshot,
+          );
+        },
         observer(raw, agentKey, community = "primary") {
           const agent = getPublicKey(agentKey);
           const plaintext = JSON.stringify(raw);
@@ -819,54 +864,15 @@ export const test = base.extend({
           return event;
         },
       });
-      expect(report.unexpected).toEqual([]);
-      // Aborted startup streams can race an already-dispatched observer control.
-      // Permit only 404s whose exact stream was already closed by the real host;
-      // a current/unknown stream failure still fails, and all errors stay recorded.
-      report.retiredObserverControls = [...observerFailures];
-      expect(observerFailures.every((failure) => failure.retired)).toBe(true);
-      const retiredConsole = (message, index) => {
-        if (
-          !/^Failed to load resource: the server responded with a status of 404/.test(
-            message,
-          )
-        )
-          return false;
-        const match = observerFailures.findIndex(
-          (failure) => failure.url === consoleLocations.get(index),
-        );
-        if (match < 0) return false;
-        observerFailures.splice(match, 1);
-        return true;
-      };
-      expect(
-        report.consoleErrors.filter(
-          (message, index) =>
-            !retiredConsole(message, index) &&
-            !(
-              expectedPageFailure &&
-              message.includes("Fixture page render failure")
-            ) &&
-            !(
-              relay?.expectedHttpErrors() &&
-              /^Failed to load resource: the server responded with a status of 429/.test(
-                message,
-              )
-            ),
-        ),
-      ).toEqual([]);
-      // Existing WebKit observer warning is recorded, never silently swallowed.
-      expect(
-        report.errors.filter(
-          (message) =>
-            !(
-              browserName === "webkit" &&
-              message ===
-                "ResizeObserver loop completed with undelivered notifications."
-            ),
-        ),
-      ).toEqual([]);
     } finally {
+      await page.close();
+      for (const clients of streams.values())
+        for (const response of clients) response.end();
+      if (server) {
+        server.httpServer.closeAllConnections();
+        await new Promise((resolve) => server.httpServer.close(resolve));
+      }
+      report.retiredObserverControls = [...observerFailures];
       await writeFile(
         testInfo.outputPath("evidence.json"),
         JSON.stringify(report, null, 2),
@@ -875,14 +881,57 @@ export const test = base.extend({
         body: JSON.stringify(report, null, 2),
         contentType: "application/json",
       });
-      await page.close();
-      for (const clients of streams.values())
-        for (const response of clients) response.end();
-      if (server) {
-        server.httpServer.closeAllConnections();
-        await new Promise((resolve) => server.httpServer.close(resolve));
-      }
     }
+    expect(report.unexpected).toEqual([]);
+    // Aborted startup streams can race an already-dispatched observer control.
+    // Permit only 404s whose exact stream was already closed by the real host;
+    // a current/unknown stream failure still fails, and all errors stay recorded.
+    expect(observerFailures.every((failure) => failure.retired)).toBe(true);
+    brokerResponses.assertPublications();
+    const disposedConsole = brokerResponses.consoleFilter();
+    const retiredConsole = (message, index) => {
+      if (
+        !/^Failed to load resource: the server responded with a status of 404/.test(
+          message,
+        )
+      )
+        return false;
+      const match = observerFailures.findIndex(
+        (failure) => failure.url === consoleLocations.get(index),
+      );
+      if (match < 0) return false;
+      observerFailures.splice(match, 1);
+      return true;
+    };
+    expect(
+      report.consoleErrors.filter(
+        (message, index) =>
+          !retiredConsole(message, index) &&
+          !disposedConsole(message, consoleLocations.get(index)) &&
+          !(
+            expectedPageFailure &&
+            message.includes("Fixture page render failure")
+          ) &&
+          !(
+            relay?.expectedHttpErrors() &&
+            /^Failed to load resource: the server responded with a status of 429/.test(
+              message,
+            )
+          ),
+      ),
+    ).toEqual([]);
+    // Existing WebKit observer warning is recorded, never silently swallowed.
+    expect(
+      report.errors.filter(
+        (message) =>
+          !(
+            browserName === "webkit" &&
+            message ===
+              "ResizeObserver loop completed with undelivered notifications."
+          ),
+      ),
+    ).toEqual([]);
   },
-});
+};
+export const test = base.extend(browserFixtures);
 export { expect };

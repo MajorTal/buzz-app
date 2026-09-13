@@ -12,13 +12,67 @@ export function policyRelay({
   pending,
   discovery,
   acceptPublication,
+  presenceSnapshot,
+  enforceQuotas = false,
+  now = () => performance.now(),
 }) {
+  const presence = new Map();
+  report.presencePublications = [];
   const sockets = [];
   const requests = [];
   const rejected = [];
   report.liveRequests = requests;
   report.quotaRefusals = rejected;
   const quotas = new Map();
+  // Audited buzz 78618804: admission.rs, rejection.rs and RedisRateLimiter.
+  // Windows start on the first charged operation; rejected attempts still count.
+  // This is opt-in modeled policy, not discovery of the deployed configuration.
+  const limits = {
+    ApiCalls: [300, 60000],
+    WsEvents: [50, 5000],
+    Messages: [60, 60000],
+  };
+  const counters = new Map();
+  report.quotaCharges = [];
+  function charge(community, category, operation) {
+    if (!enforceQuotas) return;
+    const at = now(),
+      [limit, windowMs] = limits[category];
+    const key = `${community}:${viewer}:${category}`;
+    let counter = counters.get(key);
+    if (!counter || at >= counter.until) {
+      counter = { count: 0, until: at + windowMs };
+      counters.set(key, counter);
+    }
+    counter.count++;
+    const accepted = counter.count <= limit;
+    report.quotaCharges.push({
+      community,
+      category,
+      operation,
+      at,
+      count: counter.count,
+      limit,
+      until: counter.until,
+      accepted,
+    });
+    if (accepted) return;
+    const seconds = Math.ceil((counter.until - at) / 1000);
+    const reason = `rate-limited: quota exceeded; retry in ${seconds}s`;
+    rejected.push({
+      community,
+      category,
+      operation,
+      at,
+      until: counter.until,
+      reason,
+    });
+    return reason;
+  }
+  let heldPresence = false;
+  let presenceStarted;
+  const pendingPresence = [];
+  report.presenceHolds = [];
   const heldEose = new Set();
   const pendingEose = [];
   const pendingProfiles = [];
@@ -38,7 +92,9 @@ export function policyRelay({
         ? "membership"
         : filter.kinds.includes(24200)
           ? "observer"
-          : undefined);
+          : filter.kinds.includes(20001)
+            ? "presence"
+            : undefined);
   report.wireFrames = [];
   let emptyRoster = false;
   let heldContent = false;
@@ -54,6 +110,38 @@ export function policyRelay({
       socket.onmessage?.({ data: JSON.stringify(frame) });
   }
   return {
+    presence(community, event, updateSnapshot = true) {
+      expect(event.kind).toBe(20001);
+      expect(verifyEvent(event)).toBe(true);
+      if (updateSnapshot)
+        presence.set(`${community}:${event.pubkey}`, {
+          status: event.content,
+          expires: Date.now() + 180000,
+        });
+      let deliveries = 0;
+      for (const socket of sockets) {
+        if (socket.readyState !== 1 || socket.community !== community) continue;
+        for (const [id, filter] of socket.routes) {
+          if (
+            !filter.kinds.includes(20001) ||
+            !filter.authors?.includes(event.pubkey)
+          )
+            continue;
+          emit(socket, ["EVENT", id, event]);
+          deliveries++;
+        }
+      }
+      expect(deliveries).toBeGreaterThan(0);
+    },
+    holdPresence(onStart) {
+      heldPresence = true;
+      presenceStarted = onStart;
+    },
+    releasePresence() {
+      heldPresence = false;
+      presenceStarted = undefined;
+      for (const release of pendingPresence.splice(0)) release();
+    },
     holdContent() {
       heldContent = true;
     },
@@ -117,6 +205,12 @@ export function policyRelay({
           createHash("sha256").update(init.body).digest("hex"),
         ]);
         const filters = JSON.parse(init.body);
+        const reason = charge(
+          communityOf(url),
+          "ApiCalls",
+          new URL(url).pathname,
+        );
+        if (reason) return Response.json({ error: reason }, { status: 429 });
         if (new URL(url).pathname === "/events") {
           acceptPublication(communityOf(url), filters);
           return Response.json({ accepted: true, event_id: filters.id });
@@ -163,6 +257,46 @@ export function policyRelay({
         const filter = filters[0],
           community = communityOf(url);
         report.queries.push({ community, filter, at: performance.now() });
+        if (filter.kinds?.includes(20001)) {
+          expect(filter.kinds).toEqual([20001]);
+          expect(filter.authors.length).toBeGreaterThan(0);
+          expect(filter.authors.length).toBeLessThanOrEqual(256);
+          expect(filter.limit).toBe(filter.authors.length);
+          const result = filter.authors.flatMap((author) => {
+            const value = presence.get(`${community}:${author}`);
+            return value && value.expires > Date.now()
+              ? [presenceSnapshot(author, value.status)]
+              : [];
+          });
+          if (heldPresence)
+            return new Promise((resolve, reject) => {
+              const held = {
+                at: performance.now(),
+                pending: true,
+                aborted: false,
+              };
+              report.presenceHolds.push(held);
+              const abort = () => {
+                held.pending = false;
+                held.aborted = true;
+                held.completedAt = performance.now();
+                reject(init.signal.reason);
+              };
+              if (init.signal.aborted) return abort();
+              init.signal.addEventListener("abort", abort, { once: true });
+              pendingPresence.push(() => {
+                init.signal.removeEventListener("abort", abort);
+                if (!held.pending) return;
+                held.pending = false;
+                held.completedAt = performance.now();
+                resolve(Response.json(result));
+              });
+              const started = presenceStarted;
+              presenceStarted = undefined;
+              started?.(held);
+            });
+          return Response.json(result);
+        }
         if (heldContent && filter.kinds?.includes(9))
           return new Promise((_resolve, reject) => {
             if (init.signal.aborted) reject(init.signal.reason);
@@ -285,6 +419,42 @@ export function policyRelay({
               this.routes.delete(id);
               return;
             }
+            if (kind === "REQ" || kind === "EVENT") {
+              expect(this.authenticated).toBe(true);
+              const reason =
+                charge(this.community, "WsEvents", kind) ||
+                (kind === "EVENT" && charge(this.community, "Messages", kind));
+              if (reason) {
+                queueMicrotask(() =>
+                  emit(
+                    this,
+                    kind === "REQ"
+                      ? ["CLOSED", id, reason]
+                      : ["OK", id.id, false, reason],
+                  ),
+                );
+                return;
+              }
+            }
+            if (kind === "EVENT") {
+              expect(this.authenticated).toBe(true);
+              expect(verifyEvent(id)).toBe(true);
+              expect(id.pubkey).toBe(viewer);
+              expect(id.kind).toBe(20001);
+              expect(id.tags).toEqual([]);
+              expect(["online", "away"]).toContain(id.content);
+              presence.set(`${this.community}:${id.pubkey}`, {
+                status: id.content,
+                expires: Date.now() + 180000,
+              });
+              report.presencePublications.push({
+                community: this.community,
+                event: id,
+                at: performance.now(),
+              });
+              queueMicrotask(() => emit(this, ["OK", id.id, true]));
+              return;
+            }
             expect(kind).toBe("REQ");
             expect(this.authenticated).toBe(true);
             requests.push({
@@ -309,6 +479,16 @@ export function policyRelay({
                 ]),
               );
               return;
+            }
+            if (filter.kinds.includes(20001)) {
+              expect(filter.kinds).toEqual([20001]);
+              expect(filter.authors.length).toBeGreaterThan(0);
+              expect(filter.authors.length).toBeLessThanOrEqual(256);
+              expect(
+                filter.authors.every((author) => /^[0-9a-f]{64}$/.test(author)),
+              ).toBe(true);
+              expect(filter.limit).toBe(0);
+              expect(filter["#h"]).toBeUndefined();
             }
             if (filter.kinds.includes(44100))
               expect(filter["#p"]).toEqual([viewer]);

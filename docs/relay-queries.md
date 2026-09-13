@@ -184,9 +184,12 @@ The timeline, channel-list preview and filtered plugin views share that operatio
 
 ## Bounds and lifecycle
 
-- Reads: three active slots, at most one background request, 128 pending distinct
-  requests, ten-second deadlines including queue time, four filters per request,
-  500 per-filter limit, 64 KiB keys, and an 8 MiB result budget.
+- Ordinary reads: three active slots, at most one background request, 128 pending
+  distinct requests. One strictly classified presence snapshot has separate additive
+  capacity; it does not reduce those ordinary budgets. All reads retain ten-second
+  deadlines including queue time, four filters per request, 500 per-filter limit,
+  64 KiB keys, and an 8 MiB result budget. Optional consumer cancellation retains
+  its slot until underlying work settles. See [optional presence transport](#optional-presence-transport).
 - Outbox: at most 256 operations / 2 MiB persisted, 32 KiB per submitted payload,
   three concurrent deliveries, ten-second delivery deadlines including queue time. Only outstanding
   operations count toward capacity; completed events move to a separate 2,048-event /
@@ -407,8 +410,9 @@ for outstanding work. These manual fixtures are not part of `pnpm test`; see
 The session's `live` capability exposes connection/route state independently from
 finite-read readiness. A connected socket is not proof that every route is live.
 Global profile and self-scoped membership-hint routes are separate from explicit
-channel subscriptions. One socket supports at most 1,022 channels plus those two
-globals; omitted routes and partial roster coverage remain visible.
+channel subscriptions. One socket supports at most 1,020 channels (1,019 with the
+agent observer), reserving two globals and two presence handover slots within the
+1,024-route ceiling. Omitted routes and partial roster coverage remain visible.
 
 EOSE establishes streaming, **not complete historical replay**. Retained channel
 windows get finite, signed-bounds head catch-up after establishment/reconnect;
@@ -441,6 +445,46 @@ that is distinct from retry and preserves the host's pacing/cooldown. Developmen
 HTTP/1 streaming uses a close-delimited response to avoid WebKit stranding trailing
 chunked frames until later traffic. This is not a new replay-completeness guarantee.
 
+
+### Optional presence transport
+
+The live subscription exposes a separate, explicit `presence` capability: update
+at most 256 full author keys or publish bare `online`/`away` kind-20001 events on
+the same authenticated socket. Confirmed and candidate routes overlap during
+handover. EOSE establishes the route, not a presence snapshot. Publication resolves
+only for a matching WebSocket OK; timeout, cancellation or owner disposal is not
+proof of Offline or non-delivery. There is no durable outbox entry, heartbeat
+schedule or automatic publication replay in this transport owner.
+
+Presence has separate bounded capacity and start clocks, so it does not consume
+ordinary reader slots or advance ordinary HTTP/WS pacing. Ordinary ready HTTP/reader
+work wins; WS presence yields to foreground route setup. Actual relay cooldowns
+remain shared. Presence snapshots/publications have a
+five-second start interval; presence route setup has a one-second interval.
+Ownership survives cancellation until outstanding signing/body work settles.
+Only one finite filter containing exactly `kinds: [20001]`, unique full `authors`
+and `limit: authors.length` qualifies for optional HTTP capacity. A caller-supplied
+priority cannot grant that classification. The broker implements optional HTTP
+admission and explicitly advertises `presence: true` with live support. The
+application composes that adapter. The alternate direct-signed adapter keeps
+ordinary reads/writes and the shared socket owner but does not advertise complete
+presence support or classify optional HTTP reads. Feature composition must require
+the explicit transport flag rather than infer support from `subscribe`.
+
+These transport capabilities alone do not enable session observation, renewal or
+UI indicators. With no presence caller, explicit live Retry can send an empty-author
+`/stream-presence` control but creates no presence REQ or publication. The reserved
+route capacity above applies even before feature activation.
+
+Owning coverage lives in `presence-live.test.ts`, `reader-presence.test.ts`,
+`transport.test.ts` and the broker/admission suites.
+`dev/relay-broker-fixture.test.mjs` drives eight production broker transports for a
+full reference quota window through real local HTTP and the existing policy relay.
+It checks combined upstream quota charges (including rejected attempts), loaded
+throughput and correlated WS cooldown with independent API progress. Exact start
+clocks remain covered by deterministic admission/live tests. `dev/policy-relay.test.mjs` exercises modeled quota overload and expiry once
+under Vitest, not once per browser engine. Controlled local budgets do not reserve
+account-wide relay quota or establish deployed latency.
 
 ### User attention during recovery
 

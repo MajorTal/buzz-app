@@ -1,0 +1,459 @@
+import { test, expect, vi } from "vitest";
+import { connectBrokerTransport } from "../src/features/relay/transport.ts";
+import { EventEmitter } from "node:events";
+import { createServer } from "node:http";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setTimeout as delay } from "node:timers/promises";
+import { browserFixtures } from "../tests/browser/fixture.mjs";
+import { brokerEvidence } from "../tests/browser/broker-evidence.mjs";
+
+async function until(check) {
+  for (let i = 0; i < 200; i++) {
+    if (check()) return;
+    await delay(10);
+  }
+  throw new Error("Broker fixture did not reach expected state");
+}
+
+// Execute the actual browser fixture's server, instrumentation, teardown and
+// final assertions. Only the unused browser shell is inert; HTTP/broker/WS policy
+// and the 503 are real. No browser engine, live identity, or frontend build needed.
+async function fixture(use, overrides = {}) {
+  const directory = await mkdtemp(join(tmpdir(), "presence-fixture-check-"));
+  await writeFile(join(directory, "index.html"), "<!doctype html>");
+  const page = new EventEmitter();
+  page.addInitScript = async () => {};
+  page.close = async () => {};
+  const options = Object.fromEntries(
+    Object.entries(browserFixtures)
+      .filter(([, value]) => Array.isArray(value))
+      .map(([key, value]) => [key, value[0]]),
+  );
+  try {
+    await browserFixtures.app(
+      {
+        ...options,
+        ...overrides,
+        page,
+        context: { route: async () => {}, routeWebSocket: async () => {} },
+        browserName: "chromium",
+        browser: { version: () => "HTTP-only fixture wiring check" },
+        productionBroker: true,
+        compiledApp: {
+          durationMs: 0,
+          config: {
+            configFile: false,
+            envFile: false,
+            logLevel: "silent",
+            build: { outDir: directory },
+          },
+        },
+      },
+      (app) => use(app, page),
+      {
+        workerIndex: 0,
+        project: { use: {} },
+        outputPath: (file) => join(directory, file),
+        attach: async () => {},
+      },
+    );
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+}
+
+async function publication(app, dispose) {
+  const { origin, relay, report } = app;
+  relay.holdEose("profiles");
+  relay.holdEose("membership");
+  const controller = new AbortController();
+  const headers = { Origin: origin, "Content-Type": "application/json" };
+  const response = await fetch(`${origin}/api/relay/primary/stream`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ channels: [] }),
+    signal: controller.signal,
+  });
+  const streamId = response.headers.get("x-buzz-live-id");
+  const socket = relay.sockets.at(-1);
+  await until(() => socket.authenticated);
+  const endpoint = `${origin}/api/relay/primary/stream-presence-publish`;
+  const pending = fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ streamId, status: "online" }),
+    signal: AbortSignal.timeout(3000),
+  });
+  await until(() =>
+    report.brokerRequests.some((record) => record.streamId === streamId),
+  );
+  // Allow the real middleware's body continuation to install the publication.
+  await new Promise((resolve) => setImmediate(resolve));
+  if (dispose) controller.abort();
+  else {
+    // Reset is an actual failure; later retirement must not classify it.
+    socket.onclose();
+  }
+  const failed = await pending;
+  expect(failed.status).toBe(503);
+  expect(await failed.json()).toEqual({
+    error: "Presence publication unconfirmed",
+    ...(dispose ? { code: "presence_owner_disposed" } : {}),
+  });
+  controller.abort();
+  return endpoint;
+}
+
+const console503 = (page, url) =>
+  page.emit("console", {
+    type: () => "error",
+    text: () =>
+      "Failed to load resource: the server responded with a status of 503 (Service Unavailable)",
+    location: () => ({ url }),
+  });
+
+test("actual fixture accounts disposal 503 without relying on browser response or console", async () => {
+  await fixture(async (app) => {
+    await publication(app, true);
+    expect(app.report.presencePublicationResponses).toHaveLength(1);
+    const record = app.report.brokerRequests.find((item) => item.streamId);
+    await until(() => record.close);
+    expect(record.finish).toMatchObject({
+      status: 503,
+      finished: true,
+      serverTiming: null,
+    });
+    expect(record.close).toMatchObject({ status: 503, finished: true });
+    expect(record.close.at).toBeGreaterThanOrEqual(record.finish.at);
+  });
+});
+
+test("actual fixture fails an unclassified 503 even with no console event", async () => {
+  await expect(
+    fixture(async (app) => {
+      await publication(app, false);
+    }),
+  ).rejects.toThrow("Unclassified presence publication 503");
+});
+
+test("same endpoint disposal console cannot hide a separate unclassified response", async () => {
+  await expect(
+    fixture(async (app, page) => {
+      console503(page, await publication(app, true));
+      await publication(app, false);
+    }),
+  ).rejects.toThrow("Unclassified presence publication 503");
+});
+
+test("one classified response permits one console diagnostic", async () => {
+  await fixture(async (app, page) =>
+    console503(page, await publication(app, true)),
+  );
+});
+
+test("classified response is not a blanket endpoint exemption", async () => {
+  await expect(
+    fixture(async (app, page) => {
+      const url = await publication(app, true);
+      console503(page, url);
+      console503(page, url);
+    }),
+  ).rejects.toThrow();
+});
+
+test.each([
+  undefined,
+  "not-json",
+  JSON.stringify({ error: "Presence publication unconfirmed" }),
+  JSON.stringify({
+    error: "Presence publication unconfirmed",
+    code: "unknown",
+  }),
+  JSON.stringify({
+    error: "Presence publication unconfirmed",
+    code: "presence_owner_disposed",
+    accepted: true,
+  }),
+])("missing/malformed classification fails closed (%s)", (body) => {
+  const report = { brokerRequests: [] };
+  const evidence = brokerEvidence(report, new Set());
+  const req = new EventEmitter();
+  req.url = "/api/relay/primary/stream-presence-publish";
+  req.headers = { host: "127.0.0.1:1234" };
+  const res = new EventEmitter();
+  res.statusCode = 503;
+  res.end = () => {};
+  evidence.middleware(req, res, () => {});
+  req.emit("data", JSON.stringify({ streamId: "a".repeat(32) }));
+  req.emit("end");
+  res.end(body);
+  expect(() => evidence.assertPublications()).toThrow(
+    "Unclassified presence publication 503",
+  );
+});
+
+test("passive completion evidence preserves Server-Timing and distinguishes an unfinished close", async () => {
+  const report = { brokerRequests: [] };
+  const evidence = brokerEvidence(report, new Set());
+  const server = createServer((req, res) =>
+    evidence.middleware(req, res, () => {
+      res.setHeader("Server-Timing", "admission;dur=12, upstream;dur=3");
+      res.writeHead(200, { "Content-Type": "text/plain" });
+      if (req.url.endsWith("/complete")) res.end("accepted");
+      else res.write("pending");
+    }),
+  );
+  await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+  const base = `http://127.0.0.1:${server.address().port}/api/relay`;
+  try {
+    expect(await (await fetch(`${base}/complete`)).text()).toBe("accepted");
+    const controller = new AbortController();
+    await fetch(`${base}/pending`, { signal: controller.signal });
+    controller.abort();
+    await until(() => report.brokerRequests.every((record) => record.close));
+    const [complete, pending] = report.brokerRequests;
+    expect(complete.finish).toMatchObject({
+      status: 200,
+      finished: true,
+      serverTiming: "admission;dur=12, upstream;dur=3",
+    });
+    expect(complete.close.finished).toBe(true);
+    expect(pending.finish).toBeUndefined();
+    expect(pending.close).toMatchObject({
+      status: 200,
+      finished: false,
+      serverTiming: "admission;dur=12, upstream;dur=3",
+    });
+  } finally {
+    server.closeAllConnections();
+    await new Promise((resolve) => server.close(resolve));
+  }
+});
+
+test("composer reconciliation returns only retained events from the queried community", async () => {
+  await fixture(
+    async (app) => {
+      const retained = app.histories.get("primary/alpha")[0];
+      const lookup = async (community, id) => {
+        const response = await fetch(
+          `${app.origin}/api/relay/${community}/query`,
+          {
+            method: "POST",
+            headers: { Origin: app.origin, "Content-Type": "application/json" },
+            body: JSON.stringify([{ ids: [id], limit: 1 }]),
+          },
+        );
+        expect(response.status).toBe(200);
+        return response.json();
+      };
+      expect(await lookup("primary", retained.id)).toEqual([
+        JSON.parse(JSON.stringify(retained)),
+      ]);
+      expect(await lookup("secondary", retained.id)).toEqual([]);
+      expect(await lookup("primary", "f".repeat(64))).toEqual([]);
+    },
+    { composerPublication: true },
+  );
+});
+
+// No alternate adapter or clock injection: real HTTP -> broker -> policy relay.
+// Keep demand queued for a full reference quota window; measure actual upstream
+// starts across all eight callers, not independent per-socket budgets.
+test("eight broker callers share combined API/REQ/EVENT budgets and correlated WS cooldown", async () => {
+  await fixture(
+    async ({ origin, report, relay }) => {
+      const realFetch = globalThis.fetch;
+      // Node has no browser Origin header. Supply only that browser boundary;
+      // request bodies, streaming, signing and upstream admission remain real.
+      vi.stubGlobal("fetch", (url, init) =>
+        realFetch(url, {
+          ...init,
+          headers: { ...init?.headers, Origin: origin },
+        }),
+      );
+      const stop = new AbortController();
+      const streams = [];
+      const states = new Map();
+      const pending = [];
+      const failures = [];
+      let running = true;
+      try {
+        const transports = await Promise.all(
+          Array.from({ length: 8 }, () => connectBrokerTransport(origin)),
+        );
+        expect(transports.every((t) => t.presence === true)).toBe(true);
+        for (const t of transports) {
+          const stream = t.subscribe({
+            receive() {},
+            established() {},
+            state(snapshot) {
+              states.set(t, snapshot);
+            },
+            denied() {},
+          });
+          streams.push(stream);
+        }
+        for (const stream of streams) {
+          // Enough real channel work to keep the ordinary shared setup lane busy
+          // throughout measurement, without reconnecting/replacing a socket.
+          stream.update(Array.from({ length: 40 }, (_, i) => `load-${i}`));
+        }
+        await until(
+          () =>
+            relay.sockets.filter((s) => s.authenticated && s.readyState === 1)
+              .length === 8,
+        );
+        const start = performance.now();
+        const loop = (operation) =>
+          (async () => {
+            while (running) {
+              try {
+                await operation();
+              } catch (error) {
+                if (running) throw error;
+              }
+            }
+          })().catch((error) => {
+            failures.push(error);
+          });
+        // Four ordinary readers keep demand ready, below the broker's six-slot
+        // bound. Rotate across all eight transport objects on completion.
+        let next = 0;
+        for (let i = 0; i < 4; i++)
+          pending.push(
+            loop(() =>
+              transports[next++ % 8].query(
+                [{ kinds: [0], limit: 1 }],
+                stop.signal,
+              ),
+            ),
+          );
+        pending.push(
+          loop(() =>
+            transports[next++ % 8].query(
+              [{ kinds: [20001], authors: ["a".repeat(64)], limit: 1 }],
+              stop.signal,
+            ),
+          ),
+        );
+        // One outstanding publication keeps the shared optional lane saturated
+        // without manufacturing publication-deadline failures in the fixture.
+        const publishing = loop(async () => {
+          // Budget measurement is steady-state, not a cold-publication deadline
+          // test. Drive EOSE-established owners rather than AUTH-only owners
+          // whose foreground globals are still waiting behind shared traffic.
+          const ready = transports
+            .map((t, i) => ({ state: states.get(t), stream: streams[i] }))
+            .filter(({ state }) => {
+              const globals =
+                state?.routes.filter((route) => !route.channelId) ?? [];
+              return (
+                globals.length === 2 &&
+                globals.every((route) => route.status === "live")
+              );
+            });
+          if (!ready.length) {
+            await delay(20);
+            return;
+          }
+          await ready[next++ % ready.length].stream.presence.publish(
+            "online",
+            new AbortController().signal,
+          );
+        });
+        pending.push(publishing);
+        for (let second = 0; second < 60; second++) {
+          for (const stream of streams)
+            stream.presence.update([
+              (second + 1).toString(16).padStart(64, "0"),
+            ]);
+          await delay(1000);
+          if (failures.length) {
+            throw new Error("Broker load driver failed", {
+              cause: {
+                errors: failures.map(String),
+                responses: report.presencePublicationResponses,
+              },
+            });
+          }
+        }
+        const end = start + 60000;
+        running = false;
+        stop.abort();
+        await Promise.all(pending);
+        expect(failures).toEqual([]);
+        const during = (rows) =>
+          rows.filter((row) => row.at >= start && row.at < end);
+        const ordinary = during(report.liveRequests).filter(
+          (r) => r.route !== "presence",
+        );
+        const presence = during(report.liveRequests).filter(
+          (r) => r.route === "presence",
+        );
+        const events = during(report.presencePublications);
+        const api = during(report.queries);
+        // Real scheduling can delay starts. Lower bounds prove this is a loaded
+        // run, not a vacuous "no quota rejection" pass. Exact admission-clock
+        // spacing is covered with fake time in live/http-admission tests; this
+        // fixture measures actual aggregate arrivals after signing/HTTP overhead.
+        expect(ordinary.length).toBeGreaterThanOrEqual(200);
+        expect(presence.length).toBeGreaterThanOrEqual(50);
+        expect(events.length).toBeGreaterThanOrEqual(11);
+        expect(api.length).toBeGreaterThanOrEqual(120);
+        expect(
+          api.filter((r) => r.filter.kinds?.[0] === 20001).length,
+        ).toBeGreaterThanOrEqual(11);
+        // The existing first-call-anchored relay counters charge combined callers
+        // before acceptance, including rejected work. Do not count only successes.
+        for (const [category, maximum] of [
+          ["ApiCalls", 134],
+          ["WsEvents", 27],
+          ["Messages", 13],
+        ]) {
+          const charges = report.quotaCharges.filter(
+            (r) => r.category === category,
+          );
+          expect(charges.length).toBeGreaterThan(0);
+          expect(Math.max(...charges.map((r) => r.count))).toBeLessThanOrEqual(
+            maximum,
+          );
+          expect(charges.every((r) => r.accepted)).toBe(true);
+        }
+        expect(report.quotaRefusals).toEqual([]);
+        // A correlated presence CLOSED must stop every WS caller, while ordinary
+        // API reads remain independent. Recovery occurs only after the margin.
+        relay.failRoute(
+          "primary",
+          "presence",
+          "rate-limited: quota exceeded; retry in 3s",
+        );
+        const before = report.quotaCharges.filter(
+          (r) => r.category === "WsEvents",
+        ).length;
+        for (const stream of streams) stream.presence.update(["b".repeat(64)]);
+        const recovery = streams[0].presence.publish(
+          "away",
+          new AbortController().signal,
+        );
+        await transports[0].query([{ kinds: [0], limit: 1 }]);
+        await delay(3200);
+        expect(
+          report.quotaCharges.filter((r) => r.category === "WsEvents"),
+        ).toHaveLength(before);
+        await recovery;
+        expect(
+          report.quotaCharges.filter((r) => r.category === "WsEvents").length,
+        ).toBeGreaterThan(before);
+      } finally {
+        running = false;
+        stop.abort();
+        for (const stream of streams) stream.dispose();
+        await Promise.allSettled(pending);
+        vi.unstubAllGlobals();
+      }
+    },
+    { enforceQuotas: true },
+  );
+}, 90000);

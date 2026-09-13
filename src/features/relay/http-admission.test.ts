@@ -177,3 +177,47 @@ it("a partial quota body retains its host owner until normalization installs coo
   await vi.advanceTimersByTimeAsync(3000);
   expect(lane.idle()).toBe(true);
 });
+
+it("optional starts neither consume nor reset ordinary pacing; both lanes retain shared cooldown", async () => {
+  vi.useFakeTimers();
+  const lane = createApiAdmission();
+  const starts: [string, number][] = [];
+  const run = (name: string, priority: "foreground" | "presence") =>
+    lane.run(
+      async () => {
+        starts.push([name, performance.now()]);
+      },
+      undefined,
+      priority,
+    );
+  await run("ordinary-1", "foreground");
+  await vi.advanceTimersByTimeAsync(100);
+  await run("presence-1", "presence");
+  const ordinary = run("ordinary-2", "foreground");
+  const presence = run("presence-2", "presence");
+  await vi.advanceTimersByTimeAsync(400);
+  await ordinary;
+  expect(starts).toEqual([
+    ["ordinary-1", 0],
+    ["presence-1", 100],
+    ["ordinary-2", 500],
+  ]);
+  const rejected = expect(presence).rejects.toBeInstanceOf(ApiPaused);
+  lane.pause(4000);
+  await rejected;
+  await expect(run("blocked ordinary", "foreground")).rejects.toBeInstanceOf(
+    ApiPaused,
+  );
+  await expect(run("blocked presence", "presence")).rejects.toBeInstanceOf(
+    ApiPaused,
+  );
+  await vi.advanceTimersByTimeAsync(4000);
+  await run("ordinary-3", "foreground");
+  const resumed = run("presence-3", "presence");
+  await vi.advanceTimersByTimeAsync(600);
+  await resumed;
+  expect(starts.slice(-2)).toEqual([
+    ["ordinary-3", 4500],
+    ["presence-3", 5100],
+  ]);
+});

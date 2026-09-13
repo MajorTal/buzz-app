@@ -2,6 +2,7 @@
 mod config;
 mod dto;
 mod platform;
+pub(crate) mod relay;
 mod secret;
 mod store;
 
@@ -22,6 +23,7 @@ struct Inner {
     namespace: Result<String>,
     store: Arc<dyn CredentialStore>,
     authority: Mutex<Authority>,
+    relay_http: std::sync::OnceLock<relay::HttpResult>,
 }
 #[derive(Clone)]
 pub struct Identity(Arc<Inner>);
@@ -74,6 +76,7 @@ impl Identity {
         Self(Arc::new(Inner {
             namespace,
             store,
+            relay_http: std::sync::OnceLock::new(),
             authority: Mutex::new(Authority {
                 generation: 0,
                 revocation: uuid::Uuid::new_v4().to_string(),

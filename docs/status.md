@@ -9,8 +9,10 @@ and acceptance gaps here; keep chronological results in the [archive](#historica
 - Host-owned session revocation and independently reachable host shutdown. Channels
   owns its page/navigation/layout under `src/bundled/channels`; reusable conversation
   components live in `src/features/messages` ([ownership](channels.md#reusing-conversation-ui)).
-- Explicit public development-identity pin and typed secure relay origins. Live
-  access still uses the opt-in macOS development broker, not packaged sign-in.
+- Explicit public development-identity pin and typed secure relay origins. Browser
+  access uses the opt-in macOS development broker. Native Account and purpose-bound
+  finite community IO are implemented in draft, not package-validated; see
+  [identity contract](identity-security.md).
 - React lifecycle repair, current-DOM scroll metrics and a checked-in Chromium/WebKit
   scrolling gate. [Browser testing](browser-testing.md) defines exactly what it proves.
 
@@ -52,7 +54,7 @@ and [contributing](contributing.md) for maintained commands and test organizatio
 | Gate | What is still needed |
 | --- | --- |
 | Native lifecycle acceptance | Agree app-data **and keyring** isolation, then exercise actual CLI install/update → running-app observation, on-disk rollback/backup, disable/recovery/safe mode and process restart. Browser fixture storage is not native IPC/filesystem evidence. |
-| Native identity and networking | Choose per-user packaged login/session behavior and a reviewed-origin policy or narrow host capability. Packaged real data must work without the development broker; private keys stay outside plugin JavaScript. Do not widen CSP to unrestricted networking. |
+| Native identity and networking | Native Account custody and seven purpose-bound community commands are implemented; finish independent-key entry, platform adapters and authorized packaged/fallback validation. Private keys remain outside plugin JavaScript; no broker fallback or unrestricted CSP. See [identity contract](identity-security.md). |
 | Supported author contract | The conversation preview adds generated type-only `@buzz/author`, scaffold consumption and external Composer/Message reuse. Final validation, archived cross-host compatibility and native acceptance remain open; no stable SDK promise. |
 | Independent plugin acceptance | Independently build a real-data page and a non-GitHub panel without private host imports, copied contracts or bespoke host patches. In a packaged app: install disabled → enable/use → A/B switching → update/remount → disable → rollback → failed-start recovery. Include revocation, unknown/rejected writes and stalled cleanup. |
 | Distribution | PR CI is wired in `.github/workflows/ci.yml`; decide release signing, updating, provenance and compatibility support. Record packaged artifacts and platform-specific results. Native test targets at the recorded gate contain zero cases; compilation is not GUI acceptance. |

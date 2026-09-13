@@ -17,6 +17,8 @@ export interface Outbox {
   snapshot(): readonly OutgoingEvent[];
   subscribe(listener: () => void): () => void;
   supports(kind: number): boolean;
+  /** Fail closed if hydration failed; an empty pre-hydration snapshot is not absence. */
+  whenReady(): Promise<void>;
   send(input: Pick<EventTemplate, "kind" | "content" | "tags">): string;
   retry(id: string): void;
   dismiss(id: string): Promise<void>;
@@ -361,6 +363,11 @@ export function createOutbox(
   const outbox: Outbox = Object.freeze({
     snapshot: () => finalSnapshot ?? snapshot,
     subscribe: (listener: () => void) => subscribe(listeners, listener),
+    async whenReady() {
+      await ready;
+      if (closed) throw abortError();
+      if (storageError) throw new Error(storageError);
+    },
     supports: (kind: number) =>
       !closed && (!writer.kinds || writer.kinds.includes(kind)),
     send(input: Pick<EventTemplate, "kind" | "content" | "tags">) {

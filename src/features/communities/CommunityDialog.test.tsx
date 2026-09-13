@@ -113,6 +113,21 @@ function owner() {
     subscribe: () => () => {},
     capture,
     assertCurrent,
+    setup: vi.fn((id: string, captured: CommunityAccount) => ({
+      async info() {
+        await registerBrokerCommunity(id, captured.signal);
+        assertCurrent(captured);
+        return communityRequest(id, "info", undefined, captured);
+      },
+      inspectProfile: () => inspectProfile(id, captured),
+      acceptPolicy: (body: unknown) =>
+        communityRequest(id, "accept-policy", body, captured),
+      claim: (body: unknown) => communityRequest(id, "claim", body, captured),
+      publishProfile: (
+        profile: PersonalProfile,
+        existing: Record<string, unknown>,
+      ) => publishProfile(id, profile, existing, captured),
+    })),
     joined,
     saveProfile,
     select: vi.fn(),
@@ -242,6 +257,10 @@ it("captures once and commits an unchanged existing profile without publication"
   ui.submit();
   await flush();
   expect(host.capture).toHaveBeenCalledTimes(1);
+  expect(host.communities.setup).toHaveBeenCalledExactlyOnceWith(
+    "https://example.com",
+    host.account,
+  );
   expect(host.joined).toHaveBeenCalledExactlyOnceWith(
     { id: "https://example.com", name: "Test community" },
     remote.profile,
@@ -576,3 +595,72 @@ it.each(["info", "accept-policy", "claim"])(
     expect(ui.close).not.toHaveBeenCalled();
   },
 );
+
+it("synchronously admits only one submit before React can disable the form", async () => {
+  const pending = deferred<void>();
+  vi.mocked(registerBrokerCommunity).mockReturnValueOnce(pending.promise);
+  const host = owner(),
+    ui = mount(host.communities);
+  ui.url("https://example.com");
+  const form = ui.find((e) => e.type === "form");
+  call(form, "onSubmit");
+  call(form, "onSubmit");
+  expect(registerBrokerCommunity).toHaveBeenCalledTimes(1);
+  pending.resolve();
+  await flush();
+  expect(inspectProfile).toHaveBeenCalledTimes(1);
+});
+it("claim retries retain the same receipt and preserve uncertainty after expiry rejection", async () => {
+  vi.mocked(inspectProfile).mockResolvedValue({
+    exists: false,
+    profile: { name: "", picture: "" },
+    existing: {},
+  });
+  const policy = { version: "v1", age_attestation_required: false };
+  const calls: { route: string; body: unknown }[] = [];
+  let attempts = 0;
+  vi.mocked(communityRequest).mockImplementation(async (_id, route, body) => {
+    calls.push({ route, body });
+    if (route === "info") return { policy } as never;
+    if (route === "accept-policy")
+      return { receipt: "captured-receipt" } as never;
+    if (route === "claim") {
+      attempts++;
+      throw attempts === 1
+        ? { code: "unavailable", outcome: "unknown" }
+        : { code: "inviteExpired", outcome: "rejected" };
+    }
+    throw new Error("unexpected route");
+  });
+  const host = owner(),
+    ui = mount(host.communities);
+  ui.url("https://example.com");
+  ui.submit();
+  await flush();
+  call(
+    ui.find(
+      (e) =>
+        e.type === "input" &&
+        e.props.placeholder === "Existing members can leave this blank",
+    ),
+    "onChange",
+    { target: { value: "v2.captured" } },
+  );
+  ui.submit();
+  await flush();
+  ui.submit();
+  await flush();
+  expect(calls.filter(({ route }) => route === "accept-policy")).toHaveLength(
+    1,
+  );
+  expect(
+    calls.filter(({ route }) => route === "claim").map(({ body }) => body),
+  ).toEqual([
+    { code: "v2.captured", policy_receipt: "captured-receipt" },
+    { code: "v2.captured", policy_receipt: "captured-receipt" },
+  ]);
+  expect(ui.find((e) => e.props.role === "alert").props.children).toContain(
+    "Joining may already have completed",
+  );
+  expect(host.joined).not.toHaveBeenCalled();
+});

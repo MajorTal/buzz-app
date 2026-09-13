@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { X } from "lucide-react";
-import {
-  communityRequest,
-  inspectProfile,
-  publishProfile,
-  type CommunityInfo,
-} from "./api";
+import type { CommunityInfo, CommunitySetup } from "./api";
 import type {
   Communities,
   CommunityAccount,
@@ -15,7 +10,6 @@ import type {
 import { readErrorKind } from "../relay/errors";
 import { canSaveProfile, ProfileFields } from "./ProfileFields";
 import { communityDestination, relayOrigin } from "./destination";
-import { registerBrokerCommunity } from "../relay/transport";
 import styles from "./Communities.module.css";
 
 type Props = {
@@ -56,16 +50,26 @@ function AccountDialog({
   const [step, setStep] = useState<"destination" | "access" | "profile">(
     mode === "profile" ? "profile" : "destination",
   );
+  const [setup, setSetup] = useState<CommunitySetup>();
   const [info, setInfo] = useState<CommunityInfo>();
   const [profile, setProfile] = useState<PersonalProfile>(client.profile);
   const [original, setOriginal] =
-    useState<Awaited<ReturnType<typeof inspectProfile>>>();
+    useState<Awaited<ReturnType<CommunitySetup["inspectProfile"]>>>();
   const [code, setCode] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [adult, setAdult] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const mounted = useRef(true);
+  const admitted = useRef(false);
+  const claimIntent = useRef<
+    | {
+        input: { code: string; policy_receipt?: string | undefined };
+        confirmed: boolean;
+        unknown: boolean;
+      }
+    | undefined
+  >(undefined);
   useEffect(() => {
     mounted.current = true;
     dialog.current?.showModal();
@@ -88,6 +92,8 @@ function AccountDialog({
     }
   }
   async function work(action: (account: CommunityAccount) => Promise<void>) {
+    if (admitted.current) return;
+    admitted.current = true;
     try {
       const captured = assertCurrent();
       setBusy(true);
@@ -97,6 +103,7 @@ function AccountDialog({
       if (isCurrent())
         setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
+      admitted.current = false;
       if (isCurrent()) setBusy(false);
     }
   }
@@ -109,29 +116,19 @@ function AccountDialog({
       await work(async (account) => {
         const next = communityDestination(relayOrigin(url));
         setDestination(next);
-        await registerBrokerCommunity(
-          next.id,
-          AbortSignal.any([account.signal, AbortSignal.timeout(12000)]),
-        );
-        assertCurrent();
-        const value = await communityRequest<CommunityInfo>(
-          next.id,
-          "info",
-          undefined,
-          account,
-        );
+        const host = communities.setup(next.id, account);
+        setSetup(host);
+        const value = await host.info();
         assertCurrent();
         // Restoring an existing admitted profile is not a new join or policy acceptance.
-        const found = await inspectProfile(next.id, account).catch(
-          (reason: unknown) => {
-            // Denial may require admission; outages/invalid replies are not absence.
-            if (readErrorKind(reason) === "denied") return undefined;
-            throw reason;
-          },
-        );
+        const found = await host.inspectProfile().catch((reason: unknown) => {
+          // Denial may require admission; outages/invalid replies are not absence.
+          if (readErrorKind(reason) === "denied") return undefined;
+          throw reason;
+        });
         assertCurrent();
         setInfo(value);
-        if (found?.exists) {
+        if (found?.exists || found?.pending) {
           setOriginal(found);
           setProfile(found.profile);
           setStep("profile");
@@ -139,38 +136,63 @@ function AccountDialog({
       });
     } else if (step === "access") {
       if (!allowed) return;
-      await work(async (account) => {
+      await work(async () => {
+        if (!setup) throw new Error("Choose a community first");
         if (code.trim()) {
-          let receipt: string | undefined;
-          if (policy) {
-            receipt = (
-              await communityRequest<{ receipt: string }>(
-                id,
-                "accept-policy",
-                {
+          // One captured invite/policy receipt survives retries. An expired retry
+          // does not disprove an earlier claim; never re-accept policy implicitly.
+          if (!claimIntent.current) {
+            let receipt: string | undefined;
+            if (policy) {
+              receipt = (
+                await setup.acceptPolicy({
                   code: code.trim(),
                   policy_version: policy.version,
                   age_confirmed: adult,
-                },
-                account,
-              )
-            ).receipt;
-            assertCurrent();
+                })
+              ).receipt;
+              assertCurrent();
+            }
+            claimIntent.current = {
+              input: { code: code.trim(), policy_receipt: receipt },
+              confirmed: false,
+              unknown: false,
+            };
           }
-          const claim = await communityRequest<{ status: string }>(
-            id,
-            "claim",
-            { code: code.trim(), policy_receipt: receipt },
-            account,
-          );
-          assertCurrent();
-          if (!["joined", "already_member"].includes(claim.status))
-            throw new Error("Membership was not confirmed");
+          const intent = claimIntent.current;
+          if (!intent.confirmed) {
+            try {
+              const claim = await setup.claim(intent.input);
+              assertCurrent();
+              if (!["joined", "already_member"].includes(claim.status)) {
+                intent.unknown = true;
+                throw new Error("Membership was not confirmed");
+              }
+              intent.confirmed = true;
+            } catch (reason) {
+              if (
+                !(
+                  reason &&
+                  typeof reason === "object" &&
+                  "outcome" in reason &&
+                  ["notSent", "rejected"].includes(String(reason.outcome))
+                )
+              )
+                intent.unknown = true;
+              if (intent.unknown)
+                throw new Error(
+                  "Joining may already have completed. Retry keeps the same invite and policy receipt; an expired retry cannot prove you did not join. Reopen the community to check existing access.",
+                );
+              throw reason;
+            }
+          }
         }
-        const found = await inspectProfile(id, account);
+        const found = await setup.inspectProfile();
         assertCurrent();
         setOriginal(found);
-        setProfile(found.exists ? found.profile : client.profile);
+        setProfile(
+          found.exists || found.pending ? found.profile : client.profile,
+        );
         setStep("profile");
       });
     } else {
@@ -182,18 +204,14 @@ function AccountDialog({
             account,
           );
         else {
-          if (!destination) throw new Error("Choose a community first");
+          if (!destination || !setup)
+            throw new Error("Choose a community first");
           if (
             !original?.exists ||
             profile.name !== original.profile.name ||
             profile.picture !== original.profile.picture
           )
-            await publishProfile(
-              id,
-              profile,
-              original?.existing ?? {},
-              account,
-            );
+            await setup.publishProfile(profile, original?.existing ?? {});
           assertCurrent();
           communities.joined(
             {
@@ -256,7 +274,7 @@ function AccountDialog({
           <p>
             {client.status === "loading"
               ? "Opening your local identity…"
-              : "Live identity access is unavailable. For development, set BUZZ_DEV_VIEWER to your Buzz public key in .env.local, then restart just web or just desktop. See README.md for requirements."}
+              : "Identity access is unavailable. Open Settings → Account to connect your identity. Browser development uses the separately configured local broker; see README.md."}
           </p>
         ) : (
           <>
@@ -286,6 +304,8 @@ function AccountDialog({
                       setAgreed(false);
                       setAdult(false);
                       setInfo(undefined);
+                      setSetup(undefined);
+                      claimIntent.current = undefined;
                       setOriginal(undefined);
                       setProfile(client.profile);
                       setError("");
@@ -308,11 +328,11 @@ function AccountDialog({
                 <label>
                   Invite code <span className={styles.note}>(if required)</span>
                   <input
-                    disabled={busy}
+                    disabled={busy || !!claimIntent.current}
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     placeholder="Existing members can leave this blank"
-                    maxLength={256}
+                    maxLength={1024}
                   />
                 </label>
                 {policy && (
@@ -373,6 +393,9 @@ function AccountDialog({
                       ? "Your existing community profile is loaded. Keep it or update it here."
                       : "Start with your local profile, or choose how you appear in this community."}
                 </p>
+                {original?.notice && (
+                  <p className={styles.note}>{original.notice}</p>
+                )}
                 <ProfileFields
                   profile={profile}
                   onChange={setProfile}

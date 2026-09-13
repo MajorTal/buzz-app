@@ -441,3 +441,15 @@ it("keeps only valid unique unresolved aliases and never carries them to another
       .memberships,
   ).toEqual([]);
 });
+
+it("keeps a configured alias on setup broker routes without selecting or joining", async () => {
+  const client = setup();
+  await flush();
+  requests.length = 0;
+  const bound = client.setup("wss://primary.example", client.capture());
+  expect(requests).toEqual([]);
+  await bound.info();
+  expect(requests).toEqual(["/api/relay/register", "/api/relay/primary/info"]);
+  expect(client.snapshot().memberships).toEqual([]);
+  expect(client.snapshot().selected).toBeNull();
+});

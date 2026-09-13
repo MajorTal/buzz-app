@@ -57,17 +57,54 @@ Tests use an in-memory store; platform adapter refuses live OS access under test
 No native launch or real credential access in this development batch. Attended
 package acceptance needs agreed app-data AND credential namespaces separately.
 
+## Native community IO
+
+Production native composition uses seven fixed commands from
+`src-tauri/src/identity/relay`; it never selects the development broker:
+`community_discover`, `community_query`, `community_sign_message`,
+`community_sign_profile`, `community_publish`, `community_accept_policy`,
+`community_claim`. Requests carry `{scope: {origin, expectedPubkey, generation,
+revocation}, ...purposeFields}`; success returns `{scope, value}`. No generic URL,
+HTTP method or signing operation is exposed. Native validates authority before
+signing/dispatch and after IO; the host also fences returned scope/account.
+
+Native constructs fresh URL/method/body-bound NIP-98 for fixed authenticated
+endpoints. Data-event retries preserve the saved signature, timestamp and ID.
+HTTPS only, no redirects or implicit HTTP retries; six native operations maximum,
+20-second per-request / 5-second connect deadlines, bounded request/response JSON.
+The host retains its shared origin/viewer admission lane and caps unresolved
+invocations at six with a 25-second caller deadline. JS timeout/abort does not
+prove native cancellation or callback reclamation.
+
+The connector advertises finite verified reads and kind-0/9 writes only. Native
+live/NIP-42, protected media, encrypted sidebar/read-state, agent activity/library
+and GIF support are omitted, not silently routed to the broker. Public external
+HTTPS image URLs remain usable. User-selected HTTPS origins can be private/internal;
+this is not a public-network-only policy or a DNS-rebinding defense.
+
+Setup acquires the existing origin/viewer session before local membership commit
+and waits for its durable outbox to hydrate. Failed hydration is not an empty
+journal. The same session/outbox survives local join. Profile recovery checks fresh
+verified remote kind-0 state, never local pending projections: an accepted duplicate
+may be a superseded event, not the current profile. Saved intent is retried by exact
+ID; conflicting or superseded edits require explicit review, not automatic resigning.
+
+Errors expose stable redacted codes and write outcomes `notSent`, `rejected`, or
+`unknown`; a rejected retry cannot disprove an earlier uncertain write. Invite/policy
+receipt expiry can reject retry after a successful claim. The dialog retains the
+captured invite/receipt while retrying and never automatically re-accepts policy.
+Profile or local setup cancellation does not undo remote membership.
+
 ## Validation boundaries
 
-The native handler, frontend controller, Account UI, account-isolated community
-owner and terminal session-cleanup regressions use synthetic credentials. The
-production composition still keeps native community IO disconnected: an active
-Account must not silently select a development broker's potentially different key.
-Browser development continues to use its existing broker.
+Native handlers use the same command registration as production, with synthetic
+in-memory credentials and loopback HTTP. Host composition tests cover native
+setup → profile publication → local join → message send → sign-out with mocked
+invoke. Browser Account/profile/community journeys do not prove native IPC or TLS.
 
-Remaining gates: native purpose-bound reads/writes/onboarding; actual invoke
-fallback/callback loss/reload recovery; broader integration checks and review of
-native IO; separately authorized synthetic packaged workflow. Unit mocks alone do
-not close the packaged/fallback gates. Existing sessions and the durable outbox
+Remaining gates: actual invoke fallback/callback loss/reload recovery, broader
+CI/integration and independent review, separately authorized synthetic packaged
+workflow, independent existing-key input, and Windows/Linux secure-store adapters.
+Unit mocks alone do not close these gates. Existing sessions and the durable outbox
 remain the owners; exact signed unknown-outcome intent stays in its original
 origin/viewer partition across account changes.

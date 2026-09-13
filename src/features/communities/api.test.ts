@@ -1,5 +1,10 @@
 import { afterEach, assert, expect, it, vi } from "vitest";
-import { communityRequest, inspectProfile, publishProfile } from "./api";
+import {
+  createBrokerCommunitySetup,
+  communityRequest,
+  inspectProfile,
+  publishProfile,
+} from "./api";
 import type { CommunityAccount } from "./service";
 import { keypair, signed } from "../relay/testing";
 const key = keypair();
@@ -124,4 +129,52 @@ it("preserves profile fields and never interprets malformed signed profile conte
   await expect(
     inspectProfile("https://one.example", account),
   ).rejects.toThrow();
+});
+
+it("broker setup registers once before info and never continues after registration retirement", async () => {
+  const { account, controller, fetcher } = setup();
+  let release!: (value: Response) => void;
+  fetcher.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const bound = createBrokerCommunitySetup("https://one.example", account);
+  expect(fetcher).not.toHaveBeenCalled();
+  const pending = bound.info();
+  expect(fetcher.mock.calls[0]?.[0]).toBe("/api/relay/register");
+  controller.abort();
+  release(Response.json({}));
+  await expect(pending).rejects.toThrow();
+  expect(fetcher).toHaveBeenCalledTimes(1);
+});
+it("broker setup routes explicit policy and claim inputs to its captured destination", async () => {
+  const { account, fetcher } = setup();
+  const bound = createBrokerCommunitySetup("https://one.example", account);
+  fetcher
+    .mockResolvedValueOnce(Response.json({}))
+    .mockResolvedValueOnce(Response.json({ name: "One", policy: null }));
+  await expect(bound.info()).resolves.toEqual({ name: "One", policy: null });
+  await bound.acceptPolicy({
+    code: "i",
+    policy_version: "v1",
+    age_confirmed: true,
+  });
+  await bound.claim({ code: "i", policy_receipt: "r" });
+  expect(fetcher.mock.calls.map(([url]) => url)).toEqual([
+    "/api/relay/register",
+    "/api/relay/https%3A%2F%2Fone.example/info",
+    "/api/relay/https%3A%2F%2Fone.example/accept-policy",
+    "/api/relay/https%3A%2F%2Fone.example/claim",
+  ]);
+  expect(JSON.parse(fetcher.mock.calls[2]?.[1].body as string)).toEqual({
+    code: "i",
+    policy_version: "v1",
+    age_confirmed: true,
+  });
+  expect(JSON.parse(fetcher.mock.calls[3]?.[1].body as string)).toEqual({
+    code: "i",
+    policy_receipt: "r",
+  });
 });

@@ -8,6 +8,8 @@ pub enum ErrorCode {
     InvalidConfiguration,
     UnsupportedPlatform,
     Absent,
+    // Stable wire variant; the implemented OS denial mapping is currently macOS-only.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     Denied,
     Unavailable,
     Corrupt,

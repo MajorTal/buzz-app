@@ -10,6 +10,7 @@ use serde::{
 use std::fmt;
 use zeroize::Zeroizing;
 
+#[cfg(target_os = "macos")]
 pub(super) const LEGACY_SERVICE: &str = "buzz-desktop";
 const MAX_BLOB_BYTES: usize = 1024 * 1024;
 

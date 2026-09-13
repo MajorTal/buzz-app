@@ -1,4 +1,7 @@
 // FOUNDATION: Client identity and membership selection outlive community query sessions.
+import { createBrokerCommunitySetup, type CommunitySetup } from "./api";
+import { waitForSetupSession } from "./setup-session";
+import type { RelaySession } from "../relay/session";
 import { Context } from "@deepseek-ai/cordis";
 import { provideRelay, type RelayData } from "../relay/service";
 import { connectBrokerTransport, type ReadTransport } from "../relay/transport";
@@ -15,6 +18,12 @@ export type CommunityAccount = Readonly<{
 export interface CommunityIdentitySource {
   snapshot(): IdentityStatus | null;
   subscribe(listener: () => void): () => void;
+  setup(
+    identity: IdentityStatus,
+    id: string,
+    account: CommunityAccount,
+    session: () => Promise<RelaySession>,
+  ): CommunitySetup;
   connect(
     identity: IdentityStatus,
     id: string,
@@ -169,7 +178,11 @@ export function createCommunities(
         const lifetime = AbortSignal.any([signal, captured.signal]);
         const transport =
           identity && native
-            ? await identity.connect(native, id, lifetime)
+            ? await identity.connect(
+                native,
+                communityDestination(id).url,
+                lifetime,
+              )
             : await connectBrokerTransport("", lifetime, id);
         assertCurrent(captured);
         if (transport.viewer !== captured.viewer)
@@ -345,6 +358,37 @@ export function createCommunities(
     relay,
     capture,
     assertCurrent,
+    setup(id: string, captured: CommunityAccount): CommunitySetup {
+      assertCurrent(captured);
+      const destination = communityDestination(id);
+      const native = authority;
+      if (identity && !native) throw new Error("Native identity unavailable");
+      const host =
+        identity && native
+          ? identity.setup(native, destination.url, captured, async () => {
+              assertCurrent(captured);
+              const owner = acquire(destination.id);
+              const session = await waitForSetupSession(owner, captured.signal);
+              assertCurrent(captured);
+              return session;
+            })
+          : createBrokerCommunitySetup(destination.id, captured);
+      // Account retirement fences every entry and late result, not merely React.
+      async function run<T>(operation: () => Promise<T>): Promise<T> {
+        assertCurrent(captured);
+        const result = await operation();
+        assertCurrent(captured);
+        return result;
+      }
+      return {
+        info: () => run(() => host.info()),
+        inspectProfile: () => run(() => host.inspectProfile()),
+        acceptPolicy: (input) => run(() => host.acceptPolicy(input)),
+        claim: (input) => run(() => host.claim(input)),
+        publishProfile: (profile, existing) =>
+          run(() => host.publishProfile(profile, existing)),
+      };
+    },
     snapshot: () => state,
     subscribe(fn: () => void) {
       listeners.add(fn);
@@ -385,8 +429,12 @@ export function createCommunities(
       });
       // Observers of the local commit may revoke identity synchronously.
       assertCurrent(captured);
-      if (sessions.has(membership.id)) sessions.get(membership.id)?.retry();
-      else acquire(membership.id);
+      const owner = acquire(membership.id);
+      // Setup already acquired the origin/viewer outbox. Local membership commit
+      // refreshes its reads, never replaces the journal or an in-flight write.
+      if (owner.snapshot().status === "ready")
+        owner.snapshot().session.channels.refreshList?.();
+      else if (owner.snapshot().status !== "connecting") owner.retry();
       emitRelay();
     },
   };

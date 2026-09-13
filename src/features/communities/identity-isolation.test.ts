@@ -89,6 +89,9 @@ function setup(initial: IdentityStatus | null = ready()) {
       };
     },
     connect,
+    setup: vi.fn(() => {
+      throw new Error("Setup not provided by fixture");
+    }),
   };
   const root = new Context();
   roots.push(root);
@@ -105,6 +108,7 @@ function setup(initial: IdentityStatus | null = ready()) {
     );
   return {
     client,
+    source,
     change,
     join,
     connections,
@@ -391,3 +395,111 @@ it("a ready account cannot write through missing capture arguments or after owne
     client.saveProfile({ name: "Disposed", picture: "" }, account),
   ).toThrow();
 });
+
+it("captures canonical setup origin and native authority without contacting the broker", async () => {
+  const { client, source, change } = setup();
+  const host = {
+    info: vi.fn(async () => ({ policy: null })),
+    inspectProfile: vi.fn(async () => ({
+      exists: false,
+      profile: { name: "", picture: "" },
+      existing: {},
+    })),
+    acceptPolicy: vi.fn(async () => ({ receipt: "r" })),
+    claim: vi.fn(async () => ({ status: "joined" })),
+    publishProfile: vi.fn(async () => {}),
+  };
+  const create = vi.mocked(source.setup).mockReturnValue(host);
+  const account = client.capture();
+  const bound = client.setup("wss://ONE.example:443/", account);
+  expect(create).toHaveBeenCalledExactlyOnceWith(
+    ready(),
+    "https://one.example",
+    account,
+    expect.any(Function),
+  );
+  await expect(bound.info()).resolves.toEqual({ policy: null });
+  await expect(bound.inspectProfile()).resolves.toMatchObject({
+    exists: false,
+  });
+  const policy = { code: "invite", policy_version: "v1", age_confirmed: false };
+  const claim = { code: "invite", policy_receipt: "r" };
+  await bound.acceptPolicy(policy);
+  await bound.claim(claim);
+  await bound.publishProfile(
+    { name: "A", picture: "" },
+    { about: "preserved" },
+  );
+  expect(host.acceptPolicy).toHaveBeenCalledExactlyOnceWith(policy);
+  expect(host.claim).toHaveBeenCalledExactlyOnceWith(claim);
+  expect(host.publishProfile).toHaveBeenCalledExactlyOnceWith(
+    { name: "A", picture: "" },
+    { about: "preserved" },
+  );
+  change(ready(b.pubkey, "4"));
+  for (const action of [
+    () => bound.info(),
+    () => bound.inspectProfile(),
+    () => bound.acceptPolicy(policy),
+    () => bound.claim(claim),
+    () => bound.publishProfile({ name: "stale", picture: "" }, {}),
+  ]) {
+    await expect(action()).rejects.toThrow("Account changed");
+  }
+  for (const fn of Object.values(host)) expect(fn).toHaveBeenCalledTimes(1);
+  expect(() => client.setup("https://one.example", account)).toThrow(
+    "Account changed",
+  );
+  expect(create).toHaveBeenCalledTimes(1);
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it.each([
+  "info",
+  "inspectProfile",
+  "acceptPolicy",
+  "claim",
+  "publishProfile",
+] as const)(
+  "rejects late native %s results after a same-key generation change without retry",
+  async (name) => {
+    const { client, source, change } = setup();
+    let release!: (value: unknown) => void;
+    const work = vi.fn(
+      () =>
+        new Promise<unknown>((resolve) => {
+          release = resolve;
+        }),
+    );
+    const host = {
+      info: work,
+      inspectProfile: work,
+      acceptPolicy: work,
+      claim: work,
+      publishProfile: work,
+    };
+    vi.mocked(source.setup).mockReturnValue(
+      host as unknown as ReturnType<CommunityIdentitySource["setup"]>,
+    );
+    const bound = client.setup("https://one.example", client.capture());
+    const pending =
+      name === "info"
+        ? bound.info()
+        : name === "inspectProfile"
+          ? bound.inspectProfile()
+          : name === "acceptPolicy"
+            ? bound.acceptPolicy({
+                code: "i",
+                policy_version: "v",
+                age_confirmed: false,
+              })
+            : name === "claim"
+              ? bound.claim({ code: "i" })
+              : bound.publishProfile({ name: "A", picture: "" }, {});
+    change(ready(a.pubkey, "4"));
+    release({ policy: null, receipt: "r", status: "joined" });
+    await expect(pending).rejects.toThrow("Account changed");
+    expect(work).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);

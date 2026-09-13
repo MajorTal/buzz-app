@@ -48,6 +48,14 @@ impl IdentityKey {
         }
         Self::from_bytes(bytes)
     }
+    pub(super) fn sign_hash(&self, hash: &[u8; 32]) -> Result<String> {
+        let secp = Secp256k1::signing_only();
+        let mut pair = secp256k1::Keypair::from_seckey_byte_array(&secp, *self.bytes)
+            .map_err(|_| ErrorCode::Corrupt)?;
+        let signature = secp.sign_schnorr_no_aux_rand(hash, &pair);
+        pair.non_secure_erase();
+        Ok(signature.to_string())
+    }
     pub(super) fn pubkey(&self) -> &str {
         &self.pubkey
     }

@@ -1,4 +1,7 @@
-import { connectBrokerTransport } from "../relay/transport";
+import {
+  connectBrokerTransport,
+  registerBrokerCommunity,
+} from "../relay/transport";
 import type { CommunityAccount, PersonalProfile } from "./service";
 export type CommunityInfo = {
   name?: string;
@@ -78,4 +81,52 @@ export async function publishProfile(
   }>(id, "profile", { ...profile, existing }, account);
   if (!receipt.accepted || !receipt.event_id)
     throw new Error(receipt.message ?? "Profile publication was not confirmed");
+}
+
+/** Captured host operations: no arbitrary route, destination change or signer. */
+export interface CommunitySetup {
+  info(): Promise<CommunityInfo>;
+  inspectProfile(): Promise<
+    Awaited<ReturnType<typeof inspectProfile>> & {
+      notice?: string;
+      pending?: boolean;
+    }
+  >;
+  acceptPolicy(input: {
+    code: string;
+    policy_version: string;
+    age_confirmed: boolean;
+  }): Promise<{ receipt: string }>;
+  claim(input: {
+    code: string;
+    policy_receipt?: string | undefined;
+  }): Promise<{ status: string }>;
+  publishProfile(
+    profile: PersonalProfile,
+    existing: Record<string, unknown>,
+  ): Promise<void>;
+}
+
+export function createBrokerCommunitySetup(
+  id: string,
+  account: CommunityAccount,
+): CommunitySetup {
+  return {
+    async info() {
+      const signal = AbortSignal.any([
+        account.signal,
+        AbortSignal.timeout(12000),
+      ]);
+      signal.throwIfAborted();
+      await registerBrokerCommunity(id, signal);
+      signal.throwIfAborted();
+      return communityRequest<CommunityInfo>(id, "info", undefined, account);
+    },
+    inspectProfile: () => inspectProfile(id, account),
+    acceptPolicy: (input) =>
+      communityRequest(id, "accept-policy", input, account),
+    claim: (input) => communityRequest(id, "claim", input, account),
+    publishProfile: (profile, existing) =>
+      publishProfile(id, profile, existing, account),
+  };
 }

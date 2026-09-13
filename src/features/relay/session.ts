@@ -27,6 +27,7 @@ import type { ReadTransport } from "./transport";
 import type { LiveSnapshot, LiveSubscription } from "./live";
 import {
   hasTag,
+  newer,
   type ReadFilter,
   type RelayEvent,
   type EventData,
@@ -633,6 +634,56 @@ export function createRelaySession(
     media: (url: string) => transport?.media(url),
     /** A plugin may request writes from this same interface when the host supports them. */
     outbox: writes?.outbox,
+    /** Setup needs current relay evidence, never a projection of local pending intent. */
+    async ownProfile(signal?: AbortSignal) {
+      if (closed || !transport) throw new Error("Relay is disconnected");
+      const combined = AbortSignal.any([
+        lifetime.signal,
+        AbortSignal.timeout(10000),
+        ...(signal ? [signal] : []),
+      ]);
+      const epoch = accessEpoch;
+      const cleared = cacheClearEpoch;
+      const filters = [{ kinds: [0], authors: [transport.viewer], limit: 5 }];
+      const read = async () => {
+        const began = accessEpoch;
+        const events = await verified.read(filters, {
+          signal: combined,
+          fresh: true,
+          priority: "foreground",
+        });
+        // Reconciliation invokes observers. They may retire or clear this session
+        // synchronously after verification but before its promise returns.
+        combined.throwIfAborted();
+        if (closed || began !== accessEpoch || cleared !== cacheClearEpoch)
+          throw new DOMException("Stale profile read", "AbortError");
+        return events;
+      };
+      let events: readonly RelayEvent[];
+      try {
+        events = await read();
+      } catch (error) {
+        // Initial channel discovery invalidates all pending reads. One bounded
+        // own-profile reread is safe; account/clear/explicit cancellation is not.
+        if (
+          closed ||
+          combined.aborted ||
+          readErrorKind(error) !== "cancelled" ||
+          epoch === accessEpoch ||
+          cleared !== cacheClearEpoch
+        )
+          throw error;
+        events = await read();
+      }
+      return events
+        .filter(
+          (event) => event.kind === 0 && event.pubkey === transport.viewer,
+        )
+        .reduce<RelayEvent | undefined>(
+          (current, event) => newer(current, event),
+          undefined,
+        );
+    },
     async read(filters: readonly ReadFilter[], settings?: ReadOptions) {
       const began = revision;
       const epoch = accessEpoch;

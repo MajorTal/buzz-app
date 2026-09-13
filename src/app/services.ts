@@ -12,6 +12,7 @@ import { createPluginManager } from "../plugins/manager";
 import { withTimeout } from "../plugins/timeout";
 import { createIdentity } from "../features/identity/service";
 import { createNativeIdentityBackend } from "../features/identity/native";
+import { createNativeCommunities } from "../features/communities/native";
 
 export function createServices() {
   // One renderer owner reconnects to process identity; Account mounts own no session.
@@ -31,8 +32,9 @@ export function createServices() {
   const communities = createCommunities(
     ctx,
     // Never use a broker's potentially different key as native identity transport.
-    // Native read/send integration is the next slice; remain disconnected until then.
+    // Native advertises finite reads + kind-0/9 writes, not broker/live parity.
     !nativeIdentity && import.meta.env.VITE_BUZZ_LIVE === "1",
+    nativeIdentity ? createNativeCommunities(identity) : undefined,
   );
   const relay = communities.relay;
   let disposal: Promise<void> | undefined;

@@ -39,6 +39,11 @@ remote side effect and is not undone if later profile setup fails or is cancelle
 Profile editing preserves existing fields that this editor does not expose.
 Changing a community profile does not change the local default. The first
 completed community setup seeds the local default only when it is still empty.
+Native setup uses the hydrated session outbox for kind-0 intent, requires fresh
+remote evidence of its exact event ID, and reuses that outbox after local join. An
+accepted receipt alone does not establish the current profile. Unknown retries
+keep the saved event; see [native identity contract](identity-security.md).
+
 Picture setup currently accepts HTTPS URLs, not uploads; a protected media URL
 from one community is not a portable public avatar for another.
 
@@ -68,10 +73,12 @@ Channel-head persistence now includes community origin as well as viewer, rather
 than relying solely on the relay signing key. Identity keys never enter browser
 JavaScript; local preferences contain the public viewer ID only.
 
-This is the development integration, not a native identity/join implementation.
-Packaged builds do not include the broker. Account import, community
-creation/removal, agent enrollment, avatar uploads and background connection
-eviction are not implemented. Agents should eventually have local
+Packaged builds do not include the broker. The native Account adapter now supplies
+finite reads, kind-0/9 signing/publication and policy/claim setup through the same
+host owners; [native identity](identity-security.md) records its narrower capabilities
+and unverified package/platform gates. Explicit legacy copy and saved unlock are
+implemented; independent key entry, community creation/removal, agent enrollment,
+avatar uploads and background connection eviction are not implemented. Agents should eventually have local
 configuration plus separately scoped participation; selecting a community must
 not become a deployment or enrollment command.
 
@@ -110,8 +117,8 @@ This establishes **trusted-app-origin intent, not a human gesture**; same-origin
 plugins and local processes remain trusted, not sandboxed. User-directed HTTPS
 networking may reach internal/private destinations. This is not a public-only
 network policy or DNS-rebinding defense; TLS verification remains enabled.
-No CSP widening, private key exposure to JavaScript, or native identity adapter
-is included.
+The broker adds no CSP widening or private key exposure to JavaScript. Native
+identity has a separate purpose-bound adapter, never a broker fallback.
 
 ## Verification
 

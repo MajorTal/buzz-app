@@ -1,7 +1,18 @@
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { assert, afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { Context } from "@deepseek-ai/cordis";
 import { createServices, type AppServices } from "./services";
 import type { IdentityBackend } from "../features/identity/contracts";
+import { keypair, signed } from "../features/relay/testing";
+import type { EventTemplate } from "nostr-tools";
+import type { RelayEvent } from "../features/relay/events";
+import { invoke } from "@tauri-apps/api/core";
+vi.mock("@tauri-apps/api/core", () => ({
+  invoke: vi.fn(),
+  isTauri: () => false,
+}));
+vi.mock("../features/relay/outbox-storage", () => ({
+  browserOutboxStorage: () => ({ load: () => [], save: () => {} }),
+}));
 const native = vi.hoisted(() => ({
   backend: undefined as IdentityBackend | undefined,
 }));
@@ -253,7 +264,7 @@ it("composes one native identity and never connects its separate development-bro
   expect(owner.snapshot().identity?.pubkey).toBe(status.pubkey);
   expect(native.backend.status).toHaveBeenCalledTimes(1);
   expect(services.identity).toBe(owner);
-  expect(services.communities.snapshot().viewer).toBeUndefined();
+  expect(services.communities.snapshot().viewer).toBe(status.pubkey);
   expect(fetch).not.toHaveBeenCalled();
   await services.dispose();
   expect(owner.snapshot().identity).toBeNull();
@@ -300,3 +311,128 @@ it("a missing initial native reply cannot trigger broker fallback or retain disp
   expect(owner.snapshot().identity).toBeNull();
   expect(native.backend.signOut).not.toHaveBeenCalled();
 });
+
+it.each(["https://native.example", "https://primary.example"])(
+  "production native composition at %s joins with the same outbox, sends with IPC and retires it on sign-out",
+  async (origin) => {
+    await services.dispose();
+    vi.mocked(fetch).mockClear();
+    const key = keypair(),
+      relay = keypair();
+    const status = {
+      state: "ready",
+      pubkey: key.pubkey,
+      generation: "2",
+      revocation: "00000000-0000-4000-8000-000000000001",
+      busy: false,
+      reason: null,
+    };
+    const signedOut = {
+      ...status,
+      state: "signedOut",
+      pubkey: null,
+      generation: "3",
+      revocation: "00000000-0000-4000-8000-000000000002",
+    };
+    native.backend = {
+      status: vi.fn(async () => status),
+      unlockSaved: vi.fn(),
+      importLegacy: vi.fn(),
+      signOut: vi.fn(async () => signedOut),
+    };
+    let remote: RelayEvent | undefined;
+    const published: RelayEvent[] = [];
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      const request = (args as { request: Record<string, unknown> }).request;
+      let value: unknown;
+      if (command === "community_discover")
+        value = {
+          viewer: key.pubkey,
+          relayAuthor: relay.pubkey,
+          name: "Native community",
+          policy: null,
+        };
+      else if (command === "community_query") value = remote ? [remote] : [];
+      else if (
+        command === "community_sign_profile" ||
+        command === "community_sign_message"
+      )
+        value = signed(key, request.template as EventTemplate);
+      else if (command === "community_publish") {
+        const event = request.event as RelayEvent;
+        published.push(event);
+        if (event.kind === 0) remote = event;
+        value = { event_id: event.id, accepted: true, duplicate: false };
+      } else throw new Error(`Unexpected purpose ${command}`);
+      return { scope: request.scope, value };
+    });
+    services = createServices();
+    await vi.advanceTimersByTimeAsync(0);
+    const account = services.communities.capture();
+    const setup = services.communities.setup(origin, account);
+    expect(await setup.info()).toMatchObject({ name: "Native community" });
+    const inspection = setup.inspectProfile();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(await inspection).toMatchObject({ exists: false });
+    expect(services.communities.snapshot().selected).toBeNull();
+    const saved = setup.publishProfile({ name: "Native", picture: "" }, {});
+    await vi.advanceTimersByTimeAsync(5000);
+    await saved;
+    const discoveries = vi
+      .mocked(invoke)
+      .mock.calls.filter(([name]) => name === "community_discover").length;
+    services.communities.joined(
+      { id: origin, name: "Native" },
+      { name: "Native", picture: "" },
+      account,
+    );
+    await vi.advanceTimersByTimeAsync(2000);
+    const session = services.relay.snapshot().session;
+    assert.exists(session.outbox);
+    expect(
+      vi
+        .mocked(invoke)
+        .mock.calls.filter(([name]) => name === "community_discover"),
+    ).toHaveLength(discoveries);
+    expect(session.live.snapshot().status).toBe("unavailable");
+    session.outbox.send({
+      kind: 9,
+      content: "hello",
+      tags: [["h", "channel"]],
+    });
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(published.map((event) => event.kind)).toEqual([0, 9]);
+    expect(fetch).not.toHaveBeenCalled();
+    // Renderer reload restores the stored alias but the real native adapter still
+    // receives canonical origins, never the alias used by the dev broker.
+    await services.dispose();
+    vi.mocked(invoke).mockClear();
+    services = createServices();
+    await vi.advanceTimersByTimeAsync(3000);
+    expect(services.relay.snapshot()).toMatchObject({ status: "ready" });
+    expect(services.communities.snapshot().selected).toBe(
+      origin === "https://primary.example" ? "primary" : origin,
+    );
+    expect(vi.mocked(invoke).mock.calls.length).toBeGreaterThan(0);
+    for (const [, args] of vi.mocked(invoke).mock.calls)
+      expect(args).toMatchObject({ request: { scope: { origin } } });
+    expect(fetch).not.toHaveBeenCalled();
+    const restoredAccount = services.communities.capture();
+    const restoredSession = services.relay.snapshot().session;
+    const restoredSetup = services.communities.setup(origin, restoredAccount);
+    assert.exists(restoredSession.outbox);
+    expect(restoredAccount.signal.aborted).toBe(false);
+    expect(restoredSession.outbox.supports(9)).toBe(true);
+    expect(await restoredSetup.info()).toMatchObject({
+      name: "Native community",
+    });
+    await services.identity.signOut();
+    expect(restoredAccount.signal.aborted).toBe(true);
+    expect(restoredSession.outbox.supports(9)).toBe(false);
+    expect(services.communities.snapshot()).toMatchObject({
+      status: "unavailable",
+      selected: null,
+    });
+    await expect(restoredSetup.info()).rejects.toThrow();
+  },
+);

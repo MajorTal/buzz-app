@@ -147,7 +147,7 @@ broker, snapshots, conflict repair, and route teardown). The paired
 send and cold-open admission with a held snapshot versus equivalent no-presence
 owners. Colocated reader, broker, live and signed-transport tests separately hold
 capacity/signing work and exercise the combined eight-caller budgets; browser
-journeys alone do not establish those bounds. `policy-quota.spec.mjs` proves that
+journeys alone do not establish those bounds. `dev/policy-relay.test.mjs` proves that
 the numerical quota fixture rejects deliberate overload. Channel-opening measurements
 retain their existing warm-switch budget.
 

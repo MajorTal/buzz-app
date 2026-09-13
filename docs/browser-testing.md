@@ -199,6 +199,16 @@ The separate `channel-opening.test.ts` exercises catch-up ownership and terminal
 retry states through the production session. A held-response reproducer establishes
 a failure mechanism; it does not on its own identify a live incident's cause.
 
+## Fixture server isolation
+
+Concurrent Vite fixture servers must own separate optimizer caches. Use
+`tests/browser/vite-server.mjs` for new fixtures; its `close()` releases the owned
+cache. The existing emoji and conversation fixtures retain their explicitly owned
+temporary caches. Do not share Vite's default `node_modules/.vite`: another server
+can invalidate dependency imports and leave a blank fixture with a 504
+`Outdated Optimize Dep`. Keep import failures visible; retries or longer UI waits
+do not repair module loading.
+
 ## Presence contention controls
 
 `presence-contention.spec.mjs` forces a real signed presence conflict through the
@@ -222,7 +232,7 @@ These clocks must not be subtracted across domains.
 The opt-in policy relay numerically enforces audited reference defaults: shared
 API **300/min**, WS REQ/EVENT **50/5s**, plus **60 EVENT/min**. Counters are shared
 across sockets for the same community/viewer; HTTP publications share the API
-counter with snapshots. `policy-quota.spec.mjs` deliberately exceeds each budget
+counter with snapshots. `dev/policy-relay.test.mjs` runs once under Vitest (no browser) and deliberately exceeds each budget
 and requires correlated rejection, community isolation, and window expiry. This
 positive control prevents an empty refusal list from masquerading as enforcement.
 The short browser journeys do not saturate the client's maximum envelope or prove

@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
@@ -16,8 +16,8 @@ test("presence: viewport demand, equal-status silence, conflict repair and teard
   });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await server.listen();
   try {
+    await server.listen();
     const started = Date.now();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/presence.html`,
@@ -153,10 +153,11 @@ test("presence: real same-origin Web Lock and cross-window activity handoff", as
     logLevel: "error",
     server: { host: "127.0.0.1", port: 0 },
   });
-  await server.listen();
-  const first = await context.newPage();
-  const second = await context.newPage();
+  let first, second;
   try {
+    await server.listen();
+    first = await context.newPage();
+    second = await context.newPage();
     const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/presence-publisher.html`;
     const time = new Date("2026-09-12T00:00:00Z");
     await first.clock.install({ time });
@@ -209,8 +210,10 @@ test("presence: real same-origin Web Lock and cross-window activity handoff", as
       await second.evaluate(() => window.publisherFixture.publications),
     ).toEqual(["online"]);
   } finally {
-    await first.close();
-    await second.close();
-    await server.close();
+    try {
+      await Promise.all([first?.close(), second?.close()]);
+    } finally {
+      await server.close();
+    }
   }
 });

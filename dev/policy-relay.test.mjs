@@ -1,16 +1,14 @@
-import { test, expect } from "@playwright/test";
+import { test, expect } from "vitest";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools";
 import { createHash } from "node:crypto";
-import { policyRelay } from "./policy-relay.mjs";
+import { policyRelay } from "../tests/browser/policy-relay.mjs";
 
 // Positive controls for the modeled upstream used by the browser measurements.
 // No actual app or deployed relay is involved in these enforcement checks.
-test("modeled presence quota enforcement rejects overload across sockets and HTTP purposes", async ({
-  browserName,
-}, testInfo) => {
+test("modeled presence quota enforcement rejects overload across sockets and HTTP purposes", async () => {
   const key = generateSecretKey(),
     viewer = getPublicKey(key);
-  const report = { queries: [], unexpected: [], browserName };
+  const report = { queries: [], unexpected: [] };
   let clock = 1000;
   const sign = (kind, tags = [], content = "online") =>
     finalizeEvent(
@@ -109,8 +107,4 @@ test("modeled presence quota enforcement rejects overload across sockets and HTT
   ]);
   expect(report.unexpected).toEqual([]);
   for (const socket of sockets) socket.close();
-  await testInfo.attach("quota-positive-control", {
-    body: JSON.stringify(report, null, 2),
-    contentType: "application/json",
-  });
 });

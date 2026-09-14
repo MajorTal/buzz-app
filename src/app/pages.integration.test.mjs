@@ -31,6 +31,16 @@ test("the app runtime exposes ready bundled pages and removes them on disable", 
     await settle();
     assert.equal(services.pages.snapshot().length, 3);
     await vi.waitFor(() =>
+      assert.deepEqual(
+        services.conversation.tools
+          .snapshot()
+          .map((tool) => tool.pluginId)
+          .sort(),
+        ["buzz.emoji", "buzz.mentions", "buzz.task-details"],
+      ),
+    );
+    await services.plugins.change("disable", "buzz.task-details");
+    await vi.waitFor(() =>
       assert.equal(services.conversation.tools.snapshot().length, 2),
     );
     assert.equal(services.conversation.inline.snapshot().length, 1);

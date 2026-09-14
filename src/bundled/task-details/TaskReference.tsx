@@ -10,6 +10,7 @@ import { taskReferences } from "./reference";
 import { TaskSummary } from "./TaskSummary";
 import type { RelaySession } from "../../features/relay/session";
 import styles from "./task.module.css";
+import { taskViewTarget } from "./view-route";
 
 type Editor = ComponentType<{
   session: RelaySession;
@@ -84,17 +85,21 @@ function ResolvedReference({
   }
   if (!task && content.link) return <>{fallback ?? text}</>;
   const open = async () => {
-    const result = await navigation.open({
-      version: 1,
-      kind: "conversation",
-      scope: {
-        viewer,
-        communityOrigin: scope.slice(0, -(viewer.length + 1)),
-      },
-      channelId: address.channel,
-      messageId: address.root,
-      threadRootId: address.root,
-    });
+    const result = await navigation.open(
+      task
+        ? taskViewTarget(scope, viewer, address.channel, address.root)
+        : {
+            version: 1,
+            kind: "conversation",
+            scope: {
+              viewer,
+              communityOrigin: scope.slice(0, -(viewer.length + 1)),
+            },
+            channelId: address.channel,
+            messageId: address.root,
+            threadRootId: address.root,
+          },
+    );
     setError(
       result.status === "failed"
         ? "Could not open task thread. Try again."
@@ -113,7 +118,7 @@ function ResolvedReference({
           <TaskSummary task={task} session={connection.session} />
           <span className={styles.cardActions}>
             <button type="button" onClick={() => void open()}>
-              Open thread
+              Open task
             </button>
             <TaskPopover
               session={connection.session}

@@ -173,11 +173,49 @@ test("Projects marks an existing channel locally, restores it, and links saved t
   await expect(
     page.locator(`[data-message-id="${app.exact.root.id}"]`).first(),
   ).toBeVisible();
+  const workspace = page.getByRole("region", { name: "Task workspace" });
+  await expect(workspace.locator("header").first()).toContainText(
+    "Silent hangup",
+  );
   await expect(
-    page
-      .getByRole("region", { name: "Thread messages", exact: true })
-      .getByRole("region", { name: "Attached task" }),
+    workspace.getByRole("region", { name: "Attached task" }),
+  ).toHaveCount(0);
+  await page.reload();
+  await expect(workspace.locator("header").first()).toContainText(
+    "Silent hangup",
+  );
+  await expect(
+    workspace.getByRole("textbox", { name: "Reply to thread", exact: true }),
+  ).toBeVisible();
+  await workspace
+    .getByRole("textbox", { name: "Reply to thread", exact: true })
+    .fill("Reply from the task workspace");
+  await workspace
+    .getByRole("button", { name: "Send message", exact: true })
+    .click();
+  await expect
+    .poll(() =>
+      fileStore.notifications.find(
+        (event) => event.content === "Reply from the task workspace",
+      ),
+    )
+    .toMatchObject({
+      tags: expect.arrayContaining([
+        ["h", "alpha"],
+        expect.arrayContaining(["e", app.exact.root.id]),
+      ]),
+    });
+  await workspace.getByRole("button", { name: "View in channel" }).click();
+  await expect(
+    page.getByRole("region", { name: "Channel message history", exact: true }),
+  ).toBeVisible();
+  await expect(
+    page.getByRole("region", { name: "Thread messages", exact: true }),
   ).toContainText("Silent hangup");
+  await page.goBack();
+  await expect(workspace.locator("header").first()).toContainText(
+    "Silent hangup",
+  );
 });
 
 test("local task panel saves against a canonical thread and never publishes metadata", async ({
@@ -371,7 +409,7 @@ test("task references render as an inline link or a whole-message card and open 
     cardRow.getByText("Quiet ending", { exact: true }),
   ).toBeVisible();
   await expect(
-    cardRow.getByRole("button", { name: "Open thread", exact: true }),
+    cardRow.getByRole("button", { name: "Open task", exact: true }),
   ).toBeVisible();
   const inline = app.append("primary", "alpha", `See ${link}.`);
   const inlineRow = page.locator(`[data-message-id="${inline.id}"]`);
@@ -379,7 +417,7 @@ test("task references render as an inline link or a whole-message card and open 
     inlineRow.getByRole("button", { name: "Quiet ending", exact: true }),
   ).toBeVisible();
   await expect(
-    inlineRow.getByRole("button", { name: "Open thread", exact: true }),
+    inlineRow.getByRole("button", { name: "Open task", exact: true }),
   ).toHaveCount(0);
   const assignment = app.append(
     "primary",
@@ -408,9 +446,13 @@ test("task references render as an inline link or a whole-message card and open 
     exact: true,
   });
   await expect(
-    thread
-      .locator(`[data-message-id="${app.exact.root.id}"]`)
-      .getByRole("region", { name: "Attached task" }),
+    thread.locator(`[data-message-id="${app.exact.root.id}"]`),
+  ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Task workspace" })
+      .locator("header")
+      .first(),
   ).toContainText("Updated task");
   expect(fileStore.notifications).toHaveLength(0);
 });

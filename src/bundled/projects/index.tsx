@@ -12,16 +12,30 @@ import { isProject, projectKey } from "./data";
 import { useFileStore } from "../task-details/file-store";
 import styles from "./projects.module.css";
 import { TaskSummary } from "../task-details/TaskSummary";
+import { TaskWorkspace } from "../task-details/TaskWorkspace";
+import { isTaskRoute, taskViewTarget } from "../task-details/view-route";
 
-export const inject = ["pages", "relay", "navigation"];
+export const inject = ["pages", "relay", "navigation", "conversation"];
 export const apply: PluginModule["apply"] = (ctx) => {
   ctx.pages.register({
     id: "projects",
     title: "Projects",
     layout: "workspace",
-    component: () => (
-      <ProjectsPage relay={ctx.relay} navigation={ctx.navigation} />
-    ),
+    route: { version: 1, validate: isTaskRoute },
+    component: ({ navigation }) =>
+      navigation?.target.kind === "page" &&
+      navigation.target.route &&
+      isTaskRoute(navigation.target.route.params) ? (
+        <TaskWorkspace
+          relay={ctx.relay}
+          navigator={ctx.navigation}
+          extensions={ctx.conversation}
+          navigation={navigation}
+          address={navigation.target.route.params}
+        />
+      ) : (
+        <ProjectsPage relay={ctx.relay} navigation={ctx.navigation} />
+      ),
   });
 };
 
@@ -104,13 +118,20 @@ function ProjectList({
     readError = String(e);
   }
   const open = async (channelId: string, messageId?: string) => {
-    const result = await navigation.open({
-      version: 1,
-      kind: "conversation",
-      scope: { viewer, communityOrigin: scope.slice(0, -(viewer.length + 1)) },
-      channelId,
-      ...(messageId ? { messageId, threadRootId: messageId } : {}),
-    });
+    const result = await navigation.open(
+      messageId
+        ? taskViewTarget(scope, viewer, channelId, messageId)
+        : {
+            version: 1,
+            kind: "conversation",
+            scope: {
+              viewer,
+              communityOrigin: scope.slice(0, -(viewer.length + 1)),
+            },
+            channelId,
+            ...(messageId ? { messageId, threadRootId: messageId } : {}),
+          },
+    );
     if (result.status === "failed")
       setError("Could not open the conversation. Try again.");
   };

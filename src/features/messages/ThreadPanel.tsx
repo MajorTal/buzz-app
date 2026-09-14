@@ -7,6 +7,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
 } from "react";
 import { X } from "lucide-react";
 import type { ConversationExtensions } from "../conversation/contracts";
@@ -22,6 +23,8 @@ import type { PageNavigation } from "../navigation/service";
 import { messageViewKey } from "./view-key";
 
 export type ThreadPanelProps = {
+  /** Optional domain header; conversation ownership stays here. */
+  header?: ReactNode;
   extensions?: ConversationExtensions | undefined;
   session: RelaySession;
   scope: string;
@@ -59,6 +62,7 @@ function OwnedThreadPanel({
   close,
   onOpenLink,
   canOpenLink,
+  header,
 }: ThreadPanelProps) {
   const [view, setView] = useState<ThreadView>();
   const [error, setError] = useState<string>();
@@ -103,17 +107,19 @@ function OwnedThreadPanel({
         }
       }}
     >
-      <header className={styles.heading}>
-        <strong>Thread</strong>
-        <button
-          ref={closeButton}
-          type="button"
-          aria-label="Close thread"
-          onClick={close}
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
-      </header>
+      {header ?? (
+        <header className={styles.heading}>
+          <strong>Thread</strong>
+          <button
+            ref={closeButton}
+            type="button"
+            aria-label="Close thread"
+            onClick={close}
+          >
+            <X size={18} aria-hidden="true" />
+          </button>
+        </header>
+      )}
       {error ? (
         <div className={styles.empty} role="alert">
           <p>{error}</p>

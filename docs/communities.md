@@ -10,7 +10,7 @@ each community's queries, live subscriptions, projections and durable outbox.
 
 Configure `BUZZ_DEV_VIEWER` with your existing Buzz public key in `.env.local`
 ([setup and safety notes](../README.md#relay-channels)), then run
-`just web` and open http://localhost:1430, or use `just desktop` instead. The
+`just web` and open the Local URL it prints, or use `just desktop` instead. The
 development broker requires macOS and refuses a Keychain identity that does not
 match your explicit public pin.
 Click the avatar → **Settings → Profile** to edit and save a local default

@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:desktop": "vite --strictPort",
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "author:build": "node scripts/build-author.mjs",

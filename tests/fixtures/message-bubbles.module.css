@@ -1,0 +1,61 @@
+/* Preview states only; live typing/presence is not connected. */
+.typingBubble {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  width: 56px;
+  height: 36px;
+  color: var(--text-muted);
+}
+.agentAvatar {
+  border-radius: 30%;
+}
+.agentBadge {
+  padding: 0 5px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  font-size: 10px;
+  line-height: 14px;
+}
+.dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  /* A slow status cycle with a brief pulse, rather than an entrance transition. */
+  animation: typingPulse 1.2s linear infinite;
+}
+.dot:nth-child(2) {
+  animation-delay: 80ms;
+}
+.dot:nth-child(3) {
+  animation-delay: 160ms;
+}
+@keyframes typingPulse {
+  0%,
+  40%,
+  100% {
+    opacity: 0.4;
+    transform: translateY(0);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-2px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot {
+    animation-name: typingFade;
+  }
+}
+@keyframes typingFade {
+  0%,
+  40%,
+  100% {
+    opacity: 0.55;
+  }
+  20% {
+    opacity: 0.85;
+  }
+}

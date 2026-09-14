@@ -42,7 +42,9 @@ const eventSignatures = new WeakMap<ChannelMessage, string>();
 export const geometrySignature = (
   events: readonly ChannelMessage[],
   profiles: ReadonlyMap<string, Profile>,
+  viewer?: string,
 ) =>
+  `pulse-bubbles-v6:${viewer ?? ""}:` +
   events
     .map((event) => {
       let signature = eventSignatures.get(event);

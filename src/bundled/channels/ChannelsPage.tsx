@@ -603,6 +603,7 @@ function ChannelWorkspace({
               extensions={extensions}
               key={`${showingThread.channelId}:${showingThread.messageId}`}
               session={queries}
+              viewer={viewer}
               scope={scope}
               channelName={current?.name ?? ""}
               channelId={showingThread.channelId}

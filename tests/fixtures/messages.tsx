@@ -279,6 +279,7 @@ function Fixture() {
           channelName={channelId}
         />
         <ThreadPanel
+          viewer={viewer.pubkey}
           extensions={extensions}
           session={owner.session}
           scope={scope}

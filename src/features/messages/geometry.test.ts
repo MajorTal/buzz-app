@@ -22,6 +22,9 @@ it("invalidates geometry for changed content, profiles, width, session, and hist
   expect(geometrySignature(rows, new Map())).not.toBe(
     geometrySignature(rows, new Map([[author.pubkey, { name: "Author" }]])),
   );
+  expect(geometrySignature(rows, new Map(), author.pubkey)).not.toBe(
+    geometrySignature(rows, new Map(), "another-viewer"),
+  );
   const edited = rows.map((row) => ({ ...row, content: "edited" }));
   expect(geometrySignature(rows, new Map())).not.toBe(
     geometrySignature(edited, new Map()),

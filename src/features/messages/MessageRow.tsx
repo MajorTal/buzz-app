@@ -1,3 +1,4 @@
+import { CornerUpLeft } from "lucide-react";
 import { memo, useCallback, useSyncExternalStore } from "react";
 import type { UnreadCapability } from "../relay/unread";
 import { profileTarget } from "../profiles/target";
@@ -13,6 +14,9 @@ import { usesLargeEmojiPresentation } from "./emoji-size";
 
 export type MessageRowProps = {
   row: ChannelMessage;
+  viewer?: string | undefined;
+  continuation?: boolean;
+  groupEnd?: boolean;
   unread?: UnreadCapability | undefined;
   extensions?: ConversationExtensions | undefined;
   profile: Profile | undefined;
@@ -27,6 +31,9 @@ export type MessageRowProps = {
 
 export const MessageRow = memo(function MessageRow({
   row,
+  viewer,
+  continuation = false,
+  groupEnd = true,
   unread,
   extensions,
   profile,
@@ -38,6 +45,9 @@ export const MessageRow = memo(function MessageRow({
   onOpenThread,
   participantProfiles,
 }: MessageRowProps) {
+  const outgoing = !!viewer && row.authorId === viewer;
+  const canOpenThread =
+    onOpenThread && (!row.delivery || row.delivery === "seen");
   const threadUnread = useThreadUnread(
     row.replyCount > 0 && onOpenThread ? unread : undefined,
     row.channelId,
@@ -70,70 +80,26 @@ export const MessageRow = memo(function MessageRow({
           </span>
         </div>
       )}
-      <div className={styles.message}>
-        <AvatarTag
-          className={styles.avatar}
-          {...(clickable
-            ? {
-                type: "button" as const,
-                "aria-label": `View ${name} profile`,
-                onClick: (event: import("react").MouseEvent<HTMLElement>) => {
-                  event.currentTarget.focus();
-                  onOpenLink(target);
-                },
-              }
-            : {})}
-        >
-          {picture ? (
-            <img src={picture} alt="" loading="lazy" />
-          ) : (
-            name.slice(0, 2).toUpperCase()
-          )}
-        </AvatarTag>
+      <div
+        className={`${styles.message} ${continuation && !day ? styles.continuation : ""}`}
+        data-bubble-direction={outgoing ? "outgoing" : "incoming"}
+      >
+        {!outgoing && <div className={styles.avatarSpace} />}
         <div className={styles.messageBody}>
-          <div className={styles.byline}>
-            <strong>{name}</strong>
-            <time dateTime={new Date(row.createdAt * 1000).toISOString()}>
+          <div className={continuation && !day ? styles.srOnly : styles.byline}>
+            <strong className={outgoing ? styles.srOnly : undefined}>
+              {outgoing ? "You" : name}
+            </strong>
+            <time
+              className={styles.timestamp}
+              dateTime={new Date(row.createdAt * 1000).toISOString()}
+            >
               {new Date(row.createdAt * 1000).toLocaleTimeString(undefined, {
                 hour: "numeric",
                 minute: "2-digit",
               })}
             </time>
           </div>
-          <MessageMarkdown
-            row={row}
-            extensions={extensions}
-            media={media}
-            onOpenLink={onOpenLink}
-            canOpenLink={canOpenLink}
-            participantProfiles={participantProfiles}
-            largeEmoji={emojiOnly}
-          />
-          <DeliveryNotice row={row} retry={retry} />
-          {row.attachments.map((attachment) => {
-            const url = safeMessageUrl(attachment.url);
-            if (!url) return null;
-            const source = media(url);
-            return attachment.video || !source ? (
-              <a
-                className={styles.attachment}
-                key={url}
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {attachment.video ? "Video attachment" : "Image attachment"} ↗
-              </a>
-            ) : (
-              <AttachmentImage
-                key={url}
-                attachment={attachment}
-                url={url}
-                source={source}
-                onOpenLink={onOpenLink}
-              />
-            );
-          })}
           {row.reactions.length > 0 && (
             <div className={styles.reactions}>
               {row.reactions.map((reaction) => (
@@ -155,6 +121,97 @@ export const MessageRow = memo(function MessageRow({
               ))}
             </div>
           )}
+          <div className={styles.bubbleAnchor}>
+            {row.content && (
+              <MessageMarkdown
+                row={row}
+                extensions={extensions}
+                media={media}
+                onOpenLink={onOpenLink}
+                canOpenLink={canOpenLink}
+                participantProfiles={participantProfiles}
+                largeEmoji={emojiOnly}
+              />
+            )}
+            {row.attachments.length > 0 && (
+              <div className={styles.attachments}>
+                {row.attachments.map((attachment) => {
+                  const url = safeMessageUrl(attachment.url);
+                  if (!url) return null;
+                  const source = media(url);
+                  return attachment.video || !source ? (
+                    <a
+                      className={styles.attachment}
+                      key={url}
+                      href={url}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      {attachment.video
+                        ? "Video attachment"
+                        : "Image attachment"}{" "}
+                      ↗
+                    </a>
+                  ) : (
+                    <AttachmentImage
+                      key={url}
+                      attachment={attachment}
+                      url={url}
+                      source={source}
+                      onOpenLink={onOpenLink}
+                    />
+                  );
+                })}
+              </div>
+            )}
+            {!outgoing && groupEnd && (
+              <AvatarTag
+                className={styles.avatar}
+                {...(clickable
+                  ? {
+                      type: "button" as const,
+                      "aria-label": `View ${name} profile`,
+                      onClick: (
+                        event: import("react").MouseEvent<HTMLElement>,
+                      ) => {
+                        event.currentTarget.focus();
+                        onOpenLink(target);
+                      },
+                    }
+                  : {})}
+              >
+                {name.slice(0, 2).toUpperCase()}
+                {picture && (
+                  <img
+                    key={picture}
+                    src={picture}
+                    alt=""
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.hidden = true;
+                    }}
+                  />
+                )}
+              </AvatarTag>
+            )}
+            {canOpenThread && (
+              <div className={styles.bubbleActions}>
+                <button
+                  type="button"
+                  className={styles.messageAction}
+                  aria-label="Reply in thread"
+                  title="Reply in thread"
+                  onClick={(event) => {
+                    event.currentTarget.focus();
+                    onOpenThread(row.id);
+                  }}
+                >
+                  <CornerUpLeft size={18} aria-hidden="true" />
+                </button>
+              </div>
+            )}
+          </div>
+          <DeliveryNotice row={row} retry={retry} />
           {row.replyCount > 0 && onOpenThread && (
             <button
               type="button"

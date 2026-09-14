@@ -6,6 +6,7 @@ import type { RelaySession } from "../relay/session";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Virtualizer, type VirtualizerHandle } from "virtua";
 import { MessageRow } from "./MessageRow";
+import { continuesMessage, startsMessageDay } from "./message-grouping";
 import type { ChannelWindow } from "../relay/contracts";
 import { useRowProfiles } from "../relay/react";
 import { geometryFor, geometrySignature } from "./geometry";
@@ -109,8 +110,8 @@ function Timeline({
   const profiles = useRowProfiles(queries.profiles, window.rows);
   const geometry = useMemo(() => geometryFor(queries.channels), [queries]);
   const signature = useMemo(
-    () => geometrySignature(window.rows, profiles),
-    [window.rows, profiles],
+    () => geometrySignature(window.rows, profiles, viewer),
+    [window.rows, profiles, viewer],
   );
   const [focusedMessageId, setFocusedMessageId] = useState<string>();
   const focusedIndex = rows.findIndex((row) => row.id === focusedMessageId);
@@ -468,12 +469,7 @@ function Timeline({
           {...(initialCache.current ? { cache: initialCache.current } : {})}
         >
           {rows.map((row, index) => {
-            const day =
-              index === 0 ||
-              new Date(
-                (rows[index - 1]?.createdAt ?? 0) * 1000,
-              ).toDateString() !==
-                new Date(row.createdAt * 1000).toDateString();
+            const day = startsMessageDay(rows[index - 1], row);
             return row.membership ? (
               <MembershipRow
                 key={row.id}
@@ -487,6 +483,9 @@ function Timeline({
               <MessageRow
                 key={row.id}
                 row={row}
+                viewer={viewer}
+                continuation={continuesMessage(rows[index - 1], row)}
+                groupEnd={!continuesMessage(row, rows[index + 1])}
                 unread={queries.unread}
                 extensions={extensions}
                 profile={profiles.get(row.authorId)}

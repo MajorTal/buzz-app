@@ -18,6 +18,42 @@ const row: ChannelMessage = {
   reactions: [],
   replyCount: 23,
 };
+
+it("combines directional groups with Markdown, profile access, and thread actions", () => {
+  const author = "a".repeat(64);
+  const sample = (viewer: string, groupEnd: boolean) =>
+    renderToStaticMarkup(
+      <MessageRow
+        row={{
+          ...row,
+          authorId: author,
+          content: "**Important** reply",
+          replyCount: 0,
+        }}
+        viewer={viewer}
+        continuation
+        groupEnd={groupEnd}
+        profile={{ name: "Author" }}
+        media={() => undefined}
+        onOpenLink={() => true}
+        canOpenLink={() => true}
+        onOpenThread={() => {}}
+        day={false}
+        retry={undefined}
+      />,
+    );
+  const incoming = sample("other", true);
+  expect(incoming).toContain('data-bubble-direction="incoming"');
+  expect(incoming).toContain("<strong>Important</strong>");
+  expect(incoming).toContain('aria-label="View Author profile"');
+  expect(incoming).toContain('aria-label="Reply in thread"');
+  expect(sample("other", false)).not.toContain(
+    'aria-label="View Author profile"',
+  );
+  const outgoing = sample(author, true);
+  expect(outgoing).toContain('data-bubble-direction="outgoing"');
+  expect(outgoing).not.toContain('aria-label="View Author profile"');
+});
 function render(
   patch: Partial<UnreadSnapshot>,
   replies = 23,
@@ -64,7 +100,7 @@ it.each([null, 0])(
   (observedCount) => {
     const { html } = render({ observedCount });
     expect(html).toContain('aria-label="View thread: 23 replies"');
-    expect(html).not.toContain("title=");
+    expect(html).not.toContain('title="Observed unread replies');
   },
 );
 it("describes local manual intent and stale evidence honestly", () => {

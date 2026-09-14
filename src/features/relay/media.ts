@@ -1,3 +1,4 @@
+import { relayDebug } from "./debug";
 /** Avatar request warming, the react-native-web Image model: fetch and
  * decode() into detached images, then retain nothing. The browser's own HTTP
  * and decoded-image caches serve the real <img> mounts. Never warms
@@ -8,6 +9,7 @@ export function createMediaPreparation() {
   let disposed = false;
   const active = new Set<HTMLImageElement>();
   const cancellations = new Map<HTMLImageElement, () => void>();
+  const startedAt = new Map<string, number>();
   let decoded = 0;
   function pump() {
     if (disposed || typeof Image === "undefined") return;
@@ -17,7 +19,7 @@ export function createMediaPreparation() {
       const image = new Image();
       active.add(image);
       let finished = false;
-      const finish = () => {
+      const finish = (outcome: string) => {
         if (finished) return;
         finished = true;
         clearTimeout(timeout);
@@ -25,18 +27,25 @@ export function createMediaPreparation() {
         active.delete(image);
         cancellations.delete(image);
         pending.delete(url);
+        relayDebug(
+          "avatar",
+          outcome,
+          url.slice(-28),
+          `${Date.now() - (startedAt.get(url) ?? Date.now())}ms`,
+        );
+        startedAt.delete(url);
         pump();
       };
       const timeout = setTimeout(() => {
         image.src = "";
-        finish();
+        finish("timeout");
       }, 10000);
-      cancellations.set(image, () => finish());
-      image.onerror = () => finish();
+      cancellations.set(image, () => finish("cancelled"));
+      image.onerror = () => finish("error");
       image.onload = () => {
         // Do not explicitly decode enormous originals just to prepare an avatar.
         if (image.naturalWidth * image.naturalHeight * 4 > 8 * 1024 * 1024) {
-          finish();
+          finish(`too-large ${image.naturalWidth}x${image.naturalHeight}`);
           return;
         }
         void image
@@ -47,9 +56,12 @@ export function createMediaPreparation() {
             },
             () => {},
           )
-          .finally(() => finish());
+          .finally(() =>
+            finish(`ok ${image.naturalWidth}x${image.naturalHeight}`),
+          );
       };
       image.referrerPolicy = "no-referrer";
+      startedAt.set(url, Date.now());
       image.src = url;
     }
   }

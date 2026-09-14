@@ -355,6 +355,14 @@ export function relayBrokerPlugin({
       );
       server.middlewares.use(async (req, res, next) => {
         if (!req.url?.startsWith("/api/relay/")) return next();
+        const startedAt = Date.now();
+        const route = new URL(req.url, "http://localhost").pathname;
+        res.on("finish", () => {
+          if (route === "/api/relay/media") return;
+          server.config.logger.info(
+            `[relay-broker] ${req.method} ${route} -> ${res.statusCode} (${Date.now() - startedAt}ms)`,
+          );
+        });
         const origin = `http://${req.headers.host ?? ""}`;
         // Same-origin browser access only; trusted plugins/local processes are not sandboxed.
         if (!/^(localhost|127\.0\.0\.1):\d+$/.test(req.headers.host ?? ""))
@@ -364,8 +372,12 @@ export function relayBrokerPlugin({
           (req.headers.origin && req.headers.origin !== origin) ||
           (req.headers["sec-fetch-site"] &&
             req.headers["sec-fetch-site"] !== "same-origin")
-        )
+        ) {
+          server.config.logger.info(
+            `[relay-broker] rejected ${req.method} ${route}: origin=${req.headers.origin ?? "none"} sec-fetch-site=${req.headers["sec-fetch-site"] ?? "none"}`,
+          );
           return json(res, 403, { error: "Origin rejected" });
+        }
         const url = new URL(req.url, origin);
         // Own cancellation before awaiting the request body, signing or dispatch.
         const cancel = new AbortController();
@@ -732,6 +744,9 @@ export function relayBrokerPlugin({
             const bytes = Buffer.from(await upstream.arrayBuffer());
             if (bytes.length > MAX_MEDIA_BYTES)
               return json(res, 413, { error: "Media budget exceeded" });
+            server.config.logger.info(
+              `[relay-broker] media ${target.pathname} ${bytes.length}B ${type} (${Date.now() - startedAt}ms)`,
+            );
             res.writeHead(200, {
               "Content-Type": type,
               "Cache-Control": "private, max-age=3600",
@@ -923,6 +938,10 @@ export function relayBrokerPlugin({
             !validFilters(filters)
           )
             return json(res, 400, { error: "Read filter rejected" });
+          if (route === "/api/relay/query")
+            server.config.logger.info(
+              `[relay-broker] query ${req.headers["x-buzz-read-priority"] === "background" ? "background" : "foreground"} ${JSON.stringify(filters).slice(0, 240)}`,
+            );
           const gifSearchPath = gifs ? await getGifSearchPath(relay) : null;
           if (gifs && !gifSearchPath)
             return json(res, 404, { error: "GIF search is unavailable" });

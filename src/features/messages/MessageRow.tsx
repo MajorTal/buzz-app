@@ -31,6 +31,7 @@ export type MessageRowProps = {
   onMediaPlayback?: (playback: MediaPlayback) => void;
   onMediaTime?: (seconds: number) => void;
   onOpenMediaReview?: (
+    messageId: string,
     attachment: ChannelMessage["attachments"][number],
     seconds: number,
   ) => void;
@@ -152,7 +153,10 @@ export const MessageRow = memo(function MessageRow({
                   source={source}
                   onOpenLink={onOpenLink}
                   {...(onOpenMediaReview
-                    ? { onOpenReview: onOpenMediaReview }
+                    ? {
+                        onOpenReview: (item, seconds) =>
+                          onOpenMediaReview(row.id, item, seconds),
+                      }
                     : {})}
                 />
               );
@@ -172,7 +176,10 @@ export const MessageRow = memo(function MessageRow({
                   : {})}
                 {...(onMediaPlayback ? { onPlayback: onMediaPlayback } : {})}
                 {...(onOpenMediaReview
-                  ? { onOpenReview: onOpenMediaReview }
+                  ? {
+                      onOpenReview: (item, seconds) =>
+                        onOpenMediaReview(row.id, item, seconds),
+                    }
                   : {})}
               />
             );

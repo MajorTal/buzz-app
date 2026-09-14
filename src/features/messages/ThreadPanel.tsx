@@ -250,6 +250,16 @@ function ThreadMessages({
     request: number;
   }>();
   const rootId = snapshot.root?.id;
+  const openRootMedia = useCallback(
+    (
+      _rowId: string,
+      attachment: ChannelMessage["attachments"][number],
+      seconds: number,
+    ) => {
+      if (rootId) onOpenMediaReview?.(rootId, attachment, seconds);
+    },
+    [rootId, onOpenMediaReview],
+  );
   const videoAttachment = snapshot.root?.attachments.find((item) => item.video);
   // The bridge walks oldest-first. Finish its bounded range automatically, rather
   // than exposing transport pagination as a conversation control.
@@ -350,10 +360,7 @@ function ThreadMessages({
                 : {})}
               onMediaPlayback={setMediaPlayback}
               {...(onOpenMediaReview
-                ? {
-                    onOpenMediaReview: (attachment, seconds) =>
-                      onOpenMediaReview(messageId, attachment, seconds),
-                  }
+                ? { onOpenMediaReview: openRootMedia }
                 : {})}
             />
             {videoAttachment && mediaPlayback && (
@@ -398,10 +405,7 @@ function ThreadMessages({
                     }
                   : {})}
                 {...(onOpenMediaReview && rootId
-                  ? {
-                      onOpenMediaReview: (attachment, seconds) =>
-                        onOpenMediaReview(rootId, attachment, seconds),
-                    }
+                  ? { onOpenMediaReview: openRootMedia }
                   : {})}
               />
             </li>

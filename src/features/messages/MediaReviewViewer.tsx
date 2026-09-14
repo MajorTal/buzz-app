@@ -371,7 +371,9 @@ function ReviewComments({
           onOpenLink={() => false}
           day={false}
           retry={session.messages.retry}
-          onOpenMediaReview={selectAttachment}
+          onOpenMediaReview={(_rowId, attachment, seconds) =>
+            selectAttachment(attachment, seconds)
+          }
           {...(seek ? { onMediaTime: seek } : {})}
         />
       ))}

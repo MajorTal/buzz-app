@@ -501,14 +501,7 @@ function Timeline({
                 onOpenLink={onOpenLink}
                 canOpenLink={canOpenLink}
                 onOpenThread={onOpenThread}
-                {...(onOpenMediaReview
-                  ? {
-                      onOpenMediaReview: (
-                        attachment: Attachment,
-                        seconds: number,
-                      ) => onOpenMediaReview(row.id, attachment, seconds),
-                    }
-                  : {})}
+                {...(onOpenMediaReview ? { onOpenMediaReview } : {})}
                 retry={queries.outbox?.retry}
                 day={day}
               />

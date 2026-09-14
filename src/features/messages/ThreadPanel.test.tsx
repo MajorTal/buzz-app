@@ -538,10 +538,10 @@ it("routes media in replies through the resolved root review workspace", () => {
       e.type === MessageRow && (e.props.row as ChannelMessage).id === "reply",
   );
   const handler = reply?.props.onOpenMediaReview as
-    | ((item: typeof attachment, seconds: number) => void)
+    | ((rowId: string, item: typeof attachment, seconds: number) => void)
     | undefined;
   expect(handler).toBeDefined();
-  handler?.(attachment, 0);
+  handler?.("reply", attachment, 0);
   expect(open).toHaveBeenCalledExactlyOnceWith("resolved-root", attachment, 0);
 });
 

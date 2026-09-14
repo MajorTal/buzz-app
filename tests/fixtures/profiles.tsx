@@ -29,11 +29,12 @@ import { profileTarget } from "../../src/features/profiles/target";
 import "../../src/shared/styles/globals.css";
 
 const viewer = keypair(),
+  author = keypair(),
   authority = keypair(),
   mic = keypair(),
   pinky = keypair(),
   missing = keypair();
-const root = message(viewer, "one", "Hello @Mic", 10, [["p", mic.pubkey]]);
+const root = message(author, "one", "Hello @Mic", 10, [["p", mic.pubkey]]);
 const unknown = message(missing, "one", "Unknown author", 11);
 const reply = message(viewer, "one", "Thread @Pinky", 12, [
   ["e", root.id, "", "reply"],
@@ -42,6 +43,7 @@ const reply = message(viewer, "one", "Thread @Pinky", 12, [
 const report = { profileReads: [] as string[][], publications: 0 };
 let failMissing = true;
 const data = [
+  profile(author, { name: "Author", about: "Human profile" }),
   profile(viewer, { name: "Viewer", about: "Human profile" }),
   profile(mic, { name: "Mic", about: "Mic biography" }),
   profile(pinky, { name: "Pinky", about: "Agent profile" }),
@@ -55,7 +57,12 @@ function session() {
       return filters.flatMap((filter) => {
         if (filter.kinds?.includes(39002))
           return [
-            roster(authority, "one", [viewer.pubkey, mic.pubkey, pinky.pubkey]),
+            roster(authority, "one", [
+              viewer.pubkey,
+              author.pubkey,
+              mic.pubkey,
+              pinky.pubkey,
+            ]),
             roster(authority, "two", [viewer.pubkey]),
           ];
         if (filter.kinds?.includes(39000))
@@ -172,10 +179,9 @@ Object.assign(window, {
       for (const listener of listeners) listener();
     },
     npubs: Object.fromEntries(
-      Object.entries({ viewer, mic, pinky, missing }).map(([name, key]) => [
-        name,
-        profileTarget(key.pubkey)?.slice(6),
-      ]),
+      Object.entries({ viewer, author, mic, pinky, missing }).map(
+        ([name, key]) => [name, profileTarget(key.pubkey)?.slice(6)],
+      ),
     ),
     keys: {
       viewer: viewer.pubkey,

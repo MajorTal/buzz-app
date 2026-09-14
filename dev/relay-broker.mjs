@@ -20,6 +20,7 @@ import {
 } from "./sidebar-preferences.mjs";
 import { createHostAdmission } from "../src/features/relay/host-admission.ts";
 import { relayKlipySearchPath } from "../src/features/relay/gifs.ts";
+import { validReactionContent } from "../src/features/relay/emoji.ts";
 // Dev-only relay broker. Holds the local Buzz identity in this Node process and signs NIP-98 reads
 // for the browser, so no key ever reaches page JavaScript. The dev server loads it whenever
 // BUZZ_DEV_VIEWER is configured; production builds and tests never load it.
@@ -192,7 +193,7 @@ async function relayAuthority(fetch, relay) {
 export function validMessageTemplate(event) {
   return (
     event &&
-    event.kind === 9 &&
+    [7, 9].includes(event.kind) &&
     typeof event.content === "string" &&
     event.content.trim().length > 0 &&
     Buffer.byteLength(event.content) <= 32000 &&
@@ -208,6 +209,14 @@ export function validMessageTemplate(event) {
     ).length === 1 &&
     (() => {
       const references = event.tags.filter((tag) => tag[0] === "e");
+      if (event.kind === 7)
+        return (
+          event.content === event.content.trim() &&
+          validReactionContent(event.content) &&
+          references.length === 1 &&
+          references[0].length === 2 &&
+          /^[0-9a-f]{64}$/.test(references[0][1])
+        );
       if (!references.length) return true;
       const [reply] = references;
       // This write surface supports direct-to-root replies, not arbitrary references.
@@ -308,7 +317,10 @@ export function relayBrokerPlugin({
             })
               .then(async (response) => {
                 if (!response.ok) throw new Error("GIF discovery failed");
-                return relayKlipySearchPath(await response.json());
+                const path = relayKlipySearchPath(await response.json());
+                // A relay can enable GIFs while this broker is still running.
+                if (!path) gifSearchPaths.delete(relay);
+                return path;
               })
               .catch((error) => {
                 gifSearchPaths.delete(relay);
@@ -413,7 +425,9 @@ export function relayBrokerPlugin({
               });
             const info = await response.json();
             const gifSearchPath = relayKlipySearchPath(info);
-            gifSearchPaths.set(relay, Promise.resolve(gifSearchPath));
+            if (gifSearchPath)
+              gifSearchPaths.set(relay, Promise.resolve(gifSearchPath));
+            else gifSearchPaths.delete(relay);
             const policyResponse = await fetchUpstream(
               `${relay}/api/join-policy`,
               { redirect: "error", signal: AbortSignal.timeout(10000) },
@@ -509,7 +523,7 @@ export function relayBrokerPlugin({
               viewer,
               ...(await getAuthority(relay)),
               relayUrl: relay,
-              writeKinds: [9],
+              writeKinds: [7, 9],
               sidebarPreferences: true,
               readState: true,
               agentLibrary: true,
@@ -840,7 +854,7 @@ export function relayBrokerPlugin({
               const started = performance.now();
               const event = finalizeEvent(
                 {
-                  kind: 9,
+                  kind: filters.kind,
                   content: filters.content,
                   created_at: filters.created_at,
                   tags: filters.tags,

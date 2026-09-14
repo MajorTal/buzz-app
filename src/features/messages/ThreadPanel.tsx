@@ -320,6 +320,8 @@ function ThreadMessages({
             extensions={extensions}
             row={snapshot.root}
             viewer={viewer}
+            session={session}
+            scope={scope}
             profile={profiles.get(snapshot.root.authorId)}
             participantProfiles={profiles}
             media={session.media}
@@ -349,6 +351,8 @@ function ThreadMessages({
                   row,
                 )}
                 groupEnd={!continuesMessage(row, snapshot.replies[index + 1])}
+                session={session}
+                scope={scope}
                 profile={profiles.get(row.authorId)}
                 participantProfiles={profiles}
                 media={session.media}

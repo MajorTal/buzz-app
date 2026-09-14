@@ -486,6 +486,8 @@ function Timeline({
                 viewer={viewer}
                 continuation={continuesMessage(rows[index - 1], row)}
                 groupEnd={!continuesMessage(row, rows[index + 1])}
+                session={queries}
+                scope={scope}
                 unread={queries.unread}
                 extensions={extensions}
                 profile={profiles.get(row.authorId)}

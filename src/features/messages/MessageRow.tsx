@@ -11,12 +11,23 @@ import { MessageMarkdown } from "./MessageMarkdown";
 import { safeMessageUrl } from "../relay/message-content";
 import styles from "./Messages.module.css";
 import { usesLargeEmojiPresentation } from "./emoji-size";
+import { ReactionTool } from "../conversation/ReactionTool";
+import type { RelaySession } from "../relay/session";
+
+const emptySubscribe = () => () => {};
+const EMPTY_CHANNEL_LIST = Object.freeze({
+  status: "unavailable" as const,
+  channels: Object.freeze([]),
+});
+const emptyChannelList = () => EMPTY_CHANNEL_LIST;
 
 export type MessageRowProps = {
   row: ChannelMessage;
   viewer?: string | undefined;
   continuation?: boolean;
   groupEnd?: boolean;
+  session?: RelaySession | undefined;
+  scope?: string | undefined;
   unread?: UnreadCapability | undefined;
   extensions?: ConversationExtensions | undefined;
   profile: Profile | undefined;
@@ -34,6 +45,8 @@ export const MessageRow = memo(function MessageRow({
   viewer,
   continuation = false,
   groupEnd = true,
+  session,
+  scope,
   unread,
   extensions,
   profile,
@@ -53,6 +66,11 @@ export const MessageRow = memo(function MessageRow({
     row.channelId,
     row.threadRootId ?? row.id,
   );
+  const channelList = useSyncExternalStore(
+    session?.channels.subscribeList ?? emptySubscribe,
+    session?.channels.list ?? emptyChannelList,
+    session?.channels.list ?? emptyChannelList,
+  );
   const unreadLabel =
     threadUnread?.manual === "local-only"
       ? "Thread marked unread on this device only"
@@ -67,6 +85,14 @@ export const MessageRow = memo(function MessageRow({
   const clickable = target && canOpenLink?.(target);
   const AvatarTag = clickable ? "button" : "div";
   const emojiOnly = usesLargeEmojiPresentation(row.content, row.emoji);
+  const canReact = !!(
+    extensions &&
+    session &&
+    scope &&
+    session.outbox?.supports(7) &&
+    !channelList.channels.find((channel) => channel.id === row.channelId)
+      ?.archived
+  );
   return (
     <div data-message-id={row.id}>
       {day && (
@@ -102,23 +128,37 @@ export const MessageRow = memo(function MessageRow({
           </div>
           {row.reactions.length > 0 && (
             <div className={styles.reactions}>
-              {row.reactions.map((reaction) => (
-                <span key={JSON.stringify(reaction)}>
-                  {extensions ? (
-                    <InlineText
-                      registry={extensions.inline}
-                      content={{
-                        text: reaction.content,
-                        message: row,
-                        reaction,
-                      }}
-                      media={media}
-                    />
-                  ) : (
-                    reaction.content
-                  )}
-                </span>
-              ))}
+              <div className={styles.reactionChips}>
+                {row.reactions.map((reaction) => (
+                  <span key={JSON.stringify(reaction)}>
+                    {extensions ? (
+                      <InlineText
+                        registry={extensions.inline}
+                        content={{
+                          text: reaction.content,
+                          message: row,
+                          reaction,
+                        }}
+                        media={media}
+                      />
+                    ) : (
+                      reaction.content
+                    )}
+                  </span>
+                ))}
+              </div>
+              {canReact && extensions && session && scope && (
+                <ReactionTool
+                  registry={extensions.tools}
+                  session={session}
+                  scope={scope}
+                  messageId={row.id}
+                  disabled={
+                    !!row.delivery &&
+                    !["accepted", "seen"].includes(row.delivery)
+                  }
+                />
+              )}
             </div>
           )}
           <div className={styles.bubbleAnchor}>

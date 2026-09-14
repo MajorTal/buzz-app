@@ -149,6 +149,7 @@
   border: 0;
 }
 .bubbleAnchor {
+  align-self: stretch;
   position: relative;
   display: flex;
   flex-direction: column;
@@ -158,6 +159,7 @@
 }
 .text,
 .plainText {
+  align-self: stretch;
   margin: 0;
   max-width: 100%;
   border-radius: 20px;
@@ -171,8 +173,6 @@
 }
 .text[data-single-emoji] {
   --inline-emoji-size: calc(42px * var(--buzz-text-scale, 1));
-  display: flex;
-  align-items: flex-start;
   min-height: calc(48px * var(--buzz-text-scale, 1));
   margin-top: 4px;
   font-size: calc(42px * var(--buzz-text-scale, 1));
@@ -188,15 +188,14 @@
   position: relative;
   z-index: 1;
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   align-self: flex-end;
+  gap: 4px;
   max-width: 100%;
   min-height: 28px;
   margin: 0 -6px -8px 0;
-  overflow-x: auto;
-  border: 1.5px solid var(--surface);
-  border-radius: 999px;
-  background: var(--bubble-background);
-  color: var(--bubble-foreground);
+  color: var(--text);
   font-size: calc(12px * var(--buzz-text-scale, 1));
 }
 .message[data-bubble-direction="outgoing"] .reactions {
@@ -204,7 +203,28 @@
   margin-right: 0;
   margin-left: -6px;
 }
-.reactions > span {
+.message:has(.bubbleActions) .reactions {
+  max-width: calc(100% - 36px);
+  margin-right: 36px;
+}
+.reactions:has([role="status"], [role="alert"]) {
+  margin-bottom: 4px;
+}
+.reactions > :where([role="status"], [role="alert"]) {
+  flex-basis: 100%;
+  overflow-wrap: anywhere;
+}
+.reactionChips {
+  display: flex;
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1.5px solid var(--surface);
+  border-radius: 999px;
+  background: var(--bubble-background);
+  color: var(--bubble-foreground);
+}
+.reactionChips > span {
   display: inline-flex;
   align-items: center;
   flex-shrink: 0;
@@ -213,7 +233,7 @@
   overflow: hidden;
   white-space: nowrap;
 }
-.reactions > :where(span + span) {
+.reactionChips > :where(span + span) {
   border-left: 1px solid
     color-mix(in srgb, var(--bubble-foreground) 15%, transparent);
 }
@@ -355,6 +375,9 @@
   position: relative;
   width: 100%;
 }
+.composerInput:has(textarea[data-custom-emoji-only]) {
+  overflow: hidden;
+}
 .composer textarea {
   position: relative;
   z-index: 1;
@@ -380,7 +403,10 @@
   height: calc(48px * var(--buzz-text-scale, 1));
   min-height: calc(48px * var(--buzz-text-scale, 1));
   color: transparent;
-  font-size: 0;
+  /* Collapse hidden shortcode advances without collapsing the native caret. */
+  font-family: monospace;
+  font-size: inherit;
+  letter-spacing: -1ch;
   line-height: calc(48px * var(--buzz-text-scale, 1));
   caret-color: var(--text);
 }
@@ -390,14 +416,17 @@
 }
 .composerCustomEmojiGroup {
   position: absolute;
-  top: 50%;
+  top: 3px;
   left: 0;
+  right: 0;
   display: flex;
-  gap: calc(2px * var(--buzz-text-scale, 1));
+  flex-wrap: wrap;
+  gap: calc(6px * var(--buzz-text-scale, 1))
+    calc(2px * var(--buzz-text-scale, 1));
   pointer-events: none;
-  transform: translateY(-50%);
 }
 .composerCustomEmoji {
+  flex-shrink: 0;
   width: calc(42px * var(--buzz-text-scale, 1));
   height: calc(42px * var(--buzz-text-scale, 1));
   object-fit: contain;
@@ -623,6 +652,9 @@
 .mentionRecipients code {
   font-size: calc(10px * var(--buzz-text-scale, 1));
 }
+.text[data-single-emoji] img {
+  vertical-align: top;
+}
 .text[data-single-emoji] {
   margin: 0;
 }
@@ -821,7 +853,7 @@ button.avatar:focus-visible,
   color: var(--text-muted);
   font-size: calc(10px * var(--buzz-text-scale, 1));
 }
-.membershipAvatar img {
+.membershipAvatars .membershipAvatar img {
   position: absolute;
   inset: 0;
   width: 100%;

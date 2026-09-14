@@ -11,9 +11,10 @@ import type { RelaySession } from "../relay/session";
 import { readView, writeView } from "../../shared/view-state";
 import styles from "./Messages.module.css";
 import { messageViewKey } from "./view-key";
+import { extendEmojiSelection } from "./emoji-selection";
 import {
   customEmojiOnlySpans,
-  isUnicodeEmojiOnly,
+  isEmojiOnly,
   leadingCustomEmojiSpans,
   usesLargeEmojiPresentation,
 } from "./emoji-size";
@@ -115,16 +116,63 @@ function Composer({
     customEmojiSources.every(
       ({ source }) => !!source && source !== failedCustomEmoji,
     );
-  const showCustomEmojiOnly =
-    showCustomEmoji &&
-    customEmojiOnly.length > 0 &&
-    customEmojiOnly.length <= 3;
+  const showCustomEmojiOnly = showCustomEmoji && customEmojiOnly.length > 0;
   const showLeadingCustomEmoji =
     showCustomEmoji &&
     !customEmojiOnly.length &&
     !!leadingCustomEmoji.spans.length;
   const input = useRef<HTMLTextAreaElement>(null);
   const customEmojiMirror = useRef<HTMLSpanElement>(null);
+  const customEmojiGroup = useRef<HTMLSpanElement>(null);
+  const [customEmojiLayout, setCustomEmojiLayout] = useState({
+    left: 0,
+    top: 0,
+    height: 48,
+  });
+  useLayoutEffect(() => {
+    if (!showCustomEmojiOnly) return;
+    const group = customEmojiGroup.current;
+    const last = group?.children[customEmojiOnly.length - 1];
+    if (!group || !last || !(last instanceof HTMLElement)) return;
+    const resize = () => {
+      const lineHeight = Number.parseFloat(
+        getComputedStyle(input.current ?? group).lineHeight,
+      );
+      const next = {
+        left: Math.min(
+          last.offsetLeft + last.offsetWidth + 2,
+          Math.max(0, group.clientWidth - 2),
+        ),
+        top: last.offsetTop,
+        height: last.offsetTop + lineHeight,
+      };
+      setCustomEmojiLayout((current) =>
+        current.left === next.left &&
+        current.top === next.top &&
+        current.height === next.height
+          ? current
+          : next,
+      );
+    };
+    resize();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(resize);
+    observer.observe(group);
+    return () => observer.disconnect();
+  }, [showCustomEmojiOnly, customEmojiOnly.length]);
+  useLayoutEffect(() => {
+    const element = input.current;
+    if (
+      showCustomEmojiOnly &&
+      element &&
+      element.selectionStart === draft.length &&
+      element.selectionEnd === draft.length
+    )
+      element.scrollTop = Math.max(
+        0,
+        customEmojiLayout.height - element.clientHeight,
+      );
+  }, [showCustomEmojiOnly, customEmojiLayout.height, draft.length]);
   const inlineEmojiGroup = useRef<HTMLSpanElement>(null);
   const inlinePrefixMeasure = useRef<HTMLSpanElement>(null);
   const [inlineTextIndent, setInlineTextIndent] = useState(0);
@@ -190,10 +238,14 @@ function Composer({
   useLayoutEffect(() => {
     const mirror = customEmojiMirror.current;
     if (mirror) mirror.scrollTop = input.current?.scrollTop ?? 0;
+    if (customEmojiGroup.current)
+      customEmojiGroup.current.style.transform = `translateY(-${input.current?.scrollTop ?? 0}px)`;
   });
   function syncCustomEmojiScroll(element: HTMLTextAreaElement) {
     if (customEmojiMirror.current)
       customEmojiMirror.current.scrollTop = element.scrollTop;
+    if (customEmojiGroup.current)
+      customEmojiGroup.current.style.transform = `translateY(-${element.scrollTop}px)`;
   }
   function insert(
     text: string,
@@ -264,7 +316,7 @@ function Composer({
     return (
       typeof edit.text === "string" &&
       insert(
-        `${edit.text}${isUnicodeEmojiOnly(edit.text) ? "" : " "}`,
+        `${edit.text}${isEmojiOnly(edit.text, emojiCatalog.entries) ? "" : " "}`,
         undefined,
         query,
       )
@@ -338,7 +390,9 @@ function Composer({
           style={
             showCustomEmojiOnly
               ? {
-                  paddingLeft: `calc(${customEmojiOnly.length * 44}px * var(--buzz-text-scale, 1))`,
+                  paddingLeft: customEmojiLayout.left,
+                  paddingTop: customEmojiLayout.top,
+                  height: customEmojiLayout.height,
                 }
               : showLeadingCustomEmoji
                 ? { textIndent: `${inlineTextIndent}px` }
@@ -395,6 +449,28 @@ function Composer({
               ["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)
             ) {
               completion.invalidate();
+              if (
+                showCustomEmoji &&
+                !event.altKey &&
+                !event.ctrlKey &&
+                !event.metaKey &&
+                (event.key === "ArrowLeft" || event.key === "ArrowRight")
+              ) {
+                const next = extendEmojiSelection(
+                  customEmojiSources,
+                  event.currentTarget,
+                  event.key,
+                );
+                if (next) {
+                  event.preventDefault();
+                  event.currentTarget.setSelectionRange(
+                    next.start,
+                    next.end,
+                    next.direction,
+                  );
+                  setSelection({ start: next.start, end: next.end });
+                }
+              }
               return;
             }
             if (completion.keys.current?.(event)) return;
@@ -411,7 +487,11 @@ function Composer({
           }}
         />
         {showCustomEmojiOnly && (
-          <span className={styles.composerCustomEmojiGroup} aria-hidden="true">
+          <span
+            ref={customEmojiGroup}
+            className={styles.composerCustomEmojiGroup}
+            aria-hidden="true"
+          >
             {customEmojiSources.map(({ start, end, key, source }) => (
               <img
                 key={key}

@@ -34,14 +34,17 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const SRC = new URL("../../src/shared/design-system", import.meta.url).pathname;
-const VIEWER = new URL("../../tests/fixtures/design-system", import.meta.url)
-  .pathname;
-const TOKENS_FILE = new URL(
-  "../../src/shared/design-system/styles/tokens.css",
-  import.meta.url,
-).pathname;
+const SRC = fileURLToPath(
+  new URL("../../src/shared/design-system", import.meta.url),
+);
+const VIEWER = fileURLToPath(
+  new URL("../../tests/fixtures/design-system", import.meta.url),
+);
+const TOKENS_FILE = fileURLToPath(
+  new URL("../../src/shared/design-system/styles/tokens.css", import.meta.url),
+);
 
 /**
  * Colour utilities that may not carry an opacity modifier.

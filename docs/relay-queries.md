@@ -81,7 +81,7 @@ running broker needs one coordinated restart to gain the new filter. Reopening
 the picker reuses its ready catalog; it is not a manual refresh fallback for an
 older broker.
 
-`session.messages.send`, `reply`, and `edit` resolve referenced `:shortcodes:`
+`session.messages.send`, `reply`, `edit`, and `react` resolve referenced `:shortcodes:`
 into original-URL emoji tags **before** the outbox assigns identity or signs. Text
 without shortcode candidates does not wait. A cold/unavailable catalog throws
 synchronously, so a composer retains its draft; plugins can await `ensure()` or
@@ -93,7 +93,10 @@ Message and reaction rendering uses only each event's own emoji tags, never the
 current palette. Tagged edits replace mappings; legacy tagless edits preserve the
 original message's mappings. All thumbnails use the captured session's media
 resolver; unsupported or unloadable images fall back to literal shortcodes.
-Uploads/management and reaction authoring are outside this slice.
+Reaction authoring uses the existing outbox: kind 7, the loaded message's channel
+(`h`) and target (`e`), and event-local custom emoji tags. The development broker
+admits bounded reactions with exactly one canonical target and preserves kind 7
+through signing. Uploads and emoji management remain outside this slice.
 
 ## Thread views
 

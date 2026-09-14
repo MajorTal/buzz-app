@@ -54,6 +54,38 @@ it("combines directional groups with Markdown, profile access, and thread action
   expect(outgoing).toContain('data-bubble-direction="outgoing"');
   expect(outgoing).not.toContain('aria-label="View Author profile"');
 });
+it.each([
+  ["😀 🙏 👏 😄", [], true],
+  ["😀".repeat(40), [], true],
+  [
+    ":party: ".repeat(24),
+    [{ shortcode: "party", url: "https://emoji.test/party.png" }],
+    true,
+  ],
+  [
+    ":party: 😀 :party: 😀",
+    [{ shortcode: "party", url: "https://emoji.test/party.png" }],
+    true,
+  ],
+  ["😀 🙏 👏 😄 hello", [], false],
+  [":unknown: 😀", [], false],
+  ["  \n  ", [], false],
+] as const)(
+  "keeps emoji-only message size independent of count: %s",
+  (content, emoji, large) => {
+    const html = renderToStaticMarkup(
+      <MessageRow
+        row={{ ...row, content, emoji }}
+        profile={undefined}
+        media={() => undefined}
+        onOpenLink={() => false}
+        day={false}
+        retry={undefined}
+      />,
+    );
+    expect(html.includes('data-single-emoji="true"')).toBe(large);
+  },
+);
 function render(
   patch: Partial<UnreadSnapshot>,
   replies = 23,

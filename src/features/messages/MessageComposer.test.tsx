@@ -35,6 +35,8 @@ vi.mock("react", async (original) => ({
           initial === null
             ? {
                 focus: vi.fn(),
+                style: {},
+                children: [],
                 addEventListener: vi.fn(),
                 removeEventListener: vi.fn(),
                 ownerDocument: {
@@ -263,7 +265,7 @@ it("enlarges Unicode-only drafts and restores normal text presentation", () => {
   h.type("😀 🙏 👏");
   expect(h.input().props["data-single-emoji"]).toBe(true);
   h.type("😀 🙏 👏 😄");
-  expect(h.input().props["data-single-emoji"]).toBeUndefined();
+  expect(h.input().props["data-single-emoji"]).toBe(true);
   h.type("😀 🙏 hello");
   expect(h.input().props["data-single-emoji"]).toBeUndefined();
 });
@@ -278,7 +280,7 @@ it("recognizes an exact custom emoji draft without treating shortcode prose as e
   expect(usesLargeEmojiPresentation(":party: 😀 :PARTY:", [party])).toBe(true);
   expect(
     usesLargeEmojiPresentation(":party: 😀 :PARTY: :party:", [party]),
-  ).toBe(false);
+  ).toBe(true);
 });
 
 it.each([undefined, "root"])(

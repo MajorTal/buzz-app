@@ -493,6 +493,8 @@ function Timeline({
               <MessageRow
                 key={row.id}
                 row={row}
+                session={queries}
+                scope={scope}
                 unread={queries.unread}
                 extensions={extensions}
                 profile={profiles.get(row.authorId)}

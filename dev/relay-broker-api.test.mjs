@@ -126,6 +126,27 @@ test("GIF capability discovery does not depend on join-policy availability", asy
   }
 });
 
+test("GIF discovery retries unsupported relays and caches confirmed support", async () => {
+  let supported = false;
+  const descriptor = {
+    supported_extensions: ["buzz-gif"],
+    gif: { provider: "klipy", search: "/gifs/search" },
+  };
+  const h = await harness(() => Response.json(supported ? descriptor : {}));
+  try {
+    expect(await (await h.get("gif-info")).json()).toEqual({});
+    supported = true;
+    expect(await (await h.get("gif-info")).json()).toEqual(descriptor);
+    expect(await (await h.get("gif-info")).json()).toEqual(descriptor);
+    expect(h.calls.map(({ url }) => url)).toEqual([
+      fixtureRelayUrl,
+      fixtureRelayUrl,
+    ]);
+  } finally {
+    await h.close();
+  }
+});
+
 test("GIF search follows the relay-advertised KLIPY path with signed, bounded input", async () => {
   const responseBody = {
     result: true,
@@ -436,6 +457,72 @@ test("queued request mints fresh auth at dispatch after wall time advances", asy
     await response.text();
     expect(h.calls).toHaveLength(2);
     expect(h.calls[1].at - h.calls[0].at).toBeGreaterThanOrEqual(490);
+  } finally {
+    await h.close();
+  }
+});
+
+test("reaction sign and publish preserve kind 7 and reject malformed targets before upstream I/O", async () => {
+  const h = await harness((call) =>
+    Response.json({ accepted: true, event_id: call.body.id }),
+  );
+  try {
+    const template = {
+      ...h.event,
+      kind: 7,
+      content: ":party:",
+      tags: [
+        ["h", "c"],
+        ["e", "a".repeat(64)],
+        ["emoji", "party", "https://a.test/party.png"],
+      ],
+    };
+    const response = await h.post("sign", template);
+    expect(response.status).toBe(200);
+    const event = await response.json();
+    expect(verifyEvent(event)).toBe(true);
+    expect(event.kind).toBe(7);
+    expect(event.tags).toEqual(template.tags);
+    expect((await h.post("publish", event)).status).toBe(200);
+    expect(h.calls).toHaveLength(1);
+    expect(h.calls[0].body).toEqual(JSON.parse(JSON.stringify(event)));
+    for (const length of [62, 63, 64]) {
+      const content = `:${"a".repeat(length)}:`;
+      const signed = await h.post("sign", { ...template, content });
+      expect(signed.status).toBe(200);
+      const boundaryEvent = await signed.json();
+      expect(boundaryEvent.content).toBe(content);
+      expect((await h.post("publish", boundaryEvent)).status).toBe(200);
+    }
+    expect(h.calls).toHaveLength(4);
+    for (const route of ["sign", "publish"]) {
+      for (const tags of [
+        [],
+        [["e", "bad"]],
+        [["e", "a".repeat(64), "", "reply"]],
+        [
+          ["e", "a".repeat(64)],
+          ["e", "b".repeat(64)],
+        ],
+      ]) {
+        expect(
+          (await h.post(route, { ...event, tags: [["h", "c"], ...tags] }))
+            .status,
+        ).toBe(400);
+      }
+      expect(
+        (await h.post(route, { ...event, content: "x".repeat(65) })).status,
+      ).toBe(400);
+      expect(
+        (await h.post(route, { ...event, content: `:${"a".repeat(65)}:` }))
+          .status,
+      ).toBe(400);
+      expect(
+        (await h.post(route, { ...event, content: ` ${"x".repeat(64)}` }))
+          .status,
+      ).toBe(400);
+    }
+    expect(h.calls).toHaveLength(4);
   } finally {
     await h.close();
   }

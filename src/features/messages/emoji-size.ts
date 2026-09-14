@@ -1,5 +1,4 @@
 import type { CustomEmoji } from "../relay/emoji";
-const LARGE_EMOJI_LIMIT = 3;
 const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 const emojiPresentation =
   /\p{Extended_Pictographic}|\p{Regional_Indicator}|[\d#*]\uFE0F?\u20E3/u;
@@ -88,13 +87,5 @@ export function usesLargeEmojiPresentation(
   value: string,
   entries: readonly CustomEmoji[] = [],
 ) {
-  const content = renderedEmoji(value, entries).trim();
-  if (!isUnicodeEmojiOnly(content)) return false;
-  let count = 0;
-  for (const { segment } of graphemes.segment(content)) {
-    if (/^\s+$/u.test(segment)) continue;
-    count++;
-    if (count > LARGE_EMOJI_LIMIT) return false;
-  }
-  return count > 0;
+  return isEmojiOnly(value, entries);
 }

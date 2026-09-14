@@ -32,11 +32,12 @@ const owners: { dispose(): void }[] = [];
 afterEach(() => {
   for (const owner of owners.splice(0)) owner.dispose();
 });
-function session(scope = "a") {
+function session(scope = "a", publishSucceeds = false) {
   const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
   let live!: LiveCallbacks;
   const sign = vi.fn(async (template) => signed(viewer, template));
   const publish = vi.fn(async (_event: RelayEvent) => {
+    if (publishSucceeds) return;
     throw new PublishRejected("retry test");
   });
   const query = vi.fn(wire.transport.query);
@@ -151,6 +152,129 @@ it("actual session cold send is draft-safe; A/B sends, replies and signed retrie
     url,
   ]);
   expect(a.session.emoji.snapshot().entries[0]?.url).toBe("https://new.test/p");
+});
+it("reactions use retained thread targets after shared-cache eviction", () => {
+  const h = session();
+  const root = message(member, "c", "Still visible", 1);
+  h.live.receive([root]);
+  const thread = h.session.thread("c", root.id);
+  owners.push(thread);
+  h.live.receive(
+    Array.from({ length: 9 }, (_, index) =>
+      message(member, "other", "x".repeat(1024 * 1024), 100 + index),
+    ),
+  );
+  expect(thread.snapshot().root?.id).toBe(root.id);
+  const id = h.session.messages.react(root.id, "👍");
+  expect(
+    h.session.outbox?.snapshot().find((item) => item.event.id === id)?.event,
+  ).toMatchObject({
+    kind: 7,
+    content: "👍",
+    tags: expect.arrayContaining([
+      ["h", "c"],
+      ["e", root.id],
+    ]),
+  });
+});
+it("reconciles retained channel reactions through confirmation and access loss", async () => {
+  const h = session("a", true);
+  const root = message(member, "c", "Still visible", 1);
+  h.session.channels.ensure("c");
+  h.live.receive([roster(relay, "c", [viewer.pubkey], 1), root]);
+  h.live.receive(
+    Array.from({ length: 9 }, (_, index) =>
+      message(member, "other", "x".repeat(1024 * 1024), 100 + index),
+    ),
+  );
+  expect(h.session.channels.window("c").rows[0]?.id).toBe(root.id);
+  const id = h.session.messages.react(root.id, "👍");
+  expect(h.session.channels.window("c").rows[0]?.reactions).toEqual([
+    { content: "👍" },
+  ]);
+  await flush();
+  await flush();
+  const operation = h.session.outbox
+    ?.snapshot()
+    .find((item) => item.event.id === id);
+  expect(operation).toMatchObject({ delivery: "accepted", signed: { id } });
+  const confirmation = h.wire.pending.find((request) =>
+    request.filters.some((filter) => filter.ids?.includes(id)),
+  );
+  if (!confirmation || !operation?.signed)
+    throw new Error("Missing signed reaction confirmation");
+  confirmation.respond([operation.signed]);
+  await flush();
+  expect(h.session.outbox?.snapshot()).toHaveLength(0);
+  expect(h.session.channels.window("c").rows[0]?.reactions).toEqual([
+    { content: "👍" },
+  ]);
+  h.live.receive([roster(relay, "c", [], 2)]);
+  expect(h.session.channels.window("c").rows).toEqual([]);
+  expect(() => h.session.messages.react(root.id, "🎉")).toThrow(/Load/);
+});
+it("accepts every catalog shortcode length through session reaction authoring", async () => {
+  const h = session();
+  const root = message(member, "c", "React here", 1);
+  const names = [62, 63, 64].map((length) => "a".repeat(length));
+  h.live.receive([root]);
+  const ready = h.session.emoji.ensure();
+  h.wire.next().respond([
+    set(
+      member,
+      1,
+      names.map((name) => ["emoji", name, `https://a.test/${name}.png`]),
+    ),
+  ]);
+  await ready;
+  for (const name of names) {
+    const content = `:${name}:`;
+    const id = h.session.messages.react(root.id, content);
+    expect(
+      h.session.outbox?.snapshot().find((item) => item.event.id === id)?.event,
+    ).toMatchObject({
+      kind: 7,
+      content,
+      tags: expect.arrayContaining([
+        ["e", root.id],
+        ["emoji", name, `https://a.test/${name}.png`],
+      ]),
+    });
+  }
+});
+it("reactions use the loaded target and preserve custom emoji on a failed delivery retry", async () => {
+  const h = session();
+  const root = message(member, "c", "React here", 1);
+  h.live.receive([root]);
+  const ready = h.session.emoji.ensure();
+  h.wire.next().respond([set()]);
+  await ready;
+  const id = h.session.messages.react(root.id, ":party:");
+  await flush();
+  await flush();
+  const event = h.publish.mock.calls[0]?.[0];
+  expect(event).toMatchObject({ kind: 7, content: ":party:" });
+  expect(event?.tags).toEqual(
+    expect.arrayContaining([
+      ["h", "c"],
+      ["e", root.id],
+      ["emoji", "party", url],
+    ]),
+  );
+  h.live.receive([set(member, 9, [["emoji", "party", "https://new.test/p"]])]);
+  h.session.messages.retry(id);
+  await flush();
+  await flush();
+  expect(h.sign).toHaveBeenCalledTimes(1);
+  expect(h.publish.mock.calls[1]?.[0]).toEqual(event);
+  expect(() => h.session.messages.react("missing", "👍")).toThrow(/Load/);
+  expect(() => h.session.messages.react(root.id, " ")).toThrow(/empty/);
+  expect(() => h.session.messages.react(root.id, "x".repeat(65))).toThrow(
+    /long/,
+  );
+  expect(() =>
+    h.session.messages.react(root.id, `:${"x".repeat(65)}:`),
+  ).toThrow(/long/);
 });
 it("plain sends are immediate and do not acquire a palette; load failure requires explicit retry", async () => {
   const h = session();

@@ -319,7 +319,7 @@ it("bounds enlarged emoji presentation on sent messages", () => {
       }),
     ).find((element) => element.type === MessageMarkdown);
   expect(message("😀 🙏 👏")?.props.largeEmoji).toBe(true);
-  expect(message("😀 🙏 👏 😄")?.props.largeEmoji).toBe(false);
+  expect(message("😀 🙏 👏 😄")?.props.largeEmoji).toBe(true);
 });
 
 it("the actual message row rejects attachment URLs outside the shared safe-link policy", () => {

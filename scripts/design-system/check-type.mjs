@@ -28,10 +28,14 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const SRC = new URL("../../src/shared/design-system", import.meta.url).pathname;
-const VIEWER = new URL("../../tests/fixtures/design-system", import.meta.url)
-  .pathname;
+const SRC = fileURLToPath(
+  new URL("../../src/shared/design-system", import.meta.url),
+);
+const VIEWER = fileURLToPath(
+  new URL("../../tests/fixtures/design-system", import.meta.url),
+);
 
 /** Size roles a component may use. Kept in sync with typography.css. */
 const SIZE_ROLES = [

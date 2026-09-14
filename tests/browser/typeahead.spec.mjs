@@ -521,22 +521,38 @@ test("current custom catalog drives typeahead and signed tags across community r
   const suggestionBox = await suggestions.boundingBox();
   const composerBox = await composer.boundingBox();
   expect(suggestionBox.width).toBeCloseTo(composerBox.width * 0.375, 1);
-  await first.click();
-  await expect(input).toHaveValue(":party-parrot: ");
-  expect(await input.evaluate((element) => element.selectionStart)).toBe(
-    ":party-parrot: ".length,
+  const regularTextSize = await input.evaluate(
+    (element) => getComputedStyle(element).fontSize,
   );
+  await first.click();
+  await expect(input).toHaveValue(":party-parrot:");
+  await expect(input).toHaveCSS("font-size", regularTextSize);
+  await expect(composer.locator("img")).toHaveCSS("width", "42px");
+  await input.press("Shift+ArrowLeft");
+  expect(
+    await input.evaluate((element) =>
+      element.value.slice(element.selectionStart, element.selectionEnd),
+    ),
+  ).toBe(":party-parrot:");
+  await input.press("ArrowRight");
+  expect(await input.evaluate((element) => element.selectionStart)).toBe(
+    ":party-parrot:".length,
+  );
+  await expect(input).toBeFocused();
+  await page.screenshot({
+    path: test.info().outputPath("custom-emoji-native-caret.png"),
+    caret: "initial",
+  });
   await page.evaluate(() => window.emojiFixture.remove());
-  await expect(input).toHaveValue(":party-parrot: ");
+  await expect(input).toHaveValue(":party-parrot:");
   await page.evaluate(() => window.emojiFixture.replace());
-  await input.press("ArrowLeft");
   await input.press("Backspace");
-  await expect(input).toHaveValue(":party-parrot ");
+  await expect(input).toHaveValue(":party-parrot");
   await input.press("ControlOrMeta+z");
-  await expect(input).toHaveValue(":party-parrot: ");
+  await expect(input).toHaveValue(":party-parrot:");
   // macOS End scrolls the document; use its caret shortcut when overscroll is off.
   await input.press(process.platform === "darwin" ? "Meta+ArrowRight" : "End");
-  await input.pressSequentially("hello");
+  await input.pressSequentially(" hello");
   await expect(input).toHaveValue(":party-parrot: hello");
   await input.press("Enter");
   await expect
@@ -627,7 +643,7 @@ test("current custom catalog drives typeahead and signed tags across community r
   );
   await input.fill("hello :party");
   await page.getByRole("option", { name: ":party:", exact: true }).click();
-  await expect(input).toHaveValue("hello :party: ");
+  await expect(input).toHaveValue("hello :party:");
   await input.fill(":party");
   await expect(
     page.getByRole("option", { name: ":party:", exact: true }),
@@ -640,7 +656,7 @@ test("current custom catalog drives typeahead and signed tags across community r
   await page.getByRole("button", { name: "Switch community" }).click();
   await input.fill(":party");
   await page.getByRole("option", { name: ":party:", exact: true }).click();
-  await expect(input).toHaveValue(":party: ");
+  await expect(input).toHaveValue(":party:");
   await input.press("Enter");
   await expect
     .poll(() =>

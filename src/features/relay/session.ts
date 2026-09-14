@@ -123,12 +123,17 @@ export function createRelaySession(
         )
       : undefined;
   const rawLocal = () => writes?.local.snapshot() ?? [];
+  let retainedChannelEvent: (id: string) => RelayEvent | undefined = () =>
+    undefined;
   function retainedThreadEvent(id: string) {
     for (const thread of threads) {
       if (!canAccess(thread.channelId)) continue;
       const event = thread.event(id);
       if (event) return event;
     }
+  }
+  function retainedEvent(id: string) {
+    return retainedThreadEvent(id) ?? retainedChannelEvent(id);
   }
   function visibility(events: readonly EventData[] = []) {
     const evidence = new Map(
@@ -139,12 +144,12 @@ export function createRelaySession(
     );
     return eventVisibility(
       canAccess,
-      // Retained thread targets survive shared-cache eviction. They are evidence,
+      // Retained view targets survive shared-cache eviction. They are evidence,
       // not an access grant: eventVisibility still checks every referenced target.
       (id) =>
         evidence.get(id) ??
         recent.peek(id)?.event ??
-        retainedThreadEvent(id) ??
+        retainedEvent(id) ??
         unread.event(id),
     );
   }
@@ -329,6 +334,7 @@ export function createRelaySession(
     },
   );
   canAccess = channels.canAccess;
+  retainedChannelEvent = channels.retainedEvent;
   const readScope = `${transport?.scope ?? transport?.relayAuthor ?? "offline"}:${transport?.viewer ?? ""}`;
   const reads = createReadState({
     viewer: transport?.viewer ?? "",
@@ -598,7 +604,8 @@ export function createRelaySession(
       transport?.viewer,
       (id) =>
         local().find((item) => item.event.id === id)?.event ??
-        recent.peek(id)?.event,
+        recent.peek(id)?.event ??
+        retainedEvent(id),
       emoji.tags,
       validateMentions,
     ),

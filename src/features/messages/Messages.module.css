@@ -124,8 +124,6 @@
 }
 .text[data-single-emoji] {
   --inline-emoji-size: calc(42px * var(--buzz-text-scale, 1));
-  display: flex;
-  align-items: flex-start;
   min-height: calc(48px * var(--buzz-text-scale, 1));
   margin-top: 4px;
   font-size: calc(42px * var(--buzz-text-scale, 1));
@@ -141,6 +139,8 @@
 }
 .reactions {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   gap: 4px;
   margin-top: 6px;
 }
@@ -233,6 +233,9 @@
   position: relative;
   width: 100%;
 }
+.composerInput:has(textarea[data-custom-emoji-only]) {
+  overflow: hidden;
+}
 .composer textarea {
   position: relative;
   z-index: 1;
@@ -258,7 +261,10 @@
   height: calc(48px * var(--buzz-text-scale, 1));
   min-height: calc(48px * var(--buzz-text-scale, 1));
   color: transparent;
-  font-size: 0;
+  /* Collapse hidden shortcode advances without collapsing the native caret. */
+  font-family: monospace;
+  font-size: inherit;
+  letter-spacing: -1ch;
   line-height: calc(48px * var(--buzz-text-scale, 1));
   caret-color: var(--text);
 }
@@ -268,14 +274,17 @@
 }
 .composerCustomEmojiGroup {
   position: absolute;
-  top: 50%;
+  top: 3px;
   left: 0;
+  right: 0;
   display: flex;
-  gap: calc(2px * var(--buzz-text-scale, 1));
+  flex-wrap: wrap;
+  gap: calc(6px * var(--buzz-text-scale, 1))
+    calc(2px * var(--buzz-text-scale, 1));
   pointer-events: none;
-  transform: translateY(-50%);
 }
 .composerCustomEmoji {
+  flex-shrink: 0;
   width: calc(42px * var(--buzz-text-scale, 1));
   height: calc(42px * var(--buzz-text-scale, 1));
   object-fit: contain;
@@ -971,6 +980,9 @@ button.mediaPreview {
   border-radius: 0.5rem;
   background: var(--surface-control);
 }
+.text[data-single-emoji] img {
+  vertical-align: top;
+}
 .text[data-single-emoji] {
   margin: 4px 0 0;
 }
@@ -1169,7 +1181,7 @@ button.avatar:focus-visible,
   color: var(--text-muted);
   font-size: calc(10px * var(--buzz-text-scale, 1));
 }
-.membershipAvatar img {
+.membershipAvatars .membershipAvatar img {
   position: absolute;
   inset: 0;
   width: 100%;

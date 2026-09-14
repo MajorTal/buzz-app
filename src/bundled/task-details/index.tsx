@@ -13,6 +13,7 @@ import { parseTask, taskKey, type Task } from "./data";
 import { useFileStore } from "./file-store";
 import styles from "./task.module.css";
 import { AssigneePicker } from "./AssigneePicker";
+import { ensureTaskMember } from "./ensure-member";
 
 export const inject = ["conversation"];
 export const apply: PluginModule["apply"] = (ctx) => {
@@ -306,6 +307,7 @@ function TaskEditor({
               setNotice(
                 "Assignment saved. Notification has not been queued yet.",
               );
+              await ensureTaskMember(session, channelId, task.assignee);
               const name =
                 session.agentLibrary
                   .snapshot()
@@ -330,7 +332,8 @@ function TaskEditor({
           Assign
         </Button>
         <p className="text-body-sm text-secondary">
-          Saves the task and notifies the agent to start work.
+          Saves the task, adds the agent to this channel if needed, and notifies
+          them to start work.
         </p>
       </div>
       {task.branches.map((link, index) => (

@@ -220,7 +220,9 @@ test("local task panel saves against a canonical thread and never publishes meta
   await form
     .getByRole("textbox", { name: "Description", exact: true })
     .fill("Move playback into the runtime");
-  await form.getByRole("button", { name: "Add branch", exact: true }).click();
+  await form
+    .getByRole("button", { name: "Link existing branch", exact: true })
+    .click();
   await form
     .getByRole("textbox", { name: "Repository URL" })
     .fill("https://github.com/block/berd");

@@ -83,6 +83,37 @@ test("broker signing is limited to bounded channel messages and canonical direct
     assert.equal(validMessageTemplate(invalid), false);
 });
 
+test("membership signing permits only a single bot addition", () => {
+  const event = {
+    kind: 9000,
+    content: "",
+    created_at: 1788810000,
+    tags: [
+      ["h", "dde67da5-fb84-47ce-8feb-64c9ad7b1d52"],
+      ["p", "a".repeat(64)],
+      ["role", "bot"],
+    ],
+  };
+  assert.equal(validMessageTemplate(event), true);
+  assert.equal(
+    validMessageTemplate({
+      ...event,
+      tags: [
+        ...event.tags,
+        ["client-id", "dde67da5-fb84-47ce-8feb-64c9ad7b1d52"],
+      ],
+    }),
+    true,
+  );
+  for (const invalid of [
+    { ...event, content: "extra" },
+    { ...event, tags: [...event.tags, ["p", "b".repeat(64)]] },
+    { ...event, tags: [...event.tags.slice(0, 2), ["role", "admin"]] },
+    { ...event, tags: [...event.tags.slice(0, 2), ["role", "owner"]] },
+  ])
+    assert.equal(validMessageTemplate(invalid), false);
+});
+
 test("the upstream pool reuses warm connections and reports only new connects", async () => {
   const { createServer } = await import("node:http");
   const server = createServer((_req, res) => res.end("{}"));

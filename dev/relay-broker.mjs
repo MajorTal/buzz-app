@@ -191,6 +191,35 @@ async function relayAuthority(fetch, relay) {
   };
 }
 export function validMessageTemplate(event) {
+  if (event?.kind === 9000)
+    return (
+      event.content === "" &&
+      Number.isSafeInteger(event.created_at) &&
+      Array.isArray(event.tags) &&
+      event.tags.every((tag) => Array.isArray(tag) && tag.length === 2) &&
+      (event.tags.length === 3 ||
+        (event.tags.length === 4 &&
+          event.tags.filter(
+            ([name, value]) =>
+              name === "client-id" &&
+              typeof value === "string" &&
+              /^[0-9a-f-]{36}$/.test(value),
+          ).length === 1)) &&
+      event.tags.filter(
+        ([name, value]) =>
+          name === "h" &&
+          typeof value === "string" &&
+          /^[0-9a-f-]{36}$/.test(value),
+      ).length === 1 &&
+      event.tags.filter(
+        ([name, value]) =>
+          name === "p" &&
+          typeof value === "string" &&
+          /^[0-9a-f]{64}$/.test(value),
+      ).length === 1 &&
+      event.tags.filter(([name, value]) => name === "role" && value === "bot")
+        .length === 1
+    );
   return (
     event &&
     [7, 9].includes(event.kind) &&
@@ -523,7 +552,7 @@ export function relayBrokerPlugin({
               viewer,
               ...(await getAuthority(relay)),
               relayUrl: relay,
-              writeKinds: [7, 9],
+              writeKinds: [7, 9, 9000],
               sidebarPreferences: true,
               readState: true,
               agentLibrary: true,

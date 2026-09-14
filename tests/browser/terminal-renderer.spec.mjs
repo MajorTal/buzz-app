@@ -1,27 +1,12 @@
-import { test, expect } from "@playwright/test";
-import { createServer } from "./vite-server.mjs";
-import react from "@vitejs/plugin-react";
-import { fileURLToPath } from "node:url";
+import { test, expect } from "./source-fixture.mjs";
 
 test("real xterm retains output across detach, handles input and resize, and releases app shortcut", async ({
   page,
 }) => {
-  const root = fileURLToPath(new URL("../../", import.meta.url));
-  const server = await createServer({
-    root,
-    configFile: false,
-    envFile: false,
-    plugins: [react()],
-    server: { host: "127.0.0.1", port: 0 },
-  });
   const errors = [];
   page.on("pageerror", (e) => errors.push(String(e)));
-  try {
-    await server.listen();
     await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
-    await page.goto(
-      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/terminal.html`,
-    );
+  await page.goto("/tests/fixtures/terminal.html");
     const button = (name) => page.getByRole("button", { name, exact: true });
     const input = page.getByLabel("Input", { exact: true });
     const splash = page.locator("[data-terminal-splash]");
@@ -52,9 +37,7 @@ test("real xterm retains output across detach, handles input and resize, and rel
 
     const colors = await splash
       .locator('[data-layer="head"]')
-      .evaluateAll((nodes) =>
-        nodes.map((node) => getComputedStyle(node).color),
-      );
+    .evaluateAll((nodes) => nodes.map((node) => getComputedStyle(node).color));
     expect(new Set(colors).size).toBeGreaterThan(8);
     await expect(splash).toHaveCSS("--splash-lightness", "72%");
     await expect(splash).toHaveCSS("--splash-chroma", "0.12");
@@ -80,9 +63,7 @@ test("real xterm retains output across detach, handles input and resize, and rel
                 .map(Number)
                 .map((v) => {
                   const s = v / 255;
-                  return s <= 0.04045
-                    ? s / 12.92
-                    : ((s + 0.055) / 1.055) ** 2.4;
+                return s <= 0.04045 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4;
                 });
               return rgb[0] * 0.2126 + rgb[1] * 0.7152 + rgb[2] * 0.0722;
             };
@@ -236,30 +217,15 @@ test("real xterm retains output across detach, handles input and resize, and rel
     await expect(splash).toHaveCount(0);
     await page.clock.resume();
     expect(errors).toEqual([]);
-  } finally {
-    await server.close();
-  }
 });
 
 test("terminal shared controls keep focus, recovery and layout in both modes", async ({
   page,
 }) => {
-  const root = fileURLToPath(new URL("../../", import.meta.url));
-  const server = await createServer({
-    root,
-    configFile: false,
-    envDir: false,
-    plugins: [react()],
-    server: { host: "127.0.0.1", port: 0 },
-  });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  try {
-    await server.listen();
     await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
-    await page.goto(
-      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/terminal-panel.html`,
-    );
+  await page.goto("/tests/fixtures/terminal-panel.html");
     const button = (name) => page.getByRole("button", { name, exact: true });
     const launcher = button("Toggle channel terminal");
     await expect(launcher).toHaveAttribute("data-buzz-ui", "");
@@ -366,13 +332,13 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
           await page.clock.resume();
         }
         await expect(restart).toBeInViewport();
-        expect(
-          await drawer.evaluate((el) => el.scrollWidth),
-        ).toBeLessThanOrEqual(width);
+      expect(await drawer.evaluate((el) => el.scrollWidth)).toBeLessThanOrEqual(
+        width,
+      );
         const header = drawer.locator(".panel-header");
-        expect(
-          await header.evaluate((el) => el.scrollWidth),
-        ).toBeLessThanOrEqual(width);
+      expect(await header.evaluate((el) => el.scrollWidth)).toBeLessThanOrEqual(
+        width,
+      );
         await page.screenshot({
           path: test.info().outputPath(`terminal-panel-${mode}-${width}.png`),
         });
@@ -416,9 +382,7 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     await expect(drawer.locator(".xterm-rows")).toContainText(
       "FIXTURE_SHELL_READY",
     );
-    await page.goto(
-      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/terminal-panel.html?short`,
-    );
+  await page.goto("/tests/fixtures/terminal-panel.html?short");
     await page.evaluate(() =>
       document.documentElement.style.setProperty("--buzz-text-scale", "2"),
     );
@@ -437,26 +401,14 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
       path: test.info().outputPath("terminal-short-200.png"),
     });
     expect(errors).toEqual([]);
-  } finally {
-    await server.close();
-  }
 });
 
 test("real xterm replies survive scope switches while stale input and retired writes are fenced", async ({
   page,
 }) => {
-  const server = await createServer({
-    root: fileURLToPath(new URL("../../", import.meta.url)),
-    configFile: false,
-    envDir: false,
-    plugins: [react()],
-    server: { host: "127.0.0.1", port: 0 },
-  });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  try {
-    await server.listen();
-    const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/terminal-session.html`;
+  const url = "/tests/fixtures/terminal-session.html";
     const open = async () => {
       await page.goto(url);
       await expect
@@ -464,8 +416,7 @@ test("real xterm replies survive scope switches while stale input and retired wr
         .toBe(true);
       await page.evaluate(() => window.terminalSession.mount());
     };
-    const generated = () =>
-      page.evaluate(() => window.terminalSession.generated);
+  const generated = () => page.evaluate(() => window.terminalSession.generated);
     const writes = () => page.evaluate(() => window.terminalSession.writes);
     const reply = (data) => ({ owner: "retained-owner", id: "pty-1", data });
     const output = async (data) => {
@@ -549,7 +500,4 @@ test("real xterm replies survive scope switches while stale input and retired wr
         await page.evaluate(() => window.terminalSession.dispose());
     }
     expect(errors).toEqual([]);
-  } finally {
-    await server.close();
-  }
 });

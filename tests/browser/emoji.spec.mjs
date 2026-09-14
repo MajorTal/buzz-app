@@ -1,28 +1,9 @@
-import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
-import react from "@vitejs/plugin-react";
-import { fileURLToPath } from "node:url";
-import { mkdtemp, rm } from "node:fs/promises";
-import { join } from "node:path";
-import { tmpdir } from "node:os";
+import { test, expect } from "./source-fixture.mjs";
 
 test("community picker uses keyboard, proxy thumbnails, event-local history and scoped send/reply tags", async ({
   browserName,
   page,
 }) => {
-  // Parallel fixtures must not invalidate each other’s optimized lazy imports.
-  const cacheDir = await mkdtemp(join(tmpdir(), "buzz-emoji-vite-"));
-  let server;
-  try {
-    server = await createServer({
-      cacheDir,
-      root: fileURLToPath(new URL("../../", import.meta.url)),
-      configFile: false,
-      envFile: false,
-      plugins: [react()],
-      logLevel: "error",
-      server: { host: "127.0.0.1", port: 0, strictPort: false },
-    });
     const errors = [];
     page.on("pageerror", (error) => errors.push(String(error)));
     await page.route("**/emoji-media/**", async (route) => {
@@ -33,12 +14,9 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
         body: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22"><circle cx="11" cy="11" r="10" fill="purple"/></svg>',
       });
     });
-    await server.listen();
     // The host selection, not the operating system, chooses the widget mode.
     await page.emulateMedia({ colorScheme: "dark" });
-    await page.goto(
-      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/emoji.html`,
-    );
+  await page.goto("/tests/fixtures/emoji.html");
     const draft = () =>
       page.getByRole("textbox", { name: /Message #general|Reply to thread/ });
     const picker = page.getByRole("button", {
@@ -84,10 +62,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     // from its platform clipboard, even though the handler populated the event.
     const emojiImage = sentSingleEmoji.locator("img");
     const copyBounds = await emojiImage.boundingBox();
-    await page.mouse.move(
-      copyBounds.x - 2,
-      copyBounds.y + copyBounds.height / 2,
-    );
+  await page.mouse.move(copyBounds.x - 2, copyBounds.y + copyBounds.height / 2);
     await page.mouse.down();
     await page.mouse.move(
       copyBounds.x + copyBounds.width + 2,
@@ -401,9 +376,9 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(region).toHaveCSS("border-radius", "24px");
     await expect(region).toHaveCSS("border-top-width", "1px");
     await expect(region).not.toHaveCSS("box-shadow", "none");
-    await expect(
-      page.getByRole("button", { name: "Refresh emoji" }),
-    ).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Refresh emoji" })).toHaveCount(
+    0,
+  );
     await expect(surface).toHaveCSS("width", "360px");
     const initialRegion = await region.boundingBox();
     const initialSurface = await surface.boundingBox();
@@ -543,9 +518,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
         await button.evaluate((el) => {
           const r = el.getBoundingClientRect();
           return el.contains(
-            el
-              .getRootNode()
-              .elementFromPoint(r.right - 2, r.top + r.height / 2),
+          el.getRootNode().elementFromPoint(r.right - 2, r.top + r.height / 2),
           );
         }),
       ).toBe(true);
@@ -558,9 +531,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       "360px",
     );
     await search.fill("");
-    const frequent = page.locator(
-      'em-emoji-picker [data-id="frequent"] button',
-    );
+  const frequent = page.locator('em-emoji-picker [data-id="frequent"] button');
     await expect(frequent.first()).toBeVisible();
     const firstRow = await frequent.evaluateAll((buttons) =>
       buttons.slice(0, 7).map((button) => {
@@ -662,10 +633,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(recentIcon).toHaveCSS("fill", "none");
     await expect(recentIcon).toHaveCSS("stroke-width", "2px");
     await expect(recentIcon.locator("circle")).toHaveAttribute("r", "10");
-    await expect(recentIcon.locator("path")).toHaveAttribute(
-      "d",
-      "M12 6v6l4 2",
-    );
+  await expect(recentIcon.locator("path")).toHaveAttribute("d", "M12 6v6l4 2");
     const indicator = navigation.locator(".bar");
     await expect(indicator).toHaveCSS("display", "none");
     const selectedCategory = navigation.locator("button[aria-selected]");
@@ -725,9 +693,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(categoryHeading).toHaveCSS("color", "rgb(82, 82, 82)");
     await expect(categoryHeading).toHaveCSS("font-size", "12px");
     await expect(categoryHeading).toHaveCSS("font-weight", "400");
-    await expect(page.getByText("Pick an emoji", { exact: true })).toHaveCount(
-      0,
-    );
+  await expect(page.getByText("Pick an emoji", { exact: true })).toHaveCount(0);
     const rootBox = await surface.boundingBox();
     const navBox = await navigation.boundingBox();
     expect(navBox.y).toBeGreaterThan(rootBox.y + rootBox.height / 2);
@@ -779,9 +745,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await picker.click();
     await search.fill("");
     await expect(
-      page.locator(
-        'em-emoji-picker [data-id="frequent"] img[src*="aonly.png"]',
-      ),
+    page.locator('em-emoji-picker [data-id="frequent"] img[src*="aonly.png"]'),
     ).toHaveCount(1);
     await search.fill("grinning");
     await expect(
@@ -1003,11 +967,4 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       ),
     ).toBe("😀 🙏 👏 hello");
     expect(errors).toEqual([]);
-  } finally {
-    try {
-      await server?.close();
-    } finally {
-      await rm(cacheDir, { recursive: true, force: true });
-    }
-  }
 });

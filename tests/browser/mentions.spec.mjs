@@ -1,26 +1,11 @@
-import { test, expect } from "@playwright/test";
-import { createServer } from "./vite-server.mjs";
-import react from "@vitejs/plugin-react";
-import { fileURLToPath } from "node:url";
+import { test, expect } from "./source-fixture.mjs";
 
 test("actual composer selects namesakes by exact key, publishes channel/reply tags, and blocks removed members", async ({
   page,
 }) => {
-  const server = await createServer({
-    root: fileURLToPath(new URL("../../", import.meta.url)),
-    configFile: false,
-    envFile: false,
-    plugins: [react()],
-    logLevel: "error",
-    server: { host: "127.0.0.1", port: 0 },
-  });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  try {
-    await server.listen();
-    await page.goto(
-      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/mentions.html`,
-    );
+  await page.goto("/tests/fixtures/mentions.html");
     const keys = await page.evaluate(() => ({
       first: window.mentionFixture.first,
       second: window.mentionFixture.second,
@@ -54,9 +39,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     await page.evaluate(() => {
       document.documentElement.dataset.colorMode = "dark";
     });
-    await page
-      .getByRole("button", { name: "Insert emoji", exact: true })
-      .click();
+  await page.getByRole("button", { name: "Insert emoji", exact: true }).click();
     const search = page.getByRole("searchbox", { name: "Search" });
     await expect(page.locator("em-emoji-picker #root")).toHaveAttribute(
       "data-theme",
@@ -79,9 +62,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     await page.screenshot({
       path: test.info().outputPath("mention-recipients.png"),
     });
-    await page
-      .getByRole("button", { name: "Send message", exact: true })
-      .click();
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect
       .poll(() =>
         page.evaluate(
@@ -115,13 +96,9 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
         .getByRole("region", { name: "Notification recipients" })
         .getByRole("button"),
     ).toHaveCount(1);
-    await page
-      .getByRole("button", { name: "Send message", exact: true })
-      .click();
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect
-      .poll(() =>
-        page.evaluate(() => window.mentionFixture.publications.length),
-      )
+    .poll(() => page.evaluate(() => window.mentionFixture.publications.length))
       .toBe(2);
     const reply = await page.evaluate(
       () => window.mentionFixture.publications[1],
@@ -138,9 +115,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     await page
       .getByRole("button", { name: "Remove first Honey", exact: true })
       .click();
-    await page
-      .getByRole("button", { name: "Send message", exact: true })
-      .click();
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
     await expect(page.getByRole("alert")).toContainText(
       "no longer a channel member",
     );
@@ -177,7 +152,4 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
       page.getByRole("textbox", { name: "Reply to thread" }),
     ).toHaveJSProperty("value", "@Honey @Honey ");
     expect(errors).toEqual([]);
-  } finally {
-    await server.close();
-  }
 });

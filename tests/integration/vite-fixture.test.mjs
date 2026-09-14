@@ -64,7 +64,7 @@ test("browser fixture call sites cannot fall back to Vite's shared default cache
     const source = await readFile(join(browser, name), "utf8");
     if (!source.includes('import { createServer } from "vite"')) continue;
     // These existing tests own a temporary directory through their full lifecycle.
-    assert.ok(["emoji.spec.mjs", "conversation.spec.mjs"].includes(name), name);
+    assert.equal(name, "conversation.spec.mjs");
     assert.match(
       source,
       /cacheDir[,:]/,

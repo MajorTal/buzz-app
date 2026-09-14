@@ -15,9 +15,11 @@ import { PagesService } from "../features/pages/service";
 import { bundledPlugins } from "../bundled";
 import { createPluginManager } from "../plugins/manager";
 import { withTimeout } from "../plugins/timeout";
+import { createWindowHost } from "../features/windows/service";
 
 export function createServices() {
   const appearance = createAppearance();
+  const windows = createWindowHost();
   const ctx = new Context();
   const plugins = createPluginManager(ctx, {
     bundled: bundledPlugins,
@@ -40,9 +42,12 @@ export function createServices() {
     undefined,
     (target) => notificationAuthorized(communities, target),
   );
-  ctx.effect(() => bindMessageNotifications(notifications, communities));
+  // Every window runs a full session; only main may raise desktop notifications.
+  if (windows.isMain)
+    ctx.effect(() => bindMessageNotifications(notifications, communities));
   let disposal: Promise<void> | undefined;
   return {
+    windows,
     notifications,
     navigation,
     navigationHost,
@@ -56,6 +61,7 @@ export function createServices() {
     appearance,
     dispose() {
       appearance.dispose();
+      windows.dispose();
       // Start root cancellation without waiting for plugin-owned cleanup. Cordis
       // starts sibling effects independently; the runtime still owns replacement
       // barriers. A timeout reports incomplete cleanup, never successful disposal.

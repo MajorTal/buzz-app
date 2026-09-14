@@ -1,36 +1,58 @@
 import { useState } from "react";
 import { PanelRight } from "lucide-react";
 import type { RegisteredPanel } from "../../features/panels/service";
+import {
+  type WindowHost,
+  type WindowLayout,
+  panelTabKey,
+} from "../../features/windows/service";
+import { PageTab } from "./PageTab";
 
 export function PanelLaunchers({
   panels,
   selected,
   launch,
+  windows,
+  layout,
+  tabsHere,
 }: {
   panels: readonly RegisteredPanel[];
   selected: RegisteredPanel | undefined;
   launch(panel: RegisteredPanel, trigger: HTMLButtonElement): void;
+  windows: WindowHost;
+  layout: WindowLayout;
+  tabsHere: number;
 }) {
   return panels
     .filter((panel) => panel.launcher)
     .map((panel) => (
-      <button
-        type="button"
+      <PageTab
         key={`${panel.key}:${panel.revision}`}
+        tabKey={panelTabKey(panel)}
+        name={panel.title}
         className="shell-icon"
-        aria-label={panel.title}
-        title={panel.title}
-        aria-expanded={panel === selected}
-        onClick={(event) => launch(panel, event.currentTarget)}
+        label={panel.title}
+        selected={false}
+        expanded={panel === selected}
+        onSelect={(event) => launch(panel, event.currentTarget)}
+        windows={windows}
+        layout={layout}
+        tabsHere={tabsHere}
       >
         <LauncherIcon
           key={panel.launcher?.icon}
           src={panel.launcher?.icon ?? ""}
         />
-      </button>
+      </PageTab>
     ));
 }
-function LauncherIcon({ src }: { src: string }) {
+export function LauncherIcon({
+  src,
+  size = "size-7",
+}: {
+  src: string;
+  size?: string;
+}) {
   const [failed, setFailed] = useState(false);
   return failed ? (
     <PanelRight size={18} aria-hidden="true" />
@@ -38,7 +60,7 @@ function LauncherIcon({ src }: { src: string }) {
     <img
       src={src}
       alt=""
-      className="size-7 object-contain"
+      className={`${size} object-contain`}
       onError={() => setFailed(true)}
     />
   );

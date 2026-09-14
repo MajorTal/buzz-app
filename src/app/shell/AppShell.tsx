@@ -1,11 +1,15 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useSyncExternalStore } from "react";
 import { House } from "lucide-react";
 import { isTauri } from "@tauri-apps/api/core";
 import type { RegisteredPage } from "../../features/pages/service";
+import type { RegisteredPanel } from "../../features/panels/service";
 import type { Communities } from "../../features/communities/service";
+import { type WindowHost, panelTabKey } from "../../features/windows/service";
 import { CommunitySwitcher } from "../../features/communities/CommunitySwitcher";
 import { ProfileButton } from "./ProfileButton";
 import { PageSearch } from "./PageSearch";
+import { PageTab } from "./PageTab";
+import { LauncherIcon } from "./PanelLaunchers";
 import { orderPages, pagePresentation } from "./presentation";
 import { PanelFrame } from "../../features/panels/PanelFrame";
 
@@ -13,11 +17,13 @@ const macDesktop = isTauri() && /Mac/i.test(navigator.platform);
 
 export function AppShell({
   pages,
+  panelTabs = [],
   selected,
   onSelect,
   tone,
   workspace,
   communities,
+  windows,
   navigationControls,
   onCommunitySelect,
   launchers,
@@ -25,17 +31,25 @@ export function AppShell({
   children,
 }: {
   pages: readonly RegisteredPage[];
+  /** Launcher panels shown as tabs (detached windows only). */
+  panelTabs?: readonly RegisteredPanel[];
   selected: string;
   onSelect: (key: string) => void;
   tone: string;
   workspace?: boolean;
   communities: Communities;
+  windows: WindowHost;
   navigationControls?: ReactNode;
   onCommunitySelect?: (id: string | null) => void;
   launchers?: ReactNode;
   companion?: ReactNode;
   children: ReactNode;
 }) {
+  const layout = useSyncExternalStore(windows.subscribe, windows.snapshot);
+  // Detached windows carry only the tab strip; community, Settings and profile stay in main.
+  const main = windows.isMain;
+  const ordered = orderPages(pages);
+  const tabsHere = ordered.length + panelTabs.length;
   return (
     <div
       data-shell-tone={tone}
@@ -59,45 +73,76 @@ export function AppShell({
       >
         <div className="shell-communities" data-tauri-drag-region>
           {navigationControls}
-          <CommunitySwitcher
-            communities={communities}
-            onSelect={onCommunitySelect}
-          />
+          {main && (
+            <CommunitySwitcher
+              communities={communities}
+              onSelect={onCommunitySelect}
+            />
+          )}
         </div>
-        <nav aria-label="Pages" className="shell-pages">
-          <button
-            type="button"
-            className="shell-tab"
-            aria-current={selected === "home" ? "page" : undefined}
-            onClick={() => onSelect("home")}
-          >
-            <House aria-hidden="true" size={15} strokeWidth={1.7} />
-            Home
-          </button>
-          {orderPages(pages).map((page) => {
+        <nav
+          aria-label="Pages"
+          className="shell-pages"
+          data-drop-target={layout.dropTarget || undefined}
+        >
+          {main && (
+            <button
+              type="button"
+              className="shell-tab"
+              aria-current={selected === "home" ? "page" : undefined}
+              onClick={() => onSelect("home")}
+            >
+              <House aria-hidden="true" size={15} strokeWidth={1.7} />
+              Home
+            </button>
+          )}
+          {ordered.map((page) => {
             const { label, icon: Icon } = pagePresentation(page);
             return (
-              <button
-                type="button"
+              <PageTab
                 key={page.key}
-                className="shell-tab"
-                aria-current={selected === page.key ? "page" : undefined}
-                onClick={() => onSelect(page.key)}
+                tabKey={page.key}
+                name={label}
+                selected={selected === page.key}
+                onSelect={() => onSelect(page.key)}
+                windows={windows}
+                layout={layout.layout}
+                tabsHere={tabsHere}
               >
                 <Icon aria-hidden="true" size={15} strokeWidth={1.7} />
                 {label}
-              </button>
+              </PageTab>
+            );
+          })}
+          {panelTabs.map((panel) => {
+            const key = panelTabKey(panel);
+            return (
+              <PageTab
+                key={key}
+                tabKey={key}
+                name={panel.title}
+                selected={selected === key}
+                onSelect={() => onSelect(key)}
+                windows={windows}
+                layout={layout.layout}
+                tabsHere={tabsHere}
+              >
+                <LauncherIcon src={panel.launcher?.icon ?? ""} size="size-4" />
+                {panel.title}
+              </PageTab>
             );
           })}
         </nav>
         <div className="shell-actions" data-tauri-drag-region>
-          {launchers}
-          <PageSearch pages={pages} onSelect={onSelect} />
-          <ProfileButton
-            communities={communities}
-            settingsSelected={selected === "settings"}
-            onSettings={() => onSelect("settings")}
-          />
+          {main && launchers}
+          {main && <PageSearch pages={pages} onSelect={onSelect} />}
+          {main && (
+            <ProfileButton
+              communities={communities}
+              settingsSelected={selected === "settings"}
+              onSettings={() => onSelect("settings")}
+            />
+          )}
         </div>
       </header>
       <div className="flex min-h-0 flex-1">

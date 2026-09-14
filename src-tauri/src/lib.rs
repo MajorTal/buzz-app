@@ -1,10 +1,15 @@
 mod notifications;
 mod terminal;
+mod windows;
 use notifications::{notification_show, Notifications};
 use tauri::Manager as _;
 use terminal::{
     terminal_close, terminal_close_owner, terminal_create_owner, terminal_read, terminal_resize,
     terminal_spawn, terminal_write, Terminals,
+};
+use windows::{
+    windows_drag_begin, windows_drag_end, windows_drag_move, windows_drop_tab, windows_layout,
+    windows_move_tab, Windows,
 };
 
 use buzzodz_plugins::{
@@ -155,14 +160,32 @@ async fn plugin_recover(
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let manager = Manager::from_env();
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Imports::default())
         .manage(Terminals::default())
         .manage(Notifications::default())
-        .manage(PluginManager(Manager::from_env()))
+        .manage(Windows::open(manager.as_ref().ok().map(Manager::root)))
+        .manage(PluginManager(manager))
+        .setup(|app| {
+            windows::restore(app.handle());
+            Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Only user/explicit closes change the layout; app exit keeps it for restore.
+            if matches!(event, tauri::WindowEvent::CloseRequested { .. }) {
+                windows::window_closing(window.app_handle(), window.label());
+            }
+        })
         .invoke_handler(tauri::generate_handler![
+            windows_layout,
+            windows_move_tab,
+            windows_drop_tab,
+            windows_drag_begin,
+            windows_drag_move,
+            windows_drag_end,
             notification_show,
             terminal_create_owner,
             terminal_spawn,

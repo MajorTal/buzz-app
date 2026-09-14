@@ -14,11 +14,12 @@ it("registers the desktop link fallback in the production native builder", () =>
   );
 });
 
-it("grants only HTTP(S) opening to the main window, without file or application access", () => {
+it("grants only HTTP(S) opening to app windows, without file or application access", () => {
   const capability = JSON.parse(
     read("../../src-tauri/capabilities/default.json"),
   );
-  expect(capability.windows).toEqual(["main"]);
+  // Detached tab windows render the same pages and need the same link fallback.
+  expect(capability.windows).toEqual(["main", "tabs-*"]);
   expect(capability.remote).toBeUndefined();
   const openerPermissions = capability.permissions.filter((permission) =>
     (typeof permission === "string"

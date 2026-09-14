@@ -192,6 +192,16 @@
   .shell-pages {
     @apply flex min-w-0 items-center gap-1 overflow-x-auto rounded-full border border-shell-edge/70 bg-surface/25 p-1;
     max-width: min(calc(100vw - 400px), 640px);
+    transition:
+      box-shadow 120ms ease-out,
+      background-color 120ms ease-out;
+  }
+  /* A tab dragged from another window is hovering this one. */
+  .shell-pages[data-drop-target] {
+    @apply bg-surface/70;
+    box-shadow:
+      0 0 0 2px var(--focus),
+      0 0 0 6px color-mix(in srgb, var(--focus) 25%, transparent);
   }
   .shell-actions {
     @apply flex items-center justify-end gap-2;

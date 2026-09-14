@@ -74,6 +74,45 @@ it.each([null, "", "system", "LIGHT", '{"mode":"dark"}', "light", "dark"])(
   },
 );
 
+it.each([
+  [null, "light", 1],
+  ["dark", "dark", 1],
+  ["dark", "dark", 1.5],
+  ["light", "light", 1],
+])(
+  "the drag ghost follows the stored appearance %j at scale %d",
+  (stored, mode, scale) => {
+    const b = browser(stored);
+    b.values.set(FONT_SCALE_KEY, String(scale));
+    const tab = { textContent: "" };
+    const hash = { fn: undefined as (() => void) | undefined };
+    const context = {
+      localStorage: b.storage,
+      document: { ...b.host.document, getElementById: () => tab },
+      location: { hash: "", search: "?title=Messages" },
+      URLSearchParams,
+      window: {
+        addEventListener: (_: string, fn: () => void) => {
+          hash.fn = fn;
+        },
+      },
+    };
+    runInNewContext(readFileSync("public/drag-ghost.js", "utf8"), context);
+    expect(b.root.dataset.colorMode).toBe(mode);
+    expect(b.root.style.setProperty).toHaveBeenLastCalledWith(
+      "--buzz-text-scale",
+      String(scale),
+    );
+    expect(tab.textContent).toBe("Messages");
+    // Reuse: a later show updates title and appearance together.
+    b.values.set(APPEARANCE_KEY, mode === "dark" ? "light" : "dark");
+    context.location.hash = "#title=Bestie&n=1";
+    hash.fn?.();
+    expect(tab.textContent).toBe("Bestie");
+    expect(b.root.dataset.colorMode).toBe(mode === "dark" ? "light" : "dark");
+  },
+);
+
 it("persists a choice, applies the document, notifies, and restores on a new lifetime", () => {
   const b = browser();
   const app = createAppearance(b.host);

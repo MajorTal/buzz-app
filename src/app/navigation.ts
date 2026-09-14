@@ -2,6 +2,7 @@ import {
   useEffect,
   useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react";
@@ -10,18 +11,27 @@ import { communityDestination } from "../features/communities/destination";
 import type { OpenTarget } from "../features/navigation/targets";
 import type { PageNavigation } from "../features/navigation/service";
 import type { OpenFailure } from "../features/navigation/controller";
+import { windowPages } from "../features/windows/service";
+import { followSavedCommunity } from "../features/windows/follow";
+import { orderPages } from "./shell/presentation";
 
 const channelsKey = "buzz.channels/channels";
 export function useAppNavigation(services: AppServices) {
   const navigation = services.navigation;
+  const host = services.windows;
   const state = useSyncExternalStore(navigation.subscribe, navigation.snapshot);
   const client = useSyncExternalStore(
     services.communities.subscribe,
     services.communities.snapshot,
   );
-  const pages = useSyncExternalStore(
+  const registry = useSyncExternalStore(
     services.pages.subscribe,
     services.pages.snapshot,
+  );
+  const windows = useSyncExternalStore(host.subscribe, host.snapshot);
+  const pages = useMemo(
+    () => windowPages(windows.layout, host.label, registry),
+    [windows.layout, host.label, registry],
   );
   const plugins = useSyncExternalStore(
     services.plugins.subscribe,
@@ -37,13 +47,21 @@ export function useAppNavigation(services: AppServices) {
         ? channelsKey
         : undefined;
   const page = pages.find((page) => page.key === pageKey);
+  // A target that belongs to another window (or Home/Settings outside main) is
+  // redirected to this window's first tab rather than reported as a failure.
+  const redirecting =
+    windows.status === "loading" ||
+    ((host.isMain || pages.length > 0) &&
+      ((!host.isMain &&
+        (target.kind === "home" || target.kind === "settings")) ||
+        (!!pageKey && !page && registry.some((item) => item.key === pageKey))));
   const membership = scope
     ? client.memberships.find(
         (item) => communityDestination(item.id).url === scope.communityOrigin,
       )
     : undefined;
   let failure: OpenFailure | undefined;
-  let waiting = false;
+  let waiting = redirecting;
   if (scope === null) {
     waiting = client.status === "loading" || client.selected !== null;
   } else if (scope) {
@@ -158,7 +176,7 @@ export function useAppNavigation(services: AppServices) {
     if (!waiting && !failure && target.kind === "home")
       request?.complete({ status: "opened" });
   }, [waiting, failure, target, request]);
-  const select = (key: string) => {
+  const select = (key: string, options?: { replace?: boolean }) => {
     const selectedClient = services.communities.snapshot();
     let destination: OpenTarget;
     if (key === "home") destination = { version: 1, kind: "home" };
@@ -182,8 +200,31 @@ export function useAppNavigation(services: AppServices) {
           : { scope: null }),
       };
     }
-    void navigation.open(destination);
+    void navigation.open(destination, options);
   };
+  const latest = useRef({ select, pageKey });
+  latest.current = { select, pageKey };
+  const first = orderPages(pages)[0]?.key;
+  useEffect(() => {
+    if (!redirecting || windows.status === "loading" || startup !== "ready")
+      return;
+    if (first) latest.current.select(first, { replace: true });
+    else if (host.isMain) latest.current.select("home", { replace: true });
+    // A detached window without pages shows its empty state instead.
+  }, [redirecting, windows.status, startup, first, host.isMain]);
+  useEffect(() => {
+    if (host.isMain || !client.viewer) return;
+    return followSavedCommunity(client.viewer, (selected) => {
+      const current = services.communities.snapshot();
+      if (selected === current.selected) return;
+      // A community joined in another window needs a relaunch of this one to follow.
+      if (selected && !current.memberships.some((m) => m.id === selected))
+        return;
+      services.communities.select(selected);
+      const { pageKey, select } = latest.current;
+      if (pageKey) select(pageKey, { replace: true });
+    });
+  }, [host.isMain, client.viewer, services]);
   return {
     state,
     target,
@@ -192,6 +233,7 @@ export function useAppNavigation(services: AppServices) {
     request,
     select,
     waiting,
+    redirecting,
     failure,
     selected: pageKey ?? target.kind,
     retry() {

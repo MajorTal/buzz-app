@@ -168,6 +168,10 @@ impl Manager {
             std::env::var("BUZZODZ_SAFE_MODE").as_deref() == Ok("1"),
         )
     }
+    /// The profile directory; other profile-scoped desktop state lives beside the registry.
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
     fn lock(&self) -> Result<File> {
         fs::create_dir_all(&self.root).map_err(err)?;
         let file = OpenOptions::new()

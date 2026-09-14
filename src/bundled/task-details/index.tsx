@@ -13,7 +13,8 @@ import type { ThreadView } from "../../features/relay/threads";
 import { useRelayConnection } from "../../features/relay/react";
 import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { parseTask, saveTask, taskKey, type Task } from "./data";
+import { parseTask, taskKey, type Task } from "./data";
+import { useFileStore } from "./file-store";
 import styles from "./task.module.css";
 
 export const inject = ["panels", "relay"];
@@ -147,20 +148,53 @@ function ResolvedTask({
       </p>
     );
   const storageKey = taskKey(scope, channel, snapshot.root.id);
-  return <TaskEditor key={storageKey} storageKey={storageKey} />;
+  return <FileTask key={storageKey} storageKey={storageKey} scope={scope} />;
 }
 
-export function TaskEditor({ storageKey }: { storageKey: string }) {
+function FileTask({
+  storageKey,
+  scope,
+}: {
+  storageKey: string;
+  scope: string;
+}) {
+  const file = useFileStore(scope);
+  return (
+    <>
+      {file.error && (
+        <p role="alert">
+          {file.error} <Button onClick={file.retry}>Retry</Button>
+        </p>
+      )}
+      {file.records ? (
+        <TaskEditor storageKey={storageKey} file={file} />
+      ) : (
+        <p role="status">Loading task file…</p>
+      )}
+    </>
+  );
+}
+
+function TaskEditor({
+  storageKey,
+  file,
+}: {
+  storageKey: string;
+  file: ReturnType<typeof useFileStore>;
+}) {
   const [loaded] = useState(() => {
     try {
-      const raw = localStorage.getItem(storageKey);
+      const raw = file.records?.[storageKey]?.value ?? null;
       return { raw, task: parseTask(raw), error: "" };
     } catch (e) {
       return { raw: null, task: undefined, error: String(e) };
     }
   });
   const [task, setTask] = useState(loaded.task);
-  const [previous, setPrevious] = useState(loaded.raw);
+  const [previous, setPrevious] = useState(
+    file.records?.[storageKey]?.revision ?? null,
+  );
+  const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState(loaded.error);
   if (!task)
@@ -189,15 +223,24 @@ export function TaskEditor({ storageKey }: { storageKey: string }) {
       data-buzz-ui=""
       className={styles.form}
       aria-label="Local task details"
-      onSubmit={(event) => {
+      onSubmit={async (event) => {
         event.preventDefault();
+        if (saving) return;
+        setSaving(true);
         try {
-          setPrevious(saveTask(localStorage, storageKey, previous, task));
+          const revision = await file.save(
+            storageKey,
+            JSON.stringify(task),
+            previous,
+          );
+          setPrevious(revision);
           setError("");
           setNotice("Saved on this device.");
         } catch (e) {
           setError(String(e));
           setNotice("");
+        } finally {
+          setSaving(false);
         }
       }}
     >
@@ -206,7 +249,7 @@ export function TaskEditor({ storageKey }: { storageKey: string }) {
         Task details
       </div>
       <p className="text-body-sm text-secondary">
-        Local only · Not shared with agents or other devices.
+        Saved on this Mac · Shared with local agent scripts, not the relay.
       </p>
       {field("Title", task.title, (title) => update({ ...task, title }))}
       <label className={styles.field}>
@@ -272,8 +315,56 @@ export function TaskEditor({ storageKey }: { storageKey: string }) {
         >
           Add branch
         </Button>
-        <Button type="submit" variant="primary">
+        <Button
+          type="submit"
+          variant="primary"
+          disabled={saving || !!file.error}
+        >
           Save locally
+        </Button>
+        <Button
+          disabled={saving || !previous || !!file.error}
+          onClick={async () => {
+            if (
+              !window.confirm(
+                "Delete task metadata? The conversation will remain.",
+              )
+            )
+              return;
+            setSaving(true);
+            try {
+              setPrevious(await file.save(storageKey, null, previous));
+              setTask(parseTask(null));
+              setError("");
+              setNotice("Task metadata deleted. Conversation unchanged.");
+            } catch (e) {
+              setError(String(e));
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          Delete task
+        </Button>
+        <Button
+          disabled={saving}
+          onClick={async () => {
+            setSaving(true);
+            try {
+              const records = await file.read();
+              setTask(parseTask(records[storageKey]?.value ?? null));
+              setPrevious(records[storageKey]?.revision ?? null);
+              setNotice("");
+              setError("");
+              file.retry();
+            } catch (e) {
+              setError(String(e));
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          Reload saved task
         </Button>
       </div>
       {error && (

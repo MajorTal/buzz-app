@@ -9,7 +9,11 @@ export function taskKey(scope: string, channel: string, root: string) {
   return `buzz.local-task.v1:${JSON.stringify([scope, channel, root])}`;
 }
 
-export function channelTasks(storage: Storage, scope: string, channel: string) {
+export function channelTasks(
+  storage: Pick<Storage, "getItem" | "key" | "length">,
+  scope: string,
+  channel: string,
+) {
   const prefix = `buzz.local-task.v1:${JSON.stringify([scope, channel]).slice(0, -1)},`;
   const tasks: { root: string; task: Task }[] = [];
   for (let i = 0; i < storage.length; i++) {
@@ -44,21 +48,4 @@ export function parseTask(raw: string | null): Task {
       "Stored task details are invalid. The saved record has not been changed.",
     );
   return value;
-}
-
-export function saveTask(
-  storage: Storage,
-  key: string,
-  previous: string | null,
-  task: Task,
-) {
-  if (!task.title.trim()) throw new Error("Enter a task title before saving.");
-  if (storage.getItem(key) !== previous)
-    throw new Error(
-      "Task details changed in another window. Reopen this panel before saving.",
-    );
-  const raw = JSON.stringify(task);
-  parseTask(raw);
-  storage.setItem(key, raw);
-  return raw;
 }

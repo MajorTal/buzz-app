@@ -19,6 +19,13 @@ export default defineConfig(async ({ command, mode }) => {
   const plugins: PluginOption[] = [react()];
   if (live)
     plugins.push(
+      (await import("./dev/task-store-api.mjs")).taskStorePlugin({
+        viewer: env.BUZZ_DEV_VIEWER,
+        file: env.BUZZ_TASK_FILE || undefined,
+      }),
+    );
+  if (live)
+    plugins.push(
       (await import("./dev/relay-broker.mjs")).relayBrokerPlugin({
         authorizedViewer: env.BUZZ_DEV_VIEWER,
         relayUrl: defaultRelay,

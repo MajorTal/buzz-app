@@ -1,6 +1,6 @@
 import { expect, it } from "vitest";
-import { isProject, markProject } from "./data";
-import { channelTasks, saveTask, taskKey } from "../task-details/data";
+import { isProject, projectKey } from "./data";
+import { channelTasks, taskKey } from "../task-details/data";
 
 it("marks only the selected channel and account/community and reads its real task records", () => {
   const values = new Map<string, string>();
@@ -14,7 +14,7 @@ it("marks only the selected channel and account/community and reads its real tas
     removeItem: (key: string) => values.delete(key),
     clear: () => values.clear(),
   } as Storage;
-  markProject(storage, "account/community", "voice");
+  storage.setItem(projectKey("account/community", "voice"), "true");
   expect(isProject(storage, "account/community", "voice")).toBe(true);
   expect(isProject(storage, "another/community", "voice")).toBe(false);
   expect(isProject(storage, "account/community", "other")).toBe(false);
@@ -24,7 +24,10 @@ it("marks only the selected channel and account/community and reads its real tas
     assignee: "",
     branches: [],
   };
-  saveTask(storage, taskKey("account/community", "voice", "root"), null, task);
+  storage.setItem(
+    taskKey("account/community", "voice", "root"),
+    JSON.stringify(task),
+  );
   expect(channelTasks(storage, "account/community", "voice")).toEqual([
     { root: "root", task },
   ]);
@@ -34,13 +37,13 @@ it("marks only the selected channel and account/community and reads its real tas
   expect(() => channelTasks(storage, "account/community", "voice")).toThrow();
 });
 
-it("propagates storage failures rather than reporting a saved project", () => {
+it("propagates storage failures rather than reporting a missing project", () => {
   const storage = {
-    setItem: () => {
+    getItem: () => {
       throw new Error("Storage denied");
     },
   } as unknown as Storage;
-  expect(() => markProject(storage, "scope", "channel")).toThrow(
+  expect(() => isProject(storage, "scope", "channel")).toThrow(
     "Storage denied",
   );
 });

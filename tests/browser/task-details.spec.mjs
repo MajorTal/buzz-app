@@ -1,5 +1,66 @@
-import { test, expect } from "./fixture.mjs";
+import { test as base, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { createServer } from "node:http";
+import { taskStoreHandler } from "../../dev/task-store-api.mjs";
+import { changeStore, putRecord, readStore } from "../../dev/task-store.mjs";
+
+const test = base.extend({
+  fileStore: async ({ app, page }, use) => {
+    const dir = await mkdtemp(join(tmpdir(), "buzz-task-browser-"));
+    const file = join(dir, "tasks.json");
+    const handler = taskStoreHandler({ viewer: app.viewer, file });
+    const server = createServer((req, res) =>
+      handler(req, res, () => {
+        res.writeHead(404);
+        res.end();
+      }),
+    );
+    await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const origin = `http://127.0.0.1:${server.address().port}`;
+    const route = async (page) =>
+      page.route("**/api/experiment/tasks?*", async (r) => {
+        const req = r.request();
+        const response = await fetch(
+          `${origin}${new URL(req.url()).pathname}${new URL(req.url()).search}`,
+          {
+            method: req.method(),
+            headers: { Origin: origin, "Content-Type": "application/json" },
+            ...(req.method() === "POST" ? { body: req.postData() } : {}),
+          },
+        );
+        await r.fulfill({
+          status: response.status,
+          contentType: "application/json",
+          body: await response.text(),
+        });
+      });
+    await route(page);
+    try {
+      await use({
+        read: async () => (await readStore(file)).records,
+        put: (key, value) =>
+          changeStore(
+            (records) =>
+              putRecord(
+                records,
+                key,
+                JSON.stringify(value),
+                records[key]?.revision ?? null,
+              ),
+            file,
+          ),
+        route,
+      });
+    } finally {
+      server.closeAllConnections();
+      await new Promise((resolve) => server.close(resolve));
+      await rm(dir, { recursive: true, force: true });
+    }
+  },
+});
 
 test.use({
   pluginFixtures: true,
@@ -11,6 +72,7 @@ test.use({
 test("Projects marks an existing channel locally, restores it, and links saved task threads", async ({
   page,
   app,
+  fileStore,
 }) => {
   await open(page, app);
   await page.evaluate(
@@ -49,6 +111,29 @@ test("Projects marks an existing channel locally, restores it, and links saved t
   await expect(task).toBeVisible();
   await page.reload();
   await expect(task).toBeVisible();
+  const key = Object.keys(await fileStore.read()).find((k) =>
+    k.startsWith("buzz.local-task.v1:"),
+  );
+  await fileStore.put(key, {
+    title: "Silent hangup",
+    description: "Updated by the agent",
+    assignee: "Another agent",
+    branches: [],
+  });
+  await expect(
+    page.getByText("Assigned to Another agent", { exact: true }),
+  ).toBeVisible();
+  // Clearing browser storage leaves the file intact and the Projects view recoverable.
+  await page.evaluate(() => {
+    for (const key of Object.keys(localStorage))
+      if (
+        key.startsWith("buzz.local-task.v1:") ||
+        key.startsWith("buzz.local-project.v1:")
+      )
+        localStorage.removeItem(key);
+  });
+  await page.reload();
+  await expect(task).toBeVisible();
   await task.click();
   await expect(
     page.locator(`[data-message-id="${app.exact.root.id}"]`).first(),
@@ -58,6 +143,7 @@ test("Projects marks an existing channel locally, restores it, and links saved t
 test("local task panel saves against a canonical thread and never publishes metadata", async ({
   page,
   app,
+  fileStore,
 }) => {
   await open(page, app);
   const launcher = page.getByRole("button", {
@@ -99,10 +185,8 @@ test("local task panel saves against a canonical thread and never publishes meta
     .fill("jtennant/status-sounds");
   await form.getByRole("button", { name: "Save locally" }).click();
   await expect(form.getByRole("status")).toHaveText("Saved on this device.");
-  const records = await page.evaluate(() =>
-    Object.entries(localStorage).filter(([key]) =>
-      key.startsWith("buzz.local-task.v1:"),
-    ),
+  const records = Object.entries(await fileStore.read()).filter(([key]) =>
+    key.startsWith("buzz.local-task.v1:"),
   );
   expect(records).toHaveLength(1);
   expect(records[0][0]).toContain(app.exact.root.id);
@@ -122,22 +206,43 @@ test("local task panel saves against a canonical thread and never publishes meta
   await expect(form.getByRole("textbox", { name: "Branch name" })).toHaveValue(
     "jtennant/status-sounds",
   );
-  await page.evaluate(() => {
-    const key = Object.keys(localStorage).find((key) =>
-      key.startsWith("buzz.local-task.v1:"),
-    );
-    const record = JSON.parse(localStorage.getItem(key));
-    localStorage.setItem(
-      key,
-      JSON.stringify({ ...record, title: "Changed elsewhere" }),
-    );
+  const key = records[0][0];
+  await fileStore.put(key, {
+    ...JSON.parse(records[0][1].value),
+    title: "Changed elsewhere",
   });
+  const conflict = page.waitForResponse(
+    (response) =>
+      response.url().includes("/api/experiment/tasks?") &&
+      response.status() === 409,
+  );
   await form.getByRole("button", { name: "Save locally" }).click();
-  await expect(form.getByRole("alert")).toContainText("another window");
-  await launcher.click();
-  await launcher.click();
+  await conflict;
+  await expect(form.getByRole("alert")).toContainText("changed elsewhere");
+  await form.getByRole("button", { name: "Reload saved task" }).click();
   await expect(
     form.getByRole("textbox", { name: "Title", exact: true }),
   ).toHaveValue("Changed elsewhere");
+  await form.getByRole("textbox", { name: "Assignee" }).fill("Another agent");
+  await form.getByRole("button", { name: "Save locally" }).click();
+  await expect(form.getByRole("status")).toHaveText("Saved on this device.");
+  expect(JSON.parse((await fileStore.read())[key].value).assignee).toBe(
+    "Another agent",
+  );
+  page.once("dialog", (dialog) => dialog.accept());
+  await form.getByRole("button", { name: "Delete task", exact: true }).click();
+  await expect(form.getByRole("status")).toContainText("metadata deleted");
+  expect((await fileStore.read())[key].value).toBeNull();
+  // This deliberately rejected save is the single expected network-console error.
+  const conflicts = app.report.consoleErrors.filter(
+    (message) =>
+      message ===
+      "Failed to load resource: the server responded with a status of 409 (Conflict)",
+  );
+  expect(conflicts).toHaveLength(1);
+  app.report.consoleErrors.splice(
+    app.report.consoleErrors.indexOf(conflicts[0]),
+    1,
+  );
   expect(app.report.publications).toHaveLength(publications);
 });

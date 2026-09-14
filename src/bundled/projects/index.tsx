@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import type { PluginModule } from "../../plugins/api";
 import type { RelayData } from "../../features/relay/service";
 import type { RelaySession } from "../../features/relay/session";
@@ -7,7 +7,8 @@ import { useChannelList, useRelayConnection } from "../../features/relay/react";
 import { FullPageSurface } from "../../shared/design-system/ui/FullPageSurface";
 import { Button } from "../../shared/design-system/ui/Button";
 import { channelTasks } from "../task-details/data";
-import { isProject, markProject } from "./data";
+import { isProject, projectKey } from "./data";
+import { useFileStore } from "../task-details/file-store";
 import styles from "./projects.module.css";
 
 export const inject = ["pages", "relay", "navigation"];
@@ -36,8 +37,8 @@ function ProjectsPage({
         <div className={`${styles.page} text-body`} data-buzz-ui="">
           <h1 className="text-title">Projects</h1>
           <p>
-            Local to this browser or app. Task details are not shared with
-            agents or other devices.
+            Saved on this Mac and shared with local agent scripts. Not synced to
+            the relay.
           </p>
           {connection.status === "ready" &&
           connection.scope &&
@@ -74,17 +75,9 @@ function ProjectList({
 }) {
   const list = useChannelList(session.channels);
   const [selected, select] = useState("");
-  const [, refresh] = useState(0);
+  const file = useFileStore(scope);
+  const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
-  useEffect(() => {
-    const changed = () => refresh((v) => v + 1);
-    window.addEventListener("storage", changed);
-    window.addEventListener("focus", changed);
-    return () => {
-      window.removeEventListener("storage", changed);
-      window.removeEventListener("focus", changed);
-    };
-  }, []);
   const channels = list.channels.filter(
     (c) => !c.archived && c.channelType !== "dm",
   );
@@ -95,10 +88,10 @@ function ProjectList({
   let readError = "";
   try {
     projects = channels
-      .filter((c) => isProject(localStorage, scope, c.id))
+      .filter((c) => isProject(file.storage, scope, c.id))
       .map((channel) => ({
         channel,
-        tasks: channelTasks(localStorage, scope, channel.id),
+        tasks: channelTasks(file.storage, scope, channel.id),
       }));
   } catch (e) {
     readError = String(e);
@@ -116,6 +109,12 @@ function ProjectList({
   };
   return (
     <>
+      {!file.records && <p role="status">Loading task file…</p>}
+      {file.error && (
+        <p role="alert">
+          {file.error} <Button onClick={file.retry}>Retry</Button>
+        </p>
+      )}
       {list.status === "error" ? (
         <div role="alert">
           Could not load channels.{" "}
@@ -131,16 +130,21 @@ function ProjectList({
       <form
         className={styles.add}
         aria-label="Add local project"
-        onSubmit={(event) => {
+        onSubmit={async (event) => {
           event.preventDefault();
-          if (!channels.some((c) => c.id === selected) || readError) return;
+          if (!channels.some((c) => c.id === selected) || readError || saving)
+            return;
+          setSaving(true);
           try {
-            markProject(localStorage, scope, selected);
+            const key = projectKey(scope, selected);
+            await file.save(key, "true", file.records?.[key]?.revision ?? null);
             setError("");
             select("");
-            refresh((v) => v + 1);
+            file.retry();
           } catch (e) {
             setError(String(e));
+          } finally {
+            setSaving(false);
           }
         }}
       >
@@ -162,12 +166,22 @@ function ProjectList({
         </label>
         <Button
           type="submit"
-          disabled={!channels.some((c) => c.id === selected) || !!readError}
+          disabled={
+            !file.records ||
+            saving ||
+            !!file.error ||
+            !channels.some((c) => c.id === selected) ||
+            !!readError
+          }
         >
           Mark as project locally
         </Button>
       </form>
-      {list.status === "ready" && !projects.length && !readError ? (
+      {file.records &&
+      list.status === "ready" &&
+      !projects.length &&
+      !readError &&
+      !file.error ? (
         <p>No local projects yet.</p>
       ) : null}
       {projects.map(({ channel, tasks }) => (

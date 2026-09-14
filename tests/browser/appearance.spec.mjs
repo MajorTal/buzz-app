@@ -13,12 +13,19 @@ async function expectMode(page, mode) {
   await expect(page.locator("html")).toHaveCSS("color-scheme", mode);
   await expect(page.locator("html")).toHaveCSS(
     "background-color",
-    mode === "dark" ? "rgb(17, 24, 29)" : "rgb(231, 240, 239)",
+    mode === "dark" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
   );
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    mode === "dark" ? "#11181d" : "#e7f0ef",
+    mode === "dark" ? /^#(?:000|000000)$/ : /^#(?:fff|ffffff)$/,
   );
+  await expect(page.locator(".shell-background")).toHaveCSS(
+    "background-image",
+    /linear-gradient/,
+  );
+  await expect(
+    page.getByRole("navigation", { name: "Pages", exact: true }),
+  ).toHaveCSS("backdrop-filter", /blur\(/);
 }
 
 test("Appearance changes and restores both modes, native keyboard controls, dialogs and narrow layout", async ({
@@ -41,10 +48,10 @@ test("Appearance changes and restores both modes, native keyboard controls, dial
       .locator(".shell-tab")
       .first()
       .evaluate((el) => getComputedStyle(el).color),
-  ).toBe("rgb(230, 237, 240)");
+  ).toBe("rgb(255, 255, 255)");
   await expect(button(page, "Appearance")).toHaveCSS(
     "background-color",
-    "rgb(27, 37, 43)",
+    "rgb(26, 26, 26)",
   );
   expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(
     "dark",
@@ -74,7 +81,7 @@ test("Appearance changes and restores both modes, native keyboard controls, dial
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveCSS(
       "background-color",
-      mode === "dark" ? "rgb(27, 37, 43)" : "rgb(255, 255, 255)",
+      mode === "dark" ? "rgb(26, 26, 26)" : "rgb(255, 255, 255)",
     );
     await page.keyboard.press("Escape");
   }
@@ -188,7 +195,7 @@ test("saved dark document paints before the application module is allowed to exe
     await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
     await expect(page.locator("html")).toHaveCSS(
       "background-color",
-      "rgb(17, 24, 29)",
+      "rgb(0, 0, 0)",
     );
     expect(await page.locator("#root").innerHTML()).toBe("");
     // Observe the painted document for two frames with the entire React bundle still withheld.
@@ -200,7 +207,7 @@ test("saved dark document paints before the application module is allowed to exe
     );
     await expect(page.locator("html")).toHaveCSS(
       "background-color",
-      "rgb(17, 24, 29)",
+      "rgb(0, 0, 0)",
     );
     // Pre-paint coverage must never start (then tear down) a relay session.
     expect(relayRequests).toEqual([]);
@@ -255,15 +262,15 @@ test("compiled host preserves compatibility utility meanings", async ({
     await page.getByRole("radio", { name: mode, exact: true }).check();
     await expect(page.locator("#primary-text")).toHaveCSS(
       "color",
-      mode === "Light" ? "rgb(10, 10, 10)" : "rgb(245, 245, 245)",
+      mode === "Light" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
     );
     await expect(page.locator("#primary-border")).toHaveCSS(
       "border-top-color",
-      mode === "Light" ? "rgb(232, 232, 232)" : "rgb(51, 51, 51)",
+      mode === "Light" ? "rgb(232, 232, 232)" : "rgb(35, 35, 35)",
     );
     await expect(page.locator("#old-primary")).toHaveCSS(
       "background-color",
-      mode === "Light" ? "rgb(49, 63, 67)" : "rgb(214, 227, 235)",
+      mode === "Light" ? "rgb(25, 25, 25)" : "rgb(199, 199, 199)",
     );
     await expect(page.locator("#old-primary")).toHaveCSS(
       "border-radius",
@@ -274,9 +281,9 @@ test("compiled host preserves compatibility utility meanings", async ({
         "font-family",
         /ui-monospace/,
       );
-      await expect(page.locator(`#${id}`)).not.toHaveCSS(
+      await expect(page.locator(`#${id}`)).toHaveCSS(
         "font-family",
-        /JetBrains/,
+        /JetBrains Mono/,
       );
     }
     await expect(page.locator("#new-mono")).toHaveCSS(

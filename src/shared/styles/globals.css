@@ -18,27 +18,44 @@
 /* Legacy utility compatibility. Prefix-specific primary avoids stealing the
    system's text-primary and border-primary meanings. */
 @theme inline {
+  --spacing: var(--space-1);
   /* Scale type, not Tailwind spacing (which is also rem-based). Plugins can
      consume these utilities or multiply custom font sizes by --buzz-text-scale. */
-  --text-xs: calc(0.75rem * var(--buzz-text-scale, 1));
-  --text-sm: calc(0.875rem * var(--buzz-text-scale, 1));
-  --text-base: calc(1rem * var(--buzz-text-scale, 1));
-  --text-lg: calc(1.125rem * var(--buzz-text-scale, 1));
-  --text-xl: calc(1.25rem * var(--buzz-text-scale, 1));
-  --text-2xl: calc(1.5rem * var(--buzz-text-scale, 1));
-  --text-3xl: calc(1.875rem * var(--buzz-text-scale, 1));
-  --text-4xl: calc(2.25rem * var(--buzz-text-scale, 1));
-  --text-5xl: calc(3rem * var(--buzz-text-scale, 1));
-  --text-6xl: calc(3.75rem * var(--buzz-text-scale, 1));
-  --text-7xl: calc(4.5rem * var(--buzz-text-scale, 1));
-  --text-8xl: calc(6rem * var(--buzz-text-scale, 1));
-  --text-9xl: calc(8rem * var(--buzz-text-scale, 1));
+  --text-xs: var(--text-caption);
+  --text-xs--line-height: var(--text-caption--line-height);
+  --text-sm: var(--text-body-sm);
+  --text-sm--line-height: var(--text-body-sm--line-height);
+  --text-base: var(--text-body);
+  --text-base--line-height: var(--text-body--line-height);
+  --text-lg: var(--text-body-lg);
+  --text-lg--line-height: var(--text-body-lg--line-height);
+  --text-xl: var(--text-body-lg);
+  --text-xl--line-height: var(--text-body-lg--line-height);
+  --text-2xl: var(--text-heading);
+  --text-2xl--line-height: var(--text-heading--line-height);
+  --text-3xl: var(--text-title);
+  --text-3xl--line-height: var(--text-title--line-height);
+  --text-4xl: var(--text-title);
+  --text-4xl--line-height: var(--text-title--line-height);
+  --text-5xl: var(--text-display);
+  --text-5xl--line-height: var(--text-display--line-height);
+  --text-6xl: var(--text-display);
+  --text-6xl--line-height: var(--text-display--line-height);
+  --text-7xl: var(--text-display);
+  --text-7xl--line-height: var(--text-display--line-height);
+  --text-8xl: var(--text-display);
+  --text-8xl--line-height: var(--text-display--line-height);
+  --text-9xl: var(--text-display);
+  --text-9xl--line-height: var(--text-display--line-height);
   --font-mono: var(--buzz-mono-family);
-  --font-legacy-sans:
-    Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI",
-    sans-serif;
-  --radius-3xl: var(--radius-card);
-  --radius-xl: var(--radius-legacy-control);
+  --font-legacy-sans: var(--font-sans);
+  --radius-xs: var(--radius-chip);
+  --radius-sm: var(--radius-chip);
+  --radius-md: var(--radius-chip);
+  --radius-lg: var(--radius-row);
+  --radius-xl: var(--radius-control);
+  --radius-2xl: var(--radius-panel);
+  --radius-3xl: var(--radius-panel);
   --color-ink: var(--text);
   --color-muted: var(--text-muted);
   --color-line: var(--border);
@@ -72,21 +89,30 @@
     overscroll-behavior: none;
   }
   * {
+    scrollbar-width: thin;
     box-sizing: border-box;
   }
+  :where(strong, b) {
+    font-weight: var(--type-weight-medium);
+  }
   body {
-    font-size: calc(1rem * var(--buzz-text-scale, 1));
+    font-size: var(--text-body);
+    line-height: var(--text-body--line-height);
+    letter-spacing: var(--text-body--letter-spacing);
     margin: 0;
   }
   button:not(:where([data-buzz-ui], [data-buzz-ui] *)) {
     cursor: pointer;
     border: 1px solid var(--border);
     border-radius: var(--radius-legacy-control);
-    padding: 8px 14px;
+    padding: var(--space-2) var(--space-control-inset);
     background: var(--surface);
     color: var(--accent);
     font: inherit;
-    font-size: calc(14px * var(--buzz-text-scale, 1));
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    letter-spacing: var(--text-label--letter-spacing);
+    font-weight: var(--text-label--font-weight);
   }
   input:not(:where([data-buzz-ui], [data-buzz-ui] *)),
   textarea:not(:where([data-buzz-ui], [data-buzz-ui] *)),
@@ -113,29 +139,29 @@
     cursor: default;
   }
   h1:not(:where([data-buzz-ui], [data-buzz-ui] *)) {
-    font-size: clamp(
-      calc(28px * var(--buzz-text-scale, 1)),
-      calc(4vw * var(--buzz-text-scale, 1)),
-      calc(40px * var(--buzz-text-scale, 1))
-    );
-    line-height: 1.2;
-    font-weight: 600;
-    margin: 8px 0 24px;
-    letter-spacing: -1px;
+    font-size: var(--text-title);
+    line-height: var(--text-title--line-height);
+    letter-spacing: var(--text-title--letter-spacing);
+    font-weight: var(--text-title--font-weight);
+    margin: var(--space-2) 0 var(--space-8);
   }
   h2:not(:where([data-buzz-ui], [data-buzz-ui] *)) {
-    font-size: calc(22px * var(--buzz-text-scale, 1));
-    margin: 28px 0 8px;
-    font-weight: 600;
+    font-size: var(--text-heading);
+    line-height: var(--text-heading--line-height);
+    letter-spacing: var(--text-heading--letter-spacing);
+    margin: var(--space-section-gap) 0 var(--space-4);
+    font-weight: var(--type-weight-medium);
   }
   h3:not(:where([data-buzz-ui], [data-buzz-ui] *)) {
-    font-size: calc(17px * var(--buzz-text-scale, 1));
-    margin: 0 0 6px;
-    font-weight: 600;
+    font-size: var(--text-label);
+    line-height: var(--text-label--line-height);
+    letter-spacing: var(--text-label--letter-spacing);
+    margin: 0 0 var(--space-1h);
+    font-weight: var(--type-weight-medium);
   }
   p:not(:where([data-buzz-ui], [data-buzz-ui] *)) {
-    line-height: 1.6;
-    margin: 8px 0;
+    line-height: var(--text-body--line-height);
+    margin: var(--space-2) 0;
     overflow-wrap: anywhere;
   }
 }
@@ -166,19 +192,9 @@
     outline-offset: 3px;
   }
   .shell-background {
-    background-image:
-      radial-gradient(circle, var(--shell-dot) 0.8px, transparent 1px),
-      var(--shell-image);
-    background-size:
-      36px 36px,
-      100% 100%,
-      100% 100%;
-    background-position:
-      16px 8px,
-      center,
-      center;
-    background-repeat: repeat, no-repeat, no-repeat;
+    background: var(--bg-app);
   }
+
   .shell-header {
     @apply grid h-14 shrink-0 items-center gap-3 px-4;
     grid-template-columns: minmax(0, 1fr) minmax(0, auto) minmax(0, 1fr);
@@ -187,10 +203,10 @@
     @apply flex min-w-0 items-center justify-start;
   }
   .shell-header-mac .shell-communities {
-    padding-left: 88px;
+    padding-left: var(--space-16);
   }
   .shell-pages {
-    @apply flex min-w-0 items-center gap-1 overflow-x-auto rounded-full border border-shell-edge/70 bg-surface/25 p-1;
+    @apply glass-primary flex min-w-0 items-center gap-1 overflow-x-auto rounded-full p-1;
     max-width: min(calc(100vw - 400px), 640px);
   }
   .shell-actions {
@@ -209,26 +225,26 @@
     }
   }
   .shell-tab {
-    @apply flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-0 bg-transparent px-4 py-1.5 text-sm leading-[calc(1rem*var(--buzz-text-scale,1))] text-ink hover:bg-surface/80 hover:text-ink;
+    @apply flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-0 bg-transparent px-4 py-1.5 text-label-sm text-ink hover:bg-neutral-3 hover:text-ink;
   }
   .shell-icon {
-    @apply flex size-9 items-center justify-center rounded-full border-0 bg-surface/50 p-0 text-ink hover:bg-surface hover:text-ink;
+    @apply glass-primary-interactive flex size-9 items-center justify-center rounded-full border-0 p-0 text-ink hover:text-ink;
   }
   .shell-tab[aria-current="page"],
   .shell-icon[aria-current="page"] {
     @apply bg-surface text-ink;
   }
   .muted {
-    @apply text-[length:calc(13px*var(--buzz-text-scale,1))] font-normal text-muted;
+    @apply text-body-sm text-muted;
   }
   .eyebrow {
-    @apply text-[length:calc(11px*var(--buzz-text-scale,1))] font-semibold tracking-[0.16em] text-muted;
+    @apply text-caption text-muted;
   }
   .actions {
     @apply flex flex-wrap gap-2;
   }
   .notice {
-    @apply my-5 rounded-2xl border border-warning-border bg-warning-surface p-5 text-sm text-warning;
+    @apply my-5 rounded-2xl border border-warning-border bg-warning-surface p-5 text-body-sm text-warning;
   }
   .error,
   .danger {
@@ -237,20 +253,18 @@
 }
 
 /* Host text preference feeds the system ramp exactly once; rem geometry is unchanged.
-   Legacy palette, canvas, radii and type remain deliberately independent until migrated. */
+   Compatibility names forward to shared values; the host owns appearance. */
 :root {
   --type-scale: var(--buzz-text-scale, 1);
-  --buzz-mono-family:
-    ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
-    "Courier New", monospace;
+  --buzz-mono-family: var(--font-system-mono);
   --default-mono-font-family: var(--buzz-mono-family);
 }
 
 @layer base {
   body {
     font-family: var(--font-legacy-sans);
-    line-height: 1.5;
-    letter-spacing: normal;
+    line-height: var(--text-body--line-height);
+    letter-spacing: var(--text-body--letter-spacing);
   }
 }
 
@@ -263,7 +277,7 @@
 @layer components {
   /* Components carry the boundary themselves, including portal roots. Product
      compositions can opt in with the same marker without copying component CSS. */
-  [data-buzz-ui] {
+  :where([data-buzz-ui]) {
     --buzz-mono-family: var(--font-system-mono);
     font-family: var(--font-sans);
     font-size: var(--text-body);
@@ -285,7 +299,7 @@
 }
 
 @layer base {
-  :where([data-buzz-ui]) :where(code, kbd, pre, samp) {
+  :where(code, kbd, pre, samp) {
     font-family: var(--buzz-mono-family);
     font-variant-numeric: tabular-nums;
   }
@@ -297,5 +311,5 @@
   background-color: var(--primary);
 }
 @utility bg-primary-hover {
-  background-color: color-mix(in oklab, var(--primary) 90%, transparent);
+  background-color: var(--neutral-12);
 }

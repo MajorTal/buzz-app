@@ -128,8 +128,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
     };
   };
   const emojiSearchStyle = await emojiSearch.evaluate(searchStyle);
-  expect(emojiSearchStyle.fontFamily).toMatch(/^Inter, /);
-  expect(emojiSearchStyle.fontFamily).not.toContain("Inter Variable");
+  expect(emojiSearchStyle.fontFamily).toMatch(/Inter Variable/);
   const emojiContentHeight = (
     await page.locator("em-emoji-picker").boundingBox()
   ).height;
@@ -236,7 +235,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   });
   await expect(draft).toHaveValue("");
   const composer = draft.locator("xpath=ancestor::form");
-  await expect(composer).toHaveCSS("border-top-color", "rgb(138, 148, 152)");
+  await expect(composer).toHaveCSS("border-top-color", "rgb(128, 128, 128)");
   await expect(composer).toHaveCSS("box-shadow", "none");
   await expect(search).toHaveAttribute("spellcheck", "false");
   await expect(search).toHaveAttribute("autocorrect", "off");

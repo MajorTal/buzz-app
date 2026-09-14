@@ -11,7 +11,8 @@
     padding: 0 var(--space-control-inset);
     background: transparent;
     color: var(--text-primary);
-    font: inherit;
+    font-family: inherit;
+    @apply text-label;
     cursor: pointer;
     transition:
       color var(--duration-state) var(--easing-state),
@@ -21,21 +22,22 @@
   }
 
   .buzz-button[data-size="compact"] {
+    @apply text-label-sm;
     height: var(--size-row);
     border-radius: var(--radius-row);
     padding-inline: var(--space-control-inset);
   }
 
   .buzz-button[data-variant="primary"] {
-    background: var(--purple-9);
-    color: var(--text-on-accent);
+    background: var(--neutral-11);
+    color: var(--neutral-1);
   }
 
   /* The accent's own hover step, not a fade. `opacity: 0.9` lightened the label
      along with the fill and composited an unnamed colour nothing could measure —
      the move check-color.mjs rejects everywhere else. */
   .buzz-button[data-variant="primary"]:hover:not([data-disabled]) {
-    background: var(--purple-10);
+    background: var(--neutral-12);
   }
 
   .buzz-button[data-variant="quiet"] {
@@ -104,12 +106,12 @@
   }
 
   .buzz-button[data-icon-variant="solid"] {
-    background: var(--purple-9);
-    color: var(--text-on-accent);
+    background: var(--neutral-11);
+    color: var(--neutral-1);
   }
 
   .buzz-button[data-icon-variant="solid"]:hover:not([data-disabled]) {
-    background: var(--purple-10);
+    background: var(--neutral-12);
   }
 
   /* A gentle acknowledgement/submit action on a quiet surface. This cannot be
@@ -187,7 +189,7 @@
   }
 
   html[data-keyboard-navigation] .buzz-preview-card-example:focus-visible {
-    outline: 2px solid var(--purple-8);
+    outline: 2px solid var(--text-primary);
     outline-offset: 2px;
   }
 
@@ -557,7 +559,7 @@
   }
 
   html[data-keyboard-navigation] .search-field input:focus-visible {
-    outline: 2px solid var(--purple-8);
+    outline: 2px solid var(--text-primary);
     outline-offset: 2px;
   }
 
@@ -664,7 +666,7 @@
   html[data-keyboard-navigation] .buzz-button:focus-visible,
   html[data-keyboard-navigation] .navigation-item:focus-visible,
   html[data-keyboard-navigation] .buzz-tabs-tab:focus-visible {
-    outline: 2px solid var(--purple-8);
+    outline: 2px solid var(--text-primary);
     outline-offset: 2px;
   }
 
@@ -745,7 +747,7 @@
     background: var(--neutral-3);
   }
   .buzz-accordion-trigger:focus-visible {
-    outline: 2px solid var(--purple-8);
+    outline: 2px solid var(--text-primary);
     outline-offset: 2px;
   }
   .buzz-accordion-trigger[aria-expanded="true"] > svg {
@@ -817,7 +819,7 @@
     cursor: not-allowed;
   }
   html[data-keyboard-navigation] .buzz-switch-control:focus-visible {
-    outline: 2px solid var(--purple-8);
+    outline: 2px solid var(--text-primary);
     outline-offset: 2px;
   }
 }

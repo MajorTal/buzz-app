@@ -495,8 +495,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
           ? "rgb(66, 66, 66) 0px 0px 0px 2px"
           : "rgb(206, 206, 206) 0px 0px 0px 2px",
       );
-      await expect(search).toHaveCSS("font-family", /^Inter, /);
-      await expect(search).not.toHaveCSS("font-family", /Inter Variable/);
+      await expect(search).toHaveCSS("font-family", /Inter Variable/);
       await expect(search).toHaveValue("party");
       await expect(search).toBeFocused();
       expect(await searchNode.evaluate((node) => node.isConnected)).toBe(true);

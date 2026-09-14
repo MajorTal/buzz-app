@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 // is delayed, substituted or interpreted as delivery by this observer.
 export function brokerEvidence(report, retiredStreams) {
   const publications = [];
+  const retirements = new Map();
   report.presencePublicationResponses = publications;
   return {
     middleware(req, res, next) {
@@ -16,6 +17,7 @@ export function brokerEvidence(report, retiredStreams) {
       report.brokerRequests.push(record);
       const url = new URL(req.url, `http://${req.headers.host}`);
       const publishing = url.pathname.endsWith("/stream-presence-publish");
+      const retiredAtArrival = publishing ? new Map(retirements) : undefined;
       const streaming = url.pathname.endsWith("/stream");
       let streamId;
       if (streaming) {
@@ -35,12 +37,12 @@ export function brokerEvidence(report, retiredStreams) {
           try {
             record.streamId = JSON.parse(body).streamId;
           } catch {
-            // Invalid/unreadable request evidence cannot classify a 503.
+            // Invalid/unreadable request evidence cannot classify an error.
           }
         });
         const end = res.end;
         res.end = function (chunk, ...args) {
-          if (this.statusCode === 503) {
+          if (this.statusCode === 404 || this.statusCode === 503) {
             let value;
             try {
               value = JSON.parse(String(chunk));
@@ -51,13 +53,26 @@ export function brokerEvidence(report, retiredStreams) {
               url: url.href,
               streamId: record.streamId,
               at: performance.now(),
-              status: 503,
+              status: this.statusCode,
               body: value ?? null,
               disposed:
+                this.statusCode === 503 &&
                 /^[0-9a-f]{32}$/.test(record.streamId ?? "") &&
                 value?.error === "Presence publication unconfirmed" &&
                 value?.code === "presence_owner_disposed" &&
                 Object.keys(value).length === 2,
+              // Retirement must precede arrival, not merely the eventual response
+              // or fixture teardown. A different relay's stream cannot classify.
+              retired:
+                this.statusCode === 404 &&
+                /^[0-9a-f]{32}$/.test(record.streamId ?? "") &&
+                retiredAtArrival.get(record.streamId) ===
+                  url.pathname.replace(
+                    /\/stream-presence-publish$/,
+                    "/stream",
+                  ) &&
+                value?.error === "Live stream no longer available" &&
+                Object.keys(value).length === 1,
             });
           }
           return end.call(this, chunk, ...args);
@@ -74,37 +89,48 @@ export function brokerEvidence(report, retiredStreams) {
       });
       res.once("close", () => {
         record.close = snapshot();
-        if (streaming && streamId) retiredStreams.add(streamId);
-        // A destroyed/truncated 503 without end() is still an unclassified failure.
-        if (publishing && res.statusCode === 503 && !res.writableEnded)
+        if (streaming && /^[0-9a-f]{32}$/.test(streamId ?? "")) {
+          retiredStreams.add(streamId);
+          retirements.set(streamId, url.pathname);
+        }
+        // A destroyed/truncated error without end() remains unclassified.
+        if (
+          publishing &&
+          [404, 503].includes(res.statusCode) &&
+          !res.writableEnded
+        )
           publications.push({
             url: url.href,
             streamId: record.streamId,
-            status: 503,
+            status: res.statusCode,
             disposed: false,
+            retired: false,
           });
       });
       next();
     },
     assertPublications() {
       assert.deepEqual(
-        publications.filter((item) => !item.disposed),
+        publications.filter((item) => !item.disposed && !item.retired),
         [],
-        "Unclassified presence publication 503",
+        "Unclassified presence publication 404/503",
       );
     },
     consoleFilter() {
       // Each classified response permits at most one endpoint-qualified console
       // diagnostic. Independent publication validation prevents same-URL masking.
-      const remaining = publications.filter((item) => item.disposed);
+      const remaining = publications.filter(
+        (item) => item.disposed || item.retired,
+      );
       return (message, location) => {
-        if (
-          !/^Failed to load resource: the server responded with a status of 503/.test(
+        const match =
+          /^Failed to load resource: the server responded with a status of (404|503)\b/.exec(
             message,
-          )
-        )
-          return false;
-        const index = remaining.findIndex((item) => item.url === location);
+          );
+        if (!match) return false;
+        const index = remaining.findIndex(
+          (item) => item.url === location && item.status === Number(match[1]),
+        );
         if (index < 0) return false;
         remaining.splice(index, 1);
         return true;

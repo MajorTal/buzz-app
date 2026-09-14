@@ -177,7 +177,7 @@ test("actual fixture fails an unclassified 503 even with no console event", asyn
     fixture(async (app) => {
       await publication(app, false);
     }),
-  ).rejects.toThrow("Unclassified presence publication 503");
+  ).rejects.toThrow("Unclassified presence publication 404/503");
 });
 
 test("same endpoint disposal console cannot hide a separate unclassified response", async () => {
@@ -186,7 +186,7 @@ test("same endpoint disposal console cannot hide a separate unclassified respons
       console503(page, await publication(app, true));
       await publication(app, false);
     }),
-  ).rejects.toThrow("Unclassified presence publication 503");
+  ).rejects.toThrow("Unclassified presence publication 404/503");
 });
 
 test("one classified response permits one console diagnostic", async () => {
@@ -232,8 +232,195 @@ test.each([
   req.emit("end");
   res.end(body);
   expect(() => evidence.assertPublications()).toThrow(
-    "Unclassified presence publication 503",
+    "Unclassified presence publication 404/503",
   );
+});
+
+async function retiredPublication(app, community = "primary") {
+  const headers = { Origin: app.origin, "Content-Type": "application/json" };
+  const controller = new AbortController();
+  let streamId;
+  try {
+    const response = await fetch(`${app.origin}/api/relay/primary/stream`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ channels: [] }),
+      signal: controller.signal,
+    });
+    expect(response.status).toBe(200);
+    streamId = response.headers.get("x-buzz-live-id");
+  } finally {
+    controller.abort();
+  }
+  await until(() =>
+    app.report.brokerRequests.some(
+      (record) => record.url.endsWith("/stream") && record.close,
+    ),
+  );
+  const endpoint = `${app.origin}/api/relay/${community}/stream-presence-publish`;
+  const response = await fetch(endpoint, {
+    method: "POST",
+    headers,
+    body: JSON.stringify({ streamId, status: "online" }),
+    signal: AbortSignal.timeout(3000),
+  });
+  expect(response.status).toBe(404);
+  expect(await response.json()).toEqual({
+    error: "Live stream no longer available",
+  });
+  expect(app.report.presencePublications).toEqual([]);
+  return { endpoint, streamId };
+}
+
+const console404 = (page, url) =>
+  page.emit("console", {
+    type: () => "error",
+    text: () =>
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+    location: () => ({ url }),
+  });
+
+test.each([false, true])(
+  "actual fixture accounts an already-retired publication 404 (console %s)",
+  async (console) => {
+    await fixture(async (app, page) => {
+      const { endpoint, streamId } = await retiredPublication(app);
+      expect(app.report.presencePublicationResponses).toEqual([
+        expect.objectContaining({
+          url: endpoint,
+          streamId,
+          status: 404,
+          disposed: false,
+          retired: true,
+          body: { error: "Live stream no longer available" },
+        }),
+      ]);
+      if (console) console404(page, endpoint);
+    });
+  },
+);
+
+test("retirement in another community cannot classify a real publication 404", async () => {
+  await expect(
+    fixture(async (app) => {
+      await retiredPublication(app, "secondary");
+    }),
+  ).rejects.toThrow("Unclassified presence publication 404/503");
+});
+
+test.each([404, 503])(
+  "retired 404 console cannot hide an unclassified %s at the same endpoint",
+  async (status) => {
+    await expect(
+      fixture(async (app, page) => {
+        const { endpoint } = await retiredPublication(app);
+        console404(page, endpoint);
+        if (status === 503) await publication(app, false);
+        else {
+          const response = await fetch(endpoint, {
+            method: "POST",
+            headers: { Origin: app.origin, "Content-Type": "application/json" },
+            body: JSON.stringify({
+              streamId: "0".repeat(32),
+              status: "online",
+            }),
+          });
+          expect(response.status).toBe(404);
+          await response.text();
+        }
+      }),
+    ).rejects.toThrow("Unclassified presence publication 404/503");
+  },
+);
+
+test.each(["duplicate", "wrong status", "wrong endpoint"])(
+  "retired publication accounting rejects %s console evidence",
+  async (failure) => {
+    await expect(
+      fixture(async (app, page) => {
+        const { endpoint } = await retiredPublication(app);
+        if (failure === "duplicate") {
+          console404(page, endpoint);
+          console404(page, endpoint);
+        } else if (failure === "wrong status") console503(page, endpoint);
+        else console404(page, `${endpoint}/other`);
+      }),
+    ).rejects.toThrow();
+  },
+);
+
+// The real fixture tests above prove production wiring. These controlled response
+// boundaries cover impossible/malformed evidence without altering broker behavior.
+test.each([
+  { name: "current stream", retirement: "never" },
+  { name: "unknown stream", requestId: "b".repeat(32) },
+  { name: "malformed stream ID", requestId: "bad", streamId: "bad" },
+  { name: "different relay", streamPath: "/api/relay/secondary/stream" },
+  { name: "retirement during upload", retirement: "after arrival" },
+  { name: "retirement after response", retirement: "after response" },
+  { name: "missing body", body: undefined },
+  { name: "malformed JSON", body: "not-json" },
+  { name: "wrong error", body: JSON.stringify({ error: "other" }) },
+  {
+    name: "extra field",
+    body: JSON.stringify({
+      error: "Live stream no longer available",
+      accepted: true,
+    }),
+  },
+  { name: "truncated response", truncated: true },
+])("publication 404 fails closed for $name", (options) => {
+  const report = { brokerRequests: [] };
+  const evidence = brokerEvidence(report, new Set());
+  const streamId = options.streamId ?? "a".repeat(32);
+  const request = (url) => {
+    const req = new EventEmitter();
+    req.url = url;
+    req.headers = { host: "127.0.0.1:1234" };
+    return req;
+  };
+  const response = () => {
+    const res = new EventEmitter();
+    res.statusCode = 200;
+    res.writeHead = () => {};
+    res.end = () => {};
+    res.getHeader = () => undefined;
+    return res;
+  };
+  const stream = response();
+  evidence.middleware(
+    request(options.streamPath ?? "/api/relay/primary/stream"),
+    stream,
+    () => {},
+  );
+  stream.writeHead(200, { "X-Buzz-Live-ID": streamId });
+  const retirement = options.retirement ?? "before arrival";
+  if (retirement === "before arrival") stream.emit("close");
+  const req = request("/api/relay/primary/stream-presence-publish");
+  const res = response();
+  evidence.middleware(req, res, () => {});
+  if (retirement === "after arrival") stream.emit("close");
+  req.emit("data", JSON.stringify({ streamId: options.requestId ?? streamId }));
+  req.emit("end");
+  res.statusCode = 404;
+  if (options.truncated) res.emit("close");
+  else
+    res.end(
+      Object.hasOwn(options, "body")
+        ? options.body
+        : JSON.stringify({ error: "Live stream no longer available" }),
+    );
+  if (retirement === "after response") stream.emit("close");
+  expect(report.presencePublicationResponses).toHaveLength(1);
+  expect(() => evidence.assertPublications()).toThrow(
+    "Unclassified presence publication 404/503",
+  );
+  expect(
+    evidence.consoleFilter()(
+      "Failed to load resource: the server responded with a status of 404 (Not Found)",
+      "http://127.0.0.1:1234/api/relay/primary/stream-presence-publish",
+    ),
+  ).toBe(false);
 });
 
 test("passive completion evidence preserves Server-Timing and distinguishes an unfinished close", async () => {

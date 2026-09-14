@@ -2,7 +2,13 @@ import { fixtureRelayUrl, fixtureAliases } from "../tests/relay-config.ts";
 import { createServer } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
 import { test, expect, vi } from "vitest";
-import { getPublicKey } from "nostr-tools";
+import {
+  getPublicKey,
+  generateSecretKey,
+  finalizeEvent,
+  nip44,
+} from "nostr-tools";
+import { createRelaySession } from "../src/features/relay/session.ts";
 import { relayBrokerPlugin } from "./relay-broker.mjs";
 import { connectBrokerTransport } from "../src/features/relay/transport.ts";
 
@@ -32,7 +38,7 @@ async function harness(
           if (kind === "AUTH")
             queueMicrotask(() => this.receive(["OK", id.id, true]));
           if (kind !== "REQ") return;
-          requests.push({ at: performance.now(), filter, socket });
+          requests.push({ at: performance.now(), id, filter, socket });
           const refused = requests.length === refuseAt;
           queueMicrotask(() =>
             this.receive(refused ? ["CLOSED", id, reason] : ["EOSE", id]),
@@ -65,6 +71,7 @@ async function harness(
   const base = `http://127.0.0.1:${server.address().port}`;
   const controllers = [];
   return {
+    key,
     sockets,
     requests,
     base,
@@ -153,6 +160,123 @@ test("real HTTP accepts the 1022-channel body and rejects invalid/oversized/orig
     await h.close();
   }
 });
+
+test.each([null, 1])(
+  "maximum channel interests survive observer startup and toggles (initial %s) through the real broker/browser stream",
+  async (initialObserver) => {
+    const h = await harness();
+    const nativeFetch = globalThis.fetch;
+    let traffic;
+    try {
+      const fetcher = vi.fn((input, init) =>
+        nativeFetch(input, {
+          ...init,
+          headers: {
+            ...init?.headers,
+            ...(init?.method === "POST" ? { Origin: h.base } : {}),
+          },
+        }),
+      );
+      vi.stubGlobal("fetch", fetcher);
+      const transport = await connectBrokerTransport(h.base);
+      const states = [],
+        received = [];
+      let snapshot;
+      traffic = transport.subscribe({
+        receive(events) {
+          received.push(...events);
+        },
+        established() {},
+        denied() {},
+        state(value) {
+          snapshot = value;
+          states.push(value);
+        },
+      });
+      const ids = Array.from(
+        { length: 1024 },
+        (_, i) => `channel-${String(i).padStart(4, "0")}`,
+      );
+      traffic.observe(initialObserver);
+      traffic.update(ids);
+      const streamPosts = () =>
+        fetcher.mock.calls.filter(([url]) => String(url).endsWith("/stream"))
+          .length;
+      let sockets, posts;
+      for (const [phase, observer] of [
+        initialObserver,
+        initialObserver === null ? 1 : null,
+        initialObserver,
+      ].entries()) {
+        traffic.observe(observer);
+        const enabled = observer !== null;
+        await until(
+          () =>
+            snapshot?.status === "connected" &&
+            snapshot.routes.length === 1026 + Number(enabled) &&
+            snapshot.routes.some(
+              (r) => r.channelId === ids[0] && r.status === "live",
+            ) &&
+            (!enabled ||
+              snapshot.routes.some(
+                (r) => r.id === "observer" && r.status === "live",
+              )),
+        );
+        expect(
+          snapshot.routes
+            .filter((r) => r.channelId)
+            .map((r) => r.channelId)
+            .sort(),
+        ).toEqual(ids);
+        expect(
+          snapshot.routes
+            .filter((r) => r.status === "limited")
+            .map((r) => r.channelId),
+        ).toEqual(ids.slice(enabled ? 1021 : 1022));
+        // Status retains every interest, but only 1024 routes may have a wire.
+        expect(
+          snapshot.routes.filter((r) => r.status !== "limited"),
+        ).toHaveLength(1024);
+        expect(snapshot.routes.some((r) => r.id === "observer")).toBe(enabled);
+        sockets ??= h.sockets.length;
+        posts ??= streamPosts();
+        expect(h.sockets).toHaveLength(sockets);
+        expect(streamPosts()).toBe(posts);
+
+        const socket = h.sockets.at(-1);
+        for (const [kind, tags] of [
+          [9, [["h", ids[0]]]],
+          [0, []],
+          [44100, [["p", getPublicKey(h.key)]]],
+        ]) {
+          const route = h.requests.find(
+            (r) => r.socket === socket && r.filter.kinds.includes(kind),
+          );
+          expect(route).toBeDefined();
+          const event = finalizeEvent(
+            {
+              kind,
+              tags,
+              created_at: Math.floor(Date.now() / 1000),
+              content: `ordinary traffic in observer phase ${phase}`,
+            },
+            h.key,
+          );
+          await socket.receive(["EVENT", route.id, event]);
+          await until(() => received.some((r) => r.id === event.id));
+        }
+        expect(received).toHaveLength((phase + 1) * 3);
+        expect(
+          states.filter((s) => s.status === "retrying" || s.status === "error"),
+        ).toEqual([]);
+      }
+    } finally {
+      traffic?.dispose();
+      vi.unstubAllGlobals();
+      await h.close();
+    }
+  },
+);
 
 test.each([
   "rate-limited: quota exceeded; retry in 0s",
@@ -370,6 +494,126 @@ test("priority control cannot allocate interests or bypass owner, origin, commun
     expect((await control({ streamId, channels: ["a"] })).status).toBe(404);
     expect(h.sockets).toHaveLength(1);
   } finally {
+    await h.close();
+  }
+});
+
+test("real signed/encrypted WS → host decode → SSE → session activity; demand and clear fence without replacing chat", async () => {
+  const h = await harness();
+  const nativeFetch = globalThis.fetch;
+  let owner, release;
+  try {
+    vi.stubGlobal("fetch", (input, init) =>
+      nativeFetch(input, {
+        ...init,
+        headers: {
+          ...init?.headers,
+          ...(init?.method === "POST" ? { Origin: h.base } : {}),
+        },
+      }),
+    );
+    const transport = await connectBrokerTransport(h.base);
+    expect(transport.agentActivity).toBe(true);
+    owner = createRelaySession(transport, { prepared: true });
+    release = owner.session.agentActivity.activate();
+    await until(
+      () => owner.session.agentActivity.snapshot().status === "listening",
+    );
+    const routes = () =>
+      h.requests.filter((r) => r.filter.kinds.includes(24200));
+    const first = routes().at(-1);
+    const socketCount = h.sockets.length;
+    const globals = h.requests.filter(
+      (r) => !r.filter.kinds.includes(24200),
+    ).length;
+    const agent = generateSecretKey(),
+      sender = getPublicKey(agent),
+      viewer = getPublicKey(h.key);
+    const encrypt = (
+      raw,
+      tags = [
+        ["p", viewer],
+        ["agent", sender],
+        ["frame", "telemetry"],
+      ],
+    ) =>
+      finalizeEvent(
+        {
+          kind: 24200,
+          created_at: Math.floor(Date.now() / 1000),
+          tags,
+          content: nip44.v2.encrypt(
+            JSON.stringify(raw),
+            nip44.v2.utils.getConversationKey(agent, viewer),
+          ),
+        },
+        agent,
+      );
+    const raw = {
+      kind: "turn_started",
+      seq: 1,
+      timestamp: new Date().toISOString(),
+      channelId: null,
+      sessionId: null,
+      turnId: "synthetic-turn",
+      payload: { text: "inert <script>raw</script>" },
+    };
+    const event = encrypt(raw);
+    const view = owner.session.observe([{ kinds: [24200], limit: 1 }]);
+    await first.socket.receive(["EVENT", first.id, event]);
+    await until(
+      () => owner.session.agentActivity.snapshot().records.length === 1,
+    );
+    expect(owner.session.agentActivity.snapshot().records[0].plaintext).toBe(
+      JSON.stringify(raw),
+    );
+    expect(owner.session.agentActivity.snapshot().turns[0].state).toBe(
+      "working",
+    );
+    expect(view.snapshot().events).toEqual([]);
+    // Wrong direction is signed/encrypted but must never become telemetry.
+    await first.socket.receive([
+      "EVENT",
+      first.id,
+      encrypt(raw, [
+        ["p", viewer],
+        ["agent", sender],
+        ["frame", "control"],
+      ]),
+    ]);
+    await delay(20);
+    expect(owner.session.agentActivity.snapshot().records).toHaveLength(1);
+    await owner.clearCache();
+    expect(owner.session.agentActivity.snapshot().records).toHaveLength(0);
+    await until(() => routes().length === 2);
+    await first.socket.receive(["EVENT", first.id, event]);
+    await delay(20);
+    expect(owner.session.agentActivity.snapshot().records).toHaveLength(0);
+    const second = routes().at(-1);
+    await until(
+      () => owner.session.agentActivity.snapshot().status === "listening",
+    );
+    await second.socket.receive([
+      "EVENT",
+      second.id,
+      encrypt({ ...raw, kind: "turn_completed" }),
+    ]);
+    await until(
+      () => owner.session.agentActivity.snapshot().records.length === 1,
+    );
+    expect(owner.session.agentActivity.snapshot().turns[0].state).toBe("ended");
+    release();
+    expect(owner.session.agentActivity.snapshot().records).toHaveLength(0);
+    await delay(30);
+    expect(h.sockets).toHaveLength(socketCount);
+    expect(
+      h.requests.filter((r) => !r.filter.kinds.includes(24200)),
+    ).toHaveLength(globals);
+    view.dispose();
+  } finally {
+    release?.();
+    owner?.dispose();
+    vi.unstubAllGlobals();
     await h.close();
   }
 });

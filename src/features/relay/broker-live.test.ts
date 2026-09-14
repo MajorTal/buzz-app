@@ -1,5 +1,6 @@
 // Regression controls contributed by Brain; see WS_RETRY_REVIEW_2026_09_09.
 import { assert, afterEach, expect, it, vi } from "vitest";
+import { keypair, message } from "./testing";
 import { connectBrokerTransport } from "./transport";
 function required<T>(value: T | undefined): T {
   assert.exists(value);
@@ -38,7 +39,7 @@ function fixture() {
             live: true,
           }),
         );
-      if (url.endsWith("/stream-retry")) {
+      if (url.endsWith("/stream-retry") || url.endsWith("/stream-observer")) {
         const d = deferred<Response>();
         controls.push(d);
         signals.push(init.signal as AbortSignal);
@@ -67,10 +68,13 @@ function fixture() {
       }),
     );
   }
-  function publish(index: number) {
+  function publish(
+    index: number,
+    snapshot: unknown = { status: "connected", routes: [] },
+  ) {
     required(bodyControllers[index]).enqueue(
       new TextEncoder().encode(
-        'event: state\ndata: {"status":"connected","routes":[]}\n\n',
+        `event: state\ndata: ${JSON.stringify(snapshot)}\n\n`,
       ),
     );
   }
@@ -81,16 +85,50 @@ function fixture() {
     snapshots,
     accept,
     publish,
+    frame(kind: string, value: unknown) {
+      required(bodyControllers[0]).enqueue(
+        new TextEncoder().encode(
+          `event: ${kind}\ndata: ${JSON.stringify(value)}\n\n`,
+        ),
+      );
+    },
     callbacks: {
       state(s: unknown) {
         snapshots.push(s);
       },
-      receive() {},
+      receive: vi.fn(),
       established() {},
       denied() {},
     },
   };
 }
+it("rejects status snapshots beyond channel interests plus both globals and observer", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const t = await connectBrokerTransport();
+  const owner = required(t.subscribe)(f.callbacks);
+  try {
+    f.accept(0);
+    await tick();
+    f.publish(0, {
+      status: "connected",
+      routes: Array.from({ length: 1028 }, (_, i) => ({
+        id: `route-${i}`,
+        status: "pending",
+        replay: "unknown",
+      })),
+    });
+    await tick();
+    expect(f.snapshots.at(-1)).toEqual({
+      status: "retrying",
+      routes: [],
+      error: "Invalid live broker status",
+    });
+  } finally {
+    owner.dispose();
+  }
+});
+
 it("pre-header clicks preserve in-progress POST; duplicate controls coalesce", async () => {
   vi.useFakeTimers();
   const f = fixture();
@@ -161,3 +199,87 @@ for (const finish of ["replacement", "dispose"] as const)
         owner.dispose();
       }
     });
+
+it("late observer 404 from a retired stream cannot interrupt its replacement", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const t = await connectBrokerTransport();
+  const owner = required(t.subscribe)(f.callbacks);
+  try {
+    f.accept(0);
+    await tick();
+    f.publish(0);
+    await tick();
+    required(owner.observe)(1);
+    await tick();
+    expect(f.controls).toHaveLength(1);
+    owner.update(["a"]);
+    f.accept(1);
+    await tick();
+    f.publish(1);
+    await tick();
+    expect(required(f.signals[0]).aborted).toBe(true);
+    const before = f.snapshots.length;
+    required(f.controls[0]).resolve(new Response(null, { status: 404 }));
+    await tick();
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(f.snapshots).toHaveLength(before);
+    expect(f.headers).toHaveLength(2);
+    required(owner.observe)(2);
+    await tick();
+    expect(f.controls).toHaveLength(2);
+    expect(required(f.signals[1]).aborted).toBe(false);
+    required(f.controls[1]).resolve(new Response(null, { status: 200 }));
+    await tick();
+  } finally {
+    owner.dispose();
+  }
+});
+
+it("preserves validated replay/live provenance through production broker transport; legacy traffic stays unknown", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const t = await connectBrokerTransport();
+  const owner = required(t.subscribe)(f.callbacks);
+  try {
+    f.accept(0);
+    await tick();
+    const event = message(keypair(), "a", "incoming", 1700000000);
+    f.frame("message", event);
+    await tick();
+    expect(f.callbacks.receive).toHaveBeenLastCalledWith([event]);
+    for (const phase of ["replay", "live"]) {
+      f.frame("traffic", { event, provenance: { phase, channelId: "a" } });
+      await tick();
+      expect(f.callbacks.receive).toHaveBeenLastCalledWith([event], {
+        phase,
+        channelId: "a",
+      });
+    }
+    expect(f.callbacks.receive).toHaveBeenCalledTimes(3);
+  } finally {
+    owner.dispose();
+  }
+});
+it.each([undefined, { phase: "fresh" }, { phase: "live", channelId: ["a"] }])(
+  "rejects malformed traffic provenance instead of calling it fresh: %j",
+  async (provenance) => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const t = await connectBrokerTransport();
+    const owner = required(t.subscribe)(f.callbacks);
+    try {
+      f.accept(0);
+      await tick();
+      f.frame("traffic", {
+        event: message(keypair(), "a", "incoming", 1700000000),
+        provenance,
+      });
+      await tick();
+      expect(f.callbacks.receive).not.toHaveBeenCalled();
+      expect(f.snapshots.at(-1)).toMatchObject({ status: "retrying" });
+    } finally {
+      owner.dispose();
+    }
+  },
+);

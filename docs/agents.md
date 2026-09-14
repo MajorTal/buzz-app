@@ -161,3 +161,97 @@ macOS after dependency pruning; no native compilation was run.
 Broader scan/native/package checks and independent compatibility-adapter review
 remain deferred until an agreed integration batch. Do not gate ordinary visual
 feedback on them. Broader agent architecture proposals are outside the V1 scope.
+
+
+## Raw Agent Activity plugin
+
+**Agent Activity** is an independently toggleable bundled panel with a top-bar
+launcher. It shows the exact JSON plaintext received from owner-only kind-24200
+telemetry, in keyboard-accessible code disclosures. An agent enters the selector
+after its first retained frame; exact public keys distinguish namesakes. A profile
+**View activity** action can preselect an exact identity and originating channel
+before any frames arrive. Profile names are optional shared lookups, never ownership
+evidence. The action is not an agent/ownership badge and may show a waiting state
+for identities with no published owner-visible telemetry.
+
+The **Channel** selector filters both raw envelopes and working-turn counts, or
+shows all channels including unscoped records. Envelope and batch-child channel
+metadata are indexed without rewriting the raw JSON: a matching envelope is shown
+whole and may contain other contexts. Channel scope is not thread scope. No
+additional relay directory scan, activity subscription, or thread inference is used.
+Channels owns the contextual right-hand slot and closes it on channel/session or
+contribution changes; close returns focus to the original conversation control.
+
+The plugin's activation leases `session.agentActivity`; closing the panel does
+not stop capture. Disabling it releases demand and clears RAM. The shared live
+connection carries one dedicated `#p=viewer` observer route, with no `#h`, history
+limit, or replay: `since` is stamped at actual dispatch and retry. It reserves one
+of the shared subscription slots. Successful toggles/access clears replace only
+that route, not the socket or chat globals. An uncertain control failure can
+reconnect the shared stream through its existing bounded recovery path.
+
+`dev/agent-observer.mjs` performs signature, exact telemetry tag, recipient/key,
+freshness and size validation before host-only NIP-44 decryption. The browser
+receives a purpose-bound DTO, not keys or a general decrypt API. The relay's
+admission establishes agent ownership; a name, local library entry, or successful
+decryption alone does not. Observer records never enter ordinary history,
+message/unread reconciliation, or disk caches.
+
+Retention is session-owned RAM: at most 200 envelopes / 2 MiB plaintext and 512
+turn states, with visible trimming. Disable, cache/access reset and session
+replacement clear it; generation fences reject prior in-flight deliveries. A raw
+batch with a recognized denied channel is discarded as a whole.
+
+Working is fresh per-turn evidence, not process status. Batch children fold
+individually; `session_resolved` is activity, while `turn_completed`, `turn_error`
+and `agent_panic` end the agent/turn pair even with a null session ID. Silence
+beyond 30 seconds or disconnect makes work unknown, not stopped. Terminal state
+retains a monotonic evidence timestamp through clock rollback and bounded eviction.
+There is no agent-global sequence gate: producer sequences reset, skip and interleave.
+
+### Try with an existing owner account
+
+Use the [README's public-pin/Keychain setup](../README.md#relay-channels) and run
+`bin/just web` (or `bin/just desktop`, not both). Open http://localhost:1430, choose
+the agent's community and click **Agent Activity**. Keep the existing Buzz runner
+active, with telemetry publication enabled on the agent, then give it work. This
+app does not start agents or turn publishing on. No records may mean publishing
+is off, no new traffic, or an interrupted feed—not that an agent is idle.
+
+For a contextual view, click the identity's avatar/mention in the channel, then
+**View activity**. It preselects that exact key and channel; **Channel → All channels**
+broadens the view. The global heartbeat launcher still opens an unscoped selector.
+Select an observed agent, expand raw frames, close/reopen the panel, and toggle
+**Your profile → Settings → Plugins → Agent Activity** off/on. Re-enable starts
+empty. The feed is live-only, best-effort telemetry: the producer coalesces/batches
+and may elide oversized content. It is not a complete ACP transcript or archive.
+The development broker supports this slice; packaged/native signed transport
+without that broker reports unavailable. No composer indicator, runtime controller,
+recording export or old transcript renderer is included.
+
+### Evidence and remaining acceptance
+
+`dev/agent-observer.test.mjs`, `dev/relay-broker-live.test.mjs`, and the activity/live
+service tests cover signed/encrypted WS → host decode → SSE → actual session,
+route generations, no chat reconciliation, terminal retention and stale controls.
+`tests/browser/agent-activity.spec.mjs` covers the actual plugin, raw HTML
+nonexecution, keyboard disclosures, agent selection, disable/re-enable and
+light/dark layouts at 1280 and 390 pixels in Chromium and WebKit. Live retry and
+plugin-launcher regression journeys also pass with the additional observer route.
+These automated checks use only ephemeral identities and synthetic upstream
+telemetry. The owner reported a successful live activity try on 2026-09-12 before
+the mainline merge; this is feedback evidence, not an independently captured trace.
+
+The full `just scan` passed at `1183b2624485dc1e6a12e86cece22eaf7513591c`
+after merging main's Markdown and Terminal changes: 35 Node integration tests,
+1,054 Vitest tests, 16 plugin-manager Rust tests, 274 Chromium/WebKit browser
+checks (including measurements), 14 design-browser checks, 9 native Rust tests,
+formatting, types, builds and Clippy. Independent source review found no remaining
+merge-integration blocker. Channel-opening fixtures kept optional profiles held;
+warm click-to-visible samples were 16.8–19.2ms in Chromium and 50–67ms in WebKit,
+with no new head read, below the unchanged 100ms budget. These are local Apple
+Silicon fixture measurements, not a live-network SLA.
+
+Packaged/native activity without the development broker remains unsupported;
+attended native/package acceptance and cross-platform CI are separate from these
+local results.

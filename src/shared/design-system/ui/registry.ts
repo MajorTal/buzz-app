@@ -226,6 +226,21 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     composes: ["preview-card"],
   },
   {
+    slug: "full-page-surface",
+    name: "FullPageSurface",
+    purpose:
+      "The optional single rounded surface filling a page’s available workspace. Pages with multi-panel composition do not use it.",
+    behavior:
+      "Semantic native region; the page owns content padding, scrolling, alignment, and composition",
+    variants: ["full workspace"],
+    status: "proposed",
+    collection: "components",
+    owner: "desktop-new Design system",
+    source: "shared/design-system/ui/FullPageSurface.tsx",
+    baseUi: [],
+    composes: ["panel"],
+  },
+  {
     slug: "panel",
     name: "Panel",
     purpose:

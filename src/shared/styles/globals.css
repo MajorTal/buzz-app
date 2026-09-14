@@ -68,6 +68,8 @@
     background: var(--workspace);
     font-synthesis: none;
     -webkit-font-smoothing: antialiased;
+    /* Keep wheel/trackpad gestures from rubber-banding the whole app. */
+    overscroll-behavior: none;
   }
   * {
     box-sizing: border-box;

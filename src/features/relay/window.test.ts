@@ -11,7 +11,7 @@ const id = "a".repeat(64);
 describe("channel window bounds", () => {
   it("requests top-level rows with aux and summaries, and only echoes a full composite cursor", () => {
     expect(windowFilter(channel, null)).toMatchObject({
-      kinds: [9, 40002],
+      kinds: [9, 40002, 40099],
       "#h": [channel],
       top_level: true,
       include_aux: true,

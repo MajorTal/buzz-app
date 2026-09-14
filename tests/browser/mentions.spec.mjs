@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
@@ -16,8 +16,8 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
   });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await server.listen();
   try {
+    await server.listen();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/mentions.html`,
     );

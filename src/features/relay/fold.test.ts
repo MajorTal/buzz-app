@@ -1,4 +1,5 @@
 import { assert, describe, expect, it } from "vitest";
+import { parseAttachments } from "./fold";
 import { foldMessages } from "./fold";
 import { foldProfiles } from "./profiles";
 import { DiscoveryState } from "./discovery";
@@ -308,4 +309,75 @@ it("marks same-label identity replacement as edited without changing notificatio
   expect(
     foldMessages(channel, relay.pubkey, [original])[0]?.edited,
   ).toBeUndefined();
+});
+
+it.each([
+  ["700x900", { width: 700, height: 900 }],
+  ["1x999999", { width: 1, height: 999999 }],
+  [undefined, undefined],
+  ["0x900", undefined],
+  ["700x0", undefined],
+  ["-1x2", undefined],
+  ["1.5x2", undefined],
+  ["1x2px", undefined],
+  ["Infinityx2", undefined],
+  ["1000000x2", undefined],
+  ["1x2x3", undefined],
+])("validates attachment layout dimensions %s", (dim, dimensions) => {
+  const event = message(keypair(), "channel", "", 1, [
+    [
+      "imeta",
+      "url https://x.test/image.png",
+      "m image/png",
+      ...(dim ? [`dim ${dim}`] : []),
+    ],
+  ]);
+  const attachments = parseAttachments(event, [
+    "https://x.test/image.png",
+    "https://x.test/legacy.png",
+  ]);
+  expect(attachments).toEqual([
+    {
+      url: "https://x.test/image.png",
+      video: false,
+      ...(dimensions ? { dimensions } : {}),
+    },
+    { url: "https://x.test/legacy.png", video: false },
+  ]);
+});
+
+it.each([
+  "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+  "000000", // 1x1
+  `|000${"00".repeat(81)}`, // maximum 9x9
+  undefined,
+  "",
+  "short",
+  "LEHV6nWB2yk8pyo0adR*.7kCMdn!", // invalid alphabet
+  "LEHV6nWB2yk8pyo0adR*.7kCMdn", // truncated
+  `~000${"00".repeat(18)}`, // illegal size flag, despite matching length
+  "0".repeat(10000),
+])("preserves only bounded valid attachment blurhash: %s", (hash) => {
+  const valid =
+    hash === "LEHV6nWB2yk8pyo0adR*.7kCMdnj" ||
+    hash === "000000" ||
+    hash?.startsWith("|");
+  const event = message(keypair(), "channel", "", 1, [
+    [
+      "imeta",
+      "url https://x.test/original.png",
+      "m image/png",
+      "thumb https://x.test/thumbnail.png",
+      ...(hash === undefined ? [] : [`blurhash ${hash}`]),
+    ],
+  ]);
+  expect(parseAttachments(event, ["https://x.test/legacy.png"])).toEqual([
+    {
+      url: "https://x.test/original.png",
+      video: false,
+      ...(valid ? { blurhash: hash } : {}),
+      previewUrl: "https://x.test/thumbnail.png",
+    },
+    { url: "https://x.test/legacy.png", video: false },
+  ]);
 });

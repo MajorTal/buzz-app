@@ -1,11 +1,15 @@
 // Real ChannelsPage, thread reader, shared directory, panel registry and plugin lifecycle.
 // Only the transport is synthetic. No dev broker, saved identity or live relay.
-import { StrictMode, useState } from "react";
+import { StrictMode, useLayoutEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { Context } from "@deepseek-ai/cordis";
 import { createPluginManager } from "../../src/plugins/manager";
 import { bundledPlugins } from "../../src/bundled";
-import { PanelsService } from "../../src/features/panels/service";
+import {
+  PanelsService,
+  type PanelContext,
+  type PanelProps,
+} from "../../src/features/panels/service";
 import { ChannelsPage } from "../../src/bundled/channels/ChannelsPage";
 import { createRelaySession } from "../../src/features/relay/session";
 import type {
@@ -122,15 +126,51 @@ const relay: RelayData = {
 };
 const context = new Context();
 context.provide("relay", relay);
+const contexts: PanelContext[] = [];
+function ContextProbe({ context }: PanelProps) {
+  useLayoutEffect(() => {
+    if (context && contexts.at(-1) !== context) contexts.push(context);
+  }, [context]);
+  return <p>Context probe</p>;
+}
+const probing = new URLSearchParams(location.search).has("context-probe");
 const manager = createPluginManager(context, {
-  bundled: bundledPlugins.filter(
-    ({ manifest }) => manifest.id === "buzz.profiles",
-  ),
+  bundled: probing
+    ? [
+        {
+          manifest: {
+            id: "context.probe",
+            name: "Context probe",
+            apiVersion: 1,
+          },
+          module: {
+            inject: ["panels"],
+            apply(ctx) {
+              ctx.panels.register({
+                id: "probe",
+                title: "Context probe",
+                matches: (target) => target.startsWith("nostr:"),
+                component: ContextProbe,
+              });
+            },
+          },
+        },
+      ]
+    : bundledPlugins.filter(({ manifest }) => manifest.id === "buzz.profiles"),
 });
 const panels = new PanelsService(context);
 Object.assign(window, {
   profilesFixture: {
     report,
+    contexts,
+    targets: {
+      viewer: profileTarget(viewer.pubkey),
+      mic: profileTarget(mic.pubkey),
+    },
+    disconnect() {
+      snapshot = { ...snapshot, status: "disconnected" };
+      for (const listener of listeners) listener();
+    },
     npubs: Object.fromEntries(
       Object.entries({ viewer, mic, pinky, missing }).map(([name, key]) => [
         name,

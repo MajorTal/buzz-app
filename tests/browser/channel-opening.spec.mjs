@@ -33,8 +33,27 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
         filter.authors?.some((id) => app.participants.includes(id)),
     );
   app.relay.holdProfiles(app.participants);
+  app.relay.holdEose("alpha");
+  app.relay.holdEose("beta");
+  // A visible pre-establishment head is not a warm, verified cache. A signed
+  // missed message proves the catch-up reached the UI, not merely the broker.
+  const establish = async (channel) => {
+    expect(heads(app, channel)).toHaveLength(1);
+    const missed = app.append(
+      "primary",
+      channel,
+      "Startup catch-up marker",
+      false,
+    );
+    app.relay.releaseEose(channel);
+    await expect(
+      page.locator(`[data-message-id="${missed.id}"]`),
+    ).toBeVisible();
+    expect(heads(app, channel)).toHaveLength(2);
+  };
   try {
     await open(page, app);
+    await establish("alpha");
     await expect.poll(() => labelReads().length).toBe(1);
     expect(labelReads()[0].filter.authors).toHaveLength(500);
     // The actual label hook has >1,000 missing participants. Keep its profile
@@ -62,6 +81,7 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
     expect(heads(app, "beta").length).toBeGreaterThan(0);
     expect(app.report.profileHolds.some((held) => held.pending)).toBe(true);
     expect(app.report.profileHolds.some((held) => held.aborted)).toBe(false);
+    await establish("beta");
     const before = submittedHeads.length;
     // Browser-clock click → first visible row → paint, excluding Playwright IPC.
     for (const name of ["Alpha", "Beta", "Alpha", "Beta"]) {
@@ -138,6 +158,8 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
     expect(app.report.profileHolds.some((held) => held.pending)).toBe(true);
     expect(app.report.profileHolds.some((held) => held.aborted)).toBe(false);
   } finally {
+    app.relay.releaseEose("alpha");
+    app.relay.releaseEose("beta");
     app.relay.releaseProfiles();
   }
 });

@@ -75,9 +75,15 @@ contribution when its Cordis scope ends.
 
 A page calls `panels.resolve(target)` and renders `PanelView` with the resulting
 contribution, the target string, and a close callback. The first active matcher
-wins; a throwing matcher is skipped. Ordinary link panels receive `{ target, close }`;
-channel-launched panels may also receive the public context described below. A
-plugin that needs shared data declares `relay` in its
+wins; a throwing matcher is skipped. Panels receive `{ target, close }` plus
+optional host context. A conversation host may supply
+`context: { channelId, canOpen, open }` for contextual panel-to-panel actions.
+`canOpen` is advisory active-target availability; `open` re-resolves at click time
+and returns false after the originating opening, channel, session or host
+presentation retires. This is not a global navigation API or an access grant.
+Channel-header launchers use the separate public `channelContext` metadata
+contract described below; launcher/fallback panels need not have either context.
+A plugin that needs shared data declares `relay` in its
 injection list and passes those capabilities to its components using a closure,
 just as the bundled Channels page does. The conversation preview adds only the two demonstrated component surfaces.
 
@@ -255,7 +261,7 @@ for retry, rather than silently opening another page.
 Pages receive optional `navigation` in `PageProps`. Ordinary pages acknowledge a
 successful mount inside the render boundary. Pages declaring `handlesNavigation`
 acknowledge their domain presentation with `navigation.complete(...)`; Channels
-waits for its requested channel window. `navigation.resolve(target)` normalizes a
+waits for its requested channel window or exact-message reveal/focus. `navigation.resolve(target)` normalizes a
 pending default destination within the same visit, caller and original deadline;
 it does not start competing navigation. Normalization revokes the old request.
 
@@ -276,11 +282,11 @@ into versioned route parameters. These are host-matched preview types through
 Browser `#buzz=` addresses and session history support reload and Back/Forward.
 `targetLink`/`parseTargetLink` define a `buzz://open` locator codec that omits the
 sender's viewer; `bindSharedTarget` pins it for an admitted recipient. **This slice
-does not install native OS deep-link or notification-click ingress, migrate legacy
-Buzz links, or locate/reveal older messages and threads.** Message-addressed
-conversation targets explicitly fail as unsupported rather than claiming success
-at the channel head. Those ingresses/reveal adapters must use the same validated
-target and completion lifecycle when implemented.
+does not install native OS deep-link or notification-click ingress or migrate legacy
+Buzz links.** Message-addressed conversations show the selected verified row in a
+bounded detail surface, ignoring optional `threadRootId` hints. Completion requires
+the exact row to be visible and focused; unavailable targets never fall back to the
+channel head. Ingress adapters must reuse this validated target/completion lifecycle.
 
 Drafts, reading geometry and sidebar view intent remain domain-owned, outside
 visit history. Saved sidebar preferences live in the relay session, not in the

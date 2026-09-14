@@ -1,3 +1,4 @@
+import { validatedBlurhash } from "./blurhash";
 import { threadReference } from "./thread-reference";
 import { emojiTags } from "./emoji";
 import { objectBody } from "./body";
@@ -6,7 +7,7 @@ import type { EventData } from "./events";
 import type { Attachment, ChannelMessage } from "./contracts";
 import { projectMarkdownImages, safeMessageUrl } from "./message-content";
 
-const MESSAGE_KINDS = new Set([9, 40002]);
+import { channelRowKind, membershipChange } from "./membership";
 const HEX64 = /^[0-9a-f]{64}$/;
 
 export function parseAttachments(
@@ -26,16 +27,22 @@ export function parseAttachments(
     const url = fields.url ? safeMessageUrl(fields.url) : undefined;
     if (!url || seen.has(url)) continue;
     seen.add(url);
-    const dimensions = fields.dim?.match(/^(\d+)x(\d+)$/);
-    const width = Number(dimensions?.[1]);
-    const height = Number(dimensions?.[2]);
+    // Treat signed metadata as untrusted layout input. Invalid/missing dimensions
+    // use the renderer's stable fallback rather than image-load-driven geometry.
+    const dim = /^(\d{1,6})x(\d{1,6})$/.exec(fields.dim ?? "");
+    const width = Number(dim?.[1]),
+      height = Number(dim?.[2]);
+    const blurhash = validatedBlurhash(fields.blurhash);
+    const previewUrl =
+      fields.image || fields.thumb
+        ? safeMessageUrl(fields.image ?? fields.thumb ?? "")
+        : undefined;
     result.push({
       url,
+      ...(blurhash ? { blurhash } : {}),
       video: fields.m?.startsWith("video/") ?? false,
+      ...(previewUrl ? { previewUrl } : {}),
       ...(width > 0 && height > 0 ? { dimensions: { width, height } } : {}),
-      ...(fields.image || fields.thumb
-        ? { previewUrl: fields.image ?? fields.thumb }
-        : {}),
     });
   }
   for (const url of markdownImages) {
@@ -86,7 +93,7 @@ export function foldMessages(
   const overlays = new Map<string, EventData[]>();
   const summaries = new Map<string, EventData>();
   for (const event of events) {
-    if (MESSAGE_KINDS.has(event.kind)) continue;
+    if (channelRowKind(event.kind)) continue;
     if (event.kind === 39005) {
       const target = event.tags.find((entry) => entry[0] === "e")?.[1];
       if (target && event.pubkey === relayAuthor)
@@ -108,7 +115,7 @@ export function foldMessages(
       ) ?? false;
   const rows: ChannelMessage[] = [];
   for (const event of events) {
-    if (!MESSAGE_KINDS.has(event.kind)) continue;
+    if (!channelRowKind(event.kind)) continue;
     if (!event.tags.some((entry) => entry[0] === "h" && entry[1] === channelId))
       continue;
     if (
@@ -119,6 +126,26 @@ export function foldMessages(
       continue;
     const aux = overlays.get(event.id) ?? [];
     if (deleted(event)) continue;
+    if (event.kind === 40099) {
+      const membership = membershipChange(event, relayAuthor);
+      if (membership)
+        rows.push(
+          Object.freeze({
+            id: event.id,
+            channelId,
+            authorId: event.pubkey,
+            createdAt: event.created_at,
+            content: "",
+            membership,
+            mentions: Object.freeze([]),
+            attachments: Object.freeze([]),
+            reactions: Object.freeze([]),
+            replyCount: 0,
+            participants: Object.freeze([]),
+          }),
+        );
+      continue;
+    }
     const edits = aux
       .filter(
         (item) =>

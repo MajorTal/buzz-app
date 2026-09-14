@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
@@ -16,8 +16,8 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
   });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await server.listen();
   try {
+    await server.listen();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/profiles.html`,
     );
@@ -154,6 +154,78 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
     }));
     expect(reads.reads.some((batch) => batch.includes(reads.key))).toBe(true);
     expect(errors).toEqual([]);
+  } finally {
+    await server.close();
+  }
+});
+
+test("contextual panel callbacks retire with opening, channel, contribution and session", async ({
+  page,
+}) => {
+  const server = await createServer({
+    root: fileURLToPath(new URL("../../", import.meta.url)),
+    configFile: false,
+    envFile: false,
+    plugins: [react()],
+    logLevel: "error",
+    server: { host: "127.0.0.1", port: 0, strictPort: false },
+  });
+  try {
+    await server.listen();
+    await page.goto(
+      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/profiles.html?context-probe`,
+    );
+    const avatar = page.getByRole("button", {
+      name: "View Viewer profile",
+      exact: true,
+    });
+    const panel = page.getByRole("complementary", {
+      name: "Context probe",
+      exact: true,
+    });
+    const capture = async () => {
+      await avatar.click();
+      await expect(panel).toBeVisible();
+      await page.evaluate(() => {
+        window.oldPanelContext = window.profilesFixture.contexts.at(-1);
+      });
+    };
+    const invoke = () =>
+      page.evaluate(() =>
+        window.oldPanelContext.open(window.profilesFixture.targets.mic),
+      );
+    await capture();
+    expect(await page.evaluate(() => window.oldPanelContext.channelId)).toBe(
+      "one",
+    );
+    expect(await invoke()).toBe(true);
+    // A second synchronous use of the old opening must not replace its successor.
+    expect(await invoke()).toBe(false);
+    await panel.getByRole("button", { name: "Close channel panel" }).click();
+    await capture();
+    await page.locator('[data-channel-id="two"]').click();
+    await expect(panel).toHaveCount(0);
+    expect(await invoke()).toBe(false);
+    await page.locator('[data-channel-id="one"]').click();
+    await capture();
+    await page.evaluate(() =>
+      window.profilesFixture.change("disable", "context.probe"),
+    );
+    expect(await invoke()).toBe(false);
+    await expect(panel).toHaveCount(0);
+    await page.evaluate(() =>
+      window.profilesFixture.change("enable", "context.probe"),
+    );
+    await expect(avatar).toBeVisible();
+    expect(await invoke()).toBe(false);
+    await capture();
+    await page.evaluate(() => window.profilesFixture.replace());
+    expect(await invoke()).toBe(false);
+    await expect(panel).toHaveCount(0);
+    await capture();
+    await page.evaluate(() => window.profilesFixture.disconnect());
+    expect(await invoke()).toBe(false);
+    await expect(panel).toHaveCount(0);
   } finally {
     await server.close();
   }

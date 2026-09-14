@@ -5,6 +5,7 @@ import {
   overrideActive,
   targetKey,
   type ReadTarget,
+  type ReadState,
 } from "./read-state-model";
 import type {
   createReadState,
@@ -24,13 +25,24 @@ export type UnreadSnapshot = Readonly<{
   manual: "none" | "local-only" | "remote";
   error?: string | undefined;
 }>;
+export type MessageAttention = Readonly<{
+  status: "unknown" | "ineligible" | "eligible";
+  category?: "mention" | "direct" | "thread";
+  rootId?: string;
+  unread: boolean;
+  viewing: boolean;
+}>;
 export type ReadingHandle = Readonly<{
+  /** Qualified visible rows only. This publishes no read intent and ends with the lease. */
+  view(messageIds: readonly string[], visible: () => boolean): void;
   /** Only message IDs actually visible to the active consumer; no caller timestamps. */
   observe(messageIds: readonly string[]): Promise<void>;
   dispose(): void;
 }>;
 export interface UnreadCapability {
   snapshot(target: ReadTarget): UnreadSnapshot;
+  /** Same verified attention/frontier policy as badges, not a notification event source. */
+  attention(channelId: string, messageId: string): MessageAttention;
   subscribe(target: ReadTarget, listener: () => void): () => void;
   sync(): ReadSyncSnapshot;
   subscribeSync(listener: () => void): () => void;
@@ -79,6 +91,10 @@ export function createUnread({
   const snapshots = new Map<string, UnreadSnapshot>();
   const dirty = new Set<string>();
   const handles = new Set<() => void>();
+  const views = new Map<
+    () => void,
+    { ids: ReadonlySet<string>; visible: () => boolean }
+  >();
   let bytes = 0;
   const allowed = (id: string) =>
     channels
@@ -154,6 +170,79 @@ export function createUnread({
           root(event) === target.rootId))
     );
   }
+  function isUnread({ event, rootId }: Evidence, state: ReadState) {
+    const channelId = channelOf(event);
+    if (!channelId || event.pubkey === viewer) return false;
+    const frontier = effectiveFrontier(
+      state,
+      `msg:${event.id}`,
+      channelId,
+      rootId,
+    );
+    const forced =
+      overrideActive(state.overrides[`msg:${event.id}`], frontier) ||
+      overrideActive(
+        state.overrides[channelId],
+        effectiveFrontier(state, channelId),
+      ) ||
+      (rootId !== undefined &&
+        overrideActive(
+          state.overrides[`thread:${rootId}`],
+          effectiveFrontier(state, `thread:${rootId}`, channelId),
+        ));
+    return frontier === undefined || event.created_at > frontier || !!forced;
+  }
+  function category(
+    { rootId, mentioned }: Evidence,
+    dm: boolean,
+  ): MessageAttention["category"] {
+    return mentioned
+      ? "mention"
+      : dm
+        ? "direct"
+        : rootId && participants.has(rootId)
+          ? "thread"
+          : undefined;
+  }
+  function attention(channelId: string, messageId: string): MessageAttention {
+    const unknown = Object.freeze({
+      status: "unknown",
+      unread: false,
+      viewing: false,
+    } as const);
+    if (closed || !allowed(channelId)) return unknown;
+    indexEvidence();
+    const event = events.get(messageId);
+    if (!event || channelOf(event) !== channelId || !contentKind(event))
+      return unknown;
+    const entry = byChannel
+      .get(channelId)
+      ?.find((row) => row.event.id === messageId);
+    if (!entry || event.pubkey === viewer)
+      return Object.freeze({
+        status: "ineligible",
+        unread: false,
+        viewing: false,
+      });
+    const dm =
+      channels.list().channels.find((channel) => channel.id === channelId)
+        ?.channelType === "dm";
+    const kind = category(entry, dm);
+    const viewing = [...views.values()].some(
+      (view) => view.ids.has(messageId) && view.visible(),
+    );
+    return Object.freeze({
+      status: kind
+        ? "eligible"
+        : threadReference(event) && !entry.rootId
+          ? "unknown"
+          : "ineligible",
+      ...(kind ? { category: kind } : {}),
+      ...(entry.rootId ? { rootId: entry.rootId } : {}),
+      unread: isUnread(entry, reads.state()),
+      viewing,
+    });
+  }
   function compute(target: ReadTarget): UnreadSnapshot {
     const key = targetKey(target);
     const accessible =
@@ -188,31 +277,10 @@ export function createUnread({
         .channels.find((channel) => channel.id === target.channelId)
         ?.channelType === "dm";
     indexEvidence();
-    for (const { event, rootId, mentioned } of byChannel.get(
-      target.channelId,
-    ) ?? []) {
-      if (event.pubkey === viewer || !inTarget(event, target)) continue;
-      const frontier = effectiveFrontier(
-        state,
-        `msg:${event.id}`,
-        target.channelId,
-        rootId,
-      );
-      const forced =
-        overrideActive(state.overrides[`msg:${event.id}`], frontier) ||
-        overrideActive(
-          state.overrides[target.channelId],
-          effectiveFrontier(state, target.channelId),
-        ) ||
-        (rootId !== undefined &&
-          overrideActive(
-            state.overrides[`thread:${rootId}`],
-            effectiveFrontier(state, `thread:${rootId}`, target.channelId),
-          ));
-      if (frontier !== undefined && event.created_at <= frontier && !forced)
-        continue;
+    for (const entry of byChannel.get(target.channelId) ?? []) {
+      if (!inTarget(entry.event, target) || !isUnread(entry, state)) continue;
       count++;
-      if (dm || mentioned || (rootId && participants.has(rootId))) attention++;
+      if (category(entry, dm)) attention++;
     }
     const manual = reads.localUnread(key)
       ? "local-only"
@@ -465,6 +533,7 @@ export function createUnread({
   }
   const capability: UnreadCapability = Object.freeze<UnreadCapability>({
     snapshot,
+    attention,
     subscribe(target, listener) {
       snapshot(target);
       const key = keyFor(target),
@@ -498,6 +567,7 @@ export function createUnread({
       const dispose = () => {
         active = false;
         handles.delete(dispose);
+        views.delete(dispose);
       };
       const valid = () =>
         active &&
@@ -508,6 +578,21 @@ export function createUnread({
       handles.add(dispose);
       return Object.freeze({
         dispose,
+        view(ids: readonly string[], visible: () => boolean) {
+          if (!valid() || ids.length > 128) return;
+          const verified = ids.filter((id) => {
+            try {
+              requireMessage({ kind: "message", channelId, messageId: id }, id);
+              return true;
+            } catch {
+              return false;
+            }
+          });
+          views.set(dispose, {
+            ids: new Set(verified),
+            visible: () => valid() && visible(),
+          });
+        },
         async observe(ids: readonly string[]) {
           if (!valid() || ids.length > 128) return;
           for (const id of ids) {

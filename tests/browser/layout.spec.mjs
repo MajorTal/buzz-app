@@ -48,7 +48,16 @@ async function link(page, app, target) {
     }),
   );
   app.append("primary", "alpha", `Please review ${target}`);
-  await page.getByRole("link", { name: target, exact: true }).click();
+  const trigger = page.getByRole("link", { name: target, exact: true });
+  await expect(trigger).toBeVisible();
+  await trigger.scrollIntoViewIfNeeded();
+  // Appending and bringing an offscreen link into view can both scroll Virtua.
+  // These are panel-layout checks, not clicks during an in-flight correction.
+  await settle(page);
+  await expect(
+    page.getByRole("region", { name: "Channel message history" }).locator("ol"),
+  ).toHaveCSS("pointer-events", "auto");
+  await trigger.click();
   await expect(
     panel(page).getByRole("heading", { name: "A useful change" }),
   ).toBeVisible();
@@ -70,6 +79,48 @@ async function shellFits(page, width) {
     expect(tabs.x + tabs.width).toBeLessThan(actions.x);
   }
 }
+
+test("page overscroll is disabled while message history still scrolls", async ({
+  page,
+  app,
+}) => {
+  await open(page, app);
+  // Headless wheel input does not reproduce macOS trackpad rubber-banding.
+  // Check the viewport policy as well as real panel scrolling and shell bounds.
+  await expect(page.locator("html")).toHaveCSS("overscroll-behavior", "none");
+  const shell = page.locator(".shell-background");
+  const bounds = await box(shell);
+  const history = page.getByRole("region", { name: "Channel message history" });
+  await settle(page);
+  const initialOffset = await history.evaluate((el) => el.scrollTop);
+  await history.hover();
+  await page.mouse.wheel(0, -300);
+  await expect
+    .poll(() => history.evaluate((el) => el.scrollTop))
+    .toBeLessThan(initialOffset - 100);
+  await settle(page);
+  expect(await box(shell)).toEqual(bounds);
+
+  // Projects has no overflowing content: gestures must leave the shell in place.
+  await page
+    .getByRole("navigation", { name: "Pages", exact: true })
+    .getByRole("button", { name: "Projects", exact: true })
+    .click();
+  await page.getByRole("heading", { name: "Projects", exact: true }).hover();
+  for (const [x, y] of [
+    [0, -600],
+    [0, 600],
+    [-600, 0],
+    [600, 0],
+  ]) {
+    await page.mouse.wheel(x, y);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    expect(await box(shell)).toEqual(bounds);
+    expect(await page.evaluate(() => [window.scrollX, window.scrollY])).toEqual(
+      [0, 0],
+    );
+  }
+});
 
 test("bento surfaces, centered tabs, real link panel and compact community navigation", async ({
   page,
@@ -295,14 +346,51 @@ readingTest(
     await button(page, "Close channel panel").focus();
     await button(page, "Close channel panel").click();
     const trigger = page.getByRole("link", { name: target, exact: true });
+    await settle(page);
     await expect(trigger).toBeFocused();
     expect(await page.evaluate(() => window.panelFocusScrollDelta)).toBe(0);
-    await settle(page);
     await expectAnchor(page, saved);
     await page.setViewportSize({ width: 1200, height: 700 });
     await settle(page);
     await expectAnchor(page, saved);
     await expectNonPaging(page, app);
+  },
+);
+
+readingTest(
+  "a focused message stays mounted until focus leaves the timeline",
+  async ({ page, app }) => {
+    await open(page, app);
+    await settle(page);
+    const target = "https://example.com/focused-message";
+    const previous = await page
+      .locator("[data-message-id]")
+      .last()
+      .getAttribute("data-message-id");
+    const message = app.append("primary", "alpha", `Keep focus on ${target}`);
+    const trigger = page.getByRole("link", { name: target, exact: true });
+    await expect(trigger).toBeInViewport();
+    await settle(page);
+    await trigger.evaluate((el) => el.focus({ preventScroll: true }));
+    await expect(trigger).toBeFocused();
+    const history = page.getByRole("region", {
+      name: "Channel message history",
+    });
+    await history.hover();
+    await page.mouse.wheel(0, -3500);
+    // The adjacent unpinned row proves that real virtualization has evicted this
+    // range; a timeout or a mocked virtualizer would not establish that boundary.
+    await expect(page.locator(`[data-message-id="${previous}"]`)).toHaveCount(
+      0,
+    );
+    await settle(page);
+    await expect(trigger).toBeFocused();
+    await expect(trigger).not.toBeInViewport();
+    await history.evaluate((el) => el.focus({ preventScroll: true }));
+    await expect(history).toBeFocused();
+    await expect(page.locator(`[data-message-id="${message.id}"]`)).toHaveCount(
+      0,
+    );
   },
 );
 
@@ -422,13 +510,46 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
     [800, 600],
     [480, 400],
     [390, 844],
+    [390, 400],
   ]) {
     await page.setViewportSize({ width, height });
     await shellFits(page, width);
     await expect(button(page, "Close Bestie panel")).toBeInViewport();
   }
   await button(page, "Close Bestie panel").click();
-  await expect(enabled).toBeInViewport();
+  await expect(bestie).toHaveCount(0);
+  await expect(launch).toHaveAttribute("aria-expanded", "false");
+  await expect(launch).toBeFocused();
+
+  // Plugin catalogs can outgrow the viewport. Closing restores the launcher,
+  // not a Settings row: reach the toggle with real input, not scrollIntoView.
+  const settingsPage = page.getByRole("main").locator(".overflow-y-auto");
+  await expect(enabled).not.toBeInViewport();
+  const viewport = await box(settingsPage);
+  await page.mouse.move(
+    viewport.x + viewport.width / 2,
+    viewport.y + viewport.height / 2,
+  );
+  for (let gesture = 0; gesture < 4; gesture++) {
+    const toggle = await box(enabled);
+    if (
+      toggle.y >= viewport.y &&
+      toggle.y + toggle.height <= viewport.y + viewport.height
+    )
+      break;
+    const before = await settingsPage.evaluate((el) => el.scrollTop);
+    await page.mouse.wheel(0, viewport.height * 0.75);
+    await expect
+      .poll(() => settingsPage.evaluate((el) => el.scrollTop), {
+        message: "Settings wheel input makes progress toward the plugin toggle",
+      })
+      .toBeGreaterThan(before);
+  }
+  await expect(enabled).toBeInViewport({ ratio: 1 });
+  await enabled.click();
+  await expect(enabled).toHaveAttribute("aria-checked", "false");
+  await expect(enabled).toBeFocused();
+  await expect(launch).toHaveCount(0);
 });
 
 readingTest(
@@ -534,9 +655,15 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
   ]) {
     await page.setViewportSize({ width, height });
     const bounds = await box(surface);
+    const workspace = await box(surface.locator("..").locator(".."));
     const heading = await box(title);
+    near(bounds.x, workspace.x);
+    near(bounds.y, workspace.y);
+    near(bounds.width, workspace.width);
+    near(bounds.height, workspace.height);
     near(heading.x + heading.width / 2, bounds.x + bounds.width / 2);
     near(heading.y + heading.height / 2, bounds.y + bounds.height / 2);
+    await expect(surface).toHaveCSS("overflow", "hidden");
     await shellFits(page, width);
     await page.screenshot({
       path: testInfo.outputPath(`projects-${width}.png`),

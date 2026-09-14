@@ -50,6 +50,6 @@ export const geometrySignature = (
         signature = JSON.stringify(event);
         eventSignatures.set(event, signature);
       }
-      return `${signature.length}:${signature}:${JSON.stringify(profiles.get(event.authorId))}`;
+      return `${signature.length}:${signature}:${JSON.stringify(event.membership ? [profiles.get(event.membership.actor), profiles.get(event.membership.target)] : profiles.get(event.authorId))}`;
     })
     .join("");

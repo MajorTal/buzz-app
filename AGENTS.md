@@ -22,7 +22,11 @@ deviating from agreed scope or product behavior.
 Target **9/10+ for minimalness, elegance, and correctness**: the smallest complete
 solution, clear ownership, and no known material defects. Prefer existing patterns
 and subtraction. No opportunistic refactors, speculative abstractions, or new
-features disguised as fixes. If the fix keeps growing, revisit the cause and scope.
+features disguised as fixes. Before expanding into another shared subsystem or
+adding alternate-adapter support, show the human the scope change and smallest
+complete alternative. Require a current caller or explicit approval for adapter
+parity. Review necessity separately from correctness; passing tests do not justify
+scope growth. Split at real ownership boundaries, not by deleting safety coverage.
 
 Keep files cohesive and group modules and tests by owner. Treat size as a review
 signal, not a quota. Extract stable boundaries only when they simplify the
@@ -45,6 +49,32 @@ remaining risks or deferred checks. Green CI is evidence, not proof of user beha
 Keep reviews convergent: consolidate actionable findings and clear exit criteria.
 Block on concrete correctness, security, or agreed-contract defects; unrelated
 hardening is follow-up. Reopen scope only when new evidence warrants it.
+
+## Deterministic tests
+
+Tests must control the ordering they assert, not depend on runner speed.
+
+- For intermediate states (loading, disabled, closing), hold the responsible
+  operation with an explicit fixture gate or deferred promise. Observe that it
+  started, assert the pending state, release it in `finally`, then verify recovery.
+  A short artificial delay is not a synchronization primitive.
+- Before capturing request counts, scroll anchors, or other baselines, establish
+  the relevant lifecycle boundary: completed startup/catch-up, mounted result,
+  applied layout, or observed event. Visible initial content does not prove that
+  background work finished. Register event observers before triggering actions.
+- Wait for observable conditions with retrying assertions, not fixed sleeps or
+  immediate snapshots of asynchronous effects. Negative assertions need a
+  completion barrier proving the work that could violate them has finished.
+  Scope selectors to the semantic content being tested, not unrelated UI.
+- When elapsed time is the behavior under test (expiry, debounce, retry), use a
+  controlled clock and assert before/after the boundary. Keep real clocks for
+  performance measurements; preserve their documented isolation and budgets.
+- Do not hide failures with test retries, longer delays/timeouts, relaxed counts
+  or tolerances, disabled animation, or broad error allowlists. Establish whether
+  the defect belongs to the product, fixture, or assertion and repair that owner.
+  Exercise adversarial ordering and the affected full test files in both browser
+  engines for browser changes. Report exact validation scope and remaining gaps;
+  a green run does not establish that all flakes are gone.
 
 ## Commit attribution and DCO
 

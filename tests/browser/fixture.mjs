@@ -27,12 +27,14 @@ export const test = base.extend({
   productionBroker: [false, { option: true }],
   readState: [false, { option: true }],
   threadUnread: [false, { option: true }],
+  exactMessages: [false, { option: true }],
   sidebarUnread: [false, { option: true }],
   savedSidebar: [false, { option: true }],
   expectedPageFailure: [false, { option: true }],
   largeSidebar: [false, { option: true }],
   dmLabels: [false, { option: true }],
   tallMessages: [false, { option: true }],
+  membershipActivity: [false, { option: true }],
   developmentReact: [false, { option: true, scope: "worker" }],
   pluginFixtures: [false, { option: true, scope: "worker" }],
   compiledApp: [buildApp, { scope: "worker" }],
@@ -45,12 +47,14 @@ export const test = base.extend({
       productionBroker,
       readState,
       threadUnread,
+      exactMessages,
       sidebarUnread,
       savedSidebar,
       expectedPageFailure,
       largeSidebar,
       dmLabels,
       tallMessages,
+      membershipActivity,
       pluginFixtures,
       developmentReact,
       compiledApp,
@@ -61,7 +65,30 @@ export const test = base.extend({
     const relayKey = generateSecretKey();
     const userKey = generateSecretKey();
     const viewer = getPublicKey(userKey);
-    const peerKey = dmLabels || readState ? generateSecretKey() : undefined;
+    const membershipKeys = membershipActivity
+      ? [generateSecretKey(), generateSecretKey()]
+      : [];
+    const membershipEvent = (
+      type,
+      targetIndex,
+      time,
+      actorIndex = -1,
+      forged = false,
+    ) =>
+      sign(
+        40099,
+        [["h", "alpha"]],
+        JSON.stringify({
+          type,
+          actor:
+            actorIndex < 0 ? viewer : getPublicKey(membershipKeys[actorIndex]),
+          target: getPublicKey(membershipKeys[targetIndex]),
+        }),
+        forged ? userKey : relayKey,
+        time,
+      );
+    const peerKey =
+      dmLabels || readState || exactMessages ? generateSecretKey() : undefined;
     const communityIds = {
       primary: "01234567-89ab-cdef-0123-456789abcdef",
       secondary: "11234567-89ab-cdef-0123-456789abcdef",
@@ -147,6 +174,55 @@ export const test = base.extend({
         );
     for (const community of ["primary", "secondary"])
       for (const id of dmIds) histories.set(`${community}/${id}`, []);
+    const targetEvents = [];
+    let exact;
+    if (exactMessages) {
+      const root = histories.get("primary/alpha")[2];
+      const replies = Array.from({ length: 80 }, (_, i) =>
+        sign(
+          9,
+          [
+            ["h", "alpha"],
+            ["e", root.id, "", "reply"],
+            ["p", getPublicKey(peerKey)],
+          ],
+          `Old thread reply ${i} · Hello @Alice Fixture`,
+          userKey,
+          root.created_at + i + 1,
+        ),
+      );
+      const target = replies.at(-1);
+      const edit = sign(
+        40003,
+        [["e", target.id]],
+        "**Exact reply edited** · Hello @Alice Fixture",
+        userKey,
+        target.created_at + 1,
+      );
+      const reaction = sign(
+        7,
+        [["e", target.id]],
+        "+",
+        userKey,
+        target.created_at + 2,
+      );
+      const deletion = sign(
+        5,
+        [["e", reaction.id]],
+        "",
+        userKey,
+        target.created_at + 3,
+      );
+      targetEvents.push(...replies, edit, reaction, deletion);
+      exact = { root, target, replies, edit, reaction, deletion };
+    }
+    if (membershipActivity) {
+      const history = histories.get("primary/alpha");
+      history.push(
+        membershipEvent("member_joined", 0, 1700000740),
+        membershipEvent("member_joined", 1, 1700000741),
+      );
+    }
     if (sidebarUnread) {
       for (const id of ["dm-030", "dm-090"])
         histories.set(`primary/${id}`, [
@@ -155,7 +231,9 @@ export const test = base.extend({
     }
     // Opt-in upstream thread evidence: no client cache/read-state injection.
     // Uppercase signed references exercise canonical thread/unread parity.
-    const threadReplies = new Map();
+    const threadReplies = new Map(
+      exact ? [[exact.root.id, exact.replies]] : [],
+    );
     const threadSummaries = [];
     if (threadUnread) {
       const history = histories.get("primary/alpha");
@@ -283,6 +361,9 @@ export const test = base.extend({
       measurements: [],
     };
     const pending = [];
+    const retiredStreams = new Set();
+    const observerFailures = [];
+    const consoleLocations = new Map();
     const send = (response, body, status = 200) => {
       response.writeHead(status, { "Content-Type": "application/json" });
       response.end(JSON.stringify(body));
@@ -335,6 +416,18 @@ export const test = base.extend({
       if (filter.kinds?.includes(0))
         return [
           sign(0, [], JSON.stringify({ name: "Fixture Reader" }), userKey),
+          ...membershipKeys
+            .filter((key) => filter.authors?.includes(getPublicKey(key)))
+            .map((key) =>
+              sign(
+                0,
+                [],
+                JSON.stringify({
+                  name: key === membershipKeys[0] ? "Pinky" : "Brain",
+                }),
+                key,
+              ),
+            ),
           ...(peerKey && filter.authors?.includes(getPublicKey(peerKey))
             ? [
                 sign(
@@ -346,12 +439,51 @@ export const test = base.extend({
               ]
             : []),
         ];
-      if (threadUnread && filter.ids)
-        return [...histories.values()]
-          .flat()
-          .filter((event) => filter.ids.includes(event.id));
-      if (threadUnread && filter.depth_limit)
-        return (threadReplies.get(filter["#e"]?.[0]) ?? [])
+      if (filter.ids)
+        return [...histories.entries()]
+          .filter(([key]) => key.startsWith(`${community}/`))
+          .flatMap(([, events]) => events)
+          .concat(community === "primary" ? targetEvents : [])
+          .filter(
+            (event) =>
+              filter.ids.includes(event.id) &&
+              (!filter["#h"] ||
+                event.tags.some(
+                  ([key, value]) => key === "h" && filter["#h"].includes(value),
+                )),
+          )
+          .slice(0, filter.limit);
+      if (
+        filter["#e"] &&
+        filter.kinds?.every((kind) => [5, 7, 9005, 39005, 40003].includes(kind))
+      )
+        return (community === "primary" ? targetEvents : [])
+          .filter(
+            (event) =>
+              filter.kinds.includes(event.kind) &&
+              event.tags.some(
+                ([key, value]) => key === "e" && filter["#e"].includes(value),
+              ),
+          )
+          .toSorted(
+            (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
+          )
+          .slice(0, filter.limit);
+      if (filter.depth_limit) {
+        const rootId = filter["#e"]?.[0];
+        const candidates = [
+          ...(community === "primary" ? (threadReplies.get(rootId) ?? []) : []),
+          ...(histories.get(`${community}/${filter["#h"]?.[0]}`) ?? []),
+        ].filter((event) => {
+          const refs = event.tags.filter(([key]) => key === "e");
+          const root =
+            refs.find((tag) => tag[3] === "root") ??
+            refs.find((tag) => tag[3] === "reply");
+          return root?.[1]?.toLowerCase() === rootId;
+        });
+        const rows = [
+          ...new Map(candidates.map((event) => [event.id, event])).values(),
+        ]
           .filter(
             (event) =>
               filter.thread_cursor === undefined ||
@@ -359,7 +491,29 @@ export const test = base.extend({
               (event.created_at === filter.thread_cursor &&
                 event.id > filter.thread_cursor_id),
           )
+          .toSorted(
+            (a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id),
+          )
           .slice(0, filter.limit);
+        const ids = new Set(rows.map((event) => event.id));
+        const aux = [];
+        if (filter.include_aux && community === "primary")
+          for (let hop = 0; hop < 2; hop++)
+            for (const event of targetEvents) {
+              if (
+                ids.has(event.id) ||
+                ![5, 7, 9005, 39005, 40003].includes(event.kind)
+              )
+                continue;
+              if (
+                event.tags.some(([key, value]) => key === "e" && ids.has(value))
+              ) {
+                aux.push(event);
+                ids.add(event.id);
+              }
+            }
+        return [...rows, ...aux];
+      }
       // Unread evidence is not a top-level window, even for a one-ID final batch.
       if (
         filter.kinds?.includes(9) &&
@@ -382,6 +536,7 @@ export const test = base.extend({
       if (!history)
         throw new Error(`Unexpected query: ${JSON.stringify(filter)}`);
       const candidates = history
+        .filter((event) => !filter.kinds || filter.kinds.includes(event.kind))
         .filter(
           (event) =>
             filter.until === undefined ||
@@ -534,10 +689,19 @@ export const test = base.extend({
           throw new Error(
             `Unexpected fixture request: ${request.method} ${request.url}`,
           );
-        expect(body).toHaveLength(1);
+        expect(body.length).toBeGreaterThan(0);
+        expect(body.length).toBeLessThanOrEqual(2);
         const filter = body[0];
-        report.queries.push({ community, filter });
-        const result = answer(community, filter);
+        const result = [
+          ...new Map(
+            body
+              .flatMap((filter) => {
+                report.queries.push({ community, filter });
+                return answer(community, filter);
+              })
+              .map((event) => [event.id, event]),
+          ).values(),
+        ];
         if (filter.until !== undefined) {
           pending.push({
             community,
@@ -562,11 +726,15 @@ export const test = base.extend({
             async configurePreviewServer(server) {
               if (relay) {
                 report.brokerRequests = [];
-                server.middlewares.use((req, _res, next) => {
+                server.middlewares.use((req, res, next) => {
                   if (req.url?.startsWith("/api/relay/"))
                     report.brokerRequests.push({
                       url: req.url,
                       at: performance.now(),
+                    });
+                  if (req.url?.endsWith("/stream"))
+                    res.once("close", () => {
+                      retiredStreams.add(res.getHeader("x-buzz-live-id"));
                     });
                   next();
                 });
@@ -606,8 +774,26 @@ export const test = base.extend({
       });
       page.on("pageerror", (error) => report.errors.push(error.message));
       page.on("console", (message) => {
-        if (message.type() === "error")
+        if (message.type() === "error") {
+          consoleLocations.set(
+            report.consoleErrors.length,
+            message.location().url,
+          );
           report.consoleErrors.push(message.text());
+        }
+      });
+      page.on("response", (response) => {
+        if (
+          response.url().endsWith("/stream-observer") &&
+          response.status() === 404
+        ) {
+          const { streamId } = response.request().postDataJSON();
+          observerFailures.push({
+            streamId,
+            url: response.url(),
+            retired: retiredStreams.has(streamId),
+          });
+        }
       });
       await page.addInitScript(
         ({ viewer }) => {
@@ -632,9 +818,53 @@ export const test = base.extend({
         report,
         pending,
         histories,
+        exact,
+        membership(
+          type,
+          targetIndex,
+          actorIndex = -1,
+          forged = false,
+          deliver = true,
+        ) {
+          const history = histories.get("primary/alpha");
+          const event = membershipEvent(
+            type,
+            targetIndex,
+            history.at(-1).created_at + 1,
+            actorIndex,
+            forged,
+          );
+          history.push(event);
+          if (!deliver) return event;
+          if (relay) relay.publish("primary", event);
+          else
+            for (const client of streams.get("primary") ?? [])
+              client.write(`data: ${JSON.stringify(event)}\n\n`);
+          return event;
+        },
         participants,
         viewer,
         relay,
+        observer(raw, agentKey, community = "primary") {
+          const agent = getPublicKey(agentKey);
+          const plaintext = JSON.stringify(raw);
+          const event = sign(
+            24200,
+            [
+              ["p", viewer],
+              ["agent", agent],
+              ["frame", "telemetry"],
+            ],
+            nip44.v2.encrypt(
+              plaintext,
+              nip44.v2.utils.getConversationKey(agentKey, viewer),
+            ),
+            agentKey,
+            Math.floor(Date.now() / 1000),
+          );
+          relay.observer(community, event);
+          return { event, plaintext, agent };
+        },
         // Change only modeled relay state. The app must consume the next real
         // roster response; this does not call client purge/recovery internals.
         hideChannel(id) {
@@ -669,6 +899,20 @@ export const test = base.extend({
               client.write(`data: ${JSON.stringify(event)}\n\n`);
           }
           return event;
+        },
+        deleteTarget() {
+          const event = sign(
+            5,
+            [
+              ["h", "alpha"],
+              ["e", exact.target.id],
+            ],
+            "",
+            userKey,
+            exact.target.created_at + 100,
+          );
+          targetEvents.push(event);
+          relay.publish("primary", event);
         },
         reply(rootId, own = false) {
           const replies = threadReplies.get(rootId);
@@ -708,9 +952,29 @@ export const test = base.extend({
         },
       });
       expect(report.unexpected).toEqual([]);
+      // Aborted startup streams can race an already-dispatched observer control.
+      // Permit only 404s whose exact stream was already closed by the real host;
+      // a current/unknown stream failure still fails, and all errors stay recorded.
+      report.retiredObserverControls = [...observerFailures];
+      expect(observerFailures.every((failure) => failure.retired)).toBe(true);
+      const retiredConsole = (message, index) => {
+        if (
+          !/^Failed to load resource: the server responded with a status of 404/.test(
+            message,
+          )
+        )
+          return false;
+        const match = observerFailures.findIndex(
+          (failure) => failure.url === consoleLocations.get(index),
+        );
+        if (match < 0) return false;
+        observerFailures.splice(match, 1);
+        return true;
+      };
       expect(
         report.consoleErrors.filter(
-          (message) =>
+          (message, index) =>
+            !retiredConsole(message, index) &&
             !(
               expectedPageFailure &&
               message.includes("Fixture page render failure")

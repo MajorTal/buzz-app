@@ -57,7 +57,9 @@ need their own validation.
   This is broader validation, not a signed package or a cross-platform test.
 
 Before the first `scan`, install the pinned browser engines with
-`bin/pnpm test:browser:install`; missing engines fail rather than skip. See
+`bin/pnpm test:browser:install`; missing engines fail rather than skip. Linux native
+notification tests also require `dbus-daemon` (installed in CI). They start and stop
+isolated test buses, never use the desktop session bus or display real banners. See
 [browser regression coverage and measurement limits](browser-testing.md).
 
 Installs run on every invocation to account for branch and lockfile changes.
@@ -189,6 +191,9 @@ the complete suite still runs with `pnpm test` / `just scan`:
   doctests (including Tauri), and every Node integration test. The CLI integration
   tests build Rust and install scaffold dependencies; they are intentionally CI-only
   rather than part of pre-push.
+- **Windows native notifications:** Clippy and all Tauri-package tests on Windows,
+  using the repository Rust pin through rustup (Hermit is not available there).
+  This compiles the Windows backend; it does not exercise OS banner interaction.
 - **Browser measurements:** Chromium then WebKit, serially on an isolated runner.
 - **Browser journeys:** four runners (Chromium and WebKit, two file-level shards
   per engine), each with two workers. They start alongside measurements on separate
@@ -204,7 +209,7 @@ the complete suite still runs with `pnpm test` / `just scan`:
 
 Actions and tool versions are pinned, installs use the frozen lockfile, and
 Hermit/pnpm/Cargo/browser caches avoid repeat downloads and cold compilation.
-Superseded PR runs are cancelled. CI uses disposable Ubuntu runners and no live
+Superseded PR runs are cancelled. CI uses disposable Ubuntu/Windows runners and no live
 Buzz identity or signing credentials. It is not native GUI acceptance, a signed
 package, or a cross-platform release gate. `just scan` remains available locally;
 CI does not add full scans to commit/push or ordinary interactive feedback rounds.

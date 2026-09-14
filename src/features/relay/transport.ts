@@ -34,6 +34,8 @@ export interface RelayWriter {
   publish(event: RelayEvent, signal: AbortSignal): Promise<void>;
 }
 export interface ReadTransport {
+  /** Purpose-bound observer decoding on the shared host live stream. */
+  readonly agentActivity?: boolean;
   /** Host-projected local library; display only, never relay authority. */
   readonly readAgentLibrary?: AgentLibraryReader;
   /** Host-only decoder of the viewer's two signed sidebar preference coordinates. */
@@ -145,6 +147,7 @@ export async function connectBrokerTransport(
     live?: boolean;
     sidebarPreferences?: boolean;
     agentLibrary?: boolean;
+    agentActivity?: boolean;
     readState?: boolean;
     readStateCommunity?: string;
   };
@@ -162,6 +165,7 @@ export async function connectBrokerTransport(
     );
   return {
     profiling,
+    agentActivity: session.agentActivity === true && session.live === true,
     ...(session.live
       ? {
           subscribe: (callbacks: LiveCallbacks) =>

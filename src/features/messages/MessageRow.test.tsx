@@ -229,3 +229,61 @@ it.each([9, 40002])(
     }
   },
 );
+
+it.each([
+  [
+    { width: 700, height: 900 },
+    "width:248.88888888888889px;aspect-ratio:700 / 900",
+  ],
+  [{ width: 1600, height: 900 }, "width:360px;aspect-ratio:1600 / 900"],
+  [{ width: 20, height: 10 }, "width:20px;aspect-ratio:20 / 10"],
+])(
+  "reserves metadata-sized previews without waiting for load: %j",
+  (dimensions, style) => {
+    const html = renderToStaticMarkup(
+      <MessageRow
+        row={{
+          ...row,
+          attachments: [
+            { url: "https://image.test/shot.png", video: false, dimensions },
+          ],
+        }}
+        profile={undefined}
+        media={(url) => url}
+        onOpenLink={() => false}
+        day={false}
+        retry={undefined}
+      />,
+    );
+    expect(html).toContain(`style="${style}"`);
+    expect(html).toContain('aria-label="Open image attachment"');
+    expect(html).toContain('loading="lazy"');
+  },
+);
+
+it("does not bypass the session media resolver to paint an inaccessible attachment", () => {
+  const media = vi.fn(() => undefined);
+  const html = renderToStaticMarkup(
+    <MessageRow
+      row={{
+        ...row,
+        attachments: [
+          {
+            url: "https://image.test/original.png",
+            video: false,
+            blurhash: "LEHV6nWB2yk8pyo0adR*.7kCMdnj",
+          },
+        ],
+      }}
+      profile={undefined}
+      media={media}
+      onOpenLink={() => false}
+      day={false}
+      retry={undefined}
+    />,
+  );
+  expect(media).toHaveBeenCalledWith("https://image.test/original.png");
+  expect(html).toContain("Image unavailable");
+  expect(html).not.toContain("<canvas");
+  expect(html).not.toContain("<img");
+});

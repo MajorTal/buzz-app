@@ -4,7 +4,7 @@ import { foldMessages } from "./fold";
 import type { OutgoingEvent } from "./outbox";
 import type { RelayProfiler } from "./profiling";
 
-const messageKind = (kind: number) => kind === 9 || kind === 40002;
+import { channelRowKind as messageKind } from "./membership";
 const order = (a: ChannelMessage, b: ChannelMessage) =>
   a.createdAt - b.createdAt || b.id.localeCompare(a.id);
 

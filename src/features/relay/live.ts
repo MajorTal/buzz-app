@@ -1,3 +1,8 @@
+import {
+  OBSERVER_KIND,
+  observerGeneration,
+  type ObserverFrame,
+} from "../agents/observer.ts";
 import type { EventTemplate, VerifiedEvent } from "nostr-tools";
 import { eventDto } from "./events.ts";
 import { EMOJI_SET } from "./emoji.ts";
@@ -38,8 +43,37 @@ export type LiveSnapshot = Readonly<{
   routes: readonly LiveRoute[];
   error?: string;
 }>;
+/** Transport provenance, not a history-completeness claim or permission to alert. */
+export type LiveProvenance = Readonly<{
+  phase: "replay" | "live";
+  channelId?: string;
+}>;
+export function liveProvenance(value: unknown): LiveProvenance {
+  if (!value || typeof value !== "object")
+    throw new Error("Invalid live provenance");
+  const input = value as Record<string, unknown>;
+  if (input.phase !== "replay" && input.phase !== "live")
+    throw new Error("Invalid live provenance");
+  if (
+    input.channelId !== undefined &&
+    (typeof input.channelId !== "string" ||
+      !/^[a-zA-Z0-9_-]{1,128}$/.test(input.channelId))
+  )
+    throw new Error("Invalid live provenance channel");
+  return Object.freeze({
+    phase: input.phase,
+    ...(typeof input.channelId === "string"
+      ? { channelId: input.channelId }
+      : {}),
+  });
+}
 export type LiveCallbacks = {
-  receive(events: readonly VerifiedEvent[]): void;
+  /** Legacy/missing provenance reconciles quietly; it is never implicitly fresh. */
+  receive(events: readonly VerifiedEvent[], provenance?: LiveProvenance): void;
+  /** Host-only encrypted telemetry route; never ordinary history reconciliation. */
+  telemetry?(event: VerifiedEvent, generation: number): void;
+  /** Decoded host DTO on the browser transport. */
+  observer?(frame: ObserverFrame, generation: number): void;
   state(snapshot: LiveSnapshot): void;
   established(channelId?: string): void;
   denied(channelId: string, reason: string): void;
@@ -48,6 +82,7 @@ export type LiveSubscription = {
   update(channels: readonly string[]): void;
   /** Host demand only: reorder existing pending routes, never grant new interests. */
   prioritize?(channels: readonly string[]): void;
+  observe?(generation: number | null): void;
   retry(): void;
   dispose(): void;
 };
@@ -78,7 +113,7 @@ type Route = {
   quotaRetries: number;
   deadline?: ReturnType<typeof setTimeout>;
 };
-const CHANNEL_KINDS = [9, 40002, 40003, 5, 9005, 7, 39000, 39002, 39005];
+const CHANNEL_KINDS = [9, 40002, 40099, 40003, 5, 9005, 7, 39000, 39002, 39005];
 /** One authenticated socket, independently established channel routes and two explicit globals.
  * Recent replay is opportunistic: finite reads own catch-up and history bounds. */
 export function subscribeRelayTraffic(
@@ -102,6 +137,7 @@ export function subscribeRelayTraffic(
   let connectionError: string | undefined;
   let interests: string[] = [];
   let priority: string[] = [];
+  let observer: number | null = null;
   const routes = new Map<string, Route>();
   const wires = new Map<string, Route>();
   const notify = () => {
@@ -139,6 +175,7 @@ export function subscribeRelayTraffic(
     const wanted = new Set([
       "profiles",
       "membership",
+      ...(observer !== null ? ["observer"] : []),
       ...interests.map((id) => `channel:${id}`),
     ]);
     for (const route of routes.values())
@@ -162,7 +199,9 @@ export function subscribeRelayTraffic(
         ...interests,
       ]),
     ];
-    const admitted = new Set(ranked.slice(0, LIVE_CHANNEL_CAPACITY));
+    const admitted = new Set(
+      ranked.slice(0, LIVE_CHANNEL_CAPACITY - (observer !== null ? 1 : 0)),
+    );
     for (const route of routes.values())
       if (route.channelId) {
         if (!admitted.has(route.channelId)) {
@@ -257,18 +296,22 @@ export function subscribeRelayTraffic(
           fail(route, "Live subscription setup timed out; retry available");
       }, 10000);
       active++;
+      if (route.id === "observer") route.since = Math.floor(Date.now() / 1000);
       const scope = route.channelId
         ? { kinds: CHANNEL_KINDS, "#h": [route.channelId] }
         : route.id === "profiles"
           ? { kinds: [0] }
-          : { kinds: [44100, 44101], "#p": [viewer] };
+          : route.id === "observer"
+            ? { kinds: [OBSERVER_KIND], "#p": [viewer] }
+            : { kinds: [44100, 44101], "#p": [viewer] };
       send([
         "REQ",
         wire,
         {
           ...scope,
+          // Live-only on every actual dispatch, including paced retries.
           since: route.since,
-          limit: LIVE_REPLAY_LIMIT,
+          ...(route.id === "observer" ? {} : { limit: LIVE_REPLAY_LIMIT }),
         },
         ...(route.id === "membership"
           ? [
@@ -416,7 +459,21 @@ export function subscribeRelayTraffic(
           return;
         }
         if (route.status === "pending") route.count++;
-        callbacks.receive([incoming]);
+        if (route.id === "observer") {
+          if (
+            observer !== null &&
+            incoming.kind === OBSERVER_KIND &&
+            incoming.created_at >= route.since
+          )
+            callbacks.telemetry?.(incoming, observer);
+        } else if (incoming.kind !== OBSERVER_KIND)
+          callbacks.receive(
+            [incoming],
+            Object.freeze({
+              phase: route.status === "live" ? "live" : "replay",
+              ...(route.channelId ? { channelId: route.channelId } : {}),
+            }),
+          );
       } else if (data[0] === "EOSE" && route.status === "pending") {
         clearTimeout(route.deadline);
         route.status = "live";
@@ -424,7 +481,7 @@ export function subscribeRelayTraffic(
         route.replay = route.count >= LIVE_REPLAY_LIMIT ? "limited" : "unknown";
         notify();
         if (!valid() || wires.get(route.wire ?? "") !== route) return;
-        callbacks.established(route.channelId);
+        if (route.id !== "observer") callbacks.established(route.channelId);
         if (valid()) pump();
       } else if (data[0] === "CLOSED") {
         fail(
@@ -440,6 +497,14 @@ export function subscribeRelayTraffic(
   }
   connect();
   return {
+    observe(value) {
+      const next = observerGeneration(value);
+      if (closed || observer === next) return;
+      observer = next;
+      const route = routes.get("observer");
+      if (route) remove(route); // Fence the old wire before enabling a new generation.
+      sync();
+    },
     prioritize(input) {
       liveChannels(input); // Same bounded ID validation, but preserve demand order.
       priority = [...new Set(input)].slice(0, 64);

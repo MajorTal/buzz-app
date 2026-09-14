@@ -15,11 +15,7 @@ export function useReading({
   settled: RefObject<boolean>;
 }) {
   useEffect(() => {
-    if (
-      !scroller.current ||
-      session.unread.sync().capability !== "frontier-sync"
-    )
-      return;
+    if (!scroller.current) return;
     const element: HTMLElement = scroller.current;
     let handle: ReadingHandle | undefined;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -43,7 +39,8 @@ export function useReading({
       return [...element.querySelectorAll<HTMLElement>("[data-message-id]")]
         .flatMap((row) => {
           const bounds = row.getBoundingClientRect();
-          return row.dataset.messageId &&
+          return row.dataset.membershipRow === undefined &&
+            row.dataset.messageId &&
             bounds.height > 0 &&
             bounds.width > 0 &&
             bounds.top >= Math.max(viewport.top, 0) &&
@@ -63,6 +60,7 @@ export function useReading({
       try {
         // Capture the lease BEFORE dwell: a newer manual action invalidates it.
         handle = session.unread.reading(channelId);
+        handle.view(ids, active);
       } catch {
         return; // Membership may disappear between commit and observation.
       }
@@ -75,7 +73,11 @@ export function useReading({
         const visible = new Set(visibleIds());
         // A row appearing only at the end of the interval has not had a dwell.
         const remained = ids.filter((id) => visible.has(id));
-        if (remained.length) void handle?.observe(remained).catch(() => {});
+        if (
+          remained.length &&
+          session.unread.sync().capability === "frontier-sync"
+        )
+          void handle?.observe(remained).catch(() => {});
       }, 750);
     }
     for (const event of [

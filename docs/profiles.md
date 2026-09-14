@@ -4,6 +4,10 @@ The bundled `buzz.profiles` plugin supplies a minimal, read-only panel for any
 public identity, human or agent. It uses the current session's shared profile
 directory. Agents retains agent-specific configuration/operations; this slice
 adds no ownership/running badge, editor, agent-library lookup or execution API.
+When Agent Activity is enabled and the host supplies conversation context, **View
+activity** opens its raw panel for this exact identity and originating channel.
+This action is offered for any public identity: it does not infer that the identity
+is an owned/running agent. Missing telemetry is explained by the activity panel.
 
 ## Boundaries
 
@@ -35,7 +39,7 @@ adds no ownership/running badge, editor, agent-library lookup or execution API.
 
 ## UI and iteration
 
-Avatar, name, about and exact copyable npub only. Shared design-system Avatar and
+Avatar, name, about, exact copyable npub, and an optional contextual activity action. Shared design-system Avatar and
 Button use the host-loaded styles directly. The profile content marks its
 `data-buzz-ui` boundary and uses shared heading/body/mono roles; its stylesheet
 owns layout, not component overrides. No new theme owner, second global reset or

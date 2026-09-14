@@ -23,10 +23,17 @@ export type Profile = Readonly<{
 export type Attachment = Readonly<{
   url: string;
   video: boolean;
-  /** Signed NIP-92 dimensions, when supplied by the sender. */
   dimensions?: Readonly<{ width: number; height: number }>;
+  /** Validated message-carried BlurHash; decoded locally only for presentation. */
+  blurhash?: string;
   /** Signed video poster or media thumbnail URL. */
   previewUrl?: string;
+}>;
+/** Relay-authored membership activity, not a membership grant or user message. */
+export type MembershipChange = Readonly<{
+  type: "member_joined" | "member_left" | "member_removed";
+  actor: string;
+  target: string;
 }>;
 export type ChannelMessage = Readonly<{
   id: string;
@@ -37,6 +44,7 @@ export type ChannelMessage = Readonly<{
   /** Unix seconds from the signed event. Ordering is (createdAt asc, id desc); no clock inference. */
   createdAt: number;
   content: string;
+  membership?: MembershipChange;
   /** Current body came from a replacement edit; original recipients do not bind its prose. */
   edited?: true;
   /** Attachment removal changed the signed body; new text adjacency cannot bind identities. */

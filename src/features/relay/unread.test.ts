@@ -671,3 +671,106 @@ it.each([5, 9005])(
     expect(seen).toEqual([[0, 0]]);
   },
 );
+
+it("projects event attention through the same mention, DM, participation and frontier policy", async () => {
+  const h = setup();
+  h.grant("room");
+  const own = message(h.viewer, "room", "root", 11);
+  const reply = message(h.alice, "room", "reply", 12, [
+    ["e", own.id, "", "reply"],
+  ]);
+  const mention = message(h.alice, "room", "mention", 13, [
+    ["p", h.viewer.pubkey],
+  ]);
+  const ordinary = message(h.alice, "room", "ordinary", 14);
+  h.emit([own, reply, mention, ordinary]);
+  const attention = (id: string) => h.session.unread.attention("room", id);
+  expect(attention(own.id)).toMatchObject({
+    status: "ineligible",
+    unread: false,
+  });
+  expect(attention(reply.id)).toMatchObject({
+    status: "eligible",
+    category: "thread",
+    rootId: own.id,
+    unread: true,
+  });
+  expect(attention(mention.id)).toMatchObject({
+    status: "eligible",
+    category: "mention",
+    unread: true,
+  });
+  expect(attention(ordinary.id)).toMatchObject({
+    status: "ineligible",
+    unread: true,
+  });
+  expect(h.snapshot().attentionCount).toBe(2);
+  const lease = h.session.unread.reading("room");
+  await lease.observe([reply.id]);
+  expect(attention(reply.id).unread).toBe(false);
+  expect(h.snapshot().attentionCount).toBe(1);
+  h.emit([
+    signed(h.relay, {
+      kind: 39000,
+      created_at: 20,
+      content: "",
+      tags: [
+        ["d", "room"],
+        ["name", "DM"],
+        ["t", "dm"],
+      ],
+    }),
+  ]);
+  expect(attention(ordinary.id)).toMatchObject({
+    status: "eligible",
+    category: "direct",
+  });
+  expect(attention(mention.id).category).toBe("mention");
+  expect(h.snapshot().attentionCount).toBe(2);
+  expect(attention("f".repeat(64)).status).toBe("unknown");
+  lease.dispose();
+});
+it("qualified viewing is lease-scoped and never writes a read marker", async () => {
+  const h = setup();
+  h.grant("room");
+  const row = message(h.alice, "room", "mention", 11, [["p", h.viewer.pubkey]]);
+  h.emit([row]);
+  let focused = true;
+  const lease = h.session.unread.reading("room");
+  const attention = () => h.session.unread.attention("room", row.id);
+  lease.view([row.id, "f".repeat(64)], () => focused);
+  expect(attention().viewing).toBe(true);
+  await flush();
+  expect(h.host.sign).not.toHaveBeenCalled();
+  expect(attention().unread).toBe(true);
+  focused = false;
+  expect(attention().viewing).toBe(false);
+  focused = true;
+  lease.dispose();
+  expect(attention().viewing).toBe(false);
+});
+it("attention fails closed after deletion or access loss, and viewing cannot survive regrant", () => {
+  const h = setup();
+  h.grant("room");
+  const row = message(h.alice, "room", "mention", 11, [["p", h.viewer.pubkey]]);
+  h.emit([row]);
+  const lease = h.session.unread.reading("room");
+  lease.view([row.id], () => true);
+  h.emit([
+    signed(h.alice, {
+      kind: 5,
+      created_at: 12,
+      content: "",
+      tags: [["e", row.id]],
+    }),
+  ]);
+  expect(h.session.unread.attention("room", row.id)).toMatchObject({
+    status: "ineligible",
+    viewing: false,
+  });
+  h.emit([roster(h.relay, "room", [], 20)]);
+  expect(h.session.unread.attention("room", row.id).status).toBe("unknown");
+  h.grant("room", 30);
+  h.emit([row]);
+  expect(h.session.unread.attention("room", row.id).viewing).toBe(false);
+});

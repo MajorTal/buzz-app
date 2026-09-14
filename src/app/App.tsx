@@ -100,6 +100,7 @@ export function App({ services }: { services: AppServices }) {
           plugins={plugins}
           communities={services.communities}
           appearance={services.appearance}
+          notifications={services.notifications}
           navigation={route.request}
           onSection={(section) =>
             void services.navigation.open({

@@ -140,6 +140,25 @@ channel timeline. Failed content rows stay visible for same-event retry; failed
 auxiliary edits/reactions stop affecting the fold. Verified echo reconciliation and
 persisted signed-event retry remain the same outbox operations as channel sends.
 
+## Exact message navigation
+
+`session.thread(channelId, messageId, { exact: true })` retains the selected
+`target` and `targetStatus` inside the existing thread owner. At most three bounded
+reads fetch the target ID, reference overlays and deletions of those overlays
+before exposing it. The root is resolved from signed ancestry, never a navigation
+hint. Normal bounded thread traversal provides surrounding context; its cursor
+never comes from the selected row. An accessible selected reply remains available
+even if the original root is missing or the reply lies beyond the traversal cap.
+
+Reference queries omit `#h` for legacy edits/deletes but retain session visibility
+checks. Raw target/overlay responses reaching 500 events fail before filtering.
+Evidence shares the thread's 2,000-event / 4 MiB budget and 64-view ceiling.
+Known tombstones survive sparse refreshes and shared-cache eviction. Exact reads
+share verification, admission, access epochs and live reconciliation without
+inserting isolated rows into channel history. Explicit denial revokes the owning
+channel; access loss, cache clear and disposal purge the view. There is no separate
+reader owner, subscription or persistence.
+
 ## Ownership and reconciliation
 
 | Internal owner | Responsibility |

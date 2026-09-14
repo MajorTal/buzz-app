@@ -1,3 +1,4 @@
+import { channelRowKind, rowProfileIds, messagePreview } from "./membership";
 import type { Outbox } from "./outbox";
 import { MessageProjection } from "./message-projection";
 import { createRelayProfiler, type RelayProfiler } from "./profiling";
@@ -152,9 +153,9 @@ export function createChannelStore(
     );
     const channels = next.channels.map((channel) => {
       const preview =
-        windows.get(channel.id)?.snapshot.rows.at(-1)?.content ??
+        messagePreview(windows.get(channel.id)?.snapshot.rows) ??
         tails.peek(channel.id)?.preview ??
-        heads.peek(channel.id)?.rows.at(-1)?.content;
+        messagePreview(heads.peek(channel.id)?.rows);
       const old = previous.get(channel.id);
       return old &&
         old.name === channel.name &&
@@ -230,10 +231,10 @@ export function createChannelStore(
       )
     )
       return;
-    const previousPreview = state.snapshot.rows.at(-1)?.content;
+    const previousPreview = messagePreview(state.snapshot.rows);
     state.snapshot = Object.freeze(next);
     notify(windowListeners.get(state.channelId));
-    if (previousPreview !== rows.at(-1)?.content) setList(list);
+    if (previousPreview !== messagePreview(rows)) setList(list);
   }
   const idleWindows = new Map<string, ChannelWindow>();
   function idleWindow(channelId: string): ChannelWindow {
@@ -319,10 +320,7 @@ export function createChannelStore(
     mediaIntents.length = Math.min(3, mediaIntents.length);
     const urls = mediaIntents.flatMap((id) => {
       const rows = heads.peek(id)?.rows ?? windows.get(id)?.snapshot.rows ?? [];
-      const authors = rows
-        .slice(-12)
-        .reverse()
-        .flatMap((row) => [row.authorId, ...row.participants]);
+      const authors = rows.slice(-12).reverse().flatMap(rowProfileIds);
       return authors.flatMap((author) => {
         const picture = directory.queries.snapshot().get(author)?.picture;
         const url = picture && transport?.media(picture);
@@ -333,14 +331,7 @@ export function createChannelStore(
   }
   async function fetchProfiles(rows: readonly ChannelMessage[]) {
     try {
-      await directory.ensure(
-        rows.flatMap((row) => [
-          row.authorId,
-          ...row.mentions,
-          ...row.participants,
-        ]),
-        "background",
-      );
+      await directory.ensure(rows.flatMap(rowProfileIds), "background");
       if (!disposed && intent) prepareMedia(intent);
     } catch {
       // Names are optional for channel rendering. Missing profiles remain retryable.
@@ -363,13 +354,7 @@ export function createChannelStore(
       heads.peek(channelId) !== head
     )
       return;
-    const authors = new Set(
-      head.rows.flatMap((row) => [
-        row.authorId,
-        ...row.mentions,
-        ...row.participants,
-      ]),
-    );
+    const authors = new Set(head.rows.flatMap(rowProfileIds));
     const profiles = [...authors].flatMap((id) => {
       const event = directory.event(id);
       return event ? [event] : [];
@@ -1055,13 +1040,15 @@ export function createChannelStore(
         .slice(0, 256);
       const preview = windows.has(channelId)
         ? tails.peek(channelId)?.preview
-        : foldMessages(channelId, transport.relayAuthor, [
-            ...new Map(
-              [...(heads.peek(channelId)?.events ?? []), ...retained].map(
-                (event) => [event.id, event],
-              ),
-            ).values(),
-          ]).at(-1)?.content;
+        : messagePreview(
+            foldMessages(channelId, transport.relayAuthor, [
+              ...new Map(
+                [...(heads.peek(channelId)?.events ?? []), ...retained].map(
+                  (event) => [event.id, event],
+                ),
+              ).values(),
+            ]),
+          );
       tails.set(channelId, { events: retained, preview });
     }
     for (const state of windows.values()) {
@@ -1071,7 +1058,7 @@ export function createChannelStore(
       const incoming = events.filter(
         (event) =>
           !ids.has(event.id) &&
-          [9, 40002, 40003, 5, 9005, 7, 39005].includes(event.kind) &&
+          [9, 40002, 40099, 40003, 5, 9005, 7, 39005].includes(event.kind) &&
           event.tags.some(
             (tag) =>
               (tag[0] === "h" && tag[1] === state.channelId) ||
@@ -1087,14 +1074,13 @@ export function createChannelStore(
       if (
         byteSize(retained) > maxHistoryBytes ||
         retained.filter(
-          (event) => [9, 40002].includes(event.kind) && !localIds.has(event.id),
+          (event) => channelRowKind(event.kind) && !localIds.has(event.id),
         ).length > maxHistoryRows
       ) {
         limited = true;
         const newest = retained
           .filter(
-            (event) =>
-              [9, 40002].includes(event.kind) && !localIds.has(event.id),
+            (event) => channelRowKind(event.kind) && !localIds.has(event.id),
           )
           .sort(
             (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
@@ -1104,7 +1090,7 @@ export function createChannelStore(
         retained = retained.filter(
           (event) =>
             keep.has(event.id) ||
-            (![9, 40002].includes(event.kind) &&
+            (!channelRowKind(event.kind) &&
               event.tags.some(
                 (tag) => tag[0] === "e" && keep.has(tag[1] ?? ""),
               )),
@@ -1129,7 +1115,7 @@ export function createChannelStore(
       if (tail && state)
         tails.set(channelId, {
           ...tail,
-          preview: state.snapshot.rows.at(-1)?.content,
+          preview: messagePreview(state.snapshot.rows),
         });
     }
     setList(list);
@@ -1166,10 +1152,12 @@ export function createChannelStore(
       const events = visible(tail.events);
       tails.set(id, {
         events,
-        preview: foldMessages(id, transport.relayAuthor, [
-          ...(heads.peek(id)?.events ?? []),
-          ...events,
-        ]).at(-1)?.content,
+        preview: messagePreview(
+          foldMessages(id, transport.relayAuthor, [
+            ...(heads.peek(id)?.events ?? []),
+            ...events,
+          ]),
+        ),
       });
     }
     for (const state of [...windows.values()]) {

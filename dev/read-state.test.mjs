@@ -65,6 +65,33 @@ describe("host-only read-state codec", () => {
     }
     key.fill(0);
   });
+  it("keeps explicit receive-event and aggregate bounds while publication validation stays smaller", () => {
+    const small = signReadState(intent, secret, 100);
+    const base = { ...small, tags: [...small.tags, ["padding", ""]] };
+    const remaining = 96 * 1024 - Buffer.byteLength(JSON.stringify(base));
+    const padded = (length) =>
+      finalizeEvent(
+        { ...small, tags: [...small.tags, ["padding", "x".repeat(length)]] },
+        secret,
+      );
+    const event = padded(remaining);
+    expect(Buffer.byteLength(JSON.stringify(event))).toBe(96 * 1024);
+    expect(decodeReadState(Array(4).fill(event), secret)).toEqual(
+      Array(4).fill({ eventId: event.id, blob }),
+    );
+    expect(() => decodeReadState([padded(remaining + 1)], secret)).toThrow(
+      "Invalid read-state event",
+    );
+    expect(() => decodeReadState(Array(6).fill(event), secret)).toThrow(
+      "capacity",
+    );
+    expect(() => validReadStateEvent(event, secret)).toThrow(
+      "Invalid read-state event",
+    );
+    expect(() =>
+      decodeReadState([{ ...event, content: "changed" }], secret),
+    ).toThrow();
+  });
   it("bounds work before decrypting/signing", () => {
     expect(() => decodeReadState(Array(17).fill({}), secret)).toThrow(
       "capacity",

@@ -83,7 +83,7 @@ it("uses independent explicit channel routes and self-p globals; equal interests
       limit: 500,
     },
     {
-      kinds: expect.arrayContaining([9, 40003, 7, 39002]),
+      kinds: expect.arrayContaining([9, 40003, 7, 39002, 40099]),
       "#h": ["a"],
       since: expect.any(Number),
       limit: 500,
@@ -103,7 +103,15 @@ it("uses independent explicit channel routes and self-p globals; equal interests
   const event = message(keypair(), "a", "incoming", 1700000000);
   await h.first.receive(["EVENT", request[1], event]);
   await h.first.receive(["EOSE", request[1]]);
-  expect(h.callbacks.receive).toHaveBeenCalledWith([event]);
+  expect(h.callbacks.receive).toHaveBeenCalledWith([event], {
+    phase: "replay",
+    channelId: "a",
+  });
+  await h.first.receive(["EVENT", request[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "live",
+    channelId: "a",
+  });
   expect(h.callbacks.established).toHaveBeenCalledWith("a");
   expect(
     h.callbacks.state.mock.lastCall?.[0].routes.find(
@@ -571,6 +579,120 @@ it("requests community emoji on the existing profile route and delivers verified
     ],
   });
   await h.first.receive(["EVENT", req?.[1], event]);
-  expect(h.callbacks.receive).toHaveBeenCalledWith([event]);
+  expect(h.callbacks.receive).toHaveBeenCalledWith([event], {
+    phase: "replay",
+  });
   h.owner.dispose();
+});
+
+it("a reconnect starts a new replay phase even for previously established routes", async () => {
+  vi.useFakeTimers();
+  const h = setup(["a"]);
+  await h.first.auth();
+  await vi.advanceTimersByTimeAsync(750);
+  const request = h.first.requests()[2];
+  assert.exists(request);
+  await h.first.receive(["EOSE", request[1]]);
+  const event = message(keypair(), "a", "live", 1700000000);
+  await h.first.receive(["EVENT", request[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "live",
+    channelId: "a",
+  });
+  h.first.close();
+  await vi.advanceTimersByTimeAsync(500);
+  const socket = h.sockets[1];
+  assert.exists(socket);
+  await socket.auth();
+  await vi.advanceTimersByTimeAsync(750);
+  const replay = socket.requests()[2];
+  assert.exists(replay);
+  await socket.receive(["EVENT", replay[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "replay",
+    channelId: "a",
+  });
+  h.owner.dispose();
+});
+
+it("live channel provenance excludes observer telemetry while preserving membership traffic", async () => {
+  vi.useFakeTimers();
+  const h = setup(["a"]);
+  try {
+    await h.first.auth();
+    await vi.advanceTimersByTimeAsync(750);
+    const route = h.first.requests()[2];
+    assert.exists(route);
+    await h.first.receive(["EOSE", route[1]]);
+    const telemetry = signed(h.key, {
+      kind: 24200,
+      content: "opaque",
+      tags: [],
+    });
+    await h.first.receive(["EVENT", route[1], telemetry]);
+    expect(h.callbacks.receive).not.toHaveBeenCalled();
+    const membership = signed(h.key, {
+      kind: 40099,
+      content: "{}",
+      tags: [["h", "a"]],
+    });
+    await h.first.receive(["EVENT", route[1], membership]);
+    expect(h.callbacks.receive).toHaveBeenCalledExactlyOnceWith([membership], {
+      phase: "live",
+      channelId: "a",
+    });
+  } finally {
+    h.owner.dispose();
+  }
+});
+
+it("observer route is optional, live-only at dispatch/retry, separately fenced and never ordinary replay", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1800000000000);
+  const h = setup([]);
+  const telemetry = vi.fn();
+  Object.assign(h.callbacks, { telemetry });
+  await h.first.auth();
+  await vi.advanceTimersByTimeAsync(500);
+  const globals = h.first.requests().map((request) => request[1]);
+  h.owner.observe?.(1);
+  await vi.advanceTimersByTimeAsync(250);
+  const first = h.first.requests().at(-1);
+  assert.exists(first);
+  expect(first[2]).toEqual({
+    kinds: [24200],
+    "#p": [h.key.pubkey],
+    since: Math.floor(Date.now() / 1000),
+  });
+  const event = signed(h.key, {
+    kind: 24200,
+    content: "opaque",
+    tags: [],
+    created_at: Math.floor(Date.now() / 1000),
+  });
+  await h.first.receive(["EVENT", first[1], event]);
+  expect(telemetry).toHaveBeenCalledWith(event, 1);
+  expect(h.callbacks.receive).not.toHaveBeenCalled();
+  await h.first.receive(["EOSE", first[1]]);
+  expect(h.callbacks.established).not.toHaveBeenCalled();
+  await h.first.receive(["CLOSED", first[1], "temporary: unavailable"]);
+  await vi.advanceTimersByTimeAsync(3000);
+  h.owner.retry();
+  const retried = h.first.requests().at(-1);
+  assert.exists(retried);
+  expect(retried[2].since).toBeGreaterThan(first[2].since);
+  h.owner.observe?.(2);
+  await vi.advanceTimersByTimeAsync(250);
+  await h.first.receive(["EVENT", first[1], event]);
+  await h.first.receive(["EVENT", retried[1], event]);
+  expect(telemetry).toHaveBeenCalledTimes(1);
+  h.owner.observe?.(null);
+  expect(
+    h.first.sent
+      .filter((entry) => entry[0] === "CLOSE")
+      .some((entry) => globals.includes(entry[1] as string)),
+  ).toBe(false);
+  expect(h.sockets).toHaveLength(1);
+  h.owner.dispose();
+  expect(vi.getTimerCount()).toBe(0);
 });

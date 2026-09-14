@@ -6,6 +6,7 @@ import { profileTarget } from "../profiles/target";
 import { InlineText } from "../conversation/InlineText";
 import type { ConversationExtensions } from "../conversation/contracts";
 import type { ChannelMessage, Profile } from "../relay/contracts";
+import { AttachmentImage } from "./AttachmentImage";
 import { DeliveryNotice } from "./DeliveryNotice";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { safeMessageUrl } from "../relay/message-content";
@@ -138,35 +139,44 @@ export const MessageRow = memo(function MessageRow({
             largeEmoji={emojiOnly}
           />
           <DeliveryNotice row={row} retry={retry} />
-          {row.attachments.length > 0 && (
-            <div className={styles.mediaAttachments}>
-              {row.attachments.map((attachment) => {
-                if (!safeMessageUrl(attachment.url)) return null;
-                return (
-                  <MediaAttachment
-                    key={attachment.url}
-                    attachment={attachment}
-                    media={media}
-                    mode={mediaMode}
-                    {...(attachment.video && mediaSeekTo !== undefined
-                      ? {
-                          seekTo: mediaSeekTo,
-                          ...(mediaSeekRequest !== undefined
-                            ? { seekRequest: mediaSeekRequest }
-                            : {}),
-                        }
-                      : {})}
-                    {...(onMediaPlayback
-                      ? { onPlayback: onMediaPlayback }
-                      : {})}
-                    {...(onOpenMediaReview
-                      ? { onOpenReview: onOpenMediaReview }
-                      : {})}
-                  />
-                );
-              })}
-            </div>
-          )}
+          {row.attachments.map((attachment) => {
+            const url = safeMessageUrl(attachment.url);
+            if (!url) return null;
+            const source = media(url);
+            if (!attachment.video && source)
+              return (
+                <AttachmentImage
+                  key={url}
+                  attachment={{ ...attachment, url }}
+                  url={url}
+                  source={source}
+                  onOpenLink={onOpenLink}
+                  {...(onOpenMediaReview
+                    ? { onOpenReview: onOpenMediaReview }
+                    : {})}
+                />
+              );
+            return (
+              <MediaAttachment
+                key={url}
+                attachment={{ ...attachment, url }}
+                media={media}
+                mode={mediaMode}
+                {...(attachment.video && mediaSeekTo !== undefined
+                  ? {
+                      seekTo: mediaSeekTo,
+                      ...(mediaSeekRequest !== undefined
+                        ? { seekRequest: mediaSeekRequest }
+                        : {}),
+                    }
+                  : {})}
+                {...(onMediaPlayback ? { onPlayback: onMediaPlayback } : {})}
+                {...(onOpenMediaReview
+                  ? { onOpenReview: onOpenMediaReview }
+                  : {})}
+              />
+            );
+          })}
           {row.reactions.length > 0 && (
             <div className={styles.reactions}>
               {row.reactions.map((reaction) => (

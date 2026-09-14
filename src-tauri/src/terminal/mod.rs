@@ -13,7 +13,9 @@ use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 const MAX_OWNERS: usize = 32;
+#[cfg(unix)]
 const MAX_SESSIONS: usize = 20;
+#[cfg(unix)]
 pub(super) const MAX_BYTES: usize = 64 * 1024;
 pub(super) const MAX_PENDING_INPUT: usize = 1024 * 1024;
 

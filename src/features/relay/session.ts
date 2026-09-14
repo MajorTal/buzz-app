@@ -4,6 +4,8 @@ import {
   type ReadOptions,
   type RelayReader,
 } from "./reader";
+import { createAgentActivity } from "../agents/activity";
+import { OBSERVER_KIND } from "../agents/observer";
 import { createAgentLibrary } from "../agents/library";
 import { createIdentityArchives } from "./identity-archives";
 import {
@@ -16,6 +18,8 @@ import {
   type ReadStateStorage,
 } from "./read-state-storage";
 import { createUnread } from "./unread";
+import type { IncomingListener, IncomingMessage } from "./incoming";
+import { objectBody } from "./body";
 import { readSidebarPreferences } from "./sidebar-preferences";
 import { createSidebarPreferencesStore } from "./sidebar-preferences-store";
 import { createEmojiDirectory } from "./emoji-directory";
@@ -85,6 +89,7 @@ export function createRelaySession(
     8 * 1024 * 1024,
   );
   const observations = new Set<(events: readonly RelayEvent[]) => void>();
+  const incomingListeners = new Set<IncomingListener>();
   const timers = new Set<ReturnType<typeof setTimeout>>();
   const pendingConfirmation = new Set<string>();
   const refreshers = new Set<() => Promise<void>>();
@@ -170,6 +175,7 @@ export function createRelaySession(
       profiles.clear();
       emoji.clear();
       agentLibrary.clear();
+      activity.clear();
       archives.clear();
       for (const purge of views.values()) purge();
       commit();
@@ -234,7 +240,9 @@ export function createRelaySession(
       events.some((event) => [39000, 39002].includes(event.kind))
     )
       channels.acceptDiscovery(events);
-    const visible = events.filter(visibility(events));
+    const visible = events
+      .filter((event) => event.kind !== OBSERVER_KIND)
+      .filter(visibility(events));
     const epoch = accessEpoch;
     profiling.measure(
       "events.reconcile",
@@ -287,6 +295,12 @@ export function createRelaySession(
   const profiles = createProfileDirectory(verified, localViews, notify);
   const emoji = createEmojiDirectory(verified, notify);
   const agentLibrary = createAgentLibrary(transport?.readAgentLibrary, notify);
+  const activity = createAgentActivity(
+    !!transport?.agentActivity && !!transport.subscribe,
+    (generation) => traffic?.observe?.(generation),
+    (channel) => canAccess(channel),
+    notify,
+  );
   const archives = createIdentityArchives(
     requests.reader,
     transport?.archiveAuthority,
@@ -567,6 +581,14 @@ export function createRelaySession(
     notify,
   );
   const session = Object.freeze({
+    /** Verified new live-route messages, after reconciliation. Never history or local intent. */
+    subscribeIncoming(listener: IncomingListener) {
+      if (closed) return () => {};
+      incomingListeners.add(listener);
+      return () => {
+        incomingListeners.delete(listener);
+      };
+    },
     unread: unread.capability,
     sidebarPreferences: sidebarPreferences.queries,
     live,
@@ -581,7 +603,11 @@ export function createRelaySession(
       validateMentions,
     ),
     /** An owned bounded thread reader. Dispose on close; the session retains access/lifetime authority. */
-    thread(channelId: string, messageId: string) {
+    thread(
+      channelId: string,
+      messageId: string,
+      options?: { exact?: boolean },
+    ) {
       if (closed || views.size >= 64)
         throw new Error("Relay view capacity unavailable");
       if (!/^[0-9a-f]{64}$/.test(messageId))
@@ -590,7 +616,40 @@ export function createRelaySession(
         channelId,
         messageId,
         relayAuthor: transport?.relayAuthor ?? "",
-        reader: verified,
+        reader: options?.exact
+          ? {
+              async read(filters, settings) {
+                const epoch = accessEpoch;
+                let events: readonly RelayEvent[];
+                try {
+                  events = await requests.reader.read(filters, settings);
+                } catch (error) {
+                  if (
+                    !closed &&
+                    epoch === accessEpoch &&
+                    readErrorKind(error) === "denied"
+                  )
+                    channels.denyChannel(channelId, error);
+                  throw error;
+                }
+                if (closed || epoch !== accessEpoch)
+                  throw new DOMException("Stale thread target", "AbortError");
+                settings?.signal?.throwIfAborted();
+                // A capped raw target/overlay read cannot establish a safe fold.
+                if (
+                  !filters.some((filter) => filter.depth_limit) &&
+                  events.length >= 500
+                )
+                  throw new Error(
+                    "Selected message exceeded its evidence limit",
+                  );
+                // The thread owner admits the complete target fold atomically.
+                return events;
+              },
+            }
+          : verified,
+        exact: options?.exact ?? false,
+        admit: options?.exact ? (events) => accept(events, false) : undefined,
         seed: recent.peek(messageId)?.event,
         local: localViews,
         canAccess: () => !closed && canAccess(channelId),
@@ -598,6 +657,8 @@ export function createRelaySession(
         notify,
       });
       threads.add(thread);
+      if (options?.exact)
+        thread.receive(recent.entries().map(([, item]) => item.event));
       observations.add(thread.receive);
       const unsubscribe = localViews?.subscribe(thread.changed);
       const dispose = () => {
@@ -614,6 +675,7 @@ export function createRelaySession(
     profiles: profiles.queries,
     emoji: emoji.queries,
     agentLibrary: agentLibrary.queries,
+    agentActivity: activity.queries,
     archives: archives.queries,
     media: (url: string) => transport?.media(url),
     /** A plugin may request writes from this same interface when the host supports them. */
@@ -866,8 +928,29 @@ export function createRelaySession(
     }
   }
   traffic = transport?.subscribe?.({
-    receive(events) {
+    observer: (frame, generation) => activity.receive(frame, generation),
+    receive(events, provenance) {
       if (closed) return;
+      const candidates = new Set(
+        provenance?.phase === "live" && provenance.channelId
+          ? events
+              .filter((event) => {
+                const destinations = event.tags.filter(
+                  ([name]) => name === "h",
+                );
+                return (
+                  (event.kind === 9 || event.kind === 40002) &&
+                  event.pubkey !== transport.viewer &&
+                  destinations.length === 1 &&
+                  destinations[0]?.[1] === provenance.channelId &&
+                  !recent.peek(event.id) &&
+                  !unread.event(event.id) &&
+                  !rawLocal().some((item) => item.event.id === event.id)
+                );
+              })
+              .map((event) => event.id)
+          : [],
+      );
       // Signed membership notifications are hints, not roster authority. Schedule
       // before visibility filtering, because a newly granted channel may be denied locally.
       if (
@@ -881,10 +964,38 @@ export function createRelaySession(
         )
       )
         refreshRoster();
-      accept(events);
+      const visible = accept(events);
+      if (closed || !candidates.size || !provenance?.channelId) return;
+      const epoch = accessEpoch;
+      const delivered = new Set<string>();
+      const incoming: readonly IncomingMessage[] = Object.freeze(
+        visible.flatMap((event) => {
+          if (!candidates.has(event.id) || delivered.has(event.id)) return [];
+          delivered.add(event.id);
+          const body =
+            event.kind === 40002 ? objectBody(event.content) : undefined;
+          const content =
+            typeof body?.content === "string" ? body.content : event.content;
+          return [
+            Object.freeze({
+              channelId: provenance.channelId as string,
+              messageId: event.id,
+              createdAt: event.created_at,
+              authorId: event.pubkey,
+              previewContent: content.slice(0, 4096),
+            }),
+          ];
+        }),
+      );
+      if (!incoming.length) return;
+      for (const listener of incomingListeners) {
+        if (closed || epoch !== accessEpoch) return;
+        listener(incoming);
+      }
     },
     state(snapshot) {
       if (closed) return;
+      activity.state(snapshot);
       if (
         snapshot.status !== "connected" &&
         liveSnapshot.status === "connected"
@@ -947,6 +1058,7 @@ export function createRelaySession(
     async clearCache() {
       accessEpoch++;
       cacheClearEpoch++;
+      activity.clear();
       sidebarPreferences.clear();
       // New windows must not yield to or receive errors from retired owners.
       catchups.clear();
@@ -965,10 +1077,12 @@ export function createRelaySession(
     dispose() {
       closed = true;
       lifetime.abort();
+      activity.dispose();
       sidebarPreferences.dispose();
       stopInterests();
       traffic?.dispose();
       liveListeners.clear();
+      incomingListeners.clear();
       observations.clear();
       for (const timer of timers) clearTimeout(timer);
       for (const dispose of [...views.keys()]) dispose();

@@ -133,6 +133,26 @@ recovery constraints, not a new shared-session API or a guarantee of general
 profile retry after every cache clear/network failure. See [browser coverage and
 limits](browser-testing.md#dm-label-recovery).
 
+## Membership activity
+
+Channel history and the existing live route include relay-signed kind-40099
+`member_joined`, `member_left` and `member_removed` summaries. Only recognized,
+channel-scoped payloads from the connected relay become activity rows; malformed,
+unknown and other authors' summaries are not rendered as JSON. These events do not
+grant/revoke access: the existing signed roster remains authoritative.
+
+The timeline groups adjacent arrivals/departures into compact avatar-and-text rows.
+Messages, local-day changes and gaps over an hour break groups; removals by different
+actors stay separate. Same-adder additions use “added by you” for the viewer;
+mixed arrivals do not invent an adder. Grouping is presentation-only: signed event
+IDs, pagination cursors and retention budgets remain per event. Profiles reuse the
+shared background directory/cache, and reading anchors can resolve a member of a
+group. Activity has no message actions, thread, unread evidence or chat preview.
+
+An already-running development broker needs a coordinated restart to load the
+expanded live filter; frontend hot reload alone changes only the history/rendering
+path. No native or relay changes are required.
+
 ## Viewing threads
 
 Click a message's reply count to open its root and replies in the right column.
@@ -157,7 +177,8 @@ The footer reuses `MessageComposer` and sends direct replies to the resolved roo
 through `session.messages.reply`. Channel and thread drafts are separate and survive
 reconnection; failed replies remain inline with the shared retry action. Read-only
 connections keep the existing composer capability notice; missing/revoked roots do
-not expose a composer. There is no jump-to-specific-reply navigation yet.
+not expose a composer. Exact navigation can retain and focus a selected reply
+beyond the traversal range; it does not extend that range or promise complete history.
 
 Replies use ascending timestamp/event-ID order, including nested replies. Retry
 appears only after a failed read; there is no routine Refresh control. Names are
@@ -254,3 +275,41 @@ after dwell; no automatic channel-prefix advance hides unseen siblings. Conversa
 options exposes local-only manual unread, explicit mark-through and sync recovery.
 Older synchronized hints may expire under bounded retention. Synced manual-unread
 and OS notifications are not enabled by this feature.
+
+
+### Attachment layout and scrolling
+
+Image attachments reserve their preview geometry before loading and across virtualized
+row remounts. Valid `imeta dim` metadata supplies the aspect ratio, bounded to 360px wide
+and 320px tall without upscaling. Missing/invalid dimensions use a stable 360:320 frame
+that shrinks with the available width; the image is contained without cropping or
+upscaling. Unknown-size images may therefore have empty space in the frame. Loading,
+failure, or retry does not resize it or force an above-bottom reader to the newest row.
+Valid message-carried `imeta blurhash` is decoded locally into a 32×32 canvas in
+that same frame when it intersects the viewport. No thumbnail is fetched. The
+preview is removed entirely (including behind transparency) only after the lazy
+original decodes; failure retains the preview. Missing/invalid hashes or canvas
+failures keep the existing background. Syntax validation bounds hashes to 166
+base83 characters / 9×9 components; folding does no pixel work. Preview work is
+per-mounted-image and uncached, visibility-gated even in nonvirtualized threads.
+Without IntersectionObserver, only the ordinary placeholder/original is used.
+This favors bounded visible work over instant offscreen previews on scrolling.
+`tests/browser/image-scroll.spec.mjs` covers delayed/failed loads, actual remounts,
+bottom following, reading anchors and narrow layout in Chromium and WebKit.
+
+## Opening an exact message
+
+Message-addressed conversations reuse the normal timeline and thread panel. A
+verified, loaded top-level target is revealed in the timeline. An off-window
+message opens as the root in the existing thread panel; a reply opens there with
+its actual root and bounded surrounding replies. No around-message channel query
+or separate detail screen is added. The presentation choice stays fixed for that
+navigation attempt; exact reads do not insert isolated old rows into channel history.
+
+Navigation completes only after the exact folded target is visible and focused.
+Reclick/Back reveals again; live/profile updates do not steal focus. The shared
+rows preserve Markdown, profile links, composers and background enrichment.
+Opening never marks read directly: the ordinary focus/visibility/dwell hook applies.
+Missing/deleted targets, access loss and failed reads expose failure/retry instead
+of channel-head success. An accessible reply remains visible when its root is
+unavailable, without a thread composer. See [the evidence contract](relay-queries.md#exact-message-navigation).

@@ -78,7 +78,10 @@ export function UnreadOptions({
         <button
           type="button"
           onClick={() => {
-            const last = session.channels.window(channelId).rows.at(-1);
+            const last = session.channels
+              .window(channelId)
+              .rows.filter((row) => !row.membership)
+              .at(-1);
             if (last)
               run(
                 session.unread.markThrough(

@@ -171,8 +171,13 @@ test("Live retry recovers an empty paused roster without restarting healthy glob
     page.getByRole("button", { name: "Alpha", exact: true }),
   ).toHaveCount(0);
   const globals = () =>
-    app.relay.requests.filter(({ filter }) => !filter["#h"]);
+    app.relay.requests.filter(
+      ({ filter }) => !filter["#h"] && !filter.kinds.includes(24200),
+    );
+  const observer = () =>
+    app.relay.requests.filter(({ filter }) => filter.kinds.includes(24200));
   await expect.poll(() => globals().length).toBe(2);
+  await expect.poll(() => observer().length).toBe(1);
   const sockets = app.relay.sockets.length;
   const rosters = () =>
     app.report.queries.filter(({ filter }) => filter.kinds?.includes(39002));
@@ -191,4 +196,10 @@ test("Live retry recovers an empty paused roster without restarting healthy glob
   expect(rosters()).toHaveLength(calls + 1);
   expect(app.relay.sockets).toHaveLength(sockets);
   expect(globals()).toHaveLength(2);
+  // The first authoritative (empty) roster resets activity's access generation.
+  // Only its live-only route is renewed; healthy chat globals stay untouched.
+  await expect.poll(() => observer().length).toBe(2);
+  expect(observer()[1].filter.since).toBeGreaterThanOrEqual(
+    observer()[0].filter.since,
+  );
 });

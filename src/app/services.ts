@@ -1,5 +1,10 @@
 // FOUNDATION: Compose the bundled distribution, plugin runtime, and services here.
 import { provideNavigation } from "../features/navigation/service";
+import { NotificationsService } from "../features/notifications/service";
+import {
+  bindMessageNotifications,
+  notificationAuthorized,
+} from "../features/notifications/messages";
 import { ShortcutsService } from "../features/shortcuts/service";
 import { ConversationService } from "../features/conversation/service";
 import { createAppearance } from "../shared/theme/service";
@@ -28,8 +33,17 @@ export function createServices() {
     import.meta.env.VITE_BUZZ_LIVE === "1",
   );
   const relay = communities.relay;
+  const notifications = new NotificationsService(
+    ctx,
+    navigation,
+    undefined,
+    undefined,
+    (target) => notificationAuthorized(communities, target),
+  );
+  ctx.effect(() => bindMessageNotifications(notifications, communities));
   let disposal: Promise<void> | undefined;
   return {
+    notifications,
     navigation,
     navigationHost,
     shortcuts,

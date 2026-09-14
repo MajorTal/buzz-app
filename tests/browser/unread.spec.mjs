@@ -218,3 +218,73 @@ test("a surviving window publishes a closed window's durable read intent", async
     await survivor.close();
   }
 });
+
+test.describe("explicit mark-through with membership activity", () => {
+  test.use({ membershipActivity: true });
+
+  for (const activityOnly of [false, true]) {
+    test(
+      activityOnly
+        ? "activity-only history explains the missing message without clearing manual unread"
+        : "chat followed by membership activity clears manual unread through the newest chat",
+      async ({ page, app }) => {
+        // Model only upstream signed history; the app must load and verify it.
+        const loaded = app.histories.get("primary/alpha").slice(-4);
+        app.histories.set(
+          "primary/alpha",
+          activityOnly
+            ? loaded.filter((event) => event.kind === 40099)
+            : loaded,
+        );
+        const lastChat = loaded.findLast((event) => event.kind === 9);
+        await open(page, app);
+        await composer(page).focus();
+        await expect(
+          history(page).locator("[data-membership-row]"),
+        ).toHaveCount(1);
+        if (!activityOnly) {
+          await expect(alpha(page).getByRole("img")).toHaveAttribute(
+            "aria-label",
+            /^2 observed unread messages/,
+          );
+        }
+        await options(page);
+        await page
+          .getByRole("button", {
+            name: "Mark unread on this device",
+            exact: true,
+          })
+          .click();
+        await expect(alpha(page).getByRole("img")).toHaveAttribute(
+          "aria-label",
+          "Marked unread on this device only",
+        );
+        const before = await journal(page);
+        await page
+          .getByRole("button", {
+            name: "Mark read through loaded messages",
+            exact: true,
+          })
+          .click();
+        if (activityOnly) {
+          await expect(page.getByRole("alert")).toHaveText(
+            "Load a verified message before marking through it.",
+          );
+          const after = await journal(page);
+          expect(after.localUnread.alpha).toBe(before.localUnread.alpha);
+          expect(after.state.frontiers).toEqual(before.state.frontiers);
+          expect(after.revision).toBe(before.revision);
+        } else {
+          await expect
+            .poll(async () => (await journal(page)).state.frontiers.alpha)
+            .toBe(lastChat.created_at);
+          expect((await journal(page)).localUnread.alpha).toBeUndefined();
+          await expect(alpha(page).getByRole("img")).toHaveCount(0);
+          await expect(page.getByRole("alert")).toHaveCount(0);
+        }
+        // Do not let the shared fixture's legacy WebKit exception mask this path.
+        expect(app.report.errors).toEqual([]);
+      },
+    );
+  }
+});

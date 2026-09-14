@@ -96,9 +96,11 @@ not create a globally ordered snapshot/stream protocol. Exact expiry and perfect
 current status cannot be inferred from the existing wire contract.
 
 Presence-only setup retries are bounded. After four failed attempts, unchanged
-nonempty demand can remain Unknown across an ordinary socket reconnect. Emptying
-and restoring demand resets that budget. Resetting it after fresh authentication
-is a recovery follow-up, not a guarantee of this version.
+nonempty demand can remain Unknown across an automatic socket reconnect. One
+explicit Live Retry resets that exhaustion whether authenticated or disconnected;
+recovery still requires fresh authentication/EOSE and respects shared cooldowns.
+Replacing or losing the browser broker stream invalidates its separate presence
+readiness; ordinary connected frames cannot restore it.
 
 ## Activity and publishing
 
@@ -117,14 +119,16 @@ confirmation stopped, not whether an EVENT was sent or accepted. Earlier rejecti
 deadline, socket reset, caller abort, or local failure cannot be relabeled by later
 disposal. No new wait, retry, round trip, or successful browser outcome is added.
 
-Browser fixtures record each publication 503 at the host response boundary,
-including when browser cancellation hides its body or console diagnostic. Only
-the explicit disposal code with the unconfirmed body is classified; every other
-503 fails independently of console output. Classified responses permit at most
-one endpoint-qualified console diagnostic each, and all responses remain in the
-evidence. Host request completion records distinguish `finish` from `close` and
-retain status/Server-Timing; neither closing a response nor handing bytes to the
-host establishes relay delivery.
+Browser fixtures record each publication 404/503 at the host response boundary,
+including when browser cancellation hides its body or console diagnostic. A 503
+is classified only by the explicit disposal code with the unconfirmed body. A 404
+requires the exact missing-stream rejection and evidence that this same relay/stream
+was already retired when the request arrived, not later during teardown. Neither
+classification means delivery. All other recorded 404/503s fail independently of
+console output. Each classified response permits at most one diagnostic matching
+its endpoint and status, and all responses remain in the evidence. Host request
+completion records distinguish `finish` from `close` and retain status/Server-Timing;
+neither closing a response nor handing bytes to the host establishes relay delivery.
 
 Optional same-origin Web Locks coordinate one publisher per community/viewer;
 BroadcastChannel shares recent local input. Unsupported hosts can publish once per

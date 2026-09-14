@@ -611,7 +611,10 @@ export function relayBrokerPlugin({
             let raw = "";
             for await (const part of req) {
               raw += part;
-              if (Buffer.byteLength(raw) > 150000)
+              // Combined maxima serialize to 159,747 bytes: 1,024 × 128-char
+              // channels, 64 priorities, 256 full authors and a safe-int observer.
+              // Keep a bounded envelope with room for field names/JSON punctuation.
+              if (Buffer.byteLength(raw) > 160000)
                 return json(res, 413, { error: "Live interests too large" });
             }
             let channels, priority, authors, observer;

@@ -140,13 +140,13 @@ async function harness(
         signal: AbortSignal.timeout(3000),
       });
     },
-    async post(channels, origin = base) {
+    async post(channels, origin = base, extra = {}) {
       const controller = new AbortController();
       controllers.push(controller);
       const response = await fetch(`${base}/api/relay/stream`, {
         method: "POST",
         headers: { Origin: origin, "Content-Type": "application/json" },
-        body: JSON.stringify({ channels }),
+        body: JSON.stringify({ channels, ...extra }),
         signal: controller.signal,
       });
       return { response, abort: () => controller.abort() };
@@ -213,9 +213,24 @@ test("real HTTP accepts the 1022-channel body and rejects invalid/oversized/orig
     large.abort();
     await until(() => h.sockets.every((s) => s.readyState === 3));
     const count = h.sockets.length;
-    for (const invalid of [[""], Array(1025).fill("a"), ["x".repeat(150001)]]) {
+    for (const [invalid, status] of [
+      [[""], 400],
+      [Array(1025).fill("a"), 400],
+      [["x".repeat(129)], 400],
+      [["x".repeat(160001)], 413],
+    ]) {
       const { response } = await h.post(invalid);
-      expect([400, 413]).toContain(response.status);
+      expect(response.status).toBe(status);
+      await response.text();
+    }
+    for (const extra of [
+      { authors: ["bad"] },
+      { authors: Array(257).fill("a".repeat(64)) },
+      { priority: Array(65).fill("a") },
+      { observer: Number.MAX_SAFE_INTEGER + 1 },
+    ]) {
+      const { response } = await h.post(["a"], h.base, extra);
+      expect(response.status).toBe(400);
       await response.text();
     }
     const denied = await h.post(["a"], "https://other.invalid");
@@ -226,22 +241,26 @@ test("real HTTP accepts the 1022-channel body and rejects invalid/oversized/orig
   }
 });
 
-test.each([null, 1])(
-  "maximum channel interests survive observer startup and toggles (initial %s) through the real broker/browser stream",
+test.each([null, Number.MAX_SAFE_INTEGER])(
+  "combined maximum-length channel, priority and presence interests survive observer startup and toggles (initial %s) through the real broker/browser stream",
   async (initialObserver) => {
     const h = await harness();
     const nativeFetch = globalThis.fetch;
     let traffic;
+    const streamResponses = [];
     try {
-      const fetcher = vi.fn((input, init) =>
-        nativeFetch(input, {
+      const fetcher = vi.fn(async (input, init) => {
+        const response = await nativeFetch(input, {
           ...init,
           headers: {
             ...init?.headers,
             ...(init?.method === "POST" ? { Origin: h.base } : {}),
           },
-        }),
-      );
+        });
+        if (String(input).endsWith("/stream"))
+          streamResponses.push(response.status);
+        return response;
+      });
       vi.stubGlobal("fetch", fetcher);
       const transport = await connectBrokerTransport(h.base);
       const states = [],
@@ -260,10 +279,29 @@ test.each([null, 1])(
       });
       const ids = Array.from(
         { length: 1024 },
-        (_, i) => `channel-${String(i).padStart(4, "0")}`,
+        (_, i) => `channel-${String(i).padStart(120, "0")}`,
+      );
+      const authors = Array.from({ length: 256 }, (_, i) =>
+        i.toString(16).padStart(64, "0"),
       );
       traffic.observe(initialObserver);
+      traffic.prioritize(ids.slice(0, 64));
+      traffic.presence.update(authors);
       traffic.update(ids);
+      const body = fetcher.mock.calls.findLast(([url]) =>
+        String(url).endsWith("/stream"),
+      )[1].body;
+      expect(Buffer.byteLength(body)).toBe(
+        initialObserver === null ? 159735 : 159747,
+      );
+      expect(JSON.parse(body)).toEqual({
+        channels: ids,
+        priority: ids.slice(0, 64),
+        authors,
+        observer: initialObserver,
+      });
+      await until(() => streamResponses.length > 0);
+      expect(streamResponses).toEqual([200]);
       const streamPosts = () =>
         fetcher.mock.calls.filter(([url]) => String(url).endsWith("/stream"))
           .length;

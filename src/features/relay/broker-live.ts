@@ -49,8 +49,20 @@ export function subscribeBrokerTraffic(
   };
   let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let heartbeat: ReturnType<typeof setTimeout> | undefined;
-  const state = (status: LiveSnapshot["status"], error?: string) =>
+  const state = (status: LiveSnapshot["status"], error?: string) => {
+    // Local stream transitions retire its EOSE evidence. Generic connected
+    // frames cannot restore it; only a matching presence-state in this generation can.
+    callbacks.presenceState?.({
+      status: authors.length
+        ? status === "error"
+          ? "error"
+          : "pending"
+        : "idle",
+      authors: [...authors],
+      ...(authors.length && error ? { error } : {}),
+    });
     publish({ status, routes: [], ...(error ? { error } : {}) });
+  };
   function start() {
     if (closed) return;
     const current = ++generation;

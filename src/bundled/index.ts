@@ -1,3 +1,5 @@
+import taskManifest from "./task-details/manifest.json";
+import * as taskDetails from "./task-details";
 import activityManifest from "./agent-activity/manifest.json";
 import * as activity from "./agent-activity";
 import terminalManifest from "./terminal/manifest.json";
@@ -21,6 +23,7 @@ import * as projects from "./projects";
 import type { BundledPlugin } from "../plugins/manager";
 
 export const bundledPlugins: readonly BundledPlugin[] = [
+  { manifest: { ...taskManifest, apiVersion: 1 }, module: taskDetails },
   { manifest: { ...activityManifest, apiVersion: 1 }, module: activity },
   { manifest: { ...terminalManifest, apiVersion: 1 }, module: terminal },
   { manifest: { ...profilesManifest, apiVersion: 1 }, module: profiles },

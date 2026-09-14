@@ -1,0 +1,37 @@
+.form {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  max-width: 42rem;
+  color: var(--text-primary);
+}
+.field {
+  display: grid;
+  gap: 0.5rem;
+  font-size: var(--text-body);
+}
+.field input,
+.field textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.5rem;
+  background: var(--bg-inset);
+  color: inherit;
+  font: inherit;
+}
+.field textarea {
+  resize: vertical;
+}
+html[data-keyboard-navigation] .field :focus-visible {
+  outline: 2px solid var(--purple-8);
+  outline-offset: 2px;
+}
+.branch {
+  display: grid;
+  gap: 0.5rem;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+}

@@ -48,6 +48,10 @@ pub fn valid_id(id: &str) -> Result<()> {
 pub fn bundled_manifests() -> Vec<Manifest> {
     vec![
         serde_json::from_str(include_str!(
+            "../../../src/bundled/task-details/manifest.json"
+        ))
+        .expect("valid bundled Local task details manifest"),
+        serde_json::from_str(include_str!(
             "../../../src/bundled/agent-activity/manifest.json"
         ))
         .expect("agent activity manifest"),

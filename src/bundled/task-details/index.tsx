@@ -316,7 +316,7 @@ function TaskEditor({
               session.messages.reply(
                 channelId,
                 rootId,
-                `@${name}, I've assigned you this task. Please start work here.`,
+                `Assigned @${name} to [${(task.title || "this task").replace(/[\\[\]]/g, "\\$&").replace(/\s+/g, " ")}](buzz://message?channel=${channelId}&id=${rootId}). Please start work now.`,
                 [task.assignee],
               );
               setNotice(

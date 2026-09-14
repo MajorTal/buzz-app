@@ -298,6 +298,12 @@ test("local task panel saves against a canonical thread and never publishes meta
   await expect.poll(() => fileStore.notifications.length).toBe(1);
   const notification = fileStore.notifications[0];
   expect(notification.pubkey).toBe(app.viewer);
+  expect(notification.content).toContain(
+    "Assigned @Another agent to [Changed elsewhere](buzz://message?",
+  );
+  expect(notification.content).toContain(
+    `&id=${app.exact.root.id}). Please start work now.`,
+  );
   expect(notification.tags).toContainEqual(["p", app.viewer]);
   expect(notification.tags).toContainEqual([
     "e",

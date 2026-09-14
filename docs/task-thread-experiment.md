@@ -6,18 +6,27 @@ This living manifest is the experiment's source of truth. The goal is automatic 
 
 ## Current experiment
 
-- When asked to start work in a focused project thread, treat it as the task. Keep all discussion there; don't create a native Buzz task or another channel.
-- Post branch and PR links in that thread. We manually mirror them into the repository channel using Monitor, linking back to the task.
-- CI/review notifications return to the task thread through Monitor.
-- Project/task metadata is local to the prototype client and maintained by the operator. Agents use the conversation, not browser storage. GitHub permissions are unchanged.
+- Create task metadata with the [task script](https://github.com/block/buzz-app/blob/jtennant/thread-task-plugin/src/bundled/task-details/README.md), using the existing thread. Don't create a native Buzz task or another task channel.
+- The client and script share a file on this Mac, scoped to John's account and community. GitHub permissions are unchanged.
+- Assignment saves metadata only. Monitor is our manual workaround for notifying the assignee and posting repository links.
 
 First pilot: the muted-call sound fix in Berd Voice, with repository links in Berd Repo.
 
+On John's Mac (Node 24; authenticated `buzz` on PATH):
+
+```sh
+node /Users/jtennant/Development/buzz-onedotzero/scripts/task.mjs create --viewer 67252b09c31a995daa63aada26569fbc6a3d12f573113f001ce7432f870da820 --community https://buzz.block.builderlab.xyz --thread '<buzz-message-link>' --title '<task-title>'
+```
+
+Use `get`, `list`, `update`, or `delete` for subsequent changes; `update --assignee <agent-pubkey>` changes assignment without waking anyone.
+
 ## Flow 1: starts in a project channel
 
-1. Start a focused thread and ask the agent to work.
-2. Mark that same thread as a task; continue the discussion there.
-3. When the agent creates a branch or PR, Monitor posts its link in the repository channel, pointing back to the task thread.
+1. Start a focused project thread; Sol creates its task record with the script.
+2. John assigns the task to another agent in the client.
+3. Monitor tags the assignee in the task thread, asking it to start work.
+4. The assignee creates a branch. Monitor creates a branch thread in the repository channel, linking back to the task.
+5. Implementation proceeds. CI/automatic-review placement is undecided: task thread or repository thread.
 
 ## Flow 2: starts elsewhere (later experiment)
 

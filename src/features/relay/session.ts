@@ -686,15 +686,14 @@ export function createRelaySession(
           : verified,
         exact: options?.exact ?? false,
         admit: options?.exact ? (events) => accept(events, false) : undefined,
-        seed: recent.peek(messageId)?.event,
+        seed: recent.peek(messageId)?.event ?? retainedEvent(messageId),
         local: localViews,
         canAccess: () => !closed && canAccess(channelId),
         visible: (events) => events.filter(visibility(events)),
         notify,
       });
       threads.add(thread);
-      if (options?.exact)
-        thread.receive(recent.entries().map(([, item]) => item.event));
+      thread.receive(recent.entries().map(([, item]) => item.event));
       observations.add(thread.receive);
       const unsubscribe = localViews?.subscribe(thread.changed);
       const dispose = () => {

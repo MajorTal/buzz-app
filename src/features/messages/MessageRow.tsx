@@ -33,7 +33,9 @@ export type MessageRowProps = {
   onOpenLink(url: string): boolean;
   day: boolean;
   retry: ((id: string) => void) | undefined;
-  onOpenThread?: ((messageId: string) => void) | undefined;
+  onOpenThread?:
+    | ((messageId: string, threadRootId: string) => void)
+    | undefined;
 };
 
 export const MessageRow = memo(function MessageRow({
@@ -200,7 +202,7 @@ export const MessageRow = memo(function MessageRow({
               aria-label={`View thread: ${row.replyCount} ${row.replyCount === 1 ? "reply" : "replies"}${unreadLabel ? `. ${unreadLabel}` : ""}`}
               onClick={(event) => {
                 event.currentTarget.focus();
-                onOpenThread(row.id);
+                onOpenThread(row.id, row.threadRootId ?? row.id);
               }}
             >
               {row.participants.length > 0 && (

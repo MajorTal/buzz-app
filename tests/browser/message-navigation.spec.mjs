@@ -93,7 +93,7 @@ test("old root and reply beyond the first thread page open exactly; reclick and 
   await page
     .getByRole("button", { name: "Close channel panel", exact: true })
     .click();
-  await expect(mention).toBeFocused();
+  await expect(thread(page)).toHaveCount(0);
   expect(await openTarget(page, target(app))).toEqual({ status: "opened" });
   await page.getByRole("button", { name: "Close thread", exact: true }).click();
   await expect(

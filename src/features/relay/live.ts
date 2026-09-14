@@ -584,8 +584,8 @@ export function subscribeRelayTraffic(
       if (closed) return;
       clearTimeout(retryTimer);
       attempts = 0;
+      presence.retry(); // Explicit Retry resets exhaustion even before reauthentication.
       if (authenticated) {
-        presence.retry();
         for (const route of routes.values()) {
           if (route.status !== "error") continue;
           route.status = "pending";

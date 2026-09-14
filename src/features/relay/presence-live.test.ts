@@ -650,3 +650,46 @@ it("cancelled unabortable publication signing stays capped across shared streams
     other.owner.dispose();
   }
 });
+
+it.each([false, true])(
+  "exhausted presence survives automatic reconnect, but one disconnected explicit Retry recovers (explicit %s)",
+  async (explicit) => {
+    const h = setup();
+    try {
+      await h.socket.globals();
+      h.presence.update([author(1)]);
+      for (let i = 0; i < 4; i++) {
+        await vi.advanceTimersByTimeAsync(8000);
+        const route = h.socket.requests(true).at(-1);
+        assert.exists(route);
+        await h.socket.receive(["CLOSED", route[1], "temporary: unavailable"]);
+      }
+      expect(h.socket.requests(true)).toHaveLength(4);
+      await vi.advanceTimersByTimeAsync(120000);
+      expect(h.socket.requests(true)).toHaveLength(4);
+      h.socket.close();
+      if (explicit) h.owner.retry();
+      else await vi.advanceTimersByTimeAsync(500);
+      expect(h.sockets).toHaveLength(2);
+      const replacement = h.sockets[1];
+      assert.exists(replacement);
+      await replacement.globals();
+      await vi.advanceTimersByTimeAsync(100);
+      if (explicit) {
+        expect(replacement.requests(true)).toHaveLength(1);
+        const route = replacement.requests(true)[0];
+        assert.exists(route);
+        await replacement.receive(["EOSE", route[1]]);
+        expect(h.callbacks.presenceState).toHaveBeenLastCalledWith({
+          status: "ready",
+          authors: [author(1)],
+        });
+      } else {
+        await vi.advanceTimersByTimeAsync(120000);
+        expect(replacement.requests(true)).toHaveLength(0);
+      }
+    } finally {
+      h.owner.dispose();
+    }
+  },
+);

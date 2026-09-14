@@ -89,6 +89,12 @@ function fixture() {
     snapshots,
     accept,
     publish,
+    end(index: number) {
+      required(bodyControllers[index]).close();
+    },
+    fail(index: number) {
+      required(bodyControllers[index]).error(new Error("injected stream loss"));
+    },
     presence(index: number, state: unknown) {
       required(bodyControllers[index]).enqueue(
         new TextEncoder().encode(
@@ -456,3 +462,122 @@ it.each([undefined, { phase: "fresh" }, { phase: "live", channelId: ["a"] }])(
     }
   },
 );
+
+it.each([200, 400, 401, 403, 413])(
+  "channel replacement invalidates ready presence synchronously and fences retired frames (HTTP %s)",
+  async (status) => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const states = vi.fn();
+    const t = await connectBrokerTransport();
+    const owner = required(t.subscribe)({
+      ...f.callbacks,
+      presenceState: states,
+    });
+    const authors = ["a".repeat(64)];
+    try {
+      required(owner.presence).update(authors);
+      f.accept(0);
+      await tick();
+      f.presence(0, { status: "ready", authors });
+      await tick();
+      expect(states).toHaveBeenLastCalledWith({ status: "ready", authors });
+      owner.update(["replacement"]);
+      // Headers are deliberately held. Neither a replacement nor its old EOSE is readiness.
+      expect(states).toHaveBeenLastCalledWith({ status: "pending", authors });
+      const count = states.mock.calls.length;
+      f.presence(0, { status: "ready", authors });
+      await tick();
+      expect(states).toHaveBeenCalledTimes(count);
+      if (status === 200) {
+        f.accept(1);
+        await tick();
+        f.publish(1);
+        await tick();
+        expect(states).toHaveBeenLastCalledWith({ status: "pending", authors });
+        f.presence(1, { status: "ready", authors });
+        await tick();
+        expect(states).toHaveBeenLastCalledWith({ status: "ready", authors });
+      } else {
+        required(f.headers[1]).resolve(new Response(null, { status }));
+        await tick();
+        expect(states).toHaveBeenLastCalledWith({
+          status: "error",
+          authors,
+          error: `Live broker rejected subscription (${status})`,
+        });
+        await vi.advanceTimersByTimeAsync(60000);
+        expect(f.headers).toHaveLength(2);
+      }
+    } finally {
+      owner.dispose();
+    }
+  },
+);
+
+it.each(["end", "fail"] as const)(
+  "stream %s invalidates presence through reconnect exhaustion; explicit retry requires fresh readiness",
+  async (loss) => {
+    vi.useFakeTimers();
+    const f = fixture();
+    const states = vi.fn();
+    const t = await connectBrokerTransport();
+    const owner = required(t.subscribe)({
+      ...f.callbacks,
+      presenceState: states,
+    });
+    const authors = ["a".repeat(64)];
+    try {
+      required(owner.presence).update(authors);
+      for (let i = 0; i <= 5; i++) {
+        f.accept(i);
+        await tick();
+        // Establish every generation, so losing any one must invalidate its ready state.
+        f.presence(i, { status: "ready", authors });
+        await tick();
+        expect(states).toHaveBeenLastCalledWith({ status: "ready", authors });
+        f[loss](i);
+        await tick();
+        expect(states.mock.lastCall?.[0]).toMatchObject({
+          status: i === 5 ? "error" : "pending",
+          authors,
+        });
+        if (i < 5) await vi.advanceTimersByTimeAsync(500 * 2 ** i);
+      }
+      expect(states.mock.lastCall?.[0].error).toMatch(/attempts exhausted/);
+      await vi.advanceTimersByTimeAsync(60000);
+      expect(f.headers).toHaveLength(6);
+      owner.retry();
+      expect(states).toHaveBeenLastCalledWith({ status: "pending", authors });
+      f.accept(6);
+      await tick();
+      f.publish(6);
+      await tick();
+      expect(states).toHaveBeenLastCalledWith({ status: "pending", authors });
+      f.presence(6, { status: "ready", authors });
+      await tick();
+      expect(states).toHaveBeenLastCalledWith({ status: "ready", authors });
+    } finally {
+      owner.dispose();
+    }
+  },
+);
+
+it("no presence demand stays idle during stream replacement and terminal rejection", async () => {
+  const f = fixture();
+  const states = vi.fn();
+  const t = await connectBrokerTransport();
+  const owner = required(t.subscribe)({
+    ...f.callbacks,
+    presenceState: states,
+  });
+  try {
+    owner.update(["replacement"]);
+    expect(states).toHaveBeenLastCalledWith({ status: "idle", authors: [] });
+    required(f.headers[1]).resolve(new Response(null, { status: 403 }));
+    await tick();
+    expect(states).toHaveBeenLastCalledWith({ status: "idle", authors: [] });
+  } finally {
+    owner.dispose();
+  }
+});

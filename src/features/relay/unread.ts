@@ -254,17 +254,14 @@ export function createUnread({
     return frontier === undefined || event.created_at > frontier || !!forced;
   }
   function category(
-    { event, rootId, mentioned }: Evidence,
+    { rootId, mentioned }: Evidence,
     dm: boolean,
   ): MessageAttention["category"] {
-    const broadcast = event.tags.some(
-      ([name, value]) => name === "broadcast" && value === "1",
-    );
     return mentioned
       ? "mention"
       : dm
         ? "direct"
-        : broadcast || (rootId && participants.has(rootId))
+        : rootId && participants.has(rootId)
           ? "thread"
           : undefined;
   }

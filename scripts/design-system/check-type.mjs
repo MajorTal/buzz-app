@@ -2,7 +2,7 @@
 /**
  * Type-system guard.
  *
- * Four rules from DESIGN.md § Type, enforced rather than trusted. Each one has
+ * Four rules from AGENTS.md § Visual and interaction contract, enforced rather than trusted. Each one has
  * already cost the existing client real work:
  *
  *   1. No arbitrary text sizes — `text-[15px]`, `text-[0.9rem]`, `font-size:`.
@@ -94,7 +94,7 @@ const RULES = [
     // rule trips it, and a guard that cries wolf gets ignored.
     pattern: /class(?:Name)?=(?:"|'|`)[^"'`]*\buppercase\b/g,
     message:
-      "all-caps text — DESIGN.md § Type forbids it. A quiet label uses text-meta on text-tertiary instead.",
+      "all-caps text — AGENTS.md requires sentence case. A quiet label uses text-body-sm on text-tertiary instead.",
   },
   {
     id: "manual-tracking",

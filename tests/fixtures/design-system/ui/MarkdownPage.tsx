@@ -15,7 +15,7 @@ function inline(text: string): ReactNode[] {
   });
 }
 
-/** A deliberately small reader for the three maintained, human-facing docs.
+/** A deliberately small reader for the maintained, human-facing docs.
  * These documents are prose first; this is not a general Markdown product
  * renderer. Unsupported constructs remain readable text rather than creating a
  * second documentation format that can drift from the source file. */

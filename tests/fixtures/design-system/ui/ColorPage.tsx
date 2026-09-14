@@ -221,7 +221,7 @@ export function ColorPage() {
 
       <Section
         title="Layer 2 — the roles"
-        description="Fifteen names, and each had to earn one. A role exists when light and dark take different ramp steps, so no single class is correct in both \u2014 or when the name enforces a rule a ramp cannot state, like there being exactly three levels of text. Everything else is written as a ramp step, because a name in front of a number hides the choice instead of recording it."
+        description="Named color relationships, system rules and approved UI patterns. Their definitions and purposes are listed below; authoring policy lives in AGENTS.md."
       >
         <div className="flex flex-col gap-8">
           {ROLE_GROUPS.map((group) => (

@@ -7,6 +7,7 @@ export default defineConfig({
   },
   test: {
     include: [
+      "scripts/design-system/**/*.test.mjs",
       "src/**/*.test.{ts,tsx,mjs}",
       "dev/**/*.test.mjs",
       "tests/fixtures/design-system/**/*.test.{ts,tsx}",

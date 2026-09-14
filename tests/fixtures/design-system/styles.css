@@ -122,7 +122,7 @@
     padding-left: 1.25rem;
   }
 
-  /* Dense reference rows: DESIGN.md § Density and rhythm asks for rows with
+  /* Dense reference rows: DESIGN.md § Surface and depth asks for rows with
      hairline dividers rather than a card per entry. Left-aligned because every
      cell is a name or a phrase, never a quantity to compare. */
   .design-doc-table {

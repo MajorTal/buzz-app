@@ -104,7 +104,8 @@ const pages = [
   createRoute({
     getParentRoute: () => design,
     path: "maintaining",
-    component: () => <SystemDocumentPage document="maintaining" />,
+    // Preserve old bookmarks without retaining a second document.
+    component: () => <SystemDocumentPage document="design" />,
   }),
   createRoute({
     getParentRoute: () => design,

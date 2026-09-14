@@ -6,8 +6,7 @@
  * The design system pages render from this, so a token added here appears in the
  * documentation automatically and the docs cannot drift from the system.
  *
- * Adding to this file is a normal, unreviewed action — see the growth procedure
- * in DESIGN.md. Every entry needs a `use` sentence and, if proposed, an `owner`.
+ * Authoring policy lives in AGENTS.md. Every entry needs a `use` sentence and, if proposed, an `owner`.
  */
 
 /** Whether a token is part of the vetted system or someone's addition. */
@@ -34,7 +33,7 @@ export interface Ramp {
   translucent?: boolean;
 }
 
-/** A public role. The only layer a screen may use. */
+/** A public semantic role. Authored palette steps are also public. */
 export interface Role {
   /** The Tailwind class, e.g. `bg-panel`. */
   token: string;
@@ -297,7 +296,7 @@ export const ROLE_GROUPS: RoleGroup[] = [
     id: "surfaces",
     name: "Structural surfaces",
     description:
-      "The roles that exist because a ramp step cannot say them: each takes a different step in light and dark, so no single class like `bg-neutral-1` is correct in both. That is the whole test for whether a colour earns a name. Ask one question: is it behind, on, above, or in? (`bg-hover` was here and is now written as `bg-neutral-4` \u2014 it was the same step in both modes. Hover is a *relationship*, one step more contrast than whatever is underneath, which no single token could express anyway.)",
+      "The roles that exist because a ramp step cannot say them: each takes a different step in light and dark, so no single class like `bg-neutral-1` is correct in both. Other reasons for naming are defined in AGENTS.md. Ask one question: is it behind, on, above, or in? (`bg-hover` was here and is now written as `bg-neutral-4` \u2014 it was the same step in both modes. Hover is a *relationship*, one step more contrast than whatever is underneath, which no single token could express anyway.)",
     roles: [
       {
         token: "bg-app",
@@ -326,7 +325,7 @@ export const ROLE_GROUPS: RoleGroup[] = [
     id: "emphasis",
     name: "Emphasis",
     description:
-      "One three-level ramp shared by text and borders: normal, lesser, really lesser. States that are not levels of emphasis get their own names rather than extending the ramp.",
+      "Three text emphasis levels and one shared border weight. States that are not levels of emphasis get their own names rather than extending the ramp.",
     roles: [
       {
         token: "text-primary",
@@ -359,8 +358,22 @@ export const ROLE_GROUPS: RoleGroup[] = [
       {
         token: "border-primary",
         variable: "--border-primary",
-        pointsAt: "neutral 4",
+        pointsAt: "neutral 4 light / neutral 6 dark",
         use: "Every deliberate line: panel boundaries, dividers, separators. One quiet weight; add another only when a design proves a different boundary needs it.",
+        status: "core",
+      },
+    ],
+  },
+  {
+    id: "paired-text",
+    name: "Paired text",
+    description: "Text chosen for its fill rather than the color mode.",
+    roles: [
+      {
+        token: "text-on-accent",
+        variable: "--text-on-accent",
+        pointsAt: "paired accent text",
+        use: "Readable text on the accent fill.",
         status: "core",
       },
     ],
@@ -390,6 +403,13 @@ export const ROLE_GROUPS: RoleGroup[] = [
         variable: "--bg-chrome-selected",
         pointsAt: "neutral 1 light / neutral 5 dark",
         use: "The selected item inside chrome. Opaque rather than a glass step, because on glass elevation reads as less translucency, not a lighter colour.",
+        status: "core",
+      },
+      {
+        token: "glass-secondary-interactive",
+        variable: "--bg-glass-secondary-hover",
+        pointsAt: "glass 5 on hover",
+        use: "Hover fill of the secondary glass material.",
         status: "core",
       },
       {
@@ -432,17 +452,6 @@ export const GRAMMAR_EXAMPLES = {
   legal: ["bg-accent-tint-hover", "text-primary", "bg-chrome-selected"],
   illegal: ["bg-chrome-hover-glass", "bg-hover-chrome"],
 };
-
-/** Runs per change, by whoever needs the value. Nothing here needs permission. */
-export const GROWTH_PROCEDURE = [
-  "Search the role list by intent, not by colour.",
-  "A state of an existing role — add the -hover, -selected, or -disabled sibling with both values.",
-  "A material variant of an existing role — add the -glass sibling with both values and its blur token.",
-  "A new role using existing words — add the name, both values, a one-sentence description, and an owner.",
-  "A new hue — generate its ramp, add roles pointing at steps. Never a literal.",
-  "A new vocabulary word — allowed, but it is the thing the audit reports on its own line, so use an existing word if one fits.",
-  "Never write a raw value. If nothing above applies, say so rather than reaching for a literal.",
-];
 
 /* ============================================================
    TYPOGRAPHY

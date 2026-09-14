@@ -1,0 +1,2018 @@
+[
+  {
+    "file": "src/app/AppearanceSettings.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | text-lg",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/AppearanceSettings.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/AppearanceSettings.tsx",
+    "rule": "local-type",
+    "evidence": "legend | text-base",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/AppearanceSettings.tsx",
+    "rule": "local-type",
+    "evidence": "legend | font-medium",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/AppearanceSettings.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-sm",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/AppearanceSettings.tsx",
+    "rule": "local-type",
+    "evidence": "span | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/NotificationSettings.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | text-lg",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/NotificationSettings.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/NotificationSettings.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-sm",
+    "count": 5,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/NotificationSettings.tsx",
+    "rule": "local-type",
+    "evidence": "legend | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-sm",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "label | text-sm",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-xs",
+    "count": 3,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "div | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "p | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "legend | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "legend | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "span | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "span | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/PluginImport.tsx",
+    "rule": "local-type",
+    "evidence": "details | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/ProfileSettings.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | text-lg",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/ProfileSettings.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/ProfileSettings.tsx",
+    "rule": "color-opacity",
+    "evidence": "div | border-shell-edge/80",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/ProfileSettings.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-sm",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "color-opacity",
+    "evidence": "span | bg-surface/70",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | text-3xl",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | tracking-tight",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "color-opacity",
+    "evidence": "nav | border-shell-edge/80",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "color-opacity",
+    "evidence": "nav | bg-surface/60",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "color-opacity",
+    "evidence": "button | hover:bg-surface/70",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | text-lg",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "color-opacity",
+    "evidence": "div | border-shell-edge/80",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/Settings.tsx",
+    "rule": "local-type",
+    "evidence": "h3 | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | text-4xl",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | tracking-tight",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | sm:text-5xl",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "color-opacity",
+    "evidence": "div | border-shell-edge/70",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "color-opacity",
+    "evidence": "div | bg-surface/95",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "local-type",
+    "evidence": "span | text-base",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "local-type",
+    "evidence": "span | font-medium",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/Home.tsx",
+    "rule": "local-type",
+    "evidence": "span | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/PageSearch.tsx",
+    "rule": "local-type",
+    "evidence": "input | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/PageSearch.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/ProfileButton.tsx",
+    "rule": "color-opacity",
+    "evidence": "button | bg-surface/65",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/ProfileButton.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/app/shell/ProfileButton.tsx",
+    "rule": "local-type",
+    "evidence": "p | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/bestie/index.tsx",
+    "rule": "local-type",
+    "evidence": "h2 | text-lg",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/bestie/index.tsx",
+    "rule": "local-type",
+    "evidence": "p | text-sm",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".root | font-size: calc(14px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".sidebar .unreadEdge | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".channelSection > summary | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".channelList button[aria-current=\"page\"] | font-weight: 550",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".preferenceNotice | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".heading button:not(:where([data-buzz-ui], [data-buzz-ui] *)) | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".empty | font-size: calc(13px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-color",
+    "evidence": ".connect | background: color-mix(in srgb, var(--surface) 79%, transparent)",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".connect h1 | font-size: calc(28px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".note | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": "@media (max-width: 650px) > .channelList button | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": "@media (max-width: 650px) > .roster | font-size: calc(10px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".diagnosticsMenu | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".liveStatus | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".unreadBadge | font-size: 0.75rem",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/channels/Channels.module.css",
+    "rule": "local-type",
+    "evidence": ".unreadBadge | font-weight: 650",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": ".emojiPopover | --picker-search-background: #f5f5f6",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": ".emojiPopover | --picker-search-foreground: #0a0a0a",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": ".emojiPopover | --picker-search-muted: #8d8d8d",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": ".emojiPopover | --picker-search-ring: #cecece",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": ".emojiPopover | --picker-tab-foreground: #0a0a0a",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": ".emojiPopover | --picker-tab-muted: #8d8d8d",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": ".emojiPopover | --picker-tab-selected: #f0f0f0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": ".emojiPopover | --picker-scrollbar-thumb: #e8e8e8",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-search-background: #161616",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-search-background: #161616",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-search-foreground: #f5f5f5",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-search-foreground: #f5f5f5",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-search-muted: #a6a6a6",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-search-muted: #a6a6a6",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-search-ring: #424242",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-search-ring: #424242",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-tab-foreground: #f5f5f5",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-tab-foreground: #f5f5f5",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-tab-muted: #a6a6a6",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-tab-muted: #a6a6a6",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-tab-selected: #1c1c1c",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-tab-selected: #1c1c1c",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-scrollbar-thumb: #424242",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .emojiPopover | --picker-scrollbar-thumb: #424242",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-type",
+    "evidence": ".emojiStatus | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-type",
+    "evidence": ".gifSearch input | font-size: calc(14px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/emoji/Emoji.module.css",
+    "rule": "local-type",
+    "evidence": ".gifAttribution | font-size: calc(11px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/github/GitHub.module.css",
+    "rule": "local-type",
+    "evidence": ".root | font-size: calc(13px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/github/GitHub.module.css",
+    "rule": "local-type",
+    "evidence": ".identity small,\n.byline,\n.note | font-size: calc(11px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/github/GitHub.module.css",
+    "rule": "local-type",
+    "evidence": ".root h2 | font-size: calc(18px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/mentions/MentionCompletion.tsx",
+    "rule": "local-type",
+    "evidence": "Avatar | text-xs",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/mentions/MentionPicker.tsx",
+    "rule": "local-type",
+    "evidence": "Avatar | text-xs",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/mentions/Mentions.module.css",
+    "rule": "local-type",
+    "evidence": ".mentionPopover p | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/mentions/Mentions.module.css",
+    "rule": "local-type",
+    "evidence": ".mentionChoices code | font-size: calc(10px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/mentions/Mentions.module.css",
+    "rule": "local-type",
+    "evidence": ".mentionLabel > span | font-size: calc(13px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/mentions/Mentions.module.css",
+    "rule": "local-type",
+    "evidence": ".mentionLabel > span | font-weight: 500",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/projects/index.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | text-3xl",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/projects/index.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | font-medium",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/projects/index.tsx",
+    "rule": "local-type",
+    "evidence": "h1 | tracking-tight",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/terminal/Terminal.module.css",
+    "rule": "local-color",
+    "evidence": ".splashArt [data-layer=\"head\"] | color: oklch(var(--splash-lightness) var(--splash-chroma) var(--splash-hue))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/terminal/Terminal.module.css",
+    "rule": "local-color",
+    "evidence": ".splashArt [data-layer=\"bevel_hi\"] | color: oklch(var(--splash-lightness) 0.12 var(--splash-hue))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/bundled/terminal/Terminal.module.css",
+    "rule": "local-color",
+    "evidence": ".splashArt [data-layer=\"field\"] | color: color-mix(\n    in srgb,\n    oklch(var(--splash-lightness) var(--splash-chroma) var(--splash-hue)) 55%,\n    var(--bg-panel)\n  )",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-color",
+    "evidence": ".switcher | border: 1px solid color-mix(in srgb, var(--shell-edge) 56%, transparent)",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-color",
+    "evidence": ".switcher | background: color-mix(in srgb, var(--surface) 31%, transparent)",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".switcher | font-size: calc(13px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".communityIcon | font-size: calc(11px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".dialog h2 | font-size: calc(1.25rem * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".dialog h2 | font-weight: 650",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".dialog p | font-size: calc(0.875rem * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".dialog label:not(.check) | font-size: calc(0.875rem * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".dialog label:not(.check) | font-weight: 550",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".note | font-size: calc(0.8rem * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/Communities.module.css",
+    "rule": "local-type",
+    "evidence": ".policy | font-size: calc(0.875rem * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/ProfileFields.tsx",
+    "rule": "local-type",
+    "evidence": "label | text-sm",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/communities/ProfileFields.tsx",
+    "rule": "local-type",
+    "evidence": "label | font-medium",
+    "count": 2,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/conversation/Completions.module.css",
+    "rule": "local-color",
+    "evidence": ".popup | box-shadow: 0 8px 30px #0002",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/conversation/Completions.module.css",
+    "rule": "local-color",
+    "evidence": ".popup[data-compact] | --completion-highlight: #f5f5f6",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/conversation/Completions.module.css",
+    "rule": "local-color",
+    "evidence": "[data-color-mode=\"dark\"] .popup[data-compact] | --completion-highlight: #161616",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/conversation/Completions.module.css",
+    "rule": "mode-color",
+    "evidence": "[data-color-mode=\"dark\"] .popup[data-compact] | --completion-highlight: #161616",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/conversation/Completions.module.css",
+    "rule": "local-type",
+    "evidence": ".preview | font-size: 24px",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/conversation/Completions.module.css",
+    "rule": "local-type",
+    "evidence": ".label small | font-size: 11px",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/conversation/Completions.module.css",
+    "rule": "local-type",
+    "evidence": ".popup p | font-size: 11px",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".heading button | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".edge | font-size: calc(11px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".edge button | font-size: calc(11px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".day | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".avatar | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".byline | font-size: calc(14px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".byline time | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text | font-size: calc(15px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text[data-single-emoji] | font-size: calc(42px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".replies | font-size: calc(13px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".attachment | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".composer | font-size: calc(14px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".empty | font-size: calc(13px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".composer textarea[data-single-emoji] | font-size: calc(42px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".composer textarea[data-custom-emoji-only] | font-size: 0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-color",
+    "evidence": ".composerCustomEmoji[data-selected] | outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent)",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".composerHint | font-size: calc(11px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".delivery | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".threadDivider | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".threadHistoryControls button | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".threadNote | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".threadAvatar | font-size: calc(9px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".mentionRecipients | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".mentionRecipients button | font-size: calc(12px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".mentionRecipients code | font-size: calc(10px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text,\n.plainText | font-size: calc(15px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text :where(h1, h2, h3, h4, h5, h6) | font-size: 1em",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text h1 | font-size: 1.35em",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text h2 | font-size: 1.2em",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text h3 | font-size: 1.08em",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text :where(h1, h2, h3) | font-weight: 700",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text :where(h4, h5, h6) | font-weight: 650",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text code | font-size: 0.88em",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text table | font-size: 0.92em",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".text th | font-weight: 650",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".membership | font-size: calc(13px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/messages/Messages.module.css",
+    "rule": "local-type",
+    "evidence": ".membershipAvatar | font-size: calc(10px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/features/panels/Panels.module.css",
+    "rule": "local-type",
+    "evidence": ".card | font-size: calc(14px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/Avatar.tsx",
+    "rule": "local-color",
+    "evidence": "span | bg-[#ece9f4]",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/Avatar.tsx",
+    "rule": "local-color",
+    "evidence": "span | text-[#675780]",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/globals.css",
+    "rule": "local-type",
+    "evidence": "@layer base > body | font-size: calc(1rem * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/globals.css",
+    "rule": "local-type",
+    "evidence": "@layer base > button:not(:where([data-buzz-ui], [data-buzz-ui] *)) | font-size: calc(14px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/globals.css",
+    "rule": "local-type",
+    "evidence": "@layer base > h1:not(:where([data-buzz-ui], [data-buzz-ui] *)) | font-size: clamp(\n      calc(28px * var(--buzz-text-scale, 1)),\n      calc(4vw * var(--buzz-text-scale, 1)),\n      calc(40px * var(--buzz-text-scale, 1))\n    )",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/globals.css",
+    "rule": "local-type",
+    "evidence": "@layer base > h1:not(:where([data-buzz-ui], [data-buzz-ui] *)) | letter-spacing: -1px",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/globals.css",
+    "rule": "local-type",
+    "evidence": "@layer base > h2:not(:where([data-buzz-ui], [data-buzz-ui] *)) | font-size: calc(22px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/globals.css",
+    "rule": "local-type",
+    "evidence": "@layer base > h3:not(:where([data-buzz-ui], [data-buzz-ui] *)) | font-size: calc(17px * var(--buzz-text-scale, 1))",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/globals.css",
+    "rule": "local-type",
+    "evidence": "@layer base > body | letter-spacing: normal",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/globals.css",
+    "rule": "local-color",
+    "evidence": "@utility bg-primary-hover | background-color: color-mix(in oklab, var(--primary) 90%, transparent)",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --text: #242e31",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --text-muted: #626b70",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --surface: #ffffff",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --surface-accent: #f5f5f4",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --surface-hover: #eef1f2",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --surface-control: #f1f4f5",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --surface-input: #fafafa",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --surface-elevated: #fafbf8",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --border: #e8e9e7",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --border-input: #8a9498",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --accent: #313f43",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --primary: #313f43",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --on-primary: #ffffff",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --selected: #dfebf1",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --on-selected: #305c72",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --focus: #397c98",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --link: #36657d",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --action: #f3e8ff",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --on-action: #242e31",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --danger: #a12f27",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --warning: #80501e",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --warning-surface: #fff7da",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --warning-border: #d7b265",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --success: #276440",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --success-surface: #e5f3e9",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --workspace: #e7f0ef",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --shell-dot: #536d7929",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --shell-edge: #ffffff",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --overlay: #17261e60",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --toggle-track: #a0a7ab",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --toggle-thumb: #ffffff",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --elevation-card: 0 1px 4px #202c3214",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --elevation-surface: 0 1px 3px #202c3210, 0 8px 28px #202c3208",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --elevation-popover: 0 8px 32px #202c3220",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --elevation-dialog: 0 2rem 6rem #0003",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root | --elevation-dock: -12px 0 32px #253d4c14",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --text: #e6edf0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --text: #e6edf0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --text-muted: #aab8c0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --text-muted: #aab8c0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface: #1b252b",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface: #1b252b",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-accent: #26333b",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-accent: #26333b",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-hover: #30414b",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-hover: #30414b",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-control: #293740",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-control: #293740",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-input: #202c33",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-input: #202c33",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-elevated: #233039",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --surface-elevated: #233039",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --border: #384b56",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --border: #384b56",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --border-input: #708791",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --border-input: #708791",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --accent: #d6e3eb",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --accent: #d6e3eb",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --primary: #d6e3eb",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --primary: #d6e3eb",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --on-primary: #172229",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --on-primary: #172229",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --selected: #304c5e",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --selected: #304c5e",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --on-selected: #c5e6fc",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --on-selected: #c5e6fc",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --focus: #98c7ed",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --focus: #98c7ed",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --link: #a3d3f0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --link: #a3d3f0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --action: #534467",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --action: #534467",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --on-action: #f5eaff",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --on-action: #f5eaff",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --danger: #ffaaa0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --danger: #ffaaa0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --warning: #f5cf89",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --warning: #f5cf89",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --warning-surface: #3d3222",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --warning-surface: #3d3222",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --warning-border: #927444",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --warning-border: #927444",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --success: #9cdbb0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --success: #9cdbb0",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --success-surface: #20392d",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --success-surface: #20392d",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --workspace: #11181d",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --workspace: #11181d",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --shell-image: radial-gradient(ellipse at 15% 0%, #203d53, transparent 65%),\n      radial-gradient(ellipse at 90% 100%, #39304b, transparent 70%)",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --shell-image: radial-gradient(ellipse at 15% 0%, #203d53, transparent 65%),\n      radial-gradient(ellipse at 90% 100%, #39304b, transparent 70%)",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --shell-dot: #a7c8db24",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --shell-dot: #a7c8db24",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --shell-edge: #43535f",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --shell-edge: #43535f",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --overlay: #060c13a6",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --overlay: #060c13a6",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --toggle-track: #708791",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --toggle-track: #708791",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --toggle-thumb: #172229",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --toggle-thumb: #172229",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-card: 0 1px 4px #0003",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-card: 0 1px 4px #0003",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-surface: 0 1px 3px #0004, 0 8px 28px #0002",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-surface: 0 1px 3px #0004, 0 8px 28px #0002",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-popover: 0 8px 32px #0006",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-popover: 0 8px 32px #0006",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-dialog: 0 2rem 6rem #0008",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-dialog: 0 2rem 6rem #0008",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "local-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-dock: -12px 0 32px #0005",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  },
+  {
+    "file": "src/shared/styles/tokens.css",
+    "rule": "mode-color",
+    "evidence": "@layer base > :root[data-color-mode=\"dark\"] | --elevation-dock: -12px 0 32px #0005",
+    "count": 1,
+    "reason": "Existing styling at 57796f0; retained until this owning surface is deliberately migrated."
+  }
+]

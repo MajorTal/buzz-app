@@ -29,7 +29,7 @@
     "design:build": "pnpm design:typecheck && vite build --config vite.design.config.ts",
     "design:preview": "vite preview --config vite.design.config.ts",
     "design:typecheck": "tsc -p tsconfig.design.json",
-    "design:check": "node scripts/design-system/check-type.mjs && node scripts/design-system/check-color.mjs && node scripts/design-system/check-contrast.mjs",
+    "design:check": "node scripts/design-system/check-type.mjs && node scripts/design-system/check-color.mjs && node scripts/design-system/check-contrast.mjs && node scripts/design-system/check-authoring.mjs",
     "design:census": "node scripts/design-system/token-consumers.mjs",
     "design:test": "vitest run --config vitest.design.config.ts",
     "design:test:browser": "pnpm build && pnpm design:build && playwright test --config tests/fixtures/design-system/playwright.config.ts"

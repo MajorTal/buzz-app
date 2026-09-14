@@ -11,11 +11,17 @@ import {
  * The component sources as text, read through Vite rather than `node:fs` so the
  * paths resolve the same way the app resolves them and no Node types are needed.
  */
-const SOURCES = import.meta.glob("/src/shared/design-system/ui/*.tsx", {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
+const SOURCES = import.meta.glob(
+  [
+    "/src/shared/design-system/ui/**/*.tsx",
+    "!/src/shared/design-system/ui/**/*.test.tsx",
+  ],
+  {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  },
+) as Record<string, string>;
 
 function read(source: string): string {
   const contents = SOURCES[`/src/${source}`];
@@ -32,6 +38,23 @@ function read(source: string): string {
  * quietly showing a stale answer on the page.
  */
 describe("component registry — Base UI backing", () => {
+  it("accounts for every shared component source", () => {
+    // This experiment is embedded in the registered Swap workspace specimen.
+    const composedSpecimens = [
+      "shared/design-system/ui/MultiPanelSwapExperiment.tsx",
+    ];
+    expect(
+      Object.keys(SOURCES)
+        .map((path) => path.replace("/src/", ""))
+        .sort(),
+    ).toEqual(
+      [
+        ...COMPONENTS.map((component) => component.source),
+        ...composedSpecimens,
+      ].sort(),
+    );
+  });
+
   it("names a source file that exists for every component", () => {
     for (const component of COMPONENTS) {
       expect(() => read(component.source), component.slug).not.toThrow();

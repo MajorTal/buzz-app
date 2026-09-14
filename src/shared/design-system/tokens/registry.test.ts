@@ -46,6 +46,26 @@ describe("token registry — every documented role exists", () => {
     expect(TOKENS).toContain("@theme inline {");
   });
 
+  it("documents every declared semantic color, not just listed roles", () => {
+    const declared = [
+      ...new Set(
+        [
+          ...DECLARATIONS.matchAll(/^\s*(--(?:bg|text|border)-[a-z0-9-]+):/gm),
+        ].map((match) => match[1]),
+      ),
+    ].sort();
+    const documented = ROLE_GROUPS.flatMap((group) =>
+      group.roles.map((role) => role.variable),
+    ).sort();
+    expect(documented).toEqual(declared);
+    for (const group of ROLE_GROUPS)
+      for (const role of group.roles) {
+        expect(role.use.trim(), role.token).not.toBe("");
+        if (role.status === "proposed")
+          expect(role.owner?.trim(), role.token).toBeTruthy();
+      }
+  });
+
   it("declares every role the registry describes", () => {
     const missing: string[] = [];
     for (const group of ROLE_GROUPS) {
@@ -55,6 +75,20 @@ describe("token registry — every documented role exists", () => {
       }
     }
     expect(missing).toEqual([]);
+  });
+
+  it("documents all authored palette hues and steps", () => {
+    const names = PALETTE.flatMap((hue) =>
+      hue.steps.map((step) => step.variable),
+    ).sort();
+    const declared = [
+      ...new Set(
+        [...DECLARATIONS.matchAll(/^\s*(--[a-z]+-\d+):\s*#[0-9a-f]{6};/gm)].map(
+          (match) => match[1],
+        ),
+      ),
+    ].sort();
+    expect(names).toEqual(declared);
   });
 
   it("declares every palette step and ramp step it lists", () => {

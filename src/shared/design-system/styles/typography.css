@@ -178,7 +178,7 @@
   --text-body--font-weight: var(--type-weight-normal);
 
   /* Body small. Secondary text: descriptions, timestamps, chip and tab labels,
-     help text under a control. The floor — see DESIGN.md § Type.              */
+     help text under a control. The floor — see DESIGN.md § Typography and state.              */
   --text-body-sm: var(--type-size-2);
   --text-body-sm--line-height: var(--type-leading-normal);
   --text-body-sm--letter-spacing: var(--type-tracking-2);

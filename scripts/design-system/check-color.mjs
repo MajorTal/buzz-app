@@ -34,6 +34,7 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { earnedColorFailures } from "./earned-colors.mjs";
 
 const SRC = new URL("../../src/shared/design-system", import.meta.url).pathname;
 const VIEWER = new URL("../../tests/fixtures/design-system", import.meta.url)
@@ -313,62 +314,8 @@ function auditLayers() {
     }
   }
 
-  // 2. THE ROLES THAT REMAIN MUST BE MODE-ASYMMETRIC.
-  //
-  // This replaces four checks that audited the identity families — that each
-  // referenced a palette step, that none was missing, that no two shared a step,
-  // that dark never restated one. All four are gone because their subject is:
-  // nineteen roles were deleted once palette steps became reachable as classes,
-  // and the ones left are the four surfaces plus emphasis.
-  //
-  // The invariant now worth enforcing is the TEST FOR WHETHER A ROLE IS EARNED.
-  // A surface role exists precisely because light and dark take *different* ramp
-  // steps, so no single class can express it. If someone adds a surface role
-  // whose two modes agree, the name is doing nothing and a class would say it —
-  // that is the mistake this catches, in the same shape it already happened.
-  //
-  // Two reasons earn a name whose modes agree, per DESIGN.md § When a name is
-  // earned. Each entry states which one, so the list reads as decisions rather
-  // than as accumulated exceptions.
-  //
-  //   • the name enforces a rule a ramp cannot state — there are three levels
-  //     of text and one border weight;
-  //   • a pattern repeated across screens has been named for the pattern.
-  //
-  // What this still catches is the mistake it was written for: a role invented
-  // by symmetry, restating one step, that no design asked for.
-  const NAME_IS_EARNED = new Map([
-    ["--text-primary", "Three text levels, enforced by name."],
-    ["--text-secondary", "Three text levels, enforced by name."],
-    ["--text-tertiary", "Three text levels, enforced by name."],
-    ["--text-disabled", "Unavailability is a rule, not a fourth level."],
-    ["--border-primary", "One shared border weight, enforced by name."],
-    ["--text-on-accent", "Paired text follows its fill, not the mode."],
-  ]);
-
-  const roleNames = [
-    ...new Set(
-      [...modes.light.matchAll(/^\s*(--(?:bg|text|border)-[a-z0-9-]+):/gm)].map(
-        (m) => m[1],
-      ),
-    ),
-  ];
-
-  for (const name of roleNames) {
-    if (NAME_IS_EARNED.has(name)) continue;
-    // Glass materials are a bundled treatment, not a surface step, and `bg-app`
-    // swaps a whole gradient rather than a step.
-    if (name.includes("glass") || name === "--bg-app") continue;
-
-    const light = read(modes.light, name);
-    const dark = read(modes.dark, name);
-    if (dark && dark !== light) continue; // earns its name
-
-    failures.push({
-      at: rel,
-      found: `${name}: ${light}`,
-      why: `Same value in both modes. Write ${light?.replace(/var\(--(.+)\)/, "$1") ?? "the step"} where it is used — unless this name is earned, in which case add it to NAME_IS_EARNED with its reason: a rule a ramp cannot state, or a pattern repeated across screens that is now named for the pattern.`,
-    });
+  for (const why of earnedColorFailures(css)) {
+    failures.push({ at: rel, found: "semantic color decision", why });
   }
 }
 
@@ -392,6 +339,6 @@ for (const { at, found, why } of failures) {
   console.error(`        ${why}\n`);
 }
 console.error(
-  "Add the step to the palette in tokens.css, or add a documented override\nin scripts/design-system/check-color.mjs with a reason. See DESIGN.md § Colour discipline.",
+  "Add the step to the palette in tokens.css, or add a documented override\nin scripts/design-system/check-color.mjs with a reason. See AGENTS.md § Choose and grow the system.",
 );
 process.exit(1);

@@ -474,7 +474,7 @@
 
 /* ============================================================
    LAYER 2 — PUBLIC ROLES
-   The only layer a screen may use. Every value below points at
+   Semantic names complement the public mode-aware palette. Every value below points at
    a ramp step or semantic backdrop choice, except the documented
    exceptions at the bottom.
    ============================================================ */
@@ -483,13 +483,15 @@
   /* --- Structural surfaces. ---------------------------------
      THE ROLES THAT EXIST BECAUSE A RAMP STEP CANNOT SAY THEM.
      Each one takes a DIFFERENT step per mode, so no class like
-     `bg-neutral-1` is correct in both. That is the whole test for
-     whether a name is earned; everything that passed it is here.
+     `bg-neutral-1` is correct in both. Other earned-name decisions are recorded beside their definitions.
 
      `bg-app` qualifies for the same reason in a different shape:
      the gradient itself is swapped per mode.                  */
+  /* @earned material: The backdrop is a complete paired gradient treatment. */
   --bg-app: var(--gradient-1);
+  /* @earned modes: Panels sit above the backdrop in both modes. */
   --bg-panel: var(--neutral-1); /* dark: neutral-3 */
+  /* @earned modes: Floating surfaces use lightness for dark-mode elevation. */
   --bg-float: var(--neutral-1); /* dark: neutral-5 */
 
   /* `bg-hover` was here and is gone. It was neutral-4 in both modes, so
@@ -508,19 +510,24 @@
      three levels of text and one border weight, and a ramp cannot
      say "three". Reaching for `text-neutral-11` because it looks
      right is how a fourth level appears without anyone deciding.  */
+  /* @earned rule: Primary reading level in the three-level text hierarchy. */
   --text-primary: var(--neutral-12);
+  /* @earned rule: Supporting reading level in the three-level text hierarchy. */
   --text-secondary: var(--neutral-10);
+  /* @earned rule: Metadata level in the three-level text hierarchy. */
   --text-tertiary: var(--neutral-9);
   /* Deliberately below the contrast targets: low contrast is the signal that a
      control is unavailable, and WCAG exempts inactive controls for the same
      reason. Raising it to Lc 60 would make disabled read as enabled. Never put
      information here that a person needs. */
+  /* @earned rule: Unavailability is a state, not a fourth text emphasis level. */
   --text-disabled: var(--neutral-8);
 
   /* One border, not three. `primary` names the sole deliberate weight,
      and neutral-4 keeps it at the threshold of perception over both the
      panel and the atmospheric backdrop. A second weight arrives only with
      a design that proves a different boundary needs one. */
+  /* @earned rule: One shared neutral border weight, paired for both modes. */
   --border-primary: var(--neutral-4);
 
   /* --- Identity: deliberately absent. ----------------------
@@ -582,10 +589,15 @@
      globals.css are the only legitimate readers: they pair each fill
      with its blur, rim, and lift so a material cannot arrive in
      pieces.                                                   */
+  /* @earned material: Bundled glass treatment; fill is private to its material utility. */
   --bg-glass-primary: var(--glass-2);
+  /* @earned material: Bundled glass treatment; fill is private to its material utility. */
   --bg-glass-primary-hover: var(--glass-3);
+  /* @earned material: Bundled glass treatment; fill is private to its material utility. */
   --bg-glass-secondary: var(--glass-4);
+  /* @earned material: Bundled glass treatment; fill is private to its material utility. */
   --bg-glass-secondary-hover: var(--glass-5);
+  /* @earned modes: Selection stays opaque above chrome glass. */
   --bg-chrome-selected: var(--neutral-1);
 
   /* --- Focus: `purple-8`, written directly. -----------------
@@ -595,8 +607,8 @@
      `purple-9` and disappears. **A focused primary button needs the ring
      separated from the fill** — an offset in the surface colour, not a
      different ring hue, so one focus treatment works everywhere. That
-     belongs to whichever component layer introduces focus. It is in
-     DESIGN.md, which is where a rule lives; a token could not state it. */
+     belongs to whichever component layer introduces focus. Its rationale is in
+     DESIGN.md; policy lives in AGENTS.md; a token could not state it. */
 
   /* --- Geometry. Repeated relationships from Messages. ----- */
   --space-workspace-inset: var(--space-4);
@@ -642,6 +654,7 @@
         than fixed, because white is readable on a blue or
         purple fill and unreadable on yellow or lime. Until the
         computation lands, these hold literals.                */
+  /* @earned rule: Paired text follows the fill, not the mode. */
   --text-on-accent: #ffffff;
 
   /* `text-on-inverse` was `var(--neutral-1)` in both modes and went with

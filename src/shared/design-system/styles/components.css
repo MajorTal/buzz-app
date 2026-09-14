@@ -361,7 +361,7 @@
      cursor should read as more solid, per DESIGN.md § Surface and depth — but it
      is why a hover inside glass cannot simply reuse a whole material. */
   /* `:not([data-selected])` because hover and selected can both be true at once —
-     a cursor can sit on the selected tab — and DESIGN.md § State says a selected
+     a cursor can sit on the selected tab — and AGENTS.md § Visual and interaction contract says a selected
      item in a toggle group is not interactive, so it must not react. These two
      selectors score identical specificity, so without the exclusion only source
      order would keep it right, and reordering them would silently give the

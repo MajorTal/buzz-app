@@ -52,8 +52,8 @@ export function OverviewPage() {
         <p className="text-body-sm text-secondary">
           The order is fixed, so there is one correct spelling. The practical
           guidance for using and evolving it lives in{" "}
-          <Link to="/design/maintaining" className="text-purple-12 underline">
-            Maintaining the system
+          <Link to="/design/agents-guide" className="text-purple-12 underline">
+            Authoring rules
           </Link>
           .
         </p>
@@ -83,10 +83,10 @@ export function OverviewPage() {
             Glass
           </Link>
           <Link
-            to="/design/maintaining"
+            to="/design/agents-guide"
             className="rounded-lg bg-neutral-2 px-4 py-2 text-body text-secondary transition-colors hover:bg-neutral-4 hover:text-primary"
           >
-            Maintaining the system
+            Authoring rules
           </Link>
         </div>
       </Section>

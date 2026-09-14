@@ -12,6 +12,14 @@ before live use.
 Files marked `FOUNDATION` require explicit human guidance before editing and
 stricter review. Escalate needed changes rather than editing without authorization.
 
+## Design-system instruction discovery
+
+Before any UI styling, component, token, appearance or viewer work anywhere in
+this repository, read [the canonical design-system rules](src/shared/design-system/AGENTS.md).
+This includes feature consumers, `tests/fixtures/design-system/`, its HTML entry,
+and `scripts/design-system/`; directory inheritance alone does not cover them.
+Follow its decision-specific references before changing a design decision.
+
 ## Engineering standard
 
 Before editing, state the intended outcome and non-goals. Read the owning code,

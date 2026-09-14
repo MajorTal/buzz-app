@@ -34,7 +34,6 @@ test("built viewer loads every specimen and foundation without app connections",
     "Glass",
     "Motion",
     "Base UI backing",
-    "Maintaining the system",
     "DESIGN.md",
     "AGENTS.md",
   ]) {
@@ -46,6 +45,17 @@ test("built viewer loads every specimen and foundation without app connections",
   await expect(
     nav.getByRole("link", { name: /Composer|Conversation|Agent work/ }),
   ).toHaveCount(0);
+  await page.goto(`${viewer}#/design/maintaining`);
+  await expect(
+    page.getByRole("heading", { name: "Design rationale", exact: true }),
+  ).toBeVisible();
+  await nav.getByRole("link", { name: "AGENTS.md", exact: true }).click();
+  await expect(page.locator("main")).toContainText(
+    "No local light/dark color overrides",
+  );
+  await expect(page.locator("main")).toContainText(
+    "same palette step in both modes",
+  );
   expect(failures).toEqual([]);
   expect(sockets).toEqual([]);
 });

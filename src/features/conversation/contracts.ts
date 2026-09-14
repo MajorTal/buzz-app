@@ -18,12 +18,21 @@ export type ComposerToolProps = Readonly<{
   insertMention(recipient: Readonly<{ pubkey: string; name: string }>): boolean;
   focus(): void;
 }>;
+export type ReactionToolProps = Readonly<{
+  session: RelaySession;
+  scope: string;
+  disabled: boolean;
+  /** Host-owned reaction intent; revoked when the tool or target is removed. */
+  select(emoji: string): boolean;
+}>;
 export type ComposerTool = Readonly<{
   id: string;
   title: string;
   /** Lower values appear first; defaults to zero. Equal values sort by contribution key. */
   order?: number;
   component: ComponentType<ComposerToolProps>;
+  /** Optional emoji-only chooser for the message reaction row. */
+  reactionComponent?: ComponentType<ReactionToolProps>;
 }>;
 export type InlineContent = Readonly<{
   text: string;

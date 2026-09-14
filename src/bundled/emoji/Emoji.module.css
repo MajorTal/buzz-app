@@ -35,13 +35,47 @@
   background: var(--surface);
   box-shadow: var(--elevation-card);
 }
+.emojiPopover:not([data-has-tabs]) {
+  /* Search sits inside 8px of picker padding plus its 2px margin. */
+  --picker-search-radius: max(0px, calc(var(--picker-container-radius) - 10px));
+  --picker-search-top-space: 0px;
+}
 .sharedSearchIcon {
   position: absolute;
-  top: 19px;
+  top: 15px;
   left: 18px;
   z-index: 4;
   color: var(--picker-search-muted);
   pointer-events: none;
+}
+.reactionPositioner {
+  z-index: 100;
+}
+.reactionPopover {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  max-width: calc(100vw - 32px);
+}
+.reactionTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-control);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.reactionTrigger:hover {
+  color: var(--text);
+}
+.reactionTrigger:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
 }
 .emojiPopover[data-has-tabs] .sharedSearchIcon {
   top: 67px;

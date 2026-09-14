@@ -16,6 +16,8 @@ export function CustomEmoji({
   return src && failed !== src ? (
     <img
       className={styles.customEmoji}
+      data-copy-emoji={literal}
+      draggable={false}
       src={src}
       alt={literal}
       title={literal}

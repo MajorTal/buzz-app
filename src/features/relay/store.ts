@@ -1280,6 +1280,13 @@ export function createChannelStore(
       });
     },
     retainedChannels: () => [...windows.keys()],
+    retainedEvent(id: string) {
+      for (const state of windows.values()) {
+        if (!authorized(state.channelId)) continue;
+        const event = state.events.find((candidate) => candidate.id === id);
+        if (event) return event;
+      }
+    },
     demandedChannels: () => [
       ...new Set([
         ...(current && windows.has(current) ? [current] : []),

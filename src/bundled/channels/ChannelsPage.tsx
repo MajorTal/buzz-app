@@ -238,6 +238,10 @@ function ChannelWorkspace({
       setExactOpening({
         request: navigation,
         inTimeline:
+          !(
+            navigation.target.kind === "conversation" &&
+            navigation.target.threadRootId
+          ) &&
           window.status === "ready" &&
           window.freshness !== "cached" &&
           window.rows.some(

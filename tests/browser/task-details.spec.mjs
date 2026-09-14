@@ -9,6 +9,29 @@ import { changeStore, putRecord, readStore } from "../../dev/task-store.mjs";
 
 const test = base.extend({
   fileStore: async ({ app, page }, use) => {
+    const notifications = [];
+    await page.route(/\/api\/relay\/.*sign$/, (route) =>
+      route.fulfill({ json: app.signTemplate(route.request().postDataJSON()) }),
+    );
+    await page.route(/\/api\/relay\/.*publish$/, (route) => {
+      const event = route.request().postDataJSON();
+      notifications.push(event);
+      return route.fulfill({ json: { event_id: event.id, accepted: true } });
+    });
+    await page.route(/\/api\/relay\/.*session$/, async (route) => {
+      const response = await route.fetch();
+      await route.fulfill({
+        json: { ...(await response.json()), agentLibrary: true },
+      });
+    });
+    await page.route(/\/api\/relay\/.*agent-library$/, (route) =>
+      route.fulfill({
+        json: {
+          definitions: [],
+          identities: [{ pubkey: app.viewer, name: "Another agent" }],
+        },
+      }),
+    );
     const dir = await mkdtemp(join(tmpdir(), "buzz-task-browser-"));
     const file = join(dir, "tasks.json");
     const handler = taskStoreHandler({ viewer: app.viewer, file });
@@ -40,6 +63,7 @@ const test = base.extend({
     await route(page);
     try {
       await use({
+        notifications,
         read: async () => (await readStore(file)).records,
         put: (key, value) =>
           changeStore(
@@ -136,6 +160,9 @@ test("Projects marks an existing channel locally, restores it, and links saved t
   await expect(task).toBeVisible();
   await task.click();
   await expect(
+    page.getByRole("textbox", { name: "Reply to thread", exact: true }),
+  ).toBeVisible();
+  await expect(
     page.locator(`[data-message-id="${app.exact.root.id}"]`).first(),
   ).toBeVisible();
 });
@@ -223,12 +250,33 @@ test("local task panel saves against a canonical thread and never publishes meta
   await expect(
     form.getByRole("textbox", { name: "Title", exact: true }),
   ).toHaveValue("Changed elsewhere");
-  await form.getByRole("textbox", { name: "Assignee" }).fill("Another agent");
+  await form
+    .getByRole("button", { name: "Assign an agent", exact: true })
+    .click();
+  await form
+    .getByRole("searchbox", { name: "Search your agents" })
+    .fill("Another");
+  await form
+    .getByRole("button", { name: `Another agent ${app.viewer}`, exact: true })
+    .click();
   await form.getByRole("button", { name: "Save locally" }).click();
   await expect(form.getByRole("status")).toHaveText("Saved on this device.");
   expect(JSON.parse((await fileStore.read())[key].value).assignee).toBe(
-    "Another agent",
+    app.viewer,
   );
+  expect(app.report.publications).toHaveLength(publications);
+  await form.getByRole("button", { name: "Assign", exact: true }).click();
+  await expect(form.getByRole("status")).toContainText("notification queued");
+  await expect.poll(() => fileStore.notifications.length).toBe(1);
+  const notification = fileStore.notifications[0];
+  expect(notification.pubkey).toBe(app.viewer);
+  expect(notification.tags).toContainEqual(["p", app.viewer]);
+  expect(notification.tags).toContainEqual([
+    "e",
+    app.exact.root.id,
+    "",
+    "reply",
+  ]);
   page.once("dialog", (dialog) => dialog.accept());
   await form.getByRole("button", { name: "Delete task", exact: true }).click();
   await expect(form.getByRole("status")).toContainText("metadata deleted");

@@ -370,15 +370,17 @@ export const test = base.extend({
     };
     const answer = (community, filter) => {
       if (filter.kinds?.includes(39002))
-        return rosterIds.map((id) =>
-          sign(39002, [
-            ["d", id],
-            ["p", viewer],
-            ...participants
-              .slice(dmIds.indexOf(id) * 8, (dmIds.indexOf(id) + 1) * 8)
-              .map((pubkey) => ["p", pubkey]),
-          ]),
-        );
+        return rosterIds
+          .filter((id) => !filter["#d"] || filter["#d"].includes(id))
+          .map((id) =>
+            sign(39002, [
+              ["d", id],
+              ["p", viewer],
+              ...participants
+                .slice(dmIds.indexOf(id) * 8, (dmIds.indexOf(id) + 1) * 8)
+                .map((pubkey) => ["p", pubkey]),
+            ]),
+          );
       if (filter.kinds?.includes(39000))
         return rosterIds.map((id) =>
           sign(39000, [
@@ -844,6 +846,7 @@ export const test = base.extend({
         },
         participants,
         viewer,
+        signTemplate: (template) => finalizeEvent(template, userKey),
         relay,
         observer(raw, agentKey, community = "primary") {
           const agent = getPublicKey(agentKey);

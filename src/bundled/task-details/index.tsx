@@ -16,6 +16,7 @@ import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { parseTask, taskKey, type Task } from "./data";
 import { useFileStore } from "./file-store";
 import styles from "./task.module.css";
+import { AssigneePicker } from "./AssigneePicker";
 
 export const inject = ["panels", "relay"];
 export const apply: PluginModule["apply"] = (ctx) => {
@@ -112,17 +113,24 @@ function ResolveThread({
       </div>
     );
   return view ? (
-    <ResolvedTask view={view} scope={scope} channel={channel} />
+    <ResolvedTask
+      view={view}
+      scope={scope}
+      channel={channel}
+      session={session}
+    />
   ) : (
     <p role="status">Loading thread…</p>
   );
 }
 
 function ResolvedTask({
+  session,
   view,
   scope,
   channel,
 }: {
+  session: RelaySession;
   view: ThreadView;
   scope: string;
   channel: string;
@@ -148,13 +156,22 @@ function ResolvedTask({
       </p>
     );
   const storageKey = taskKey(scope, channel, snapshot.root.id);
-  return <FileTask key={storageKey} storageKey={storageKey} scope={scope} />;
+  return (
+    <FileTask
+      key={storageKey}
+      storageKey={storageKey}
+      scope={scope}
+      session={session}
+    />
+  );
 }
 
 function FileTask({
+  session,
   storageKey,
   scope,
 }: {
+  session: RelaySession;
   storageKey: string;
   scope: string;
 }) {
@@ -167,7 +184,7 @@ function FileTask({
         </p>
       )}
       {file.records ? (
-        <TaskEditor storageKey={storageKey} file={file} />
+        <TaskEditor storageKey={storageKey} file={file} session={session} />
       ) : (
         <p role="status">Loading task file…</p>
       )}
@@ -176,9 +193,11 @@ function FileTask({
 }
 
 function TaskEditor({
+  session,
   storageKey,
   file,
 }: {
+  session: RelaySession;
   storageKey: string;
   file: ReturnType<typeof useFileStore>;
 }) {
@@ -261,11 +280,60 @@ function TaskEditor({
           onChange={(e) => update({ ...task, description: e.target.value })}
         />
       </label>
-      {field(
-        "Assignee (name or public key; does not notify)",
-        task.assignee,
-        (assignee) => update({ ...task, assignee }),
-      )}
+      <AssigneePicker
+        session={session}
+        value={task.assignee}
+        onChange={(assignee) => update({ ...task, assignee })}
+      />
+      <div>
+        <Button
+          type="button"
+          disabled={saving || !task.assignee || !session.outbox?.supports(9)}
+          onClick={async () => {
+            if (saving) return;
+            setSaving(true);
+            setError("");
+            setNotice("");
+            try {
+              const revision = await file.save(
+                storageKey,
+                JSON.stringify(task),
+                previous,
+              );
+              setPrevious(revision);
+              const [, channelId, rootId] = JSON.parse(
+                storageKey.slice("buzz.local-task.v1:".length),
+              );
+              setNotice(
+                "Assignment saved. Notification has not been queued yet.",
+              );
+              const name =
+                session.agentLibrary
+                  .snapshot()
+                  .identities.find((agent) => agent.pubkey === task.assignee)
+                  ?.name || task.assignee;
+              session.messages.reply(
+                channelId,
+                rootId,
+                `@${name}, I've assigned you this task. Please start work here.`,
+                [task.assignee],
+              );
+              setNotice(
+                "Assignment saved; notification queued. Check the thread for delivery status.",
+              );
+            } catch (e) {
+              setError(String(e));
+            } finally {
+              setSaving(false);
+            }
+          }}
+        >
+          Assign
+        </Button>
+        <p className="text-body-sm text-secondary">
+          Saves the task and notifies the agent to start work.
+        </p>
+      </div>
       {task.branches.map((link, index) => (
         <fieldset key={link.id} className={styles.branch}>
           <legend className="text-body-sm text-secondary">

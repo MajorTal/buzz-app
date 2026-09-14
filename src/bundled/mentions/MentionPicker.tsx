@@ -1,5 +1,6 @@
 import { Avatar } from "../../shared/Avatar";
-import { AtSign } from "lucide-react";
+import { AtSign, UserRoundPlus } from "lucide-react";
+import type { AgentLibrary } from "../../features/agents/library";
 import {
   useEffect,
   useId,
@@ -18,9 +19,11 @@ export function MentionPicker({
   channelId,
   disabled,
   select,
+  agents,
 }: {
   session: RelaySession;
-  channelId: string;
+  channelId?: string;
+  agents?: AgentLibrary["identities"];
   disabled: boolean;
   select: ComposerToolProps["insertMention"];
 }) {
@@ -40,7 +43,10 @@ export function MentionPicker({
     session.profiles.snapshot,
   );
   const channel = list.channels.find((item) => item.id === channelId);
-  const memberKey = channel?.members?.join(":") ?? "";
+  const memberKey = agents
+    ? agents.map((agent) => agent.pubkey).join(":")
+    : (channel?.members?.join(":") ?? "");
+  const label = agents ? "Assign an agent" : "Mention a member";
   useEffect(() => {
     if (!open || !memberKey) return;
     let current = true;
@@ -56,10 +62,15 @@ export function MentionPicker({
       current = false;
     };
   }, [session, open, memberKey]);
-  const candidates = (channel?.members ?? [])
+  const candidates = (
+    agents ? agents.map((agent) => agent.pubkey) : (channel?.members ?? [])
+  )
     .map((pubkey) => ({
       pubkey,
-      name: profiles.get(pubkey)?.name ?? pubkey.slice(0, 12),
+      name:
+        agents?.find((agent) => agent.pubkey === pubkey)?.name ??
+        profiles.get(pubkey)?.name ??
+        pubkey.slice(0, 12),
     }))
     .filter(({ name, pubkey }) =>
       `${name} ${pubkey}`.toLowerCase().includes(search.trim().toLowerCase()),
@@ -68,7 +79,7 @@ export function MentionPicker({
     <fieldset
       disabled={disabled}
       className={styles.pickerControls}
-      aria-label="Mention controls"
+      aria-label={agents ? "Assignment controls" : "Mention controls"}
       onKeyDown={(event) => {
         if (event.key === "Escape" && open) {
           event.preventDefault();
@@ -81,25 +92,36 @@ export function MentionPicker({
       <button
         ref={trigger}
         type="button"
-        aria-label="Mention a member"
-        title="Mention a member"
+        aria-label={label}
+        title={label}
         aria-expanded={open}
         aria-controls={id}
         onClick={() => {
           setOpen(!open);
-          session.channels.ensureList();
+          if (!agents) session.channels.ensureList();
         }}
       >
-        <AtSign size={20} aria-hidden="true" />
+        {agents ? (
+          <UserRoundPlus size={20} aria-hidden="true" />
+        ) : (
+          <AtSign size={20} aria-hidden="true" />
+        )}
       </button>
       {open && (
         <section
           id={id}
           className={styles.mentionPopover}
-          aria-label="Mention a channel member"
+          style={
+            agents
+              ? { position: "relative", bottom: "auto", marginTop: 8 }
+              : undefined
+          }
+          aria-label={
+            agents ? "Choose an assignee" : "Mention a channel member"
+          }
         >
           <label>
-            Search channel members
+            {agents ? "Search your agents" : "Search channel members"}
             <input
               type="search"
               value={search}
@@ -109,27 +131,33 @@ export function MentionPicker({
               }}
             />
           </label>
-          <p>Only members of this channel are shown.</p>
+          <p>
+            {agents
+              ? "Agents from your Buzz library. Assignment does not send a mention."
+              : "Only members of this channel are shown."}
+          </p>
           {error && <p role="status">{error}</p>}
-          {list.error && (
+          {!agents && list.error && (
             <p role="alert">Could not refresh channel membership.</p>
           )}
-          {!channel?.members && (
+          {!agents && !channel?.members && (
             <p role="status">Channel membership unavailable.</p>
           )}
-          <button
-            type="button"
-            onClick={() => session.channels.refreshList?.()}
-          >
-            Refresh members
-          </button>
+          {!agents && (
+            <button
+              type="button"
+              onClick={() => session.channels.refreshList?.()}
+            >
+              Refresh members
+            </button>
+          )}
           <div className={styles.mentionChoices}>
             {candidates.slice(0, 100).map((recipient) => (
               <button
                 type="button"
                 key={recipient.pubkey}
                 aria-label={`${recipient.name} ${recipient.pubkey}`}
-                disabled={!!channel?.archived}
+                disabled={!agents && !!channel?.archived}
                 onClick={() => {
                   if (select(recipient)) setOpen(false);
                 }}
@@ -137,7 +165,10 @@ export function MentionPicker({
                 <Avatar
                   name={recipient.name}
                   src={session.media(
-                    profiles.get(recipient.pubkey)?.picture ?? "",
+                    profiles.get(recipient.pubkey)?.picture ??
+                      agents?.find((agent) => agent.pubkey === recipient.pubkey)
+                        ?.avatar ??
+                      "",
                   )}
                   className="size-8 rounded-lg text-xs"
                 />
@@ -150,8 +181,12 @@ export function MentionPicker({
             {candidates.length > 100 && (
               <p>Narrow your search to see more members.</p>
             )}
-            {channel?.members && !candidates.length && (
-              <p>No matching channel members.</p>
+            {(agents || channel?.members) && !candidates.length && (
+              <p>
+                {agents
+                  ? "No matching agents."
+                  : "No matching channel members."}
+              </p>
             )}
           </div>
         </section>

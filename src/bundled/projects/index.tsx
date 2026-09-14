@@ -102,7 +102,7 @@ function ProjectList({
       kind: "conversation",
       scope: { viewer, communityOrigin: scope.slice(0, -(viewer.length + 1)) },
       channelId,
-      ...(messageId ? { messageId } : {}),
+      ...(messageId ? { messageId, threadRootId: messageId } : {}),
     });
     if (result.status === "failed")
       setError("Could not open the conversation. Try again.");

@@ -1,5 +1,5 @@
 import { test, expect } from "./fixture.mjs";
-test.use({ pluginFixtures: true });
+test.use({ pluginFixtures: true, historyCounts: { alpha: 0, beta: 0 } });
 for (const operation of ["complete", "resolve"]) {
   test(`removed provider cannot ${operation} its old pending request`, async ({
     page,

@@ -253,6 +253,58 @@ then Playwright. Updating a test's location must also update discovery, imports,
 fixture URLs and root-path calculations; moving a file must not silently drop it
 from the gate.
 
+### Choosing a test layer
+
+Choose the cheapest layer that can observe the failure, not the tool used by the
+last test in the feature. Regression coverage is about behavior, not test counts
+or a coverage percentage. These rules apply to human and AI contributions alike.
+
+| Contract | Default layer |
+| --- | --- |
+| Parsing, policy, state machines, protocol handling, service coordination | Vitest in Node; use real collaborating services where the boundary matters |
+| Component state, effects, subscriptions, forms, semantic DOM and stale async results | React Testing Library in Vitest with jsdom |
+| Layout, virtualization, scrolling, native editing/focus interactions, real browser storage coordination | Playwright in both engines |
+| App composition across routing, plugins, transport and persistence | Representative Playwright journeys, with permutations in lower layers |
+
+Run JS tests with `bin/pnpm exec vitest run`, optionally followed by a test path.
+For mounted component tests, add `// @vitest-environment jsdom` at the top of the
+colocated test and import `@testing-library/jest-dom/vitest` for DOM assertions.
+Use real React (including StrictMode), role/label queries and `userEvent` for
+interactions. Use `fireEvent` for deliberately low-level events or bulk input
+whose keystrokes are not the contract. Unmount with RTL `cleanup` in `afterEach`;
+clear owned storage and restore spies. Fake external services, not React hooks.
+Keep snapshots stable until a service actually changes, and assert cleanup and
+late-result rejection through real mounting, rerendering and unmounting.
+See the [composer tests](../src/features/messages/MessageComposer.test.tsx).
+
+jsdom is the default DOM emulator, not a second browser gate. Its
+[standards-oriented implementation](https://github.com/jsdom/jsdom#readme) and
+compatibility with Testing Library favor behavioral fidelity over emulator-only
+speed claims. [Vitest supports Happy DOM too](https://vitest.dev/guide/environment),
+but introducing another emulator requires a demonstrated benefit on our actual
+component tests without per-environment workarounds. Neither proves rendering,
+native IME behavior or browser performance. Keep layout shims local and explicit;
+do not treat synthetic dimensions as acceptance evidence.
+
+Before accepting test changes, reviewers should verify:
+
+- Each added browser case identifies a browser-specific behavior or integration
+  boundary that a lower layer cannot establish. Keep failure/recovery coverage,
+  but avoid repeating the same state matrix through full app startup.
+- A moved assertion has a named replacement and evidence that a plausible defect
+  makes it fail. Similar test titles do not establish equivalent coverage.
+- Fixture data matches the test's needs. Share stateless servers/compiled assets,
+  not browser contexts or mutable state; keep scale tests representative.
+- Timing claims distinguish setup, execution, runner/engine and the checked
+  snapshot. Report added/removed cases and deferred checks. Do not impose a
+  flaky wall-clock threshold on ordinary correctness tests.
+
+Follow `AGENTS.md` to record those decisions in the PR description and enforce
+them during agent review. Request a lower-layer test when the browser justification
+is missing, rather than accept unbounded journey growth. Existing broad fixtures and hook-mocked tests are
+migration work, not patterns for new tests; convert them by owner without
+bundling unrelated product changes.
+
 ### Manual browser fixtures
 
 With `just web` running **without a `BUZZ_DEV_VIEWER` pin**, these separate diagnostic pages

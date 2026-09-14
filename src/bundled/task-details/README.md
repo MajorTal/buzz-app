@@ -1,6 +1,6 @@
 # Local task details
 
-Open a conversation thread, then choose **Task details** in the channel toolbar. The plugin uses the host's existing channel-panel drawer. Enter a title, optional description and assignee, and repository/branch entries; choose **Save locally**.
+Open a conversation thread, then choose **Task details** beside its reply composer. The plugin opens a popover, not a channel drawer. Enter a title, optional description and assignee, and repository/branch entries; choose **Save locally**.
 
 The prototype dev server and local agent script share `~/.buzz/task-thread-experiment.json` (override with `BUZZ_TASK_FILE`). Records are keyed by account/community, channel, and the verified thread root. Old browser records are copied on first use without overwriting file records; originals remain in browser storage. Closing or changing browsers does not remove file records. This is local development data, not relay state. Unsaved form edits are discarded when the panel closes or changes threads.
 

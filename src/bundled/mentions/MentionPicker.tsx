@@ -1,5 +1,6 @@
 import { Avatar } from "../../shared/Avatar";
 import { AtSign, UserRoundPlus } from "lucide-react";
+import { Popover } from "@base-ui/react/popover";
 import type { AgentLibrary } from "../../features/agents/library";
 import {
   useEffect,
@@ -75,7 +76,110 @@ export function MentionPicker({
     .filter(({ name, pubkey }) =>
       `${name} ${pubkey}`.toLowerCase().includes(search.trim().toLowerCase()),
     );
-  return (
+  const button = (
+    <button
+      ref={trigger}
+      type="button"
+      aria-label={label}
+      title={label}
+      aria-expanded={open}
+      aria-controls={id}
+      onClick={() => {
+        if (!agents) {
+          setOpen(!open);
+          session.channels.ensureList();
+        }
+      }}
+    >
+      {agents ? (
+        <UserRoundPlus size={20} aria-hidden="true" />
+      ) : (
+        <AtSign size={20} aria-hidden="true" />
+      )}
+    </button>
+  );
+  const picker = (
+    <section
+      id={id}
+      className={styles.mentionPopover}
+      style={
+        agents
+          ? {
+              position: "relative",
+              bottom: "auto",
+              maxHeight: "min(360px, var(--available-height))",
+            }
+          : undefined
+      }
+      aria-label={agents ? "Choose an assignee" : "Mention a channel member"}
+    >
+      <label>
+        {agents ? "Search your agents" : "Search channel members"}
+        <input
+          type="search"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") event.preventDefault();
+          }}
+        />
+      </label>
+      <p>
+        {agents
+          ? "Agents from your Buzz library. Assignment does not send a mention."
+          : "Only members of this channel are shown."}
+      </p>
+      {error && <p role="status">{error}</p>}
+      {!agents && list.error && (
+        <p role="alert">Could not refresh channel membership.</p>
+      )}
+      {!agents && !channel?.members && (
+        <p role="status">Channel membership unavailable.</p>
+      )}
+      {!agents && (
+        <button type="button" onClick={() => session.channels.refreshList?.()}>
+          Refresh members
+        </button>
+      )}
+      <div className={styles.mentionChoices}>
+        {candidates.slice(0, 100).map((recipient) => (
+          <button
+            type="button"
+            key={recipient.pubkey}
+            aria-label={`${recipient.name} ${recipient.pubkey}`}
+            disabled={!agents && !!channel?.archived}
+            onClick={() => {
+              if (select(recipient)) setOpen(false);
+            }}
+          >
+            <Avatar
+              name={recipient.name}
+              src={session.media(
+                profiles.get(recipient.pubkey)?.picture ??
+                  agents?.find((agent) => agent.pubkey === recipient.pubkey)
+                    ?.avatar ??
+                  "",
+              )}
+              className="size-8 rounded-lg text-xs"
+            />
+            <span className={styles.mentionLabel}>
+              <span>{recipient.name}</span>
+              <code title={recipient.pubkey}>{recipient.pubkey}</code>
+            </span>
+          </button>
+        ))}
+        {candidates.length > 100 && (
+          <p>Narrow your search to see more members.</p>
+        )}
+        {(agents || channel?.members) && !candidates.length && (
+          <p>
+            {agents ? "No matching agents." : "No matching channel members."}
+          </p>
+        )}
+      </div>
+    </section>
+  );
+  const controls = (
     <fieldset
       disabled={disabled}
       className={styles.pickerControls}
@@ -89,108 +193,29 @@ export function MentionPicker({
         }
       }}
     >
-      <button
-        ref={trigger}
-        type="button"
-        aria-label={label}
-        title={label}
-        aria-expanded={open}
-        aria-controls={id}
-        onClick={() => {
-          setOpen(!open);
-          if (!agents) session.channels.ensureList();
-        }}
-      >
-        {agents ? (
-          <UserRoundPlus size={20} aria-hidden="true" />
-        ) : (
-          <AtSign size={20} aria-hidden="true" />
-        )}
-      </button>
-      {open && (
-        <section
-          id={id}
-          className={styles.mentionPopover}
-          style={
-            agents
-              ? { position: "relative", bottom: "auto", marginTop: 8 }
-              : undefined
-          }
-          aria-label={
-            agents ? "Choose an assignee" : "Mention a channel member"
-          }
-        >
-          <label>
-            {agents ? "Search your agents" : "Search channel members"}
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.preventDefault();
-              }}
-            />
-          </label>
-          <p>
-            {agents
-              ? "Agents from your Buzz library. Assignment does not send a mention."
-              : "Only members of this channel are shown."}
-          </p>
-          {error && <p role="status">{error}</p>}
-          {!agents && list.error && (
-            <p role="alert">Could not refresh channel membership.</p>
-          )}
-          {!agents && !channel?.members && (
-            <p role="status">Channel membership unavailable.</p>
-          )}
-          {!agents && (
-            <button
-              type="button"
-              onClick={() => session.channels.refreshList?.()}
-            >
-              Refresh members
-            </button>
-          )}
-          <div className={styles.mentionChoices}>
-            {candidates.slice(0, 100).map((recipient) => (
-              <button
-                type="button"
-                key={recipient.pubkey}
-                aria-label={`${recipient.name} ${recipient.pubkey}`}
-                disabled={!agents && !!channel?.archived}
-                onClick={() => {
-                  if (select(recipient)) setOpen(false);
-                }}
-              >
-                <Avatar
-                  name={recipient.name}
-                  src={session.media(
-                    profiles.get(recipient.pubkey)?.picture ??
-                      agents?.find((agent) => agent.pubkey === recipient.pubkey)
-                        ?.avatar ??
-                      "",
-                  )}
-                  className="size-8 rounded-lg text-xs"
-                />
-                <span className={styles.mentionLabel}>
-                  <span>{recipient.name}</span>
-                  <code title={recipient.pubkey}>{recipient.pubkey}</code>
-                </span>
-              </button>
-            ))}
-            {candidates.length > 100 && (
-              <p>Narrow your search to see more members.</p>
-            )}
-            {(agents || channel?.members) && !candidates.length && (
-              <p>
-                {agents
-                  ? "No matching agents."
-                  : "No matching channel members."}
-              </p>
-            )}
-          </div>
-        </section>
+      {agents ? <Popover.Trigger render={button} /> : button}
+      {agents ? (
+        <Popover.Portal>
+          <Popover.Positioner
+            side="top"
+            align="start"
+            sideOffset={8}
+            collisionPadding={12}
+            style={{ zIndex: 1000 }}
+          >
+            <Popover.Popup render={picker} />
+          </Popover.Positioner>
+        </Popover.Portal>
+      ) : (
+        open && picker
       )}
     </fieldset>
+  );
+  return agents ? (
+    <Popover.Root open={open} onOpenChange={setOpen}>
+      {controls}
+    </Popover.Root>
+  ) : (
+    controls
   );
 }

@@ -1,3 +1,17 @@
+.popup {
+  width: min(42rem, calc(100vw - 24px));
+  max-height: min(80vh, var(--available-height));
+  overflow: auto;
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 0.75rem;
+  box-shadow: var(--elevation-popover);
+}
+.close {
+  display: block;
+  margin: 0.5rem 0.5rem 0 auto;
+}
 .form {
   display: grid;
   gap: 1rem;

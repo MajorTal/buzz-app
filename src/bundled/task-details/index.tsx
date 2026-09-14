@@ -1,16 +1,12 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { Input } from "@base-ui/react/input";
 import { Field } from "@base-ui/react/field";
+import { Popover } from "@base-ui/react/popover";
 import { IconListCheck } from "@tabler/icons-react";
 import type { PluginModule } from "../../plugins/api";
-import type {
-  ChannelLauncherProps,
-  PanelProps,
-} from "../../features/panels/service";
-import type { RelayData } from "../../features/relay/service";
+import type { ComposerToolProps } from "../../features/conversation/contracts";
 import type { RelaySession } from "../../features/relay/session";
 import type { ThreadView } from "../../features/relay/threads";
-import { useRelayConnection } from "../../features/relay/react";
 import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { parseTask, taskKey, type Task } from "./data";
@@ -18,57 +14,60 @@ import { useFileStore } from "./file-store";
 import styles from "./task.module.css";
 import { AssigneePicker } from "./AssigneePicker";
 
-export const inject = ["panels", "relay"];
+export const inject = ["conversation"];
 export const apply: PluginModule["apply"] = (ctx) => {
-  ctx.panels.register({
+  ctx.conversation.registerTool({
     id: "details",
     title: "Local task details",
-    matches: () => false,
-    channelLauncher: Launcher,
-    component: (props) => <TaskPanel {...props} relay={ctx.relay} />,
+    component: TaskTool,
   });
 };
 
-function Launcher({ context, pressed, toggle }: ChannelLauncherProps) {
+function TaskTool({
+  session,
+  scope,
+  channelId,
+  threadRootId,
+}: ComposerToolProps) {
+  if (!threadRootId) return null;
   return (
-    <IconButton
-      icon={<IconListCheck size={16} aria-hidden="true" />}
-      size="toolbar"
-      variant={pressed ? "tint" : "ghost"}
-      aria-label="Task details"
-      title={
-        context.threadId ? "Task details" : "Open a thread to add task details"
-      }
-      aria-pressed={pressed}
-      disabled={!context.threadId}
-      onClick={() => toggle(context.threadId ?? "")}
-    />
-  );
-}
-
-export function TaskPanel({
-  channelContext: context,
-  relay,
-}: PanelProps & { relay: RelayData }) {
-  const connection = useRelayConnection(relay);
-  if (!context?.threadId) return <p>Open a thread to add task details.</p>;
-  if (connection.status !== "ready" || connection.scope !== context.scope)
-    return (
-      <p role="status">Reconnect to this conversation to edit its task.</p>
-    );
-  return (
-    <ResolveThread
-      key={JSON.stringify([
-        context.scope,
-        connection.generation,
-        context.channelId,
-        context.threadId,
-      ])}
-      session={connection.session}
-      scope={context.scope}
-      channel={context.channelId}
-      message={context.threadId}
-    />
+    <Popover.Root key={`${scope}:${channelId}:${threadRootId}`}>
+      <Popover.Trigger
+        render={
+          <IconButton
+            icon={<IconListCheck size={16} aria-hidden="true" />}
+            size="toolbar"
+            variant="ghost"
+            aria-label="Task details"
+            title="Task details"
+          />
+        }
+      />
+      <Popover.Portal>
+        <Popover.Positioner
+          side="top"
+          align="end"
+          sideOffset={8}
+          collisionPadding={12}
+          style={{ zIndex: 1000 }}
+        >
+          <Popover.Popup className={styles.popup} aria-label="Task details">
+            <Popover.Close
+              className={styles.close}
+              aria-label="Close task details"
+            >
+              ×
+            </Popover.Close>
+            <ResolveThread
+              session={session}
+              scope={scope}
+              channel={channelId}
+              message={threadRootId}
+            />
+          </Popover.Popup>
+        </Popover.Positioner>
+      </Popover.Portal>
+    </Popover.Root>
   );
 }
 

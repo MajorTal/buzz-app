@@ -177,7 +177,7 @@ test("local task panel saves against a canonical thread and never publishes meta
     name: "Task details",
     exact: true,
   });
-  await expect(launcher).toBeDisabled();
+  await expect(launcher).toHaveCount(0);
   const navigate = async (id) => {
     expect(
       await page.evaluate((target) => window.fixtureNavigation.open(target), {
@@ -196,6 +196,23 @@ test("local task panel saves against a canonical thread and never publishes meta
   await launcher.click();
   const form = page.getByRole("form", { name: "Local task details" });
   await expect(form).toBeVisible();
+  const insideViewport = async (locator) =>
+    locator.evaluate((element) => {
+      const r = element.getBoundingClientRect();
+      return (
+        r.top >= 0 &&
+        r.left >= 0 &&
+        r.bottom <= innerHeight &&
+        r.right <= innerWidth
+      );
+    });
+  await expect
+    .poll(() =>
+      insideViewport(
+        page.getByRole("dialog", { name: "Task details", exact: true }),
+      ),
+    )
+    .toBe(true);
   const publications = app.report.publications.length;
   await form
     .getByRole("textbox", { name: "Title", exact: true })
@@ -224,7 +241,9 @@ test("local task panel saves against a canonical thread and never publishes meta
     )
     .first()
     .getAttribute("data-message-id");
-  await launcher.click();
+  await page
+    .getByRole("button", { name: "Close task details", exact: true })
+    .click();
   await navigate(anotherReply);
   await launcher.click();
   await expect(
@@ -253,10 +272,17 @@ test("local task panel saves against a canonical thread and never publishes meta
   await form
     .getByRole("button", { name: "Assign an agent", exact: true })
     .click();
-  await form
+  await page
     .getByRole("searchbox", { name: "Search your agents" })
     .fill("Another");
-  await form
+  await expect
+    .poll(() =>
+      insideViewport(
+        page.getByRole("dialog", { name: "Choose an assignee", exact: true }),
+      ),
+    )
+    .toBe(true);
+  await page
     .getByRole("button", { name: `Another agent ${app.viewer}`, exact: true })
     .click();
   await form.getByRole("button", { name: "Save locally" }).click();

@@ -122,6 +122,52 @@ const extensions: ConversationExtensions = {
 };
 
 describe("MessageMarkdown", () => {
+  it("offers complete Markdown destinations only to opted-in renderers and preserves safe fallbacks", () => {
+    const renderer: Contribution<InlineRenderer> = {
+      ...pluginRenderer,
+      links: true,
+      matches: ({ text, link }) =>
+        link && text === "buzz://task" ? [{ start: 0, end: text.length }] : [],
+      component: () => <button type="button">Rich task</button>,
+    };
+    const ext = {
+      ...extensions,
+      inline: { ...extensions.inline, snapshot: () => [renderer] },
+    };
+    expect(
+      render("Assigned to [Task](buzz://task).", { extensions: ext }),
+    ).toContain("Rich task</button>");
+    expect(
+      render("[Normal](https://example.com)", { extensions: ext }),
+    ).toContain('href="https://example.com/"');
+    expect(
+      render("[Unsafe](javascript:alert)", { extensions: ext }),
+    ).not.toContain("href=");
+    expect(
+      render("[Task](buzz://task)", {
+        extensions: {
+          ...ext,
+          inline: {
+            ...ext.inline,
+            snapshot: () => [{ ...renderer, links: false }],
+          },
+        },
+      }),
+    ).not.toContain("Rich task");
+    expect(
+      render("[Task](buzz://task)", {
+        extensions: {
+          ...ext,
+          inline: {
+            ...ext.inline,
+            snapshot: () => [
+              { ...renderer, matches: () => [{ start: 0, end: 4 }] },
+            ],
+          },
+        },
+      }),
+    ).not.toContain("Rich task");
+  });
   it("renders compact CommonMark and GFM structure with chat line breaks", () => {
     const html = render(`# Heading
 first

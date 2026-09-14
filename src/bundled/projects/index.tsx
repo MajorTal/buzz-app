@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { IconHash, IconSearch } from "@tabler/icons-react";
 import type { PluginModule } from "../../plugins/api";
 import type { RelayData } from "../../features/relay/service";
 import type { RelaySession } from "../../features/relay/session";
@@ -10,6 +11,7 @@ import { channelTasks } from "../task-details/data";
 import { isProject, projectKey } from "./data";
 import { useFileStore } from "../task-details/file-store";
 import styles from "./projects.module.css";
+import { TaskSummary } from "../task-details/TaskSummary";
 
 export const inject = ["pages", "relay", "navigation"];
 export const apply: PluginModule["apply"] = (ctx) => {
@@ -35,11 +37,12 @@ function ProjectsPage({
     <div className="h-full min-h-0">
       <FullPageSurface aria-label="Projects">
         <div className={`${styles.page} text-body`} data-buzz-ui="">
-          <h1 className="text-title">Projects</h1>
-          <p>
-            Saved on this Mac and shared with local agent scripts. Not synced to
-            the relay.
-          </p>
+          <header className={styles.heading}>
+            <h1 className="text-title">Projects</h1>
+            <span title="Shared with local agent scripts. Not synced to the relay.">
+              On this Mac
+            </span>
+          </header>
           {connection.status === "ready" &&
           connection.scope &&
           connection.viewer ? (
@@ -75,6 +78,10 @@ function ProjectList({
 }) {
   const list = useChannelList(session.channels);
   const [selected, select] = useState("");
+  const [search, setSearch] = useState("");
+  useEffect(() => {
+    void session.agentLibrary.refresh();
+  }, [session]);
   const file = useFileStore(scope);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
@@ -107,6 +114,20 @@ function ProjectList({
     if (result.status === "failed")
       setError("Could not open the conversation. Try again.");
   };
+  const query = search.trim().toLowerCase();
+  const visible = projects
+    .map(({ channel, tasks }) => ({
+      channel,
+      tasks: channel.name.toLowerCase().includes(query)
+        ? tasks
+        : tasks.filter(({ task }) =>
+            `${task.title} ${task.description}`.toLowerCase().includes(query),
+          ),
+    }))
+    .filter(
+      ({ channel, tasks }) =>
+        tasks.length || channel.name.toLowerCase().includes(query),
+    );
   return (
     <>
       {!file.records && <p role="status">Loading task file…</p>}
@@ -127,56 +148,73 @@ function ProjectList({
         <p role="status">Loading channels…</p>
       ) : null}
       {readError || error ? <p role="alert">{readError || error}</p> : null}
-      <form
-        className={styles.add}
-        aria-label="Add local project"
-        onSubmit={async (event) => {
-          event.preventDefault();
-          if (!channels.some((c) => c.id === selected) || readError || saving)
-            return;
-          setSaving(true);
-          try {
-            const key = projectKey(scope, selected);
-            await file.save(key, "true", file.records?.[key]?.revision ?? null);
-            setError("");
-            select("");
-            file.retry();
-          } catch (e) {
-            setError(String(e));
-          } finally {
-            setSaving(false);
-          }
-        }}
-      >
-        <label>
-          Channel
-          <select
-            value={selected}
-            onChange={(event) => select(event.target.value)}
-          >
-            <option value="">Choose an existing channel</option>
-            {channels
-              .filter((c) => !projects.some((p) => p.channel.id === c.id))
-              .map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-          </select>
-        </label>
-        <Button
-          type="submit"
-          disabled={
-            !file.records ||
-            saving ||
-            !!file.error ||
-            !channels.some((c) => c.id === selected) ||
-            !!readError
-          }
+      <label className={styles.search}>
+        <IconSearch size={18} aria-hidden="true" />
+        <input
+          type="search"
+          aria-label="Find projects or tasks"
+          placeholder="Find projects or tasks…"
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+        />
+      </label>
+      <details className={styles.addProject}>
+        <summary>Add project</summary>
+        <form
+          className={styles.add}
+          aria-label="Add local project"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            if (!channels.some((c) => c.id === selected) || readError || saving)
+              return;
+            setSaving(true);
+            try {
+              const key = projectKey(scope, selected);
+              await file.save(
+                key,
+                "true",
+                file.records?.[key]?.revision ?? null,
+              );
+              setError("");
+              select("");
+              file.retry();
+            } catch (e) {
+              setError(String(e));
+            } finally {
+              setSaving(false);
+            }
+          }}
         >
-          Mark as project locally
-        </Button>
-      </form>
+          <label>
+            Channel
+            <select
+              value={selected}
+              onChange={(event) => select(event.target.value)}
+            >
+              <option value="">Choose an existing channel</option>
+              {channels
+                .filter((c) => !projects.some((p) => p.channel.id === c.id))
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <Button
+            type="submit"
+            disabled={
+              !file.records ||
+              saving ||
+              !!file.error ||
+              !channels.some((c) => c.id === selected) ||
+              !!readError
+            }
+          >
+            Add project
+          </Button>
+        </form>
+      </details>
       {file.records &&
       list.status === "ready" &&
       !projects.length &&
@@ -184,34 +222,47 @@ function ProjectList({
       !file.error ? (
         <p>No local projects yet.</p>
       ) : null}
-      {projects.map(({ channel, tasks }) => (
+      {!!projects.length && !visible.length && (
+        <p className={styles.empty} role="status">
+          No matching projects or tasks.
+        </p>
+      )}
+      {visible.map(({ channel, tasks }) => (
         <section
           key={channel.id}
           className={styles.project}
           aria-label={channel.name}
         >
-          <h2>
-            <Button variant="ghost" onClick={() => void open(channel.id)}>
-              {channel.name}
-            </Button>
-          </h2>
+          <header className={styles.projectHeader}>
+            <h2>
+              <Button variant="ghost" onClick={() => void open(channel.id)}>
+                <IconHash size={18} aria-hidden="true" />
+                {channel.name}
+              </Button>
+            </h2>
+            <span>
+              {tasks.length} {tasks.length === 1 ? "task" : "tasks"}
+            </span>
+          </header>
           {tasks.length ? (
             <ul>
               {tasks.map(({ root, task }) => (
                 <li key={root}>
-                  <Button
-                    variant="ghost"
+                  <button
+                    type="button"
+                    className={styles.taskRow}
+                    aria-label={task.title}
                     onClick={() => void open(channel.id, root)}
                   >
-                    {task.title}
-                  </Button>
-                  {task.description ? <p>{task.description}</p> : null}
-                  {task.assignee ? <p>Assigned to {task.assignee}</p> : null}
+                    <TaskSummary task={task} session={session} />
+                  </button>
                 </li>
               ))}
             </ul>
           ) : (
-            <p>No task details saved for this channel on this device yet.</p>
+            <p className={styles.empty}>
+              No tasks yet. Open a thread in this channel to add task details.
+            </p>
           )}
         </section>
       ))}

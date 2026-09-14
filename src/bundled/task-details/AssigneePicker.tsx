@@ -45,9 +45,6 @@ export function AssigneePicker({
           </Button>
         )}
       </div>
-      <p className="text-body-sm text-secondary">
-        Choose an agent, then click Assign to notify them.
-      </p>
       {snapshot.status === "loading" && (
         <p role="status">Loading your agents…</p>
       )}

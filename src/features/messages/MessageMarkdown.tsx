@@ -158,6 +158,12 @@ function remarkInlineContent(protectedContent: ProtectedContent) {
     const visit = (parent: MarkdownNode) => {
       if (literalContext(parent.type)) {
         restoreLiteral(parent);
+        if (parent.type === "link" && parent.url) {
+          parent.data = {
+            hName: "span",
+            hProperties: { "data-inline-link": parent.url },
+          };
+        }
         return;
       }
       if (!parent.children) return;
@@ -277,11 +283,32 @@ export function MessageMarkdown({
     img: ({ node: _node, alt }) =>
       alt ? <span className={styles.imageAlt}>{alt}</span> : null,
     span: ({ node: _node, children, ...props }) => {
-      const { "data-inline-text": text, "data-profile-target": target } =
-        props as typeof props & {
-          "data-inline-text"?: unknown;
-          "data-profile-target"?: unknown;
-        };
+      const {
+        "data-inline-text": text,
+        "data-profile-target": target,
+        "data-inline-link": link,
+      } = props as typeof props & {
+        "data-inline-text"?: unknown;
+        "data-profile-target"?: unknown;
+        "data-inline-link"?: unknown;
+      };
+      if (typeof link === "string") {
+        const fallback = (
+          <MessageLink href={link} onOpenLink={onOpenLink}>
+            {children}
+          </MessageLink>
+        );
+        return extensions ? (
+          <InlineText
+            registry={extensions.inline}
+            content={{ text: link, link: true, message: row }}
+            media={media}
+            fallback={fallback}
+          />
+        ) : (
+          fallback
+        );
+      }
       if (
         typeof text === "string" &&
         typeof target === "string" &&

@@ -12,6 +12,7 @@ import type {
   ComposerCompletion,
   InlineRenderer,
   ContributionReader,
+  MessageAttachment,
 } from "./contracts";
 
 export type Conversation = {
@@ -21,6 +22,8 @@ export type Conversation = {
   registerCompletion(provider: ComposerCompletion): void;
   inline: ContributionReader<InlineRenderer>;
   registerInline(renderer: InlineRenderer): void;
+  attachments: ContributionReader<MessageAttachment>;
+  registerAttachment(attachment: MessageAttachment): void;
   ui: {
     Composer: (props: Omit<MessageComposerProps, "extensions">) => ReactNode;
     Message: (props: Omit<MessageRowProps, "extensions">) => ReactNode;
@@ -31,7 +34,9 @@ declare module "@deepseek-ai/cordis" {
     conversation: Conversation;
   }
 }
-function validate(value: ComposerTool | InlineRenderer | ComposerCompletion) {
+function validate(
+  value: ComposerTool | InlineRenderer | ComposerCompletion | MessageAttachment,
+) {
   if (
     !value ||
     !/^[a-z0-9][a-z0-9._-]*$/.test(value.id) ||
@@ -50,6 +55,8 @@ export class ConversationService extends Service implements Conversation {
   readonly inline;
   private readonly toolEntries;
   private readonly inlineEntries;
+  readonly attachments;
+  private readonly attachmentEntries;
   constructor(ctx: Context) {
     super(ctx, "conversation");
     const tools = createContributions<ComposerTool>(ctx);
@@ -64,6 +71,12 @@ export class ConversationService extends Service implements Conversation {
     this.inlineEntries = inline;
     this.tools = { snapshot: tools.snapshot, subscribe: tools.subscribe };
     this.inline = { snapshot: inline.snapshot, subscribe: inline.subscribe };
+    const attachments = createContributions<MessageAttachment>(ctx);
+    this.attachmentEntries = attachments;
+    this.attachments = {
+      snapshot: attachments.snapshot,
+      subscribe: attachments.subscribe,
+    };
   }
   registerTool(value: ComposerTool) {
     validate(value);
@@ -80,6 +93,12 @@ export class ConversationService extends Service implements Conversation {
     if (typeof value.matches !== "function")
       throw new Error("An inline renderer needs a matcher");
     this.inlineEntries.register(this.ctx, value);
+  }
+  registerAttachment(value: MessageAttachment) {
+    validate(value);
+    if (typeof value.matches !== "function")
+      throw new Error("A message attachment needs a matcher");
+    this.attachmentEntries.register(this.ctx, value);
   }
   readonly ui = {
     Composer: (props: Omit<MessageComposerProps, "extensions">) => (

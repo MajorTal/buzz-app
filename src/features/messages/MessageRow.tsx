@@ -2,6 +2,7 @@ import { memo, useCallback, useSyncExternalStore } from "react";
 import type { UnreadCapability } from "../relay/unread";
 import { profileTarget } from "../profiles/target";
 import { InlineText } from "../conversation/InlineText";
+import { MessageAttachments } from "../conversation/MessageAttachments";
 import type { ConversationExtensions } from "../conversation/contracts";
 import type { ChannelMessage, Profile } from "../relay/contracts";
 import { AttachmentImage } from "./AttachmentImage";
@@ -136,6 +137,14 @@ export const MessageRow = memo(function MessageRow({
             largeEmoji={emojiOnly}
           />
           <DeliveryNotice row={row} retry={retry} />
+          {extensions?.attachments && session && scope && (
+            <MessageAttachments
+              registry={extensions.attachments}
+              message={row}
+              session={session}
+              scope={scope}
+            />
+          )}
           {row.attachments.map((attachment) => {
             const url = safeMessageUrl(attachment.url);
             if (!url) return null;

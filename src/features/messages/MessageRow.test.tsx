@@ -5,6 +5,9 @@ import { keypair, message, signed } from "../relay/testing";
 import { MessageRow } from "./MessageRow";
 import type { ChannelMessage } from "../relay/contracts";
 import type { UnreadCapability, UnreadSnapshot } from "../relay/unread";
+import type { RelaySession } from "../relay/session";
+import type { MessageAttachment } from "../conversation/contracts";
+import type { Contribution } from "../../plugins/contributions";
 
 const row: ChannelMessage = {
   id: "root",
@@ -18,6 +21,54 @@ const row: ChannelMessage = {
   reactions: [],
   replyCount: 23,
 };
+it("renders scoped plugin attachments without replacing the signed message body", () => {
+  const renderAttachment = vi.fn(({ message, scope }) => (
+    <span>
+      {scope}:{message.id}:task annotation
+    </span>
+  ));
+  let entries: readonly Contribution<MessageAttachment>[] = [
+    {
+      id: "task",
+      key: "test/task",
+      pluginId: "test",
+      revision: "1",
+      title: "Task",
+      matches: (message) => message.id === row.id,
+      component: renderAttachment,
+    },
+  ];
+  const registry = { snapshot: () => entries, subscribe: () => () => {} };
+  const renderRow = () =>
+    renderToStaticMarkup(
+      <MessageRow
+        row={row}
+        profile={undefined}
+        media={() => undefined}
+        onOpenLink={() => false}
+        day={false}
+        retry={undefined}
+        scope="community:viewer"
+        session={
+          {
+            channels: {
+              subscribeList: () => () => {},
+              list: () => ({ channels: [] }),
+            },
+          } as unknown as RelaySession
+        }
+        extensions={{
+          tools: { ...registry, snapshot: () => [] },
+          inline: { ...registry, snapshot: () => [] },
+          attachments: registry,
+        }}
+      />,
+    );
+  expect(renderRow()).toContain("community:viewer:root:task annotation");
+  expect(renderRow()).toContain("Root");
+  entries = [];
+  expect(renderRow()).not.toContain("task annotation");
+});
 it.each([
   ["😀 🙏 👏 😄", [], true],
   ["😀".repeat(40), [], true],

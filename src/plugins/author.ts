@@ -23,6 +23,8 @@ export type {
   InlineContent,
   InlineRange,
   InlineRenderer,
+  MessageAttachment,
+  MessageAttachmentProps,
 } from "../features/conversation/contracts";
 export type { RelayData, RelaySnapshot } from "../features/relay/service";
 

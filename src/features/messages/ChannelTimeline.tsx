@@ -207,11 +207,26 @@ function Timeline({
     const element = scroller.current;
     if (!element) return;
     const measured = element.clientWidth;
-    initialCache.current = geometry.get(
-      channelId,
-      latest.current.signature,
-      measured,
-    );
+    const cacheSignature = () => {
+      const keys = (extensions?.attachments?.snapshot() ?? []).map((entry) => {
+        try {
+          const value = entry.cacheKey?.(scope, channelId);
+          return value == null
+            ? null
+            : JSON.stringify([entry.key, entry.revision, value]);
+        } catch {
+          return null;
+        }
+      });
+      return keys.includes(null)
+        ? null
+        : `${latest.current.signature}:${JSON.stringify(keys)}`;
+    };
+    const initialSignature = cacheSignature();
+    initialCache.current =
+      initialSignature === null
+        ? undefined
+        : geometry.get(channelId, initialSignature, measured);
     let measuredSize = { width: 0, height: 0 };
     const measure = () => {
       const next = { width: element.clientWidth, height: element.clientHeight };
@@ -232,16 +247,17 @@ function Timeline({
       settled.current = false;
       writeView(scope, `scroll:${channelId}`, savedPosition.current);
       observer.disconnect();
-      if (handle.current)
+      const signature = cacheSignature();
+      if (handle.current && signature !== null)
         geometry.set(
           channelId,
-          latest.current.signature,
+          signature,
           latest.current.width,
           handle.current.cache,
         );
     };
     // Initial signature only; mutations invalidate the saved cache on remount.
-  }, [channelId, geometry, scope]);
+  }, [channelId, geometry, scope, extensions?.attachments]);
   useLayoutEffect(() => {
     // Row updates include edits/reactions/replies, not only new message IDs.
     // Above-bottom reading and prepend anchoring remain Virtua's responsibility.

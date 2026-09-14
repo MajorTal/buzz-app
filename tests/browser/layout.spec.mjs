@@ -636,6 +636,9 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
   app,
 }, testInfo) => {
   await page.setViewportSize({ width: 1280, height: 832 });
+  await page.route("**/api/experiment/tasks?*", (route) =>
+    route.fulfill({ json: {} }),
+  );
   await page.goto(app.origin);
   const nav = page.getByRole("navigation", { name: "Pages", exact: true });
   const titles = ["Home", "Messages", "Projects", "Agents"];
@@ -648,7 +651,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     exact: true,
   });
   await expect(title).toBeVisible();
-  await expect(surface).toHaveText("Projects");
+  await expect(surface.getByText("No local projects yet.")).toBeVisible();
   for (const [width, height] of [
     [1280, 832],
     [390, 844],
@@ -661,8 +664,17 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     near(bounds.y, workspace.y);
     near(bounds.width, workspace.width);
     near(bounds.height, workspace.height);
-    near(heading.x + heading.width / 2, bounds.x + bounds.width / 2);
-    near(heading.y + heading.height / 2, bounds.y + bounds.height / 2);
+    expect(heading.x).toBeGreaterThanOrEqual(bounds.x);
+    expect(heading.y).toBeGreaterThanOrEqual(bounds.y);
+    expect(heading.x + heading.width).toBeLessThanOrEqual(
+      bounds.x + bounds.width,
+    );
+    const search = await box(
+      surface
+        .getByRole("searchbox", { name: "Find projects or tasks" })
+        .locator(".."),
+    );
+    near(heading.x, search.x);
     await expect(surface).toHaveCSS("overflow", "hidden");
     await shellFits(page, width);
     await page.screenshot({

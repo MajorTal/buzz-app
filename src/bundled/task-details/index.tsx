@@ -10,19 +10,94 @@ import type { ThreadView } from "../../features/relay/threads";
 import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { parseTask, taskKey, type Task } from "./data";
-import { useFileStore } from "./file-store";
+import { useFileStore, taskAttachmentCacheKey } from "./file-store";
 import styles from "./task.module.css";
 import { AssigneePicker } from "./AssigneePicker";
 import { ensureTaskMember } from "./ensure-member";
+import { TaskSummary } from "./TaskSummary";
+import { TaskReference } from "./TaskReference";
+import { taskReference, taskReferences } from "./reference";
+import type { MessageAttachmentProps } from "../../features/conversation/contracts";
 
-export const inject = ["conversation"];
+export const inject = ["conversation", "relay", "navigation"];
 export const apply: PluginModule["apply"] = (ctx) => {
+  ctx.conversation.registerAttachment({
+    id: "task",
+    title: "Task details",
+    matches: (message) => !message.threadRootId,
+    cacheKey: (scope, channel) => {
+      const connection = ctx.relay.snapshot();
+      return connection.scope !== scope
+        ? null
+        : taskAttachmentCacheKey(
+            scope,
+            channel,
+            connection.session.agentLibrary.snapshot().identities,
+          );
+    },
+    component: AttachedTask,
+  });
+  ctx.conversation.registerInline({
+    id: "task-reference",
+    title: "Task reference",
+    links: true,
+    matches: ({ text, reaction }) => (reaction ? [] : taskReferences(text)),
+    component: (props) => (
+      <TaskReference
+        {...props}
+        relay={ctx.relay}
+        navigation={ctx.navigation}
+        editor={TaskPopover}
+      />
+    ),
+  });
   ctx.conversation.registerTool({
     id: "details",
     title: "Local task details",
     component: TaskTool,
   });
 };
+
+function AttachedTask({ message, session, scope }: MessageAttachmentProps) {
+  const file = useFileStore(scope);
+  const raw =
+    file.records?.[taskKey(scope, message.channelId, message.id)]?.value;
+  if (!raw) return null;
+  try {
+    const task = parseTask(raw);
+    return (
+      <section
+        data-buzz-ui=""
+        className={styles.referenceCard}
+        aria-label="Attached task"
+      >
+        <span className={styles.local}>Task · On this Mac</span>
+        <TaskSummary task={task} session={session} />
+        {file.error && (
+          <span role="alert">
+            Task updates unavailable.{" "}
+            <Button onClick={file.retry}>Retry</Button>
+          </span>
+        )}
+        <div className={styles.cardActions}>
+          <TaskPopover
+            session={session}
+            scope={scope}
+            channel={message.channelId}
+            message={message.id}
+            label="Edit task"
+          />
+        </div>
+      </section>
+    );
+  } catch {
+    return (
+      <p role="alert">
+        Task details could not be read. Open Task details to retry.
+      </p>
+    );
+  }
+}
 
 function TaskTool({
   session,
@@ -32,22 +107,49 @@ function TaskTool({
 }: ComposerToolProps) {
   if (!threadRootId) return null;
   return (
-    <Popover.Root key={`${scope}:${channelId}:${threadRootId}`}>
+    <TaskPopover
+      session={session}
+      scope={scope}
+      channel={channelId}
+      message={threadRootId}
+    />
+  );
+}
+
+export function TaskPopover({
+  session,
+  scope,
+  channel,
+  message,
+  label,
+}: {
+  session: RelaySession;
+  scope: string;
+  channel: string;
+  message: string;
+  label?: string;
+}) {
+  return (
+    <Popover.Root key={`${scope}:${channel}:${message}`}>
       <Popover.Trigger
         render={
-          <IconButton
-            icon={<IconListCheck size={16} aria-hidden="true" />}
-            size="toolbar"
-            variant="ghost"
-            aria-label="Task details"
-            title="Task details"
-          />
+          label ? (
+            <Button size="compact">{label}</Button>
+          ) : (
+            <IconButton
+              icon={<IconListCheck size={16} aria-hidden="true" />}
+              size="toolbar"
+              variant="ghost"
+              aria-label="Task details"
+              title="Task details"
+            />
+          )
         }
       />
       <Popover.Portal>
         <Popover.Positioner
-          side="top"
-          align="end"
+          side={label ? "bottom" : "top"}
+          align={label ? "start" : "end"}
           sideOffset={8}
           collisionPadding={12}
           style={{ zIndex: 1000 }}
@@ -62,8 +164,8 @@ function TaskTool({
             <ResolveThread
               session={session}
               scope={scope}
-              channel={channelId}
-              message={threadRootId}
+              channel={channel}
+              message={message}
             />
           </Popover.Popup>
         </Popover.Positioner>
@@ -267,9 +369,9 @@ function TaskEditor({
         <IconListCheck size={18} aria-hidden="true" />
         Task details
       </div>
-      <p className="text-body-sm text-secondary">
-        Saved on this Mac · Shared with local agent scripts, not the relay.
-      </p>
+      <span className={styles.local}>
+        On this Mac · Unsaved edits stay here until saved
+      </span>
       {field("Title", task.title, (title) => update({ ...task, title }))}
       <label className={styles.field}>
         Description
@@ -316,7 +418,7 @@ function TaskEditor({
               session.messages.reply(
                 channelId,
                 rootId,
-                `Assigned @${name} to [${(task.title || "this task").replace(/[\\[\]]/g, "\\$&").replace(/\s+/g, " ")}](buzz://message?channel=${channelId}&id=${rootId}). Please start work now.`,
+                `Assigned @${name} to [${(task.title || "this task").replace(/[\\[\]]/g, "\\$&").replace(/\s+/g, " ")}](${taskReference(channelId, rootId)}). Please start work now.`,
                 [task.assignee],
               );
               setNotice(
@@ -332,8 +434,7 @@ function TaskEditor({
           Assign
         </Button>
         <p className="text-body-sm text-secondary">
-          Saves the task, adds the agent to this channel if needed, and notifies
-          them to start work.
+          Adds the agent if needed and notifies them to start work.
         </p>
       </div>
       {task.branches.map((link, index) => (
@@ -392,51 +493,56 @@ function TaskEditor({
         >
           Save locally
         </Button>
-        <Button
-          disabled={saving || !previous || !!file.error}
-          onClick={async () => {
-            if (
-              !window.confirm(
-                "Delete task metadata? The conversation will remain.",
-              )
-            )
-              return;
-            setSaving(true);
-            try {
-              setPrevious(await file.save(storageKey, null, previous));
-              setTask(parseTask(null));
-              setError("");
-              setNotice("Task metadata deleted. Conversation unchanged.");
-            } catch (e) {
-              setError(String(e));
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          Delete task
-        </Button>
-        <Button
-          disabled={saving}
-          onClick={async () => {
-            setSaving(true);
-            try {
-              const records = await file.read();
-              setTask(parseTask(records[storageKey]?.value ?? null));
-              setPrevious(records[storageKey]?.revision ?? null);
-              setNotice("");
-              setError("");
-              file.retry();
-            } catch (e) {
-              setError(String(e));
-            } finally {
-              setSaving(false);
-            }
-          }}
-        >
-          Reload saved task
-        </Button>
       </div>
+      <details className={styles.advanced}>
+        <summary>More options</summary>
+        <div>
+          <Button
+            disabled={saving || !previous || !!file.error}
+            onClick={async () => {
+              if (
+                !window.confirm(
+                  "Delete task metadata? The conversation will remain.",
+                )
+              )
+                return;
+              setSaving(true);
+              try {
+                setPrevious(await file.save(storageKey, null, previous));
+                setTask(parseTask(null));
+                setError("");
+                setNotice("Task metadata deleted. Conversation unchanged.");
+              } catch (e) {
+                setError(String(e));
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            Delete task
+          </Button>
+          <Button
+            disabled={saving}
+            onClick={async () => {
+              setSaving(true);
+              try {
+                const records = await file.read();
+                setTask(parseTask(records[storageKey]?.value ?? null));
+                setPrevious(records[storageKey]?.revision ?? null);
+                setNotice("");
+                setError("");
+                file.retry();
+              } catch (e) {
+                setError(String(e));
+              } finally {
+                setSaving(false);
+              }
+            }}
+          >
+            Reload saved task
+          </Button>
+        </div>
+      </details>
       {error && (
         <p role="alert" className="text-body text-red-12">
           {error}

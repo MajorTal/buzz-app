@@ -1,5 +1,5 @@
 // FOUNDATION: Preview conversation contribution contract; data and delivery stay session-owned.
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import type { Contribution } from "../../plugins/contributions";
 import type { ChannelMessage } from "../relay/contracts";
 import type { RelaySession } from "../relay/session";
@@ -36,18 +36,40 @@ export type ComposerTool = Readonly<{
 }>;
 export type InlineContent = Readonly<{
   text: string;
+  /** True when text is a Markdown link destination, not message prose. */
+  link?: boolean;
   message: ChannelMessage;
   reaction?: ChannelMessage["reactions"][number] | undefined;
 }>;
 export type InlineRange = Readonly<{ start: number; end: number }>;
+/** Plugin-owned annotations beneath a message. Never alter its signed body or timeline identity. */
+export type MessageAttachmentProps = Readonly<{
+  message: ChannelMessage;
+  session: RelaySession;
+  scope: string;
+}>;
+export type MessageAttachment = Readonly<{
+  id: string;
+  title: string;
+  /** Synchronous eligibility only; the component owns reactive plugin data. */
+  matches(message: ChannelMessage): boolean;
+  /** Stable key for all data affecting this channel's annotation heights. Null or omitted disables cached geometry. */
+  cacheKey?(scope: string, channelId: string): string | null;
+  component: ComponentType<MessageAttachmentProps>;
+}>;
 export type InlineRenderer = Readonly<{
   id: string;
   title: string;
-  /** UTF-16 ranges within this plain-text segment. Links are never offered. */
+  /** Opt in to complete Markdown link destinations; partial matches retain the original link.
+   * Destinations are raw, unvalidated, author-controlled input; validate before using as a URL. */
+  links?: boolean;
+  /** UTF-16 ranges within this segment. Link destinations require explicit opt-in. */
   matches(content: InlineContent): readonly InlineRange[];
   component: ComponentType<{
     text: string;
     content: InlineContent;
+    /** Host-rendered original link, for renderers without data for this destination. */
+    fallback?: ReactNode;
     media(url: string): string | undefined;
   }>;
 }>;
@@ -59,6 +81,7 @@ export type ConversationExtensions = Readonly<{
   tools: ContributionReader<ComposerTool>;
   inline: ContributionReader<InlineRenderer>;
   completions?: ContributionReader<ComposerCompletion>;
+  attachments?: ContributionReader<MessageAttachment>;
 }>;
 
 /** Immutable host-issued evidence, scoped to one live editor observation. */

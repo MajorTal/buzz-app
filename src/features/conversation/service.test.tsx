@@ -51,6 +51,12 @@ it("registers both surfaces under the injecting plugin scope, removes and replac
         component: Component,
         matches: () => [],
       });
+      ctx.conversation.registerAttachment({
+        id: "annotation",
+        title: "Annotation",
+        matches: () => true,
+        component: Component,
+      });
     },
   });
   h.runtime.reconcile([h.plugin]);
@@ -58,9 +64,11 @@ it("registers both surfaces under the injecting plugin scope, removes and replac
   const first = h.service.tools.snapshot()[0];
   expect(first?.pluginId).toBe(h.plugin.manifest.id);
   expect(h.service.inline.snapshot()).toHaveLength(1);
+  expect(h.service.attachments.snapshot()).toHaveLength(1);
   h.runtime.reconcile([]);
   await vi.waitFor(() => expect(h.service.tools.snapshot()).toHaveLength(0));
   expect(h.service.inline.snapshot()).toHaveLength(0);
+  expect(h.service.attachments.snapshot()).toHaveLength(0);
   h.runtime.reconcile([h.plugin]);
   await vi.waitFor(() => expect(h.service.tools.snapshot()).toHaveLength(1));
   expect(h.service.tools.snapshot()[0]).not.toBe(first);

@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import type { Contribution } from "../../plugins/contributions";
 import type {
   ContributionReader,
@@ -16,6 +16,7 @@ export function inlineMatches(
 ): Match[] {
   const matches: Match[] = [];
   for (const renderer of renderers) {
+    if (content.link && !renderer.links) continue;
     try {
       const ranges = renderer.matches(content);
       if (!Array.isArray(ranges) || ranges.length > content.text.length)
@@ -28,6 +29,8 @@ export function inlineMatches(
           range.start < 0 ||
           range.end <= range.start ||
           range.end > content.text.length ||
+          (content.link &&
+            (range.start !== 0 || range.end !== content.text.length)) ||
           matches.some((m) => range.start < m.end && range.end > m.start)
         )
           continue;
@@ -43,10 +46,12 @@ export function InlineText({
   registry,
   content,
   media,
+  fallback,
 }: {
   registry: ContributionReader<InlineRenderer>;
   content: InlineContent;
   media(url: string): string | undefined;
+  fallback?: ReactNode;
 }) {
   const renderers = useSyncExternalStore(
     registry.subscribe,
@@ -55,16 +60,23 @@ export function InlineText({
   );
   const nodes = [];
   let offset = 0;
-  for (const match of inlineMatches(content, renderers)) {
+  const matches = inlineMatches(content, renderers);
+  if (content.link && !matches.length) return <>{fallback ?? content.text}</>;
+  for (const match of matches) {
     nodes.push(content.text.slice(offset, match.start));
     const text = content.text.slice(match.start, match.end);
     const Render = match.renderer.component;
     nodes.push(
       <ContributionBoundary
         key={`${contributionKey(match.renderer)}:${match.start}:${text}`}
-        fallback={text}
+        fallback={content.link ? (fallback ?? text) : text}
       >
-        <Render text={text} content={content} media={media} />
+        <Render
+          text={text}
+          content={content}
+          media={media}
+          fallback={fallback}
+        />
       </ContributionBoundary>,
     );
     offset = match.end;

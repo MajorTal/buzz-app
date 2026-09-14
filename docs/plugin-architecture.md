@@ -300,6 +300,8 @@ type-only `@buzz/author` declarations support the independent Composer Lab examp
 This remains a host-matched preview, not a stable cross-version SDK. Shared session
 ownership and trusted-plugin authority do not change.
 
+`registerAttachment` adds plugin-owned content beneath a message in both the channel and thread. Its synchronous `matches(message)` gates mounting; the component receives the message, relay session and scope and owns reactive data. Removing the contribution removes its UI without changing signed messages. A plugin may supply `cacheKey(scope, channelId)` covering data that affects annotation heights; an omitted or null key disables saved geometry for that view. Inline references use `registerInline`. Renderers may opt into Markdown destinations with `links: true`; these receive `content.link: true` and must match the entire destination. Unmatched links retain the host's normal URL filtering and label.
+
 ### Composer ownership and mention tools
 
 The standard composer is reusable host UI in `features/messages`, not a mandatory

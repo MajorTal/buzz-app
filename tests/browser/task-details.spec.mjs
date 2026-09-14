@@ -98,8 +98,7 @@ test("Projects marks an existing channel locally, restores it, and links saved t
   app,
   fileStore,
 }) => {
-  await open(page, app);
-  await page.evaluate(
+  await page.addInitScript(
     ({ viewer, root }) => {
       const task = {
         title: "Silent hangup",
@@ -114,6 +113,7 @@ test("Projects marks an existing channel locally, restores it, and links saved t
     },
     { viewer: app.viewer, root: app.exact.root.id },
   );
+  await open(page, app);
   const projects = () =>
     page.evaluate(
       (viewer) =>
@@ -127,12 +127,22 @@ test("Projects marks an existing channel locally, restores it, and links saved t
       app.viewer,
     );
   expect(await projects()).toEqual({ status: "opened" });
+  await page.locator("summary").filter({ hasText: "Add project" }).click();
   await page
     .getByRole("combobox", { name: "Channel", exact: true })
     .selectOption("alpha");
-  await page.getByRole("button", { name: "Mark as project locally" }).click();
+  await page.getByRole("button", { name: "Add project", exact: true }).click();
   const task = page.getByRole("button", { name: "Silent hangup", exact: true });
   await expect(task).toBeVisible();
+  await page
+    .getByRole("searchbox", { name: "Find projects or tasks" })
+    .fill("no match");
+  await expect(page.getByRole("status")).toHaveText(
+    "No matching projects or tasks.",
+  );
+  await page
+    .getByRole("searchbox", { name: "Find projects or tasks" })
+    .fill("");
   await page.reload();
   await expect(task).toBeVisible();
   const key = Object.keys(await fileStore.read()).find((k) =>
@@ -144,9 +154,7 @@ test("Projects marks an existing channel locally, restores it, and links saved t
     assignee: "Another agent",
     branches: [],
   });
-  await expect(
-    page.getByText("Assigned to Another agent", { exact: true }),
-  ).toBeVisible();
+  await expect(task).toContainText("Another agent");
   // Clearing browser storage leaves the file intact and the Projects view recoverable.
   await page.evaluate(() => {
     for (const key of Object.keys(localStorage))
@@ -165,6 +173,11 @@ test("Projects marks an existing channel locally, restores it, and links saved t
   await expect(
     page.locator(`[data-message-id="${app.exact.root.id}"]`).first(),
   ).toBeVisible();
+  await expect(
+    page
+      .getByRole("region", { name: "Thread messages", exact: true })
+      .getByRole("region", { name: "Attached task" }),
+  ).toContainText("Silent hangup");
 });
 
 test("local task panel saves against a canonical thread and never publishes metadata", async ({
@@ -267,6 +280,7 @@ test("local task panel saves against a canonical thread and never publishes meta
   await form.getByRole("button", { name: "Save locally" }).click();
   await conflict;
   await expect(form.getByRole("alert")).toContainText("changed elsewhere");
+  await form.getByText("More options", { exact: true }).click();
   await form.getByRole("button", { name: "Reload saved task" }).click();
   await expect(
     form.getByRole("textbox", { name: "Title", exact: true }),
@@ -327,4 +341,76 @@ test("local task panel saves against a canonical thread and never publishes meta
     1,
   );
   expect(app.report.publications).toHaveLength(publications);
+});
+
+test("task references render as an inline link or a whole-message card and open the real thread", async ({
+  page,
+  app,
+  fileStore,
+}) => {
+  const key = `buzz.local-task.v1:${JSON.stringify([`https://primary.example:${app.viewer}`, "alpha", app.exact.root.id])}`;
+  await fileStore.put(key, {
+    title: "Quiet ending",
+    description: "Keep the microphone quiet",
+    assignee: "",
+    branches: [],
+  });
+  await open(page, app);
+  const link = `buzz://message?channel=alpha&id=${app.exact.root.id}`;
+  const unknown = app.append(
+    "primary",
+    "alpha",
+    `See [Original title](buzz://message?channel=alpha&id=${"f".repeat(64)}).`,
+  );
+  const unknownRow = page.locator(`[data-message-id="${unknown.id}"]`);
+  await expect(unknownRow).toContainText("Original title");
+  await expect(unknownRow).not.toContainText("Task thread");
+  const card = app.append("primary", "alpha", link);
+  const cardRow = page.locator(`[data-message-id="${card.id}"]`);
+  await expect(
+    cardRow.getByText("Quiet ending", { exact: true }),
+  ).toBeVisible();
+  await expect(
+    cardRow.getByRole("button", { name: "Open thread", exact: true }),
+  ).toBeVisible();
+  const inline = app.append("primary", "alpha", `See ${link}.`);
+  const inlineRow = page.locator(`[data-message-id="${inline.id}"]`);
+  await expect(
+    inlineRow.getByRole("button", { name: "Quiet ending", exact: true }),
+  ).toBeVisible();
+  await expect(
+    inlineRow.getByRole("button", { name: "Open thread", exact: true }),
+  ).toHaveCount(0);
+  const assignment = app.append(
+    "primary",
+    "alpha",
+    `Assigned @GLM to [Quiet ending](${link}). Please start work now.`,
+  );
+  const assignmentRow = page.locator(`[data-message-id="${assignment.id}"]`);
+  await expect(
+    assignmentRow.getByRole("button", { name: "Quiet ending", exact: true }),
+  ).toBeVisible();
+  await expect(assignmentRow).toContainText("Assigned @GLM to");
+  await fileStore.put(key, {
+    title: "Updated task",
+    description: "",
+    assignee: "",
+    branches: [],
+  });
+  await expect(
+    inlineRow.getByRole("button", { name: "Updated task", exact: true }),
+  ).toBeVisible();
+  await assignmentRow
+    .getByRole("button", { name: "Updated task", exact: true })
+    .click();
+  const thread = page.getByRole("region", {
+    name: "Thread messages",
+    exact: true,
+  });
+  await expect(
+    thread
+      .locator(`[data-message-id="${app.exact.root.id}"]`)
+      .getByRole("region", { name: "Attached task" }),
+  ).toContainText("Updated task");
+  expect(fileStore.notifications).toHaveLength(0);
 });

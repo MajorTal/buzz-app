@@ -1,7 +1,7 @@
 .page {
   height: 100%;
   overflow: auto;
-  padding: 1.5rem;
+  padding: 2rem;
   color: var(--text-primary);
 }
 .page h2 {
@@ -21,7 +21,7 @@
 .add select {
   font: inherit;
   color: inherit;
-  background: var(--bg-inset);
+  background: var(--surface-input);
   padding: 0.5rem;
   border: 1px solid var(--border-primary);
   border-radius: 0.5rem;
@@ -31,8 +31,89 @@ html[data-keyboard-navigation] .add select:focus-visible {
   outline-offset: 2px;
 }
 .project {
+  border: 1px solid var(--border-primary);
+  border-radius: 0.85rem;
+  margin-block: 1rem;
+  overflow: hidden;
+}
+.heading,
+.projectHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+.heading,
+.search,
+.addProject,
+.project {
+  max-width: 62rem;
+  margin-inline: auto;
+}
+.heading span,
+.projectHeader > span,
+.empty {
+  color: var(--text-secondary);
+  font-size: var(--text-body-sm);
+}
+.search {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-block: 1.5rem 0.75rem;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid var(--border-primary);
+  border-radius: 0.65rem;
+}
+.search input {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  outline-offset: 3px;
+}
+.addProject {
+  margin-bottom: 1.5rem;
+}
+.addProject > summary {
+  cursor: pointer;
+  width: fit-content;
+  color: var(--text-secondary);
+}
+.projectHeader {
+  padding: 0.65rem 1rem;
+  background: var(--surface-accent);
+}
+.projectHeader h2 {
+  margin: 0;
+}
+.project ul {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.taskRow {
+  display: block;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  border: 0;
   border-top: 1px solid var(--border-primary);
-  padding-block: 1rem;
+  text-align: left;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+}
+.taskRow:hover {
+  background: var(--neutral-4);
+}
+html[data-keyboard-navigation] .taskRow:focus-visible {
+  outline: 2px solid var(--purple-8);
+  outline-offset: -3px;
+}
+.empty {
+  padding: 1rem 1.25rem;
 }
 .project p {
   white-space: pre-wrap;

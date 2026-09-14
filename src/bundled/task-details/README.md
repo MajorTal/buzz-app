@@ -2,6 +2,8 @@
 
 Open a conversation thread, then choose **Task details** beside its reply composer. The plugin opens a popover, not a channel drawer. Enter a title, optional description and assignee, and repository/branch entries; choose **Save locally**.
 
+Saved tasks appear as an editable card beneath the root message in both channel and thread views. A Buzz thread link in prose or a Markdown link becomes a compact task reference; a standalone plain link becomes a card. Existing assignment messages render without rewriting their signed bodies. Without a local task record, Markdown links keep their original label. The root card is an annotation, not a backdated creation event.
+
 The prototype dev server and local agent script share `~/.buzz/task-thread-experiment.json` (override with `BUZZ_TASK_FILE`). Records are keyed by account/community, channel, and the verified thread root. Old browser records are copied on first use without overwriting file records; originals remain in browser storage. Closing or changing browsers does not remove file records. This is local development data, not relay state. Unsaved form edits are discarded when the panel closes or changes threads.
 
 Choose an assignee using the searchable agent picker. **Assign** saves the task and queues a reply as you, tagging the agent to start work. Delivery uses Buzz's normal outbox; failures appear in the thread. **Save locally** only saves metadata. There is no PR lookup or Git operation. Projects refresh from disk every three seconds while open; use **Reload saved task** to refresh an open editor. Stale saves fail instead of replacing newer changes.
@@ -29,4 +31,4 @@ bin/pnpm exec vitest run dev/task-store.test.mjs src/bundled/task-details/data.t
 bin/pnpm exec playwright test --config tests/browser/playwright.config.mjs task-details.spec.mjs --project chromium --project webkit --no-deps --workers=1
 ```
 
-The browser journey uses signed fixture relay data with the production plugin, file service, thread reader, and editor. It verifies migration, script-side edits, save/reopen, canonical-root reuse, stale-save rejection, assignment, and deletion. Metadata saves stay local; explicit assignment posts a tagged thread reply.
+The browser journey uses signed fixture relay data with the production plugin, file service, thread reader, and editor. It verifies migration, script-side edits, save/reopen, canonical-root reuse, stale-save rejection, assignment, deletion, root cards, and rich references. Metadata saves stay local; explicit assignment posts a tagged thread reply.

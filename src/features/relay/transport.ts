@@ -1,3 +1,6 @@
+import { workflowHost } from "../workflows/http";
+import type { WorkflowHost } from "../workflows/host";
+import { readReceiptText } from "./receipt";
 import type { ReadStateHost, ReadStateSigning } from "./read-state-host";
 import {
   parseReadSnapshot,
@@ -31,9 +34,14 @@ import { eventDto, type ReadFilter, type RelayEvent } from "./events";
 export interface RelayWriter {
   readonly kinds?: readonly number[];
   sign(event: EventTemplate, signal: AbortSignal): Promise<RelayEvent>;
-  publish(event: RelayEvent, signal: AbortSignal): Promise<void>;
+  /** Accepted receipt text is ephemeral; callers must never journal it. */
+  publish(
+    event: RelayEvent,
+    signal: AbortSignal,
+  ): Promise<string> | Promise<void>;
 }
 export interface ReadTransport {
+  readonly workflows?: WorkflowHost;
   /** Purpose-bound observer decoding on the shared host live stream. */
   readonly agentActivity?: boolean;
   /** Host-projected local library; display only, never relay authority. */
@@ -143,6 +151,7 @@ export async function connectBrokerTransport(
     relayAuthor?: unknown;
     archiveAuthority?: unknown;
     writeKinds?: number[];
+    workflowReads?: boolean;
     relayUrl?: string;
     live?: boolean;
     sidebarPreferences?: boolean;
@@ -177,6 +186,19 @@ export async function connectBrokerTransport(
     relayAuthor: session.relayAuthor,
     ...(typeof session.archiveAuthority === "string"
       ? { archiveAuthority: session.archiveAuthority }
+      : {}),
+    ...(session.workflowReads === true
+      ? {
+          workflows: workflowHost((route, body, signal) =>
+            fetch(`${endpoint}/${route}`, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+              signal,
+            }),
+          ),
+        }
       : {}),
     ...(session.agentLibrary
       ? {
@@ -316,7 +338,7 @@ export async function connectBrokerTransport(
                 signal,
               });
               recordServerTiming(result, profiling, event.id);
-              await acceptPublish(result, event.id);
+              return acceptPublish(result, event.id);
             },
           },
         }
@@ -537,7 +559,8 @@ async function acceptPublish(response: Response, id: string) {
       `Relay delivery could not be confirmed (${response.status})`,
     );
   }
-  const result = (await response.json()) as {
+  const text = await readReceiptText(response);
+  const result = JSON.parse(text) as {
     accepted?: unknown;
     event_id?: unknown;
     message?: unknown;
@@ -550,6 +573,7 @@ async function acceptPublish(response: Response, id: string) {
         ? result.message
         : "Relay rejected the message",
     );
+  return typeof result.message === "string" ? result.message : "";
 }
 
 function recordServerTiming(

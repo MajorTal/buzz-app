@@ -103,6 +103,64 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
   );
 });
 
+test("switch keyboard activation matches pointer state and focus in both modes", async ({
+  page,
+  browserName,
+}) => {
+  await page.goto(`${viewer}#/design/components/switch`);
+  const switches = page.getByRole("switch", { name: "Show agent activity" });
+  const control = switches.nth(0);
+  const tab =
+    browserName === "webkit" && process.platform === "darwin"
+      ? "Alt+Tab"
+      : "Tab";
+  for (const width of [390, 800, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const mode of ["light", "dark"]) {
+      const toggle = page.getByRole("button", { name: `Use ${mode} mode` });
+      if (await toggle.count()) await toggle.click();
+      await expect(control).not.toBeChecked();
+      await control.click();
+      await expect(control).toBeChecked();
+      await expect(control).toHaveCSS("outline-style", "none");
+      await page.keyboard.press(tab);
+      await expect(switches.nth(1)).toBeFocused();
+      await page.keyboard.press(`Shift+${tab}`);
+      await expect(control).toBeFocused();
+      await expect(control).toHaveCSS("outline-style", "solid");
+      await expect(control).toHaveCSS("outline-width", "2px");
+      await page.keyboard.press("Space");
+      await expect(control).not.toBeChecked();
+      await page.keyboard.press("Enter");
+      await expect(control).toBeChecked();
+      await control.click();
+      await expect(control).not.toBeChecked();
+    }
+  }
+});
+
+test("disabled switch exposes its state, skips Tab and rejects activation", async ({
+  page,
+  browserName,
+}) => {
+  await page.goto(`${viewer}#/design/components/switch`);
+  const switches = page.getByRole("switch", { name: "Show agent activity" });
+  const disabled = switches.nth(2);
+  await expect(disabled).toBeDisabled();
+  await expect(disabled).not.toBeChecked();
+  await switches.nth(1).click();
+  await page.keyboard.press(
+    browserName === "webkit" && process.platform === "darwin"
+      ? "Alt+Tab"
+      : "Tab",
+  );
+  await expect(disabled).not.toBeFocused();
+  await disabled.click({ force: true });
+  await disabled.press("Space");
+  await disabled.press("Enter");
+  await expect(disabled).not.toBeChecked();
+});
+
 test("viewer does not replace host styles or appearance ownership", async ({
   page,
   context,

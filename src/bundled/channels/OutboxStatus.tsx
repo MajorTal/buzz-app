@@ -1,3 +1,4 @@
+import { isWorkflowOperation } from "../../features/workflows/protocol";
 import { useState, useSyncExternalStore } from "react";
 import type { RelayProfiler } from "../../features/relay/profiling";
 import { RelayTimings } from "./RelayTimings";
@@ -43,11 +44,15 @@ export function OutboxStatus({
                 }[item.delivery]
               }
             </span>{" "}
-            {(item.delivery === "failed" || item.delivery === "unknown") && (
-              <button type="button" onClick={() => outbox.retry(item.event.id)}>
-                Retry
-              </button>
-            )}{" "}
+            {!isWorkflowOperation(item.event) &&
+              (item.delivery === "failed" || item.delivery === "unknown") && (
+                <button
+                  type="button"
+                  onClick={() => outbox.retry(item.event.id)}
+                >
+                  Retry
+                </button>
+              )}{" "}
             {item.delivery !== "sending" && (
               <button
                 type="button"

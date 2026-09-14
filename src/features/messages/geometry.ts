@@ -44,7 +44,7 @@ export const geometrySignature = (
   profiles: ReadonlyMap<string, Profile>,
   viewer?: string,
 ) =>
-  `pulse-bubbles-v6:${viewer ?? ""}:` +
+  `pulse-bubbles-v7:${viewer ?? ""}:` +
   events
     .map((event) => {
       let signature = eventSignatures.get(event);

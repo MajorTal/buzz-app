@@ -52,30 +52,13 @@
   z-index: 100;
 }
 .reactionPopover {
+  background: var(--bg-float);
+  border-color: var(--border-primary);
+  box-shadow: var(--shadow-sm);
   position: relative;
   bottom: auto;
   left: auto;
   max-width: calc(100vw - 32px);
-}
-.reactionTrigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  background: var(--surface-control);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.reactionTrigger:hover {
-  color: var(--text);
-}
-.reactionTrigger:focus-visible {
-  outline: 2px solid var(--text);
-  outline-offset: 2px;
 }
 .emojiPopover[data-has-tabs] .sharedSearchIcon {
   top: 67px;

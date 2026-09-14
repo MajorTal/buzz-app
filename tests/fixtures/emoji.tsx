@@ -159,7 +159,7 @@ const sessions = ["a", "b"].map((community) => {
     6,
     [["emoji", "party", `${origin}/media/blocks.png`]],
   );
-  live.receive([root]);
+  live.receive([root, broken, unloaded, single, table, blocks]);
   return {
     ...owner,
     community,

@@ -1,7 +1,8 @@
 // Local presentation sample; no session, credentials, network or publication.
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import { Bot } from "lucide-react";
+import { IconRobot } from "@tabler/icons-react";
+import { Avatar } from "../../src/shared/design-system/ui/Avatar";
 import messageStyles from "../../src/features/messages/Messages.module.css";
 import styles from "./message-bubbles.module.css";
 import type { ChannelMessage } from "../../src/features/relay/contracts";
@@ -62,6 +63,7 @@ function TypingPreview({ agent = false }: { agent?: boolean }) {
     <div
       className={messageStyles.message}
       data-bubble-direction="incoming"
+      data-buzz-ui=""
       role="status"
     >
       <div className={messageStyles.avatarSpace} />
@@ -76,7 +78,11 @@ function TypingPreview({ agent = false }: { agent?: boolean }) {
             className={`${messageStyles.avatar} ${agent ? styles.agentAvatar : ""}`}
             aria-hidden="true"
           >
-            {agent ? <Bot size={17} /> : "AL"}
+            {agent ? (
+              <IconRobot size={24} />
+            ) : (
+              <Avatar alt="Alice Chen" fallback="Alice" />
+            )}
           </div>
           <div
             className={`${messageStyles.text} ${styles.typingBubble}`}
@@ -102,7 +108,7 @@ function Fixture() {
     <main
       style={{
         minHeight: "100vh",
-        background: "var(--workspace)",
+        background: "var(--neutral-3)",
         padding: "20px 12px",
       }}
     >
@@ -152,7 +158,8 @@ function Fixture() {
           maxWidth: narrow ? 360 : 760,
           margin: "0 auto",
           padding: "16px 12px 24px",
-          background: "var(--surface)",
+          background: "var(--bg-panel)",
+          color: "var(--text-primary)",
           borderRadius: 24,
         }}
       >
@@ -182,8 +189,9 @@ function Fixture() {
         </div>
       </section>
       <p
+        data-buzz-ui=""
         role="status"
-        style={{ textAlign: "center", color: "var(--text-muted)" }}
+        style={{ textAlign: "center", color: "var(--text-secondary)" }}
       >
         {status}
       </p>

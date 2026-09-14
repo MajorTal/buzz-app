@@ -6,7 +6,9 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Search, Smile, SmilePlus } from "lucide-react";
+import { Search, Smile } from "lucide-react";
+import { IconMoodPlus } from "@tabler/icons-react";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Popover } from "@base-ui/react/popover";
 import type { RelaySession } from "../../features/relay/session";
 import {
@@ -301,38 +303,45 @@ export function EmojiPicker({
       )}
     </section>
   );
-  const button = (
+  const triggerProps = {
+    ref: trigger,
+    "aria-expanded": open && !disabled,
+    "aria-busy": (gifDiscoveryRequested && gifs === undefined) || undefined,
+    "aria-controls": id,
+    disabled,
+    onPointerEnter: () => setGifDiscoveryRequested(true),
+    onFocus: () => setGifDiscoveryRequested(true),
+    onClick: () => {
+      if (open) {
+        setOpen(false);
+        return;
+      }
+      setAnimateTab(false);
+      setPressedTab(undefined);
+      void session.emoji.ensure();
+      if (gifs !== true && gifAvailability?.community === community)
+        setGifAvailability(undefined);
+      setGifDiscoveryRequested(true);
+      setOpen(true);
+    },
+  };
+  const button = reaction ? (
+    <IconButton
+      {...triggerProps}
+      aria-label="Add reaction"
+      title="Add reaction"
+      size="compact"
+      shape="round"
+      icon={<IconMoodPlus size={16} aria-hidden="true" />}
+    />
+  ) : (
     <button
-      ref={trigger}
-      className={reaction ? styles.reactionTrigger : undefined}
+      {...triggerProps}
       type="button"
-      aria-label={reaction ? "Add reaction" : "Insert emoji"}
-      title={reaction ? "Add reaction" : "Insert emoji"}
-      aria-expanded={open && !disabled}
-      aria-busy={(gifDiscoveryRequested && gifs === undefined) || undefined}
-      aria-controls={id}
-      disabled={disabled}
-      onPointerEnter={() => setGifDiscoveryRequested(true)}
-      onFocus={() => setGifDiscoveryRequested(true)}
-      onClick={() => {
-        if (open) {
-          setOpen(false);
-          return;
-        }
-        setAnimateTab(false);
-        setPressedTab(undefined);
-        void session.emoji.ensure();
-        if (gifs !== true && gifAvailability?.community === community)
-          setGifAvailability(undefined);
-        setGifDiscoveryRequested(true);
-        setOpen(true);
-      }}
+      aria-label="Insert emoji"
+      title="Insert emoji"
     >
-      {reaction ? (
-        <SmilePlus size={18} aria-hidden="true" />
-      ) : (
-        <Smile size={20} aria-hidden="true" />
-      )}
+      <Smile size={20} aria-hidden="true" />
     </button>
   );
   const controlsView = (

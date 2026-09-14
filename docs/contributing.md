@@ -71,6 +71,21 @@ Both run the development broker with your identity when the public
 `BUZZ_DEV_VIEWER` pin is configured in `.env.local`, and start without live
 identity otherwise; see [the setup and Keychain requirements](../README.md#relay-channels).
 
+After creating a worktree, bootstrap it from the checkout whose local development
+configuration it should inherit:
+
+```sh
+scripts/bootstrap-worktree.sh /absolute/path/to/source/checkout
+```
+
+The idempotent script copies the source checkout's git-ignored `.env.local`
+without overwriting an existing target, then uses the new worktree's Hermit proxy
+to run `bin/pnpm install --frozen-lockfile`. It rejects checkouts from another
+repository. Keychain credentials and pnpm's package cache remain machine-shared;
+do not copy private keys, `node_modules`, build output, `.npmrc`, or other ignored
+files. Install hooks separately as described below so existing custom hooks are
+never silently replaced.
+
 ## Interactive product iteration
 
 While shaping the first version, default to **edit → human tries the running app

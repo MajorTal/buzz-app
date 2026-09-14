@@ -1,4 +1,3 @@
-import "../../shared/design-system/styles/avatar-shape.css";
 import { memo, useCallback, useSyncExternalStore } from "react";
 import type { UnreadCapability } from "../relay/unread";
 import { profileTarget } from "../profiles/target";

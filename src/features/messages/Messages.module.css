@@ -1,3 +1,5 @@
+@import "../../shared/design-system/styles/avatar-shape.css";
+
 /* Reusable conversation components; plugins own placement and surrounding layout. */
 .thread {
   min-width: 0;

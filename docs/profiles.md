@@ -45,29 +45,27 @@ Button use the host-loaded styles directly. The profile content marks its
 owns layout, not component overrides. No new theme owner, second global reset or
 shell migration. Designers own later refinement.
 
-Agent avatar shapes are display-only. Original kind-40002 messages retain an
-`agentEnvelope` hint through the existing fold, including after edits; their author
-avatar can be a squircle without profile or library evidence. Other avatar surfaces
-use self-declared `is_agent`/`isAgent` profile metadata or exact keys in the
-already-loaded session library. These hints establish neither ownership nor running
-state. Library evidence remains lazy: opening Agents/Refresh loads it, and clearing
-it removes that fallback. Avatars never initiate a library read or scan telemetry.
+Agent hints change avatar shape, not authority:
 
-The shared, bundled SVG mask scales the same curve across avatar sizes. It clips
-artwork only; the message profile button retains its unmasked keyboard focus ring.
-`avatar-shapes.spec.mjs` checks actual painted pixels and focus in Chromium/WebKit,
-in light/dark at 390, 900 and 1280px. The open-completion regression checks library
-hint changes without another keystroke, and directory tests cover marker-only
-profile updates. The focused channel-opening check kept optional profiles held and
-added no warm head reads: local warm paints were 11.9–20.6ms in Chromium and
-36–40ms in WebKit (cold visibility upper bounds 60.3/81ms, including test IPC).
-These synthetic Apple Silicon measurements are not a live-network SLA. Full scan
-and native/package acceptance remain deferred.
+- Profiles, mentions, participants and membership avatars use squircles for
+  self-declared `is_agent`/`isAgent` metadata or exact keys in the loaded session
+  library; otherwise they use circles. My Agents cards always use squircles.
+- Message authors also use these hints. An original kind-40002 envelope is enough
+  on its own and keeps that treatment through edits.
+- Library hints are lazy: opening or refreshing Agents loads them; clearing the
+  library removes that fallback. Avatars never fetch the library or scan telemetry.
+
+None of these hints proves ownership or running state. One bundled SVG mask scales
+across sizes and clips only artwork, leaving the profile button's focus ring intact.
 
 Use the normal `bin/just desktop` or `bin/just web` workflow in the feature worktree
 with the existing public live-mode pin; run only one dev target at a time.
 
 ## Evidence and remaining checks
+
+`avatar-shapes.spec.mjs` covers painted pixels and focus across sizes, themes and
+viewports in Chromium/WebKit. Completion tests cover loaded-library changes without
+another keystroke; profile-directory tests cover marker-only updates.
 
 `tests/browser/profiles.spec.mjs` runs real React/ChannelsPage, thread reading,
 profile directory, panel registry and plugin lifecycle against a synthetic

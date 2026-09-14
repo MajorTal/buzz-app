@@ -29,7 +29,7 @@ export type MessageRowProps = {
   profile: Profile | undefined;
   participantProfiles?: ReadonlyMap<string, Profile> | undefined;
   canOpenLink?: ((target: string) => boolean) | undefined;
-  media(url: string): string | undefined;
+  media(url: string, size?: "small"): string | undefined;
   onOpenLink(url: string): boolean;
   day: boolean;
   retry: ((id: string) => void) | undefined;
@@ -72,7 +72,9 @@ export const MessageRow = memo(function MessageRow({
           ? `Observed unread replies${threadUnread?.freshness === "stale" ? "; may be out of date" : ""}. Not an exact total.`
           : undefined;
   const name = profile?.name ?? row.authorId.slice(0, 10);
-  const picture = profile?.picture ? media(profile.picture) : undefined;
+  const picture = profile?.picture
+    ? media(profile.picture, "small")
+    : undefined;
   const target = profileTarget(row.authorId);
   const clickable = target && canOpenLink?.(target);
   const AvatarTag = clickable ? "button" : "div";
@@ -211,7 +213,7 @@ export const MessageRow = memo(function MessageRow({
                     const participant = participantProfiles?.get(id);
                     const name = participant?.name ?? id.slice(0, 10);
                     const picture = participant?.picture
-                      ? media(participant.picture)
+                      ? media(participant.picture, "small")
                       : undefined;
                     return (
                       <span

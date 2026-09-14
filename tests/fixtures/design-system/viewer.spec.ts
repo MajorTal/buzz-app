@@ -250,7 +250,7 @@ test("built component references retain anatomy and fallback identity", async ({
 
   await page.goto(`${viewer}#/design/components/avatar`);
   await expect(page.getByRole("img", { name: "Cynthia Chen" })).toHaveCount(3);
-  await expect(page.getByRole("img", { name: "Morgan Martin" })).toHaveCount(4);
+  await expect(page.getByRole("img", { name: "Morgan Martin" })).toHaveCount(5);
 });
 
 test("a small pane drag settles on release and Escape", async ({ page }) => {

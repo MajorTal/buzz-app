@@ -75,15 +75,22 @@ export interface ReadTransport {
     priority?: "foreground" | "background",
   ): Promise<RelayEvent[]>;
   /** Display URL for a media URL, or undefined when this transport cannot fetch it. */
-  media(url: string): string | undefined;
+  media(url: string, size?: "small"): string | undefined;
 }
 /** Third-party https images load directly; relay-hosted media needs a signed read. */
 export function mediaUrl(
   url: string,
   relayProxy: ((url: string) => string) | undefined,
   relayOrigin: string | undefined,
+  size?: "small",
 ): string | undefined {
-  if (url.startsWith(`${relayOrigin}/media/`)) return relayProxy?.(url);
+  if (url.startsWith(`${relayOrigin}/media/`)) {
+    const media =
+      size === "small"
+        ? url.replace(/\/([0-9a-f]{64})(?:\.[a-z0-9]{1,8})?$/, "/$1.thumb.jpg")
+        : url;
+    return relayProxy?.(media);
+  }
   return /^https:\/\//.test(url) ? url : undefined;
 }
 export interface Signer {
@@ -343,11 +350,12 @@ export async function connectBrokerTransport(
           },
         }
       : {}),
-    media: (url) =>
+    media: (url, size) =>
       mediaUrl(
         url,
         (target) => `${endpoint}/media?url=${encodeURIComponent(target)}`,
         session.relayUrl,
+        size,
       ),
     async query(filters, signal, requestId = "read", priority = "foreground") {
       const result = await fetch(`${endpoint}/query`, {
@@ -427,7 +435,7 @@ export async function connectSignedTransport(
     scope: httpOrigin,
     viewer,
     relayAuthor,
-    media: (url) => mediaUrl(url, undefined, httpOrigin),
+    media: (url, size) => mediaUrl(url, undefined, httpOrigin, size),
     writer: {
       sign: (event) => signer.signEvent(event),
       async publish(event, signal) {

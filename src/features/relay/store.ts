@@ -72,7 +72,7 @@ export function createChannelStore(
     | (RelayReader & {
         viewer: string;
         relayAuthor: string;
-        media(url: string): string | undefined;
+        media(url: string, size?: "small"): string | undefined;
         revokeAccess(commit: () => void): void;
         visible(events: readonly RelayEvent[]): readonly RelayEvent[];
         /** Reverified, authorized disk evidence, before any restored rows become observable. */
@@ -323,7 +323,7 @@ export function createChannelStore(
       const authors = rows.slice(-12).reverse().flatMap(rowProfileIds);
       return authors.flatMap((author) => {
         const picture = directory.queries.snapshot().get(author)?.picture;
-        const url = picture && transport?.media(picture);
+        const url = picture && transport?.media(picture, "small");
         return url ? [url] : [];
       });
     });

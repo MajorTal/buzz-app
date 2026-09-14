@@ -14,7 +14,7 @@ export const MembershipRow = memo(function MembershipRow({
   row: TimelineRow;
   profiles: ReadonlyMap<string, Profile>;
   viewer?: string | undefined;
-  media(url: string): string | undefined;
+  media(url: string, size?: "small"): string | undefined;
   day: boolean;
 }) {
   const { targets, text, title } = membershipDescription(
@@ -41,7 +41,7 @@ export const MembershipRow = memo(function MembershipRow({
             const profile = profiles.get(id);
             const name = profile?.name ?? id.slice(0, 10);
             const picture = profile?.picture
-              ? media(profile.picture)
+              ? media(profile.picture, "small")
               : undefined;
             return (
               <span className={styles.membershipAvatar} key={id}>

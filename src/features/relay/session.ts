@@ -337,7 +337,7 @@ export function createRelaySession(
           read: (filters, settings) => readVerified(filters, settings, false),
           viewer: transport.viewer,
           relayAuthor: transport.relayAuthor,
-          media: (url) => transport.media(url),
+          media: (url, size) => transport.media(url, size),
           revokeAccess,
           visible: (events) => events.filter(visibility(events)),
           restored: (events) => unread.accept(events),
@@ -713,7 +713,7 @@ export function createRelaySession(
     workflows: workflows.capability,
     agentActivity: activity.queries,
     archives: archives.queries,
-    media: (url: string) => transport?.media(url),
+    media: (url: string, size?: "small") => transport?.media(url, size),
     /** A plugin may request writes from this same interface when the host supports them. */
     outbox: writes?.outbox,
     async read(filters: readonly ReadFilter[], settings?: ReadOptions) {

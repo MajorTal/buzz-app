@@ -319,3 +319,25 @@ it("does not bypass the session media resolver to paint an inaccessible attachme
   expect(html).not.toContain("<canvas");
   expect(html).not.toContain("<img");
 });
+
+it("requests a small profile image without downsizing message attachments", () => {
+  const media = vi.fn((url: string) => url);
+  renderToStaticMarkup(
+    <MessageRow
+      row={{
+        ...row,
+        attachments: [
+          { url: "https://image.test/attachment.png", video: false },
+        ],
+      }}
+      profile={{ name: "Author", picture: "https://image.test/avatar.png" }}
+      media={media}
+      onOpenLink={() => false}
+      day={false}
+      retry={undefined}
+    />,
+  );
+
+  expect(media).toHaveBeenCalledWith("https://image.test/avatar.png", "small");
+  expect(media).toHaveBeenCalledWith("https://image.test/attachment.png");
+});

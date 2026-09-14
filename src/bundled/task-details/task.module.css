@@ -2,7 +2,7 @@
   width: min(42rem, calc(100vw - 24px));
   max-height: min(80vh, var(--available-height));
   overflow: auto;
-  background: var(--bg-inset);
+  background: var(--surface);
   color: var(--text-primary);
   border: 1px solid var(--border-primary);
   border-radius: 0.75rem;
@@ -31,7 +31,7 @@
   padding: 0.5rem;
   border: 1px solid var(--border-primary);
   border-radius: 0.5rem;
-  background: var(--bg-inset);
+  background: var(--surface);
   color: inherit;
   font: inherit;
 }

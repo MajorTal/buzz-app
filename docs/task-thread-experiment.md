@@ -26,7 +26,13 @@ First pilot: the muted-call sound fix in Berd Voice, with repository links in Be
 3. Post the task link in the original thread and continue work in the task thread.
 4. Branch and PR links appear in the repository channel as in Flow 1.
 
-Eventually, the original thread's task link expands inline. The task thread shows a backlink at the time the link was posted. If a suitable task already exists, link it instead of creating another.
+Eventually, the original thread's task link expands inline. The task thread shows a backlink at the time the link was posted.
+
+## Flow 3: related discussion, existing task (later experiment)
+
+1. Another thread raises something relevant to an existing task, possibly already underway.
+2. Post a link to that task in the related thread, with a brief explanation of the connection. No new task or conversation move is needed.
+3. The link expands into the task thread; a chronological backlink in the task thread exposes the related discussion. Both remain in their original locations.
 
 ## Later
 

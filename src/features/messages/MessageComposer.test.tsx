@@ -13,8 +13,11 @@ import userEvent from "@testing-library/user-event";
 import { useLayoutEffect } from "react";
 import type { Contribution } from "../../plugins/contributions";
 import type {
+  ComposerCompletion,
+  ComposerCompletionProps,
   ComposerTool,
   ComposerToolProps,
+  CompletionResult,
 } from "../conversation/contracts";
 import { MessageComposer, type MessageComposerProps } from "./MessageComposer";
 import type { RelaySession } from "../relay/session";
@@ -26,6 +29,14 @@ const second = { pubkey: "b".repeat(64), name: "Honey" };
 let style: HTMLStyleElement;
 beforeEach(() => {
   localStorage.clear();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  HTMLElement.prototype.scrollIntoView = vi.fn();
   // jsdom does not lay out the emoji mirror. Give its bookkeeping a finite line
   // height; actual wrapping, dimensions and caret placement stay in Playwright.
   style = document.createElement("style");
@@ -35,10 +46,35 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   style.remove();
+  vi.unstubAllGlobals();
+  delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
 });
 
 function mount(options: Partial<MessageComposerProps> = {}) {
   let commands: ComposerToolProps;
+  const completionRequests: ComposerCompletionProps["publish"][] = [];
+  function Completion({ publish }: ComposerCompletionProps) {
+    useLayoutEffect(() => {
+      completionRequests.push(publish);
+    }, [publish]);
+    return null;
+  }
+  const completionListeners = new Set<() => void>();
+  const completion = (revision: string): Contribution<ComposerCompletion> => ({
+    id: "delayed",
+    key: "test/delayed",
+    pluginId: "test",
+    revision,
+    title: "Delayed",
+    match: ({ text, start }) =>
+      text.startsWith("!") && start > 0
+        ? { start: 0, end: start, query: text.slice(1, start) }
+        : null,
+    component: Completion,
+  });
+  let completions: readonly Contribution<ComposerCompletion>[] = [
+    completion("1"),
+  ];
   function Tool(props: ComposerToolProps) {
     useLayoutEffect(() => {
       commands = props;
@@ -99,6 +135,13 @@ function mount(options: Partial<MessageComposerProps> = {}) {
     extensions: {
       tools: { snapshot: () => tools, subscribe: () => () => {} },
       inline: { snapshot: () => [], subscribe: () => () => {} },
+      completions: {
+        snapshot: () => completions,
+        subscribe(listener) {
+          completionListeners.add(listener);
+          return () => completionListeners.delete(listener);
+        },
+      },
     },
     ...options,
   };
@@ -116,6 +159,25 @@ function mount(options: Partial<MessageComposerProps> = {}) {
     emojiListeners,
     user: userEvent.setup(),
     commands: () => commands,
+    completionRequests,
+    publish(index: number, text = "chosen") {
+      const request = completionRequests[index];
+      if (!request) throw new Error("No observed completion request");
+      const result: CompletionResult = {
+        items: [{ id: text, label: text, edit: { text } }],
+      };
+      let published: ReturnType<ComposerCompletionProps["publish"]> = false;
+      act(() => {
+        published = request(result);
+      });
+      return published;
+    },
+    replaceCompletionProvider() {
+      act(() => {
+        completions = [completion("2")];
+        for (const listener of completionListeners) listener();
+      });
+    },
     retarget(next: Partial<MessageComposerProps>) {
       props = { ...props, ...next };
       view.rerender(<MessageComposer {...props} />);
@@ -134,6 +196,80 @@ function mount(options: Partial<MessageComposerProps> = {}) {
     },
   };
 }
+
+it("revokes stale completion publications across editor and ownership lifecycles and recovers freshly", () => {
+  const h = mount();
+  const input = h.input();
+  input.focus();
+  h.fill("!a");
+  const edit = h.completionRequests.length - 1;
+  h.fill("!b");
+  h.fill("!a");
+  expect(h.publish(edit, "stale ABA")).toBe(false);
+  const afterAba = h.completionRequests.length - 1;
+  expect(h.publish(afterAba)).not.toBe(false);
+  expect(screen.getByRole("option", { name: "chosen" })).toBeVisible();
+
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(h.publish(afterAba, "stale dismissal")).toBe(false);
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+  h.fill("!provider");
+  const oldProvider = h.completionRequests.length - 1;
+  h.replaceCompletionProvider();
+  expect(h.publish(oldProvider, "stale provider")).toBe(false);
+  const replacement = h.completionRequests.length - 1;
+  expect(h.publish(replacement, "replacement fresh")).not.toBe(false);
+  expect(
+    screen.getByRole("option", { name: "replacement fresh" }),
+  ).toBeVisible();
+
+  h.fill("!destination");
+  const oldDestination = h.completionRequests.length - 1;
+  h.retarget({ threadRootId: "root" });
+  expect(h.input()).toHaveValue("");
+  expect(h.publish(oldDestination, "stale destination")).toBe(false);
+  h.input().focus();
+  h.fill("!fresh");
+  const fresh = h.completionRequests.length - 1;
+  expect(h.publish(fresh, "fresh recovery")).not.toBe(false);
+  expect(screen.getByRole("option", { name: "fresh recovery" })).toBeVisible();
+
+  h.unmount();
+  expect(h.publish(fresh, "stale unmount")).toBe(false);
+});
+
+it.each(["disabled", "readOnly"] as const)(
+  "rejects late and displayed completion results when the editor becomes %s",
+  (state) => {
+    const h = mount();
+    const input = h.input();
+    input.focus();
+    h.fill("!late");
+    const late = h.completionRequests.length - 1;
+    if (state === "disabled") {
+      h.retarget({ disabled: true });
+      expect(input).toBeDisabled();
+    } else input.readOnly = true;
+    expect(h.publish(late, "late result")).toBe(false);
+
+    if (state === "disabled") h.retarget({ disabled: false });
+    else input.readOnly = false;
+    expect(h.input()).toBeEnabled();
+    h.input().focus();
+    h.fill("!displayed");
+    const displayed = h.completionRequests.length - 1;
+    expect(h.publish(displayed, "displayed choice")).not.toBe(false);
+    expect(
+      screen.getByRole("option", { name: "displayed choice" }),
+    ).toBeVisible();
+    if (state === "disabled") h.retarget({ disabled: true });
+    else h.input().readOnly = true;
+    fireEvent.keyDown(h.input(), { key: "Enter" });
+    expect(h.input()).toHaveValue("!displayed");
+    expect(h.messages.send).not.toHaveBeenCalled();
+  },
+);
 
 it("sends channel messages and thread replies through real form and keyboard events", async () => {
   const h = mount();

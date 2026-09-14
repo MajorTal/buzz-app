@@ -868,7 +868,21 @@ export function createRelaySession(
       liveSnapshot = { ...liveSnapshot, status: "error", error: String(error) };
     }
     publishLive();
+    warmRoster();
   };
+  /** Warm every channel's head before it is opened: starred first, then the
+   * rest by recency. The account preferences own the starred set, so warming
+   * waits for them to settle; a slow read delays warmth, never demand loading. */
+  const warmRoster = () => {
+    if (closed || !options.warm) return;
+    const prefs = sidebarPreferences.queries.snapshot();
+    if (prefs.status === "idle" || prefs.status === "loading") return;
+    channels.queries.warm?.(prefs.data?.starred ?? []);
+  };
+  const stopWarmPreferences = sidebarPreferences.queries.subscribe(warmRoster);
+  // Starred-first warming needs the account preferences without waiting for
+  // the sidebar page to mount and observe them.
+  if (options.warm) void sidebarPreferences.queries.ensure();
   let refreshedGeneration = -1;
   const catchupRunning = new Map<string, Catchup>();
   const catchupQueue = new Set<string>();
@@ -1118,6 +1132,7 @@ export function createRelaySession(
       activity.dispose();
       sidebarPreferences.dispose();
       stopInterests();
+      stopWarmPreferences();
       traffic?.dispose();
       liveListeners.clear();
       incomingListeners.clear();

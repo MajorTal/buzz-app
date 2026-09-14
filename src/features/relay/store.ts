@@ -45,6 +45,8 @@ export type ChannelStoreOptions = {
   maxWindows?: number;
   unavailableReason?: string;
   prepared?: boolean;
+  /** Warm every roster channel's head in the background before it is opened. */
+  warm?: boolean;
   persistence?: HeadPersistence;
   maxHeadBytes?: number;
   maxHeads?: number;
@@ -138,6 +140,7 @@ export function createChannelStore(
   const mediaIntents: string[] = [];
   let hydration: Promise<void> | undefined;
   let preparing = false;
+  let warming = false;
   const notify = (listeners: Iterable<Listener> | undefined) => {
     for (const listener of listeners ?? []) notifyListener(listener);
   };
@@ -319,24 +322,35 @@ export function createChannelStore(
     if (previous >= 0) mediaIntents.splice(previous, 1);
     mediaIntents.unshift(channelId);
     mediaIntents.length = Math.min(3, mediaIntents.length);
-    const urls = mediaIntents.flatMap((id) => {
-      const rows = heads.peek(id)?.rows ?? windows.get(id)?.snapshot.rows ?? [];
-      const authors = rows.slice(-12).reverse().flatMap(rowProfileIds);
-      return authors.flatMap((author) => {
-        const picture = directory.queries.snapshot().get(author)?.picture;
-        const url = picture && transport?.media(picture, "small");
-        return url ? [url] : [];
-      });
-    });
+    const urls = mediaIntents.flatMap(avatarUrlsFor);
     relayDebug("media prepare", channelId.slice(0, 8), `${urls.length} urls`);
     media.prepare(urls);
   }
-  async function fetchProfiles(rows: readonly ChannelMessage[]) {
+  /** Background head reads warm request-level avatars without displacing the
+   * focused channel's intent window. */
+  function prepareWarmMedia(channelId: string) {
+    media.warm(avatarUrlsFor(channelId));
+  }
+  function avatarUrlsFor(id: string): string[] {
+    const rows = heads.peek(id)?.rows ?? windows.get(id)?.snapshot.rows ?? [];
+    const authors = rows.slice(-12).reverse().flatMap(rowProfileIds);
+    return authors.flatMap((author) => {
+      const picture = directory.queries.snapshot().get(author)?.picture;
+      const url = picture && transport?.media(picture, "small");
+      return url ? [url] : [];
+    });
+  }
+  async function fetchProfiles(
+    rows: readonly ChannelMessage[],
+    warmChannelId?: string,
+  ) {
     try {
       const ids = rows.flatMap(rowProfileIds);
       relayDebug("profiles warm", ids.length, "ids");
       await directory.ensure(ids, "background");
       if (!disposed && intent) prepareMedia(intent);
+      // Profiles are the prerequisite for resolving a channel's avatar URLs.
+      if (!disposed && warmChannelId) prepareWarmMedia(warmChannelId);
     } catch {
       // Names are optional for channel rendering. Missing profiles remain retryable.
     }
@@ -471,7 +485,10 @@ export function createChannelStore(
     // Durable message warmth must not wait behind optional name enrichment.
     const savedProfiles =
       generation === epoch ? save(channelId, head) : undefined;
-    void fetchProfiles(head.rows).then(() => {
+    void fetchProfiles(
+      head.rows,
+      priority === "background" && intent !== channelId ? channelId : undefined,
+    ).then(() => {
       if (generation === epoch) save(channelId, head, savedProfiles);
     });
     if (intent === channelId) prepareMedia(channelId);
@@ -852,6 +869,8 @@ export function createChannelStore(
   async function clearCache() {
     epoch++;
     hydration = undefined;
+    warmCandidates.clear();
+    warmPreferred = [];
     media.dispose();
     media = createMediaPreparation();
     for (const controller of controllers) controller.abort();
@@ -859,6 +878,48 @@ export function createChannelStore(
     heads.clear();
     tails.clear();
     await persistence?.clear().catch(() => {});
+  }
+  /** One background head read at a time; warm never competes with demand reads
+   * for foreground slots and is dropped wholesale when the session resets. */
+  let warmPreferred: readonly string[] = [];
+  const warmCandidates = new Set<string>();
+  function nextWarmId(): string | undefined {
+    for (const channelId of warmPreferred)
+      if (warmCandidates.has(channelId)) return channelId;
+    let best: string | undefined;
+    let bestSavedAt = -1;
+    for (const channelId of warmCandidates) {
+      const savedAt = heads.peek(channelId)?.savedAt ?? 0;
+      if (savedAt > bestSavedAt) {
+        best = channelId;
+        bestSavedAt = savedAt;
+      }
+    }
+    return best;
+  }
+  async function drainWarm() {
+    if (warming || saveData()) return;
+    warming = true;
+    try {
+      while (warmCandidates.size) {
+        const generation = epoch;
+        const channelId = nextWarmId();
+        if (!channelId) break;
+        warmCandidates.delete(channelId);
+        if (disposed || generation !== epoch) {
+          warmCandidates.clear();
+          warmPreferred = [];
+          return;
+        }
+        if (!transport || !authorized(channelId)) continue;
+        if (windows.has(channelId)) continue; // An open channel is demand-owned.
+        const head = heads.peek(channelId);
+        if (head && !head.cached && now() - head.savedAt < FRESH_FOR) continue;
+        await requestHead(channelId, "background").catch(() => {});
+      }
+    } finally {
+      warming = false;
+    }
   }
   const queries: ChannelQueries = Object.freeze({
     list: () => list,
@@ -880,6 +941,17 @@ export function createChannelStore(
     },
     refreshList() {
       void discover(true);
+    },
+    /** Background roster warm. The caller supplies preferred ids (e.g. starred);
+     * the rest follow by recency of their retained head, never-fetched last. */
+    warm(preferred: readonly string[]) {
+      if (disposed || !transport || list.status !== "ready") return;
+      const starred = new Set(preferred);
+      warmPreferred = preferred;
+      for (const channel of list.channels)
+        if (!channel.archived || starred.has(channel.id))
+          warmCandidates.add(channel.id);
+      void drainWarm();
     },
     ensure(channelId: string) {
       if (disposed || !transport || !authorized(channelId)) return;

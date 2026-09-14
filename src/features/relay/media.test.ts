@@ -1,5 +1,5 @@
 import { assert, afterEach, expect, it, vi } from "vitest";
-import { createMediaPreparation, saveData } from "./media";
+import { createMediaPreparation, saveData, wasIntended } from "./media";
 
 afterEach(() => {
   vi.unstubAllGlobals();
@@ -54,7 +54,12 @@ it("warms requests without retaining decoded bytes, and releases active image ti
   // Oversized originals are not explicitly decoded just to prepare an avatar.
   expect(second.decode).not.toHaveBeenCalled();
   media.dispose();
-  expect(media.stats()).toEqual({ active: 0, queued: 0, decoded: 1 });
+  expect(media.stats()).toEqual({
+    active: 0,
+    queued: 0,
+    prefetched: 0,
+    decoded: 1,
+  });
   expect(vi.getTimerCount()).toBe(0);
 });
 
@@ -66,13 +71,32 @@ it("skips urls already in flight", () => {
   expect(FakeImage.created).toHaveLength(1);
 });
 
+it("prefetch warming appends across channels instead of replacing the queue", () => {
+  stubImages();
+  const media = createMediaPreparation();
+  media.prepare(["focus-1", "focus-2"]);
+  // prepare() immediately activates two; a warm pass appends behind them.
+  media.warm(["warm-1", "warm-2", "warm-3"]);
+  expect(media.stats()).toMatchObject({ queued: 3, prefetched: 3 });
+  // A focused prepare intent replaces queued speculation.
+  media.prepare(["focus-3"]);
+  expect(media.stats()).toMatchObject({ queued: 1, prefetched: 3 });
+  expect(wasIntended("warm-1")).toBe(true);
+});
+
 it("Save-Data disables warming but nothing else", () => {
   stubImages();
   vi.stubGlobal("navigator", { connection: { saveData: true } });
   expect(saveData()).toBe(true);
   const media = createMediaPreparation();
   media.prepare(["a", "b"]);
-  expect(media.stats()).toEqual({ active: 0, queued: 0, decoded: 0 });
+  media.warm(["c"]);
+  expect(media.stats()).toEqual({
+    active: 0,
+    queued: 0,
+    prefetched: 0,
+    decoded: 0,
+  });
   expect(FakeImage.created).toHaveLength(0);
 
   vi.stubGlobal("navigator", { connection: { saveData: false } });

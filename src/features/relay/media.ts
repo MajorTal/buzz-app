@@ -1,4 +1,35 @@
 import { relayDebug } from "./debug";
+export function saveData(): boolean {
+  try {
+    const connection = (
+      navigator as Navigator & { connection?: { saveData?: boolean } }
+    ).connection;
+    return connection?.saveData === true;
+  } catch {
+    return false;
+  }
+}
+
+/** Display URLs covered by a recent prepare intent, for warm/cold attribution.
+ * Survives session recreation; entries expire. */
+const INTENT_TTL_MS = 5 * 60_000;
+const intended = new Map<string, number>();
+function markIntended(url: string) {
+  intended.set(url, Date.now());
+  if (intended.size > 512) {
+    const oldest = [...intended.keys()][0];
+    if (oldest) intended.delete(oldest);
+  }
+}
+export function wasIntended(url: string): boolean {
+  const at = intended.get(url);
+  if (at === undefined) return false;
+  if (Date.now() - at > INTENT_TTL_MS) {
+    intended.delete(url);
+    return false;
+  }
+  return true;
+}
 /** Avatar request warming, the react-native-web Image model: fetch and
  * decode() into detached images, then retain nothing. The browser's own HTTP
  * and decoded-image caches serve the real <img> mounts. Never warms
@@ -11,6 +42,7 @@ export function createMediaPreparation() {
   const cancellations = new Map<HTMLImageElement, () => void>();
   const startedAt = new Map<string, number>();
   let decoded = 0;
+  let prefetched = 0;
   function pump() {
     if (disposed || typeof Image === "undefined") return;
     while (active.size < 2 && queue.length) {
@@ -72,15 +104,31 @@ export function createMediaPreparation() {
       for (const url of queue) pending.delete(url);
       queue = [];
       for (const url of [...new Set(urls)].slice(0, 24)) {
+        markIntended(url);
         if (pending.has(url)) continue;
         pending.add(url);
         queue.push(url);
       }
       pump();
     },
+    /** Prefetch-path warming: appends speculation instead of replacing it, so
+     * serial background channel reads accumulate avatars across channels. */
+    warm(urls: readonly string[]) {
+      if (disposed || saveData() || typeof Image === "undefined") return;
+      for (const url of [...new Set(urls)]) {
+        markIntended(url);
+        if (pending.has(url) || queue.includes(url)) continue;
+        if (queue.length >= 48) break;
+        pending.add(url);
+        queue.push(url);
+        prefetched++;
+      }
+      pump();
+    },
     stats: () => ({
       active: active.size,
       queued: queue.length,
+      prefetched,
       decoded,
     }),
     dispose() {
@@ -93,17 +141,4 @@ export function createMediaPreparation() {
       pending.clear();
     },
   };
-}
-
-/** The Save-Data preference (Network Information API) opts out of speculative
- * media traffic. Demand fetches still happen; only warming is disabled. */
-export function saveData(): boolean {
-  try {
-    const connection = (
-      navigator as Navigator & { connection?: { saveData?: boolean } }
-    ).connection;
-    return connection?.saveData === true;
-  } catch {
-    return false;
-  }
 }

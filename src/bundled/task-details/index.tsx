@@ -380,7 +380,7 @@ function TaskEditor({
             })
           }
         >
-          Add branch
+          Link existing branch
         </Button>
         <Button
           type="submit"

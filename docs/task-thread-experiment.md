@@ -13,9 +13,23 @@ This living manifest is the experiment's source of truth. The goal is automatic 
 
 First pilot: the muted-call sound fix in Berd Voice, with repository links in Berd Repo.
 
+## Flow 1: starts in a project channel
+
+1. Start a focused thread and ask the agent to work.
+2. Mark that same thread as a task; continue the discussion there.
+3. When the agent creates a branch or PR, Monitor posts its link in the repository channel, pointing back to the task thread.
+
+## Flow 2: starts elsewhere (later experiment)
+
+1. An idea emerges in a thread outside the project channel.
+2. Choose an existing project or create one, then create a task thread in its channel with the relevant context.
+3. Post the task link in the original thread and continue work in the task thread.
+4. Branch and PR links appear in the repository channel as in Flow 1.
+
+Eventually, the original thread's task link expands inline. The task thread shows a backlink at the time the link was posted. If a suitable task already exists, link it instead of creating another.
+
 ## Later
 
 - Automatic linking through harness context (possibly environment variables), a crawler, or both. A channel workflow is another possible approach; none is selected. Monitor is today's workaround.
 - Expand task/branch links inline, with backlinks at the time of the source reference. Each message retains its canonical home and permissions; a reference does not imply origin.
-- Create or link a project task from a broader conversation, leaving an expandable reference there.
 - Shared metadata and an API to enforce the conventions.

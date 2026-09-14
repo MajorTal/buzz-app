@@ -8,7 +8,7 @@ This living manifest is the experiment's source of truth. The goal is automatic 
 
 - Create task metadata with the [task script](https://github.com/block/buzz-app/blob/jtennant/thread-task-plugin/src/bundled/task-details/README.md), using the existing thread. Don't create a native Buzz task or another task channel.
 - The client and script share a file on this Mac, scoped to John's account and community. GitHub permissions are unchanged.
-- Assignment saves metadata only. Monitor is our manual workaround for notifying the assignee and posting repository links.
+- The client's Assign button saves the assignee and posts a tagged reply as John to start work. Script updates only save metadata. Monitor remains our workaround for posting repository links.
 
 First pilot: the muted-call sound fix in Berd Voice, with repository links in Berd Repo.
 
@@ -23,8 +23,8 @@ Use `get`, `list`, `update`, or `delete` for subsequent changes; `update --assig
 ## Flow 1: starts in a project channel
 
 1. Start a focused project thread; Sol creates its task record with the script.
-2. John assigns the task to another agent in the client.
-3. Monitor tags the assignee in the task thread, asking it to start work.
+2. John chooses another agent in the client and clicks Assign.
+3. The client posts a tagged reply as John in the task thread, asking the assignee to start work.
 4. The assignee creates a branch. Monitor creates a branch thread in the repository channel, linking back to the task.
 5. Implementation proceeds. CI/automatic-review placement is undecided: task thread or repository thread.
 

@@ -8,6 +8,53 @@ test.use({
   trace: "off",
 });
 
+test("Projects marks an existing channel locally, restores it, and links saved task threads", async ({
+  page,
+  app,
+}) => {
+  await open(page, app);
+  await page.evaluate(
+    ({ viewer, root }) => {
+      const task = {
+        title: "Silent hangup",
+        description: "Do not unmute on shutdown",
+        assignee: "Sol",
+        branches: [],
+      };
+      localStorage.setItem(
+        `buzz.local-task.v1:${JSON.stringify([`https://primary.example:${viewer}`, "alpha", root])}`,
+        JSON.stringify(task),
+      );
+    },
+    { viewer: app.viewer, root: app.exact.root.id },
+  );
+  const projects = () =>
+    page.evaluate(
+      (viewer) =>
+        window.fixtureNavigation.open({
+          version: 1,
+          kind: "page",
+          pluginId: "buzz.projects",
+          pageId: "projects",
+          scope: { viewer, communityOrigin: "https://primary.example" },
+        }),
+      app.viewer,
+    );
+  expect(await projects()).toEqual({ status: "opened" });
+  await page
+    .getByRole("combobox", { name: "Channel", exact: true })
+    .selectOption("alpha");
+  await page.getByRole("button", { name: "Mark as project locally" }).click();
+  const task = page.getByRole("button", { name: "Silent hangup", exact: true });
+  await expect(task).toBeVisible();
+  await page.reload();
+  await expect(task).toBeVisible();
+  await task.click();
+  await expect(
+    page.locator(`[data-message-id="${app.exact.root.id}"]`).first(),
+  ).toBeVisible();
+});
+
 test("local task panel saves against a canonical thread and never publishes metadata", async ({
   page,
   app,

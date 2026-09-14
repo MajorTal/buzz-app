@@ -9,6 +9,20 @@ export function taskKey(scope: string, channel: string, root: string) {
   return `buzz.local-task.v1:${JSON.stringify([scope, channel, root])}`;
 }
 
+export function channelTasks(storage: Storage, scope: string, channel: string) {
+  const prefix = `buzz.local-task.v1:${JSON.stringify([scope, channel]).slice(0, -1)},`;
+  const tasks: { root: string; task: Task }[] = [];
+  for (let i = 0; i < storage.length; i++) {
+    const key = storage.key(i);
+    if (!key?.startsWith(prefix)) continue;
+    const coordinate = JSON.parse(key.slice("buzz.local-task.v1:".length));
+    if (coordinate.length !== 3 || typeof coordinate[2] !== "string")
+      throw new Error("Invalid local task address.");
+    tasks.push({ root: coordinate[2], task: parseTask(storage.getItem(key)) });
+  }
+  return tasks.sort((a, b) => a.task.title.localeCompare(b.task.title));
+}
+
 export function parseTask(raw: string | null): Task {
   if (raw === null)
     return { title: "", description: "", assignee: "", branches: [] };

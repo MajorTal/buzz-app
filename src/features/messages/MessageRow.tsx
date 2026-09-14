@@ -1,3 +1,4 @@
+import "../../shared/design-system/styles/avatar-shape.css";
 import { memo, useCallback, useSyncExternalStore } from "react";
 import type { UnreadCapability } from "../relay/unread";
 import { profileTarget } from "../profiles/target";
@@ -74,10 +75,7 @@ export const MessageRow = memo(function MessageRow({
       )}
       <div className={styles.message}>
         <AvatarTag
-          className={styles.avatar}
-          data-avatar-shape={
-            agentPubkeys?.has(row.authorId) ? "squircle" : "circle"
-          }
+          className={styles.avatarButton}
           {...(clickable
             ? {
                 type: "button" as const,
@@ -89,11 +87,20 @@ export const MessageRow = memo(function MessageRow({
               }
             : {})}
         >
-          {picture ? (
-            <img src={picture} alt="" loading="lazy" />
-          ) : (
-            name.slice(0, 2).toUpperCase()
-          )}
+          <span
+            className={styles.avatar}
+            data-avatar-shape={
+              row.agentEnvelope || agentPubkeys?.has(row.authorId)
+                ? "squircle"
+                : "circle"
+            }
+          >
+            {picture ? (
+              <img src={picture} alt="" loading="lazy" />
+            ) : (
+              name.slice(0, 2).toUpperCase()
+            )}
+          </span>
         </AvatarTag>
         <div className={styles.messageBody}>
           <div className={styles.byline}>
@@ -203,7 +210,10 @@ export const MessageRow = memo(function MessageRow({
                     );
                   })}
                   {row.participants.length > 3 && (
-                    <span className={styles.threadAvatar}>
+                    <span
+                      className={styles.threadAvatar}
+                      data-avatar-shape="circle"
+                    >
                       +{row.participants.length - 3}
                     </span>
                   )}

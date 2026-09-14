@@ -1,3 +1,4 @@
+import "../styles/avatar-shape.css";
 import { Avatar as BaseAvatar } from "@base-ui/react/avatar";
 import { useEffect, useState } from "react";
 

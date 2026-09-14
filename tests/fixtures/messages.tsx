@@ -134,7 +134,7 @@ const owner = createRelaySession({
       if (filter.kinds?.includes(0))
         return [
           profile(viewer, { name: "Fixture Reader" }),
-          profile(agent, { name: "Agent Fixture", is_agent: true }),
+          profile(agent, { name: "Agent Fixture" }),
         ].filter((event) => filter.authors?.includes(event.pubkey));
       if (filter.ids)
         return events.filter((event) => filter.ids?.includes(event.id));

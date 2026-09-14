@@ -26,6 +26,8 @@ let time = 1700000000;
 const publications: RelayEvent[] = [];
 let incoming = (_events: readonly RelayEvent[]) => {};
 let releaseProfiles = () => {};
+let libraryReads = 0;
+let libraryIncludesFirst = false;
 const delayed = new URLSearchParams(location.search).has("delayed-profiles");
 const profileGate = delayed
   ? new Promise<void>((resolve) => {
@@ -37,6 +39,16 @@ const owner = createRelaySession(
     viewer: viewer.pubkey,
     relayAuthor: relay.pubkey,
     media: (url) => url,
+    // Synthetic, lazy capability: only the explicit fixture action loads it.
+    async readAgentLibrary() {
+      libraryReads++;
+      return {
+        definitions: [],
+        identities: libraryIncludesFirst
+          ? [{ pubkey: first.pubkey, name: "Honey" }]
+          : [],
+      };
+    },
     subscribe(callbacks) {
       incoming = callbacks.receive;
       callbacks.state({ status: "connected", routes: [] });
@@ -135,6 +147,11 @@ Object.assign(window, {
       owner.session.channels.refreshList?.();
     },
     releaseProfiles: () => releaseProfiles(),
+    libraryReads: () => libraryReads,
+    setLibraryAgent(included: boolean) {
+      libraryIncludesFirst = included;
+      return owner.session.agentLibrary.refresh();
+    },
     list: () => owner.session.channels.list(),
     otherMessage() {
       incoming([message(viewer, "other", "Unrelated preview", ++time)]);

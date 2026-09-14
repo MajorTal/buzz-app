@@ -35,7 +35,10 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
       exact: true,
     });
     await expect(avatar).toHaveCount(1);
-    await expect(avatar).toHaveAttribute("data-avatar-shape", "circle");
+    await expect(avatar.locator("[data-avatar-shape]")).toHaveAttribute(
+      "data-avatar-shape",
+      "circle",
+    );
     await avatar.focus();
     await avatar.press("Enter");
     await expect(key).toHaveText(npubs.viewer);

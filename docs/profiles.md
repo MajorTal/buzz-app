@@ -3,7 +3,7 @@
 The bundled `buzz.profiles` plugin supplies a minimal, read-only panel for any
 public identity, human or agent. It uses the current session's shared profile
 directory. Agents retains agent-specific configuration/operations; this slice
-adds no ownership/running badge, editor, agent-library lookup or execution API.
+adds no ownership/running badge, editor, agent-library read or execution API.
 When Agent Activity is enabled and the host supplies conversation context, **View
 activity** opens its raw panel for this exact identity and originating channel.
 This action is offered for any public identity: it does not infer that the identity
@@ -44,6 +44,25 @@ Button use the host-loaded styles directly. The profile content marks its
 `data-buzz-ui` boundary and uses shared heading/body/mono roles; its stylesheet
 owns layout, not component overrides. No new theme owner, second global reset or
 shell migration. Designers own later refinement.
+
+Agent avatar shapes are display-only. Original kind-40002 messages retain an
+`agentEnvelope` hint through the existing fold, including after edits; their author
+avatar can be a squircle without profile or library evidence. Other avatar surfaces
+use self-declared `is_agent`/`isAgent` profile metadata or exact keys in the
+already-loaded session library. These hints establish neither ownership nor running
+state. Library evidence remains lazy: opening Agents/Refresh loads it, and clearing
+it removes that fallback. Avatars never initiate a library read or scan telemetry.
+
+The shared, bundled SVG mask scales the same curve across avatar sizes. It clips
+artwork only; the message profile button retains its unmasked keyboard focus ring.
+`avatar-shapes.spec.mjs` checks actual painted pixels and focus in Chromium/WebKit,
+in light/dark at 390, 900 and 1280px. The open-completion regression checks library
+hint changes without another keystroke, and directory tests cover marker-only
+profile updates. The focused channel-opening check kept optional profiles held and
+added no warm head reads: local warm paints were 11.9–20.6ms in Chromium and
+36–40ms in WebKit (cold visibility upper bounds 60.3/81ms, including test IPC).
+These synthetic Apple Silicon measurements are not a live-network SLA. Full scan
+and native/package acceptance remain deferred.
 
 Use the normal `bin/just desktop` or `bin/just web` workflow in the feature worktree
 with the existing public live-mode pin; run only one dev target at a time.

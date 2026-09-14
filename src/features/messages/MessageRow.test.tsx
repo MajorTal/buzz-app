@@ -304,3 +304,33 @@ it("uses the reviewed SVG squircle only for identities classified as agents", ()
   expect(html).toContain('data-avatar-shape="squircle"');
   expect(render({}, 0).html).toContain('data-avatar-shape="circle"');
 });
+
+it.each([9, 40002])(
+  "renders kind %s author shape from the existing fold without profile/library evidence",
+  (kind) => {
+    const author = keypair(),
+      relay = keypair();
+    const [folded] = foldMessages("channel", relay.pubkey, [
+      signed(author, {
+        kind,
+        content:
+          kind === 40002 ? JSON.stringify({ content: "Reply" }) : "Reply",
+        tags: [["h", "channel"]],
+      }),
+    ]);
+    if (!folded) throw new Error("Missing row");
+    const html = renderToStaticMarkup(
+      <MessageRow
+        row={folded}
+        profile={undefined}
+        media={() => undefined}
+        onOpenLink={() => false}
+        day={false}
+        retry={undefined}
+      />,
+    );
+    expect(html).toContain(
+      `data-avatar-shape="${kind === 40002 ? "squircle" : "circle"}"`,
+    );
+  },
+);

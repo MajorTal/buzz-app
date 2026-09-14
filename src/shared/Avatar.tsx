@@ -1,3 +1,4 @@
+import "./design-system/styles/avatar-shape.css";
 import { useState } from "react";
 
 /** Caller resolves private relay media through the current session. */

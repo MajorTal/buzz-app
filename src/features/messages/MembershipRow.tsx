@@ -1,3 +1,4 @@
+import "../../shared/design-system/styles/avatar-shape.css";
 import { memo } from "react";
 import type { Profile } from "../relay/contracts";
 import { membershipDescription, type TimelineRow } from "./membership-rows";
@@ -69,7 +70,10 @@ export const MembershipRow = memo(function MembershipRow({
             );
           })}
           {targets.length > 3 && (
-            <span className={styles.membershipAvatar}>
+            <span
+              className={styles.membershipAvatar}
+              data-avatar-shape="circle"
+            >
               +{targets.length - 3}
             </span>
           )}

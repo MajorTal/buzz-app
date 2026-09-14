@@ -140,6 +140,7 @@ export function MentionCompletion({
     channelId,
     memberKey,
     profiles,
+    agentPubkeys,
     query.query,
     publish,
     error,

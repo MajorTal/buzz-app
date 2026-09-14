@@ -178,9 +178,10 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
   {
     slug: "avatar",
     name: "Avatar",
-    purpose: "A person or agent identity image with a stable fallback.",
+    purpose:
+      "A person or agent identity image with a stable fallback. Circle by default; callers can select the proposed squircle shape from display-only agent evidence.",
     behavior: "Base UI Avatar",
-    variants: ["small", "default", "large"],
+    variants: ["small", "default", "large", "circle", "squircle"],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Messages",

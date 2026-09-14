@@ -1,0 +1,12 @@
+/* Shared by system and legacy avatars. The SVG viewBox scales the same curve
+   at every size; CSS path() coordinates would be fixed pixels. Apply only to
+   artwork, never its interactive wrapper, so focus and hover remain unclipped.
+   Unlayered to replace legacy utility/module radii as well as system defaults. */
+[data-avatar-shape="circle"] {
+  border-radius: 50%;
+}
+
+[data-avatar-shape="squircle"] {
+  border-radius: 0;
+  mask: url("./avatar-squircle.svg") center / 100% 100% no-repeat;
+}

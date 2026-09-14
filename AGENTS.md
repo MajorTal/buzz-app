@@ -12,6 +12,9 @@ before live use.
 Files marked `FOUNDATION` require explicit human guidance before editing and
 stricter review. Escalate needed changes rather than editing without authorization.
 
+When reviewing CI or test-cost changes, inspect job-summary counts, elapsed wall
+time, summed test execution time, and slowest-test/file evidence for regressions.
+
 ## Worktree creation
 
 Before creating a worktree, run `git worktree list` and choose the existing

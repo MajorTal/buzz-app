@@ -28,13 +28,20 @@
 
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
+import { fileURLToPath } from "node:url";
 
-const SRC = new URL("../../src/shared/design-system", import.meta.url).pathname;
-const VIEWER = new URL("../../tests/fixtures/design-system", import.meta.url)
-  .pathname;
+const SRC = fileURLToPath(
+  new URL("../../src/shared/design-system", import.meta.url),
+);
+const VIEWER = fileURLToPath(
+  new URL("../../tests/fixtures/design-system", import.meta.url),
+);
 
 /** Size roles a component may use. Kept in sync with typography.css. */
 const SIZE_ROLES = [
+  "label",
+  "label-sm",
+  "caption",
   "display",
   "title",
   "heading",
@@ -54,8 +61,6 @@ const SIZE_ROLES = [
  */
 const RETIRED_ROLES = new Map([
   ["subheading", "text-heading, or text-body-lg if it is prose"],
-  ["label", "text-body, or text-body-sm in dense chrome"],
-  ["caption", "text-body-sm"],
   ["meta", "text-body-sm"],
   ["code", "text-mono"],
 ]);
@@ -128,9 +133,9 @@ const RULES = [
     //
     // `font-semibold` and `font-normal` are absent from this list on purpose:
     // they are the two legal weights.
-    pattern: /\bfont-(?:thin|extralight|light|medium|bold|extrabold|black)\b/g,
+    pattern: /\bfont-(?:thin|extralight|light|bold|extrabold|black)\b/g,
     message:
-      "off-ramp font weight — the system is 400 and 600. Bold is font-semibold. If a one-off genuinely needs another weight, add it to OVERRIDES with a reason.",
+      "off-ramp font weight — the system is 400 and 500. Emphasis is font-medium; legacy font-semibold resolves to 500. If a one-off genuinely needs another weight, add it to OVERRIDES with a reason.",
   },
   {
     id: "retired-role",

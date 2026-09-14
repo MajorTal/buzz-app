@@ -34,6 +34,7 @@ test("built viewer loads every specimen and foundation without app connections",
     "Glass",
     "Motion",
     "Base UI backing",
+    "Foundation alignment",
     "Maintaining the system",
     "DESIGN.md",
     "AGENTS.md",
@@ -48,6 +49,104 @@ test("built viewer loads every specimen and foundation without app connections",
   ).toHaveCount(0);
   expect(failures).toEqual([]);
   expect(sockets).toEqual([]);
+});
+
+test("foundation proposals are independent, local, and usable in both modes", async ({
+  page,
+}) => {
+  await page.goto(`${viewer}#/design/foundation-alignment`);
+  const current = page.getByRole("region", {
+    name: "Current tokens",
+    exact: true,
+  });
+  const proposal = page.getByRole("region", {
+    name: "Selected proposal",
+    exact: true,
+  });
+  const color = page.getByRole("switch", { name: "Status color" });
+  const reading = page.getByRole("switch", { name: "Larger reading text" });
+  const spacing = page.getByRole("switch", { name: "More section space" });
+
+  for (const mode of ["light", "dark"]) {
+    const theme = page.getByRole("button", { name: `Use ${mode} mode` });
+    if (await theme.count()) await theme.click();
+    await expect(proposal.locator("[data-reading]")).toHaveCSS(
+      "font-size",
+      "16px",
+    );
+    await expect(proposal.locator(".alignment-project")).toHaveCSS(
+      "row-gap",
+      "32px",
+    );
+    const neutral = await current
+      .locator("[data-status]")
+      .evaluate((el) => getComputedStyle(el).color);
+    await expect(proposal.locator("[data-status]")).toHaveCSS("color", neutral);
+
+    await color.click();
+    await expect(proposal.locator("[data-status]")).not.toHaveCSS(
+      "color",
+      neutral,
+    );
+    await expect(proposal.locator("[data-reading]")).toHaveCSS(
+      "font-size",
+      "16px",
+    );
+    await expect(proposal.locator(".alignment-project")).toHaveCSS(
+      "row-gap",
+      "32px",
+    );
+    await reading.focus();
+    await page.keyboard.press("Space");
+    await expect(reading).toBeChecked();
+    await expect(proposal.locator("[data-reading]")).toHaveCSS(
+      "font-size",
+      "20px",
+    );
+    await spacing.click();
+    await expect(proposal.locator(".alignment-project")).toHaveCSS(
+      "row-gap",
+      "64px",
+    );
+    await expect(current.locator("[data-reading]")).toHaveCSS(
+      "font-size",
+      "16px",
+    );
+    await expect(current.locator(".alignment-project")).toHaveCSS(
+      "row-gap",
+      "32px",
+    );
+    await expect(current.locator("[data-status]")).toHaveCSS("color", neutral);
+
+    for (const width of [390, 800, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await expect(page.getByRole("table")).toHaveCount(3);
+      await expect(page.getByRole("table").first()).toBeVisible();
+      expect(
+        await page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      ).toBe(true);
+    }
+    await color.click();
+    await reading.click();
+    await spacing.focus();
+    await page.keyboard.press("Space");
+    await expect(spacing).not.toBeChecked();
+  }
+  await proposal
+    .getByRole("button", { name: "Follow project", exact: true })
+    .click();
+  await expect(
+    proposal.getByRole("button", { name: "Following project" }),
+  ).toHaveAttribute("aria-pressed", "true");
+  await expect(
+    current.getByRole("button", { name: "Follow project", exact: true }),
+  ).toHaveAttribute("aria-pressed", "false");
+  await page.reload();
+  await expect(color).not.toBeChecked();
+  await expect(reading).not.toBeChecked();
+  await expect(spacing).not.toBeChecked();
 });
 
 test("narrow, intermediate and wide layouts preserve theme and keyboard interaction", async ({
@@ -101,6 +200,64 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
     "data-keyboard-navigation",
     "",
   );
+});
+
+test("switch keyboard activation matches pointer state and focus in both modes", async ({
+  page,
+  browserName,
+}) => {
+  await page.goto(`${viewer}#/design/components/switch`);
+  const switches = page.getByRole("switch", { name: "Show agent activity" });
+  const control = switches.nth(0);
+  const tab =
+    browserName === "webkit" && process.platform === "darwin"
+      ? "Alt+Tab"
+      : "Tab";
+  for (const width of [390, 800, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const mode of ["light", "dark"]) {
+      const toggle = page.getByRole("button", { name: `Use ${mode} mode` });
+      if (await toggle.count()) await toggle.click();
+      await expect(control).not.toBeChecked();
+      await control.click();
+      await expect(control).toBeChecked();
+      await expect(control).toHaveCSS("outline-style", "none");
+      await page.keyboard.press(tab);
+      await expect(switches.nth(1)).toBeFocused();
+      await page.keyboard.press(`Shift+${tab}`);
+      await expect(control).toBeFocused();
+      await expect(control).toHaveCSS("outline-style", "solid");
+      await expect(control).toHaveCSS("outline-width", "2px");
+      await page.keyboard.press("Space");
+      await expect(control).not.toBeChecked();
+      await page.keyboard.press("Enter");
+      await expect(control).toBeChecked();
+      await control.click();
+      await expect(control).not.toBeChecked();
+    }
+  }
+});
+
+test("disabled switch exposes its state, skips Tab and rejects activation", async ({
+  page,
+  browserName,
+}) => {
+  await page.goto(`${viewer}#/design/components/switch`);
+  const switches = page.getByRole("switch", { name: "Show agent activity" });
+  const disabled = switches.nth(2);
+  await expect(disabled).toBeDisabled();
+  await expect(disabled).not.toBeChecked();
+  await switches.nth(1).click();
+  await page.keyboard.press(
+    browserName === "webkit" && process.platform === "darwin"
+      ? "Alt+Tab"
+      : "Tab",
+  );
+  await expect(disabled).not.toBeFocused();
+  await disabled.click({ force: true });
+  await disabled.press("Space");
+  await disabled.press("Enter");
+  await expect(disabled).not.toBeChecked();
 });
 
 test("viewer does not replace host styles or appearance ownership", async ({
@@ -192,7 +349,7 @@ test("built component references retain anatomy and fallback identity", async ({
 
   await page.goto(`${viewer}#/design/components/avatar`);
   await expect(page.getByRole("img", { name: "Cynthia Chen" })).toHaveCount(3);
-  await expect(page.getByRole("img", { name: "Morgan Martin" })).toHaveCount(4);
+  await expect(page.getByRole("img", { name: "Morgan Martin" })).toHaveCount(5);
 });
 
 test("a small pane drag settles on release and Escape", async ({ page }) => {

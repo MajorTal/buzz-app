@@ -39,10 +39,16 @@ const reply = message(viewer, "one", "Thread @Pinky", 12, [
   ["e", root.id, "", "reply"],
   ["p", pinky.pubkey],
 ]);
-const report = { profileReads: [] as string[][], publications: 0 };
+const picture = "https://images.test/avatar.png";
+const pictureFixture = "/tests/fixtures/design-system/assets/avatar.png";
+const report = {
+  profileReads: [] as string[][],
+  media: [] as [string, "small" | undefined][],
+  publications: 0,
+};
 let failMissing = true;
 const data = [
-  profile(viewer, { name: "Viewer", about: "Human profile" }),
+  profile(viewer, { name: "Viewer", about: "Human profile", picture }),
   profile(mic, { name: "Mic", about: "Mic biography" }),
   profile(pinky, { name: "Pinky", about: "Agent profile", is_agent: true }),
 ];
@@ -50,7 +56,10 @@ function session() {
   return createRelaySession({
     viewer: viewer.pubkey,
     relayAuthor: authority.pubkey,
-    media: () => undefined,
+    media: (url, size) => {
+      report.media.push([url, size]);
+      return url === picture ? pictureFixture : url;
+    },
     async query(filters) {
       return filters.flatMap((filter) => {
         if (filter.kinds?.includes(39002))

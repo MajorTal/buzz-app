@@ -140,8 +140,9 @@ export function MentionPicker({
                   name={recipient.name}
                   src={session.media(
                     profiles.get(recipient.pubkey)?.picture ?? "",
+                    "small",
                   )}
-                  className="size-8 rounded-lg text-xs"
+                  className="size-8 rounded-lg text-caption"
                   shape={
                     agentPubkeys.has(recipient.pubkey) ? "squircle" : "circle"
                   }

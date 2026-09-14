@@ -25,7 +25,7 @@ export function Avatar({
   return (
     <span
       data-avatar-shape={shape}
-      className={`relative inline-grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-[#ece9f4] font-semibold text-[#675780] ${className}`}
+      className={`relative inline-grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-neutral-3 font-semibold text-secondary ${className}`}
       aria-hidden="true"
     >
       {initials}

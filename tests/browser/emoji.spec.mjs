@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 
 test("community picker uses keyboard, proxy thumbnails, event-local history and scoped send/reply tags", async ({
+  browserName,
   page,
 }) => {
   // Parallel fixtures must not invalidate each other’s optimized lazy imports.
@@ -78,6 +79,229 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     const originalSrc = await historic.getAttribute("src");
     expect(originalSrc).toContain("/emoji-media/a/");
     await expect(page.locator('img[src*="reaction.png"]')).toHaveCount(1);
+    // Preserve real pointer selection, then observe the app's native copy event
+    // payload directly. Linux WebKit does not paste a script-installed DOM range
+    // from its platform clipboard, even though the handler populated the event.
+    const emojiImage = sentSingleEmoji.locator("img");
+    const copyBounds = await emojiImage.boundingBox();
+    await page.mouse.move(
+      copyBounds.x - 2,
+      copyBounds.y + copyBounds.height / 2,
+    );
+    await page.mouse.down();
+    await page.mouse.move(
+      copyBounds.x + copyBounds.width + 2,
+      copyBounds.y + copyBounds.height / 2,
+      { steps: 8 },
+    );
+    await page.mouse.up();
+    expect(
+      await emojiImage.evaluate((image) => {
+        const selection = window.getSelection();
+        return (
+          !!selection &&
+          !selection.isCollapsed &&
+          selection.containsNode(image, true)
+        );
+      }),
+    ).toBe(true);
+    const observeCopyPayload = () =>
+      page.evaluate(() => {
+        window.__emojiCopyPayload = undefined;
+        document.addEventListener(
+          "copy",
+          (event) => {
+            window.__emojiCopyPayload = {
+              prevented: event.defaultPrevented,
+              text: event.clipboardData?.getData("text/plain"),
+              trusted: event.isTrusted,
+            };
+          },
+          { once: true },
+        );
+      });
+    const copyPayload = () => page.evaluate(() => window.__emojiCopyPayload);
+    const copySelection = async () => {
+      if (browserName === "webkit") {
+        // Headless WebKit does not dispatch Copy for selected non-editable content
+        // from Playwright keyboard input on Linux. Invoke its browser copy command;
+        // this uses the real selection and document listener, not a synthetic event.
+        expect(await page.evaluate(() => document.execCommand("copy"))).toBe(
+          true,
+        );
+        return;
+      }
+      await page.keyboard.press("ControlOrMeta+c");
+    };
+    await emojiImage.evaluate((image) => {
+      const range = document.createRange();
+      range.selectNode(image);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await observeCopyPayload();
+    await copySelection();
+    await expect
+      .poll(copyPayload)
+      .toEqual({ prevented: true, text: ":party:", trusted: true });
+    await historic.evaluate((image) => {
+      const range = document.createRange();
+      range.selectNodeContents(image.closest("p"));
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await observeCopyPayload();
+    await copySelection();
+    await expect.poll(copyPayload).toEqual({
+      prevented: true,
+      text: "Historic :unknown:party: and https://example.test/:party:",
+      trusted: true,
+    });
+    const table = page.locator("table");
+    await expect(table.locator('img[alt=":party:"]')).toHaveCount(1);
+    await table.evaluate((element) => {
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await observeCopyPayload();
+    await copySelection();
+    await expect.poll(copyPayload).toEqual({
+      prevented: true,
+      text: "State\tOwner\tCount\tTail\n:party:\t\t12\t\n\tlead\t\tend",
+      trusted: true,
+    });
+    await table
+      .locator("tbody tr")
+      .first()
+      .evaluate((row) => {
+        const range = document.createRange();
+        range.selectNodeContents(row);
+        const selection = window.getSelection();
+        selection.removeAllRanges();
+        selection.addRange(range);
+      });
+    await observeCopyPayload();
+    await copySelection();
+    await expect.poll(copyPayload).toEqual({
+      prevented: true,
+      text: ":party:\t\t12\t",
+      trusted: true,
+    });
+    const blockquote = page.locator("blockquote");
+    const preformatted = blockquote.locator("xpath=following-sibling::pre[1]");
+    await expect(blockquote.locator('img[alt=":party:"]')).toHaveCount(1);
+    await blockquote.evaluate((element) => {
+      const start = element.querySelector("p")?.firstChild;
+      const end = element.nextElementSibling?.querySelector("code")?.lastChild;
+      if (!start || !end) throw new Error("Missing quote/code text boundaries");
+      const range = document.createRange();
+      range.setStart(start, 0);
+      range.setEnd(end, end.textContent?.length ?? 0);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+    await expect(preformatted).toContainText("code");
+    await observeCopyPayload();
+    await copySelection();
+    await expect.poll(copyPayload).toEqual({
+      prevented: true,
+      text: "Quote :party:\n\ncode\n",
+      trusted: true,
+    });
+    // Independently prove this browser's real clipboard transport with the exact
+    // handler payload; the editable source path intentionally uses native copy.
+    await draft().fill(":party:");
+    await draft().press("ControlOrMeta+a");
+    await page.keyboard.press("ControlOrMeta+c");
+    await draft().fill("");
+    await page.keyboard.press("ControlOrMeta+v");
+    await expect(draft()).toHaveJSProperty("value", ":party:");
+    // One Shift+Left selects one rendered custom emoji, not its trailing colon.
+    await draft().press("Shift+ArrowLeft");
+    expect(
+      await draft().evaluate((element) =>
+        element.value.slice(element.selectionStart, element.selectionEnd),
+      ),
+    ).toBe(":party:");
+    await page.keyboard.press("ControlOrMeta+c");
+    await draft().fill("");
+    await page.keyboard.press("ControlOrMeta+v");
+    await expect(draft()).toHaveJSProperty("value", ":party:");
+    await draft().fill(":party::party:");
+    const selectedDraftText = () =>
+      draft().evaluate((element) =>
+        element.value.slice(element.selectionStart, element.selectionEnd),
+      );
+    for (const [key, selected] of [
+      ["Shift+ArrowLeft", ":party:"],
+      ["Shift+ArrowLeft", ":party::party:"],
+      ["Shift+ArrowRight", ":party:"],
+      ["Shift+ArrowRight", ""],
+    ]) {
+      await draft().press(key);
+      expect(await selectedDraftText()).toBe(selected);
+    }
+    await draft().evaluate((element) => element.setSelectionRange(0, 0));
+    for (const [key, selected] of [
+      ["Shift+ArrowRight", ":party:"],
+      ["Shift+ArrowRight", ":party::party:"],
+      ["Shift+ArrowLeft", ":party:"],
+      ["Shift+ArrowLeft", ""],
+    ]) {
+      await draft().press(key);
+      expect(await selectedDraftText()).toBe(selected);
+    }
+    await draft().fill(":party:hello");
+    await draft().evaluate((element) => element.setSelectionRange(7, 7));
+    await draft().press("Shift+ArrowLeft");
+    expect(await selectedDraftText()).toBe(":party:");
+    await draft().press("Backspace");
+    await expect(draft()).toHaveJSProperty("value", "hello");
+    // Visible source text and unavailable emoji retain ordinary character selection.
+    for (const literal of [":unknown:", ":nosource:"]) {
+      await draft().fill(literal);
+      await draft().press("Shift+ArrowLeft");
+      expect(await selectedDraftText()).toBe(":");
+    }
+    await page.locator("main").evaluate((main) => {
+      main.style.width = "300px";
+    });
+    await draft().fill(Array(24).fill(":party:").join(" "));
+    const largeCustom = draft();
+    await expect(largeCustom.locator("img")).toHaveCount(24);
+    await expect(largeCustom.locator("img").last()).toHaveCSS("width", "42px");
+    expect(
+      await largeCustom.evaluate(
+        (group) => group.scrollWidth <= group.clientWidth,
+      ),
+    ).toBe(true);
+    expect(
+      await largeCustom
+        .locator("img")
+        .last()
+        .evaluate((image) => image.offsetTop),
+    ).toBeGreaterThan(0);
+    await page.screenshot({
+      path: test.info().outputPath("large-custom-emoji-draft.png"),
+    });
+    const lastCustomBounds = await largeCustom
+      .locator("img")
+      .last()
+      .boundingBox();
+    const inputBounds = await draft().boundingBox();
+    expect(lastCustomBounds.y + lastCustomBounds.height).toBeLessThanOrEqual(
+      inputBounds.y + inputBounds.height,
+    );
+    await page.locator("main").evaluate((main) => {
+      main.style.width = "800px";
+    });
+    await draft().fill("");
     // Opening/reading does not load the Unicode dataset or Mart's global state.
     expect(
       await page.evaluate(() =>
@@ -109,7 +333,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
           (button) => getComputedStyle(button, "::before").backgroundColor,
         ),
       )
-      .toBe("rgb(240, 240, 240)");
+      .toBe("rgb(232, 232, 232)");
     await skinTone.click();
     await expect(skinTone).toHaveAttribute("aria-selected", "");
     const toneMenu = page.locator("em-emoji-picker #root > .menu");
@@ -162,13 +386,13 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(search).toHaveCSS("margin-left", "2px");
     await expect(search).toHaveCSS("margin-right", "2px");
     await expect(search).toHaveCSS("border-top-width", "0px");
-    await expect(search).toHaveCSS("border-radius", "8px");
-    await expect(search).toHaveCSS("background-color", "rgb(245, 245, 246)");
-    await expect(search).toHaveCSS("color", "rgb(10, 10, 10)");
+    await expect(search).toHaveCSS("border-radius", "14px");
+    await expect(search).toHaveCSS("background-color", "rgb(240, 240, 240)");
+    await expect(search).toHaveCSS("color", "rgb(0, 0, 0)");
     await expect(search).toHaveCSS("outline-style", "none");
     await expect(search).toHaveCSS(
       "box-shadow",
-      "rgb(206, 206, 206) 0px 0px 0px 2px",
+      "rgb(0, 0, 0) 0px 0px 0px 2px",
     );
     const surface = page.locator("em-emoji-picker #root");
     const region = page.getByRole("region", { name: "Emoji picker" });
@@ -231,15 +455,15 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(emojiClear.locator("svg")).toHaveClass(/lucide-circle-x/);
     await expect(emojiClear.locator("svg")).toHaveCSS("width", "16px");
     await expect(emojiClear.locator("svg")).toHaveCSS("height", "16px");
-    await expect(emojiClear).toHaveCSS("color", "rgb(141, 141, 141)");
+    await expect(emojiClear).toHaveCSS("color", "rgb(82, 82, 82)");
     await expect(emojiClear.locator("circle")).toHaveCSS(
       "fill",
-      "rgb(141, 141, 141)",
+      "rgb(82, 82, 82)",
     );
     await expect(emojiClear.locator("circle")).toHaveCSS("stroke", "none");
     await expect(emojiClear.locator("path").first()).toHaveCSS(
       "stroke",
-      "rgb(245, 245, 246)",
+      "rgb(240, 240, 240)",
     );
     await expect(
       page.locator('[aria-label="Emoji picker"] > svg.lucide-search:visible'),
@@ -263,16 +487,16 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       await expect(surface).toHaveAttribute("data-theme", mode);
       await expect(search).toHaveCSS(
         "background-color",
-        mode === "dark" ? "rgb(22, 22, 22)" : "rgb(245, 245, 246)",
+        mode === "dark" ? "rgb(16, 16, 16)" : "rgb(240, 240, 240)",
       );
       await expect(search).toHaveCSS(
         "box-shadow",
         mode === "dark"
-          ? "rgb(66, 66, 66) 0px 0px 0px 2px"
-          : "rgb(206, 206, 206) 0px 0px 0px 2px",
+          ? "rgb(255, 255, 255) 0px 0px 0px 2px"
+          : "rgb(0, 0, 0) 0px 0px 0px 2px",
       );
-      await expect(search).toHaveCSS("font-family", /^Inter, /);
-      await expect(search).not.toHaveCSS("font-family", /Inter Variable/);
+      await expect(search).toHaveCSS("font-family", /Inter Variable/);
+
       await expect(search).toHaveValue("party");
       await expect(search).toBeFocused();
       expect(await searchNode.evaluate((node) => node.isConnected)).toBe(true);
@@ -283,7 +507,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     });
     await expect(page.locator("em-emoji-picker #root")).toHaveCSS(
       "width",
-      "236px",
+      "240px",
     );
     await expect(search).toHaveValue("party");
     await expect(page.locator("em-emoji-picker nav")).toHaveCount(0);
@@ -376,7 +600,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(scrollbar).toHaveCSS("opacity", "0.6");
     await expect(scrollbarThumb).toHaveCSS(
       "background-color",
-      "rgb(232, 232, 232)",
+      "rgb(149, 149, 149)",
     );
     for (const [index, result] of searchRowPositions.entries())
       expect(result.x).toBeCloseTo(firstRow[index].x, 1);
@@ -445,7 +669,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     const indicator = navigation.locator(".bar");
     await expect(indicator).toHaveCSS("display", "none");
     const selectedCategory = navigation.locator("button[aria-selected]");
-    await expect(selectedCategory).toHaveCSS("color", "rgb(10, 10, 10)");
+    await expect(selectedCategory).toHaveCSS("color", "rgb(0, 0, 0)");
     const selectedBackground = () =>
       selectedCategory.evaluate((element) => {
         const style = getComputedStyle(element, "::before");
@@ -462,7 +686,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
         };
       });
     expect(await selectedBackground()).toMatchObject({
-      background: "rgb(240, 240, 240)",
+      background: "rgb(232, 232, 232)",
       duration: "0.12s",
       height: "28px",
       width: "28px",
@@ -491,14 +715,14 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     ).toEqual(categoryPositions);
     await expect
       .poll(() => selectedBackground().then(({ background }) => background))
-      .toBe("rgb(240, 240, 240)");
+      .toBe("rgb(232, 232, 232)");
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect((await selectedBackground()).duration).toBe("0s");
     await page.emulateMedia({ reducedMotion: "no-preference" });
     const categoryHeading = page
       .locator("em-emoji-picker .category .sticky")
       .first();
-    await expect(categoryHeading).toHaveCSS("color", "rgb(100, 100, 100)");
+    await expect(categoryHeading).toHaveCSS("color", "rgb(82, 82, 82)");
     await expect(categoryHeading).toHaveCSS("font-size", "12px");
     await expect(categoryHeading).toHaveCSS("font-weight", "400");
     await expect(page.getByText("Pick an emoji", { exact: true })).toHaveCount(
@@ -551,7 +775,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     }
     await search.fill("aonly");
     await search.press("Enter");
-    await expect(draft()).toHaveValue(":aonly:");
+    await expect(draft()).toHaveJSProperty("value", ":aonly:");
     await picker.click();
     await search.fill("");
     await expect(
@@ -564,14 +788,14 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       page.getByRole("button", { name: ":grinning:", exact: true }),
     ).toBeVisible();
     await page.getByRole("button", { name: "😀", exact: true }).click();
-    await expect(draft()).toHaveValue(":aonly:😀");
+    await expect(draft()).toHaveJSProperty("value", ":aonly:😀");
     await draft().fill("before after");
     await draft().evaluate((el) => el.setSelectionRange(7, 7));
     await picker.press("Enter");
     await search.focus();
     await search.fill("party");
     await search.press("Enter");
-    await expect(draft()).toHaveValue("before :party:after");
+    await expect(draft()).toHaveJSProperty("value", "before :party:after");
     await expect(draft()).toBeFocused();
     await draft().press("Enter");
     await expect
@@ -597,7 +821,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await search.press("Escape");
     await draft().fill("A draft");
     await page.getByRole("button", { name: "Switch community" }).click();
-    await expect(draft()).toHaveValue("");
+    await expect(draft()).toHaveJSProperty("value", "");
     await expect
       .poll(() => page.evaluate(() => window.emojiFixture.status("b")))
       .toBe("ready");
@@ -619,7 +843,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       /emoji-media\/b\/.*1.png/,
     );
     await insert.click();
-    await expect(draft()).toHaveValue(":party:");
+    await expect(draft()).toHaveJSProperty("value", ":party:");
     await expect(draft()).toBeFocused();
     await draft().press("Enter");
     await expect
@@ -631,7 +855,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await picker.click();
     await search.fill("party");
     await insert.click();
-    await expect(draft()).toHaveValue(":party:");
+    await expect(draft()).toHaveJSProperty("value", ":party:");
     await expect(draft()).toBeFocused();
     await draft().press("Enter");
     await expect
@@ -655,7 +879,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     ).toBe(true);
     await page.getByRole("button", { name: "Toggle thread" }).click();
     await page.getByRole("button", { name: "Switch community" }).click();
-    await expect(draft()).toHaveValue("A draft");
+    await expect(draft()).toHaveJSProperty("value", "A draft");
     await picker.click();
     await page.evaluate(async () => {
       window.emojiFixture.fail(true);
@@ -666,10 +890,10 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     );
     await search.fill("grinning");
     await page.getByRole("button", { name: "😀", exact: true }).click();
-    await expect(draft()).toHaveValue("😀A draft");
+    await expect(draft()).toHaveJSProperty("value", "😀A draft");
     await draft().fill(":party:");
     await draft().press("Enter");
-    await expect(draft()).toHaveValue(":party:");
+    await expect(draft()).toHaveJSProperty("value", ":party:");
     await expect(page.getByRole("alert")).toContainText(
       "Community emoji unavailable",
     );
@@ -677,35 +901,56 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(region.getByRole("alert")).toContainText(
       "Fixture catalog offline",
     );
-    await page.evaluate(() => window.emojiFixture.fail(false));
-    await page
-      .getByRole("button", { name: "Retry emoji", exact: true })
-      .click();
+    await page.evaluate(() => {
+      window.emojiFixture.fail(false);
+      window.emojiFixture.holdCatalog();
+    });
+    try {
+      await page
+        .getByRole("button", { name: "Retry emoji", exact: true })
+        .click();
+      await expect
+        .poll(() => page.evaluate(() => window.emojiFixture.status("a")))
+        .toBe("loading");
+      // A usable Unicode-only picker during loading is not the recovered mount.
+      await expect(search).toHaveAttribute("data-buzz-search-ready", "true");
+      await expect(
+        page.locator('em-emoji-picker [data-id="buzz-custom"]'),
+      ).toHaveCount(0);
+    } finally {
+      await page.evaluate(() => window.emojiFixture.releaseCatalog());
+    }
+    await expect
+      .poll(() => page.evaluate(() => window.emojiFixture.status("a")))
+      .toBe("ready");
+    await expect(
+      page.locator('em-emoji-picker [data-id="buzz-custom"]'),
+    ).toHaveCount(1);
+    await expect(search).toHaveAttribute("data-buzz-search-ready", "true");
     await search.fill("party");
     await expect(insert).toBeVisible();
     await draft().fill(":broken: readable");
-    await expect(draft()).not.toHaveAttribute(
-      "data-leading-custom-emoji",
-      "true",
-    );
+    await expect(draft()).toContainText(":broken: readable");
     await draft().fill(":broken: :nosource:");
-    await expect(draft()).not.toHaveAttribute(
-      "data-leading-custom-emoji",
-      "true",
-    );
+    await expect(draft()).toContainText(":broken: :nosource:");
     await expect(draft()).not.toHaveCSS("color", "rgba(0, 0, 0, 0)");
-    await draft().fill(`:party: ${"long text ".repeat(80)}`);
-    await expect(draft()).toHaveAttribute("data-leading-custom-emoji", "true");
-    await draft().evaluate((element) => {
-      element.scrollTop = element.scrollHeight;
-      element.dispatchEvent(new Event("scroll"));
-    });
+    const longDraft = `:party: ${"long text ".repeat(160)}`;
+    await draft().fill(longDraft);
+    await expect(draft()).toHaveJSProperty("value", longDraft);
+    await expect(draft()).toContainText("long text long text");
+    await expect(draft().locator("img")).toHaveCount(1);
     await expect
       .poll(() =>
-        page
-          .locator('[class*="composerCustomEmojiMirror"]')
-          .evaluate((element) => element.scrollTop),
+        draft().evaluate(
+          (element) => element.scrollHeight - element.clientHeight,
+        ),
       )
+      .toBeGreaterThan(0);
+    await draft().evaluate((element) => {
+      element.scrollTop = element.scrollHeight;
+    });
+    await expect
+      .poll(() => draft().evaluate((element) => element.scrollTop))
       .toBeGreaterThan(0);
     await draft().fill("");
     await page.evaluate(() => window.emojiFixture.remove());
@@ -738,8 +983,8 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(draft()).toHaveAttribute("data-single-emoji", "true");
     await expect(draft()).toHaveCSS("font-size", "42px");
     await draft().fill("😀 🙏 👏 😄");
-    await expect(draft()).not.toHaveAttribute("data-single-emoji", "true");
-    await expect(draft()).toHaveCSS("font-size", "14px");
+    await expect(draft()).toHaveAttribute("data-single-emoji", "true");
+    await expect(draft()).toHaveCSS("font-size", "42px");
     await draft().fill("😀 🙏 👏 hello");
     await expect(draft()).not.toHaveAttribute("data-single-emoji", "true");
     await expect(draft()).toHaveCSS("font-size", "14px");

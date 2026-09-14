@@ -114,7 +114,10 @@ const plugins = createPluginManager(context, {
               useLayoutEffect(() => {
                 if (disabled)
                   disabledCalls.push({
-                    inputDisabled: document.querySelector("textarea")?.disabled,
+                    inputDisabled:
+                      document
+                        .querySelector('[role="textbox"]')
+                        ?.getAttribute("aria-disabled") === "true",
                     text: insertText("STALE"),
                     mention: insertMention({
                       pubkey: second.pubkey,

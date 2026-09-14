@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
@@ -18,8 +18,8 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
   });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await server.listen();
   try {
+    await server.listen();
     const address = server.httpServer.address();
     await page.goto(
       `http://127.0.0.1:${address.port}/tests/fixtures/messages.html`,
@@ -256,14 +256,14 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
     await expect.poll(() => history.evaluate((el) => el.scrollTop)).toBe(100);
     await draft.fill("keep first draft");
     await choose("Second root");
-    await expect(draft).toHaveValue("");
+    await expect(draft).toHaveJSProperty("value", "");
     await expect(
       panel.getByText("60 replies shown", { exact: true }),
     ).toBeVisible();
     await expect.poll(gap).toBeLessThan(2);
     await draft.fill("reject second reply");
     await draft.press("Enter");
-    await expect(draft).toHaveValue("");
+    await expect(draft).toHaveJSProperty("value", "");
     await expect(
       panel.getByText("Couldn’t send this message.", { exact: true }),
     ).toBeVisible({ timeout: 15_000 });
@@ -285,24 +285,24 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
     expect(delivery.publications).toHaveLength(2);
     expect(delivery.publications[0]).toEqual(delivery.publications[1]);
     await choose("First root");
-    await expect(draft).toHaveValue("keep first draft");
+    await expect(draft).toHaveJSProperty("value", "keep first draft");
     await page
       .getByRole("textbox", { name: "Message #one", exact: true })
       .fill("keep channel draft");
     await choose("Other channel root");
-    await expect(draft).toHaveValue("");
+    await expect(draft).toHaveJSProperty("value", "");
     await expect(
       page.getByRole("textbox", { name: "Message #two", exact: true }),
-    ).toHaveValue("");
+    ).toHaveJSProperty("value", "");
     await choose("First root");
-    await expect(draft).toHaveValue("keep first draft");
+    await expect(draft).toHaveJSProperty("value", "keep first draft");
     await expect(
       page.getByRole("textbox", { name: "Message #one", exact: true }),
-    ).toHaveValue("keep channel draft");
+    ).toHaveJSProperty("value", "keep channel draft");
     await choose("Switch scope");
-    await expect(draft).toHaveValue("");
+    await expect(draft).toHaveJSProperty("value", "");
     await choose("Switch scope");
-    await expect(draft).toHaveValue("keep first draft");
+    await expect(draft).toHaveJSProperty("value", "keep first draft");
     for (const [index, kind] of [9, 40002].entries()) {
       await page.evaluate((value) => window.messagesFixture.deep(value), kind);
       await expect(

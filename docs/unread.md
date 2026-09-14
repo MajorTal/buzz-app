@@ -141,8 +141,14 @@ message-history completeness, a CAS revision, or a global cryptographic communit
 identity. Absent discovery permits only bounded ordinary marker observation.
 
 Resource bounds: 4,096 snapshot events / 8 MiB encoded event array; envelope stream
-is capped before parsing at 8 MiB + 4 KiB; individual recognized read-state events
-are limited to 64 KiB and blobs to 10,000 keys. Unknown/undecryptable recognized
+is capped before parsing at 8 MiB + 4 KiB. Recognized read-state events can be up
+to 96 KiB **on receive**, accommodating older clients' original NIP-44 maximum
+plaintext (65,535 bytes → 87,472 base64 characters plus the signed envelope).
+The four-event decode batches fit the unchanged 512 KiB HTTP decode budget.
+New signing retains its stricter 40 KiB plaintext budget, and both signing and
+direct publication retain the 64 KiB event limit. The larger receive budget
+does not authorize republishing legacy records.
+Blobs remain capped at 10,000 keys. Unknown/undecryptable recognized
 coordinates fail marker loading rather than masquerading as empty state. Access
 revocation denies projections before any subscriber can inspect another one;
 durable account-owned intent survives without exposing revoked context projections.

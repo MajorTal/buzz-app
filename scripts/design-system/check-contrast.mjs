@@ -80,6 +80,8 @@ const TEXT_ROLES = [
   "--text-disabled",
   "--purple-12", // accent text: links, active nav, chip labels
   "--red-12", // error text: failed session start, rejected form
+  "--amber-12", // warning text in delivery notices and dialogs
+  "--green-12", // completion text in the foundation alignment proposal
 ];
 
 /**
@@ -98,6 +100,7 @@ const PAIRS = [
   // now that the roles are gone. Still measured as a pair, because the text
   // follows the fill: move the fill and this has to be re-measured.
   ["--neutral-1", "--neutral-11"],
+  ["--neutral-1", "--neutral-12"],
 ];
 
 /**
@@ -108,6 +111,8 @@ const PAIRS = [
  * cursor — and the hover is the harder one, which is where the gap was.
  */
 const TINT_PAIRS = [
+  ["--amber-12", "--amber-3"],
+  ["--green-12", "--green-3"],
   ["--purple-12", "--purple-3"],
   ["--purple-12", "--purple-4"],
 ];

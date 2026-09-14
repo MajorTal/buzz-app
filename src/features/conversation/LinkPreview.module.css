@@ -1,0 +1,71 @@
+.popup {
+  /* Content layout; the shared PreviewCard owns surface, border and elevation. */
+  --radius-control: var(--corner-control);
+  width: min(340px, calc(100vw - 24px));
+  max-width: calc(100vw - 24px);
+  max-height: min(320px, var(--available-height));
+  overflow: auto;
+  padding: var(--space-3);
+  gap: var(--space-2);
+  color: var(--text-primary);
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  letter-spacing: var(--text-body--letter-spacing);
+  font-weight: var(--text-body--font-weight);
+}
+.byline {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.metadata {
+  flex: 1;
+  min-width: 0;
+}
+.author {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-1);
+}
+.byline strong {
+  font-weight: var(--type-weight-semibold);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.byline time {
+  flex-shrink: 0;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
+  font-weight: var(--text-body-sm--font-weight);
+  color: var(--text-secondary);
+}
+.channel {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-top: calc(-1 * var(--space-half));
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
+  font-weight: var(--text-body-sm--font-weight);
+  color: var(--text-secondary);
+}
+.channel svg {
+  flex-shrink: 0;
+}
+.channel > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  overflow: hidden;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

@@ -38,6 +38,9 @@ semantic tokens, UI authoring rules and the local component reference.
 - `Settings.tsx` presents Profile, Plugins and Appearance as selectable sections in a left
   sidebar, opening on Profile. When the content area is narrow (including beside
   a companion panel), the section buttons form a compact row above the content.
+  Navigation and details scroll together inside the solid container at narrow
+  widths, so wrapped navigation cannot consume the detail pane's height. Wide
+  layouts keep independently scrolling navigation and details.
   Native buttons use normal Tab/Enter navigation and expose the current section.
   `ProfileSettings.tsx` edits the local default inline with Save and Cancel,
   sharing fields and validation with community setup. Cancel restores the saved

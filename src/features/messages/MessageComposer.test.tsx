@@ -1,398 +1,545 @@
-import { assert, afterEach, beforeEach, expect, it, vi } from "vitest";
-import { isValidElement, type ReactNode, type ReactElement } from "react";
-import { ComposerTools } from "../conversation/ComposerTools";
-import type { ConversationExtensions } from "../conversation/contracts";
-import { MessageComposer } from "./MessageComposer";
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import {
-  isEmojiOnly,
-  isUnicodeEmojiOnly,
-  singleCustomEmoji,
-  usesLargeEmojiPresentation,
-} from "./emoji-size";
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { useLayoutEffect } from "react";
+import type { Contribution } from "../../plugins/contributions";
+import type {
+  ComposerCompletion,
+  ComposerCompletionProps,
+  ComposerTool,
+  ComposerToolProps,
+  CompletionResult,
+  InlineRenderer,
+} from "../conversation/contracts";
+import { MessageComposer, type MessageComposerProps } from "./MessageComposer";
 import type { RelaySession } from "../relay/session";
-import type { CustomEmoji } from "../relay/emoji";
+import { emojiMatches, type CustomEmoji } from "../relay/emoji";
+import { CustomEmoji as CustomEmojiImage } from "../../bundled/emoji/CustomEmoji";
+import type { ComposerInputElement } from "./composer-dom";
 
-// Production handlers with a shallow hook harness; not DOM focus/layout evidence.
-const hooks = vi.hoisted(() => ({
-  states: [] as unknown[],
-  refs: [] as unknown[],
-  refIndex: 0,
-  index: 0,
-  id: 0,
-  effects: [] as (() => void)[],
-}));
-vi.mock("react", async (original) => ({
-  ...(await original<typeof import("react")>()),
-  useEffect: () => {},
-  useCallback: (callback: unknown) => callback,
-  useLayoutEffect: (effect: () => void) => hooks.effects.push(effect),
-  useId: () => `composer-${++hooks.id}`,
-  useRef: (initial: unknown) => {
-    const i = hooks.refIndex++;
-    if (!(i in hooks.refs))
-      hooks.refs[i] = {
-        current:
-          initial === null
-            ? {
-                focus: vi.fn(),
-                addEventListener: vi.fn(),
-                removeEventListener: vi.fn(),
-                ownerDocument: {
-                  addEventListener: vi.fn(),
-                  removeEventListener: vi.fn(),
-                  activeElement: null,
-                },
-                isConnected: true,
-                selectionStart: 0,
-                selectionEnd: 0,
-                setSelectionRange(start: number, end: number) {
-                  this.selectionStart = start;
-                  this.selectionEnd = end;
-                },
-              }
-            : initial,
-      };
-    return hooks.refs[i];
-  },
-  useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) =>
-    snapshot(),
-  useState(initial: unknown) {
-    const i = hooks.index++;
-    if (!(i in hooks.states))
-      hooks.states[i] = typeof initial === "function" ? initial() : initial;
-    return [
-      hooks.states[i],
-      (value: unknown) => {
-        hooks.states[i] = value;
-      },
-    ];
-  },
-}));
-function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
-  if (Array.isArray(node)) return node.flatMap(elements);
-  if (!isValidElement<Record<string, unknown>>(node)) return [];
-  return [node, ...elements(node.props.children as ReactNode)];
-}
-const storage = new Map<string, string>();
+const first = { pubkey: "a".repeat(64), name: "Honey" };
+const second = { pubkey: "b".repeat(64), name: "Honey" };
+
 beforeEach(() => {
-  hooks.states = [];
-  hooks.effects = [];
-  hooks.refs = [];
-  hooks.refIndex = 0;
-  hooks.index = hooks.id = 0;
-  storage.clear();
-  vi.stubGlobal("requestAnimationFrame", () => 0);
-  vi.stubGlobal("localStorage", {
-    getItem: (key: string) => storage.get(key) ?? null,
-    setItem: (key: string, value: string) => storage.set(key, value),
-  });
+  localStorage.clear();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  HTMLElement.prototype.scrollIntoView = vi.fn();
 });
-afterEach(() => vi.unstubAllGlobals());
-function mount(
-  threadRootId?: string,
-  scope = "scope",
-  writable = true,
-  emojiEntries: readonly CustomEmoji[] = [],
-) {
-  hooks.states = [];
-  hooks.effects = [];
-  hooks.refs = [];
-  hooks.refIndex = 0;
-  const messages = {
-    send: vi.fn(() => "channel-id"),
-    reply: vi.fn(() => "reply-id"),
+afterEach(() => {
+  cleanup();
+  vi.unstubAllGlobals();
+  delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+});
+
+function mount(options: Partial<MessageComposerProps> = {}) {
+  let commands: ComposerToolProps;
+  const completionRequests: ComposerCompletionProps["publish"][] = [];
+  function Completion({ publish }: ComposerCompletionProps) {
+    useLayoutEffect(() => {
+      completionRequests.push(publish);
+    }, [publish]);
+    return null;
+  }
+  const completionListeners = new Set<() => void>();
+  const completion = (revision: string): Contribution<ComposerCompletion> => ({
+    id: "delayed",
+    key: "test/delayed",
+    pluginId: "test",
+    revision,
+    title: "Delayed",
+    match: ({ text, start }) =>
+      text.startsWith("!") && start > 0
+        ? { start: 0, end: start, query: text.slice(1, start) }
+        : null,
+    component: Completion,
+  });
+  let completions: readonly Contribution<ComposerCompletion>[] = [
+    completion("1"),
+  ];
+  function Tool(props: ComposerToolProps) {
+    useLayoutEffect(() => {
+      commands = props;
+    });
+    return (
+      <>
+        <button type="button" onClick={() => props.insertMention(first)}>
+          First Honey
+        </button>
+        <button type="button" onClick={() => props.insertMention(second)}>
+          Second Honey
+        </button>
+      </>
+    );
+  }
+  const tools: readonly Contribution<ComposerTool>[] = [
+    {
+      id: "fixture",
+      key: "test/fixture",
+      pluginId: "test",
+      revision: "1",
+      title: "Fixture tools",
+      component: Tool,
+    },
+  ];
+  const emojiListeners = new Set<() => void>();
+  let emoji = {
+    status: "ready" as const,
+    entries: [] as readonly CustomEmoji[],
   };
-  const onSend = vi.fn();
+  const messages = {
+    send: vi.fn<RelaySession["messages"]["send"]>(() => "channel-id"),
+    reply: vi.fn<RelaySession["messages"]["reply"]>(() => "reply-id"),
+  };
+  const typing: ReturnType<RelaySession["typing"]["snapshot"]> = [];
+  const profiles = new Map();
   const session = {
     messages,
+    typing: { snapshot: () => typing, subscribe: () => () => {} },
+    profiles: { snapshot: () => profiles, subscribe: () => () => {} },
     emoji: {
-      snapshot: () => ({ status: "ready", entries: emojiEntries }),
-      subscribe: () => () => {},
-      ensure: () => Promise.resolve(),
-      refresh: () => Promise.resolve(),
+      snapshot: () => emoji,
+      subscribe(listener: () => void) {
+        emojiListeners.add(listener);
+        return () => {
+          emojiListeners.delete(listener);
+        };
+      },
+      ensure: vi.fn(() => Promise.resolve()),
+      refresh: vi.fn(() => Promise.resolve()),
     },
     media: (url: string) => url,
-    outbox: { supports: () => writable },
+    outbox: { supports: () => true },
   } as unknown as RelaySession;
-  const render = () => {
-    hooks.index = hooks.refIndex = 0;
-    const scoped = MessageComposer({
-      session,
-      extensions: {} as ConversationExtensions,
-      scope,
-      channelId: "channel",
-      channelName: "General",
-      onSend,
-      ...(threadRootId ? { threadRootId } : {}),
-    });
-    const tree = (
-      scoped.type as (
-        props: typeof scoped.props,
-      ) => ReactElement<Record<string, unknown>>
-    )(scoped.props);
-    const field = elements(tree).find((element) => element.type === "textarea");
-    if (field) {
-      const ref = field.props.ref as { current: HTMLTextAreaElement };
-      const length = (field.props.value as string).length;
-      ref.current.setSelectionRange(
-        Math.min(ref.current.selectionStart, length),
-        Math.min(ref.current.selectionEnd, length),
-      );
-    }
-    for (const effect of hooks.effects.splice(0)) effect();
-    return tree;
+  const onSend = vi.fn();
+  const inline: readonly Contribution<InlineRenderer>[] = [
+    {
+      id: "emoji",
+      key: "test/emoji",
+      pluginId: "test",
+      revision: "1",
+      title: "Emoji",
+      matches: ({ text, message }) => [
+        ...emojiMatches(text, message.emoji ?? []),
+      ],
+      component: ({ text, content, media }) => {
+        const entry = content.message.emoji?.find(
+          (entry) => `:${entry.shortcode}:` === text.toLowerCase(),
+        );
+        return entry ? <CustomEmojiImage emoji={entry} media={media} /> : text;
+      },
+    },
+  ];
+  let props: MessageComposerProps = {
+    session,
+    onSend,
+    scope: "scope",
+    channelId: "channel",
+    channelName: "General",
+    extensions: {
+      tools: { snapshot: () => tools, subscribe: () => () => {} },
+      inline: { snapshot: () => inline, subscribe: () => () => {} },
+      completions: {
+        snapshot: () => completions,
+        subscribe(listener) {
+          completionListeners.add(listener);
+          return () => completionListeners.delete(listener);
+        },
+      },
+    },
+    ...options,
   };
-  const input = () => {
-    const field = elements(render()).find((e) => e.type === "textarea");
-    if (!field) throw new Error("No composer input");
-    return field;
-  };
+  const view = render(<MessageComposer {...props} />, {
+    reactStrictMode: true,
+  });
+  const input = () =>
+    within(view.container).getByRole<ComposerInputElement>("textbox");
   return {
-    render,
+    ...view,
     input,
     messages,
     onSend,
-    type(text: string) {
-      const field = input();
-      (field.props.onInput as (e: unknown) => void)({
-        currentTarget: { value: text },
+    session,
+    emojiListeners,
+    user: userEvent.setup(),
+    commands: () => commands,
+    completionRequests,
+    publish(index: number, text = "chosen") {
+      const request = completionRequests[index];
+      if (!request) throw new Error("No observed completion request");
+      const result: CompletionResult = {
+        items: [{ id: text, label: text, edit: { text } }],
+      };
+      let published: ReturnType<ComposerCompletionProps["publish"]> = false;
+      act(() => {
+        published = request(result);
       });
-      const ref = field.props.ref as { current: HTMLTextAreaElement };
-      ref.current.setSelectionRange(text.length, text.length);
+      return published;
+    },
+    replaceCompletionProvider() {
+      act(() => {
+        completions = [completion("2")];
+        for (const listener of completionListeners) listener();
+      });
+    },
+    retarget(next: Partial<MessageComposerProps>) {
+      props = { ...props, ...next };
+      view.rerender(<MessageComposer {...props} />);
+    },
+    setEmoji(entries: readonly CustomEmoji[]) {
+      act(() => {
+        emoji = { status: "ready", entries };
+        for (const listener of emojiListeners) listener();
+      });
+    },
+    fill(text: string) {
+      const field = input();
+      act(() => field.focus());
+      field.value = text;
+      field.setSelectionRange(text.length, text.length);
+      fireEvent.input(field);
     },
     submit() {
-      (render().props.onSubmit as (e: unknown) => void)({
-        preventDefault() {},
-      });
-    },
-    key(shiftKey = false, isComposing = false) {
-      const preventDefault = vi.fn();
-      (input().props.onKeyDown as (e: unknown) => void)({
-        key: "Enter",
-        shiftKey,
-        nativeEvent: { isComposing },
-        preventDefault,
-      });
-      return preventDefault;
+      fireEvent.submit(within(view.container).getByRole("form"));
     },
   };
 }
-it("reuses the editor for channel sends and thread replies, preserving keyboard behavior", () => {
-  const channel = mount();
-  channel.type("channel draft");
-  channel.submit();
-  expect(channel.messages.send).toHaveBeenCalledExactlyOnceWith(
+
+it("revokes stale completion publications across editor and ownership lifecycles and recovers freshly", () => {
+  const h = mount();
+  const input = h.input();
+  input.focus();
+  h.fill("!a");
+  const edit = h.completionRequests.length - 1;
+  h.fill("!b");
+  h.fill("!a");
+  expect(h.publish(edit, "stale ABA")).toBe(false);
+  const afterAba = h.completionRequests.length - 1;
+  expect(h.publish(afterAba)).not.toBe(false);
+  expect(screen.getByRole("option", { name: "chosen" })).toBeVisible();
+
+  fireEvent.keyDown(input, { key: "Escape" });
+  expect(h.publish(afterAba, "stale dismissal")).toBe(false);
+  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
+
+  h.fill("!provider");
+  const oldProvider = h.completionRequests.length - 1;
+  h.replaceCompletionProvider();
+  expect(h.publish(oldProvider, "stale provider")).toBe(false);
+  const replacement = h.completionRequests.length - 1;
+  expect(h.publish(replacement, "replacement fresh")).not.toBe(false);
+  expect(
+    screen.getByRole("option", { name: "replacement fresh" }),
+  ).toBeVisible();
+
+  h.fill("!destination");
+  const oldDestination = h.completionRequests.length - 1;
+  h.retarget({ threadRootId: "root" });
+  expect(h.input()).toHaveValue("");
+  expect(h.publish(oldDestination, "stale destination")).toBe(false);
+  h.input().focus();
+  h.fill("!fresh");
+  const fresh = h.completionRequests.length - 1;
+  expect(h.publish(fresh, "fresh recovery")).not.toBe(false);
+  expect(screen.getByRole("option", { name: "fresh recovery" })).toBeVisible();
+
+  h.unmount();
+  expect(h.publish(fresh, "stale unmount")).toBe(false);
+});
+
+it.each(["disabled", "readOnly"] as const)(
+  "rejects late and displayed completion results when the editor becomes %s",
+  (state) => {
+    const h = mount();
+    const input = h.input();
+    input.focus();
+    h.fill("!late");
+    const late = h.completionRequests.length - 1;
+    if (state === "disabled") {
+      h.retarget({ disabled: true });
+      expect(input).toHaveAttribute("aria-disabled", "true");
+      expect(input).toHaveAttribute("contenteditable", "false");
+    } else input.readOnly = true;
+    expect(h.publish(late, "late result")).toBe(false);
+
+    if (state === "disabled") h.retarget({ disabled: false });
+    else input.readOnly = false;
+    expect(h.input().disabled).toBe(false);
+    expect(h.input().readOnly).toBe(false);
+    h.input().focus();
+    h.fill("!displayed");
+    const displayed = h.completionRequests.length - 1;
+    expect(h.publish(displayed, "displayed choice")).not.toBe(false);
+    expect(
+      screen.getByRole("option", { name: "displayed choice" }),
+    ).toBeVisible();
+    if (state === "disabled") h.retarget({ disabled: true });
+    else h.input().readOnly = true;
+    fireEvent.keyDown(h.input(), { key: "Enter" });
+    expect(h.input()).toHaveValue("!displayed");
+    expect(h.messages.send).not.toHaveBeenCalled();
+  },
+);
+
+it("sends channel messages and thread replies through real form and keyboard events", async () => {
+  const h = mount();
+  await h.user.type(h.input(), "channel draft");
+  await h.user.click(screen.getByRole("button", { name: "Send message" }));
+  expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
     "channel",
     "channel draft",
     [],
   );
-  expect(channel.messages.reply).not.toHaveBeenCalled();
-  const thread = mount("root");
-  thread.type("thread draft");
-  expect(thread.key(true)).not.toHaveBeenCalled();
-  expect(thread.key(false, true)).not.toHaveBeenCalled();
-  expect(thread.messages.reply).not.toHaveBeenCalled();
-  expect(thread.key()).toHaveBeenCalledTimes(1);
-  expect(thread.messages.reply).toHaveBeenCalledExactlyOnceWith(
+  expect(h.messages.reply).not.toHaveBeenCalled();
+  h.retarget({ threadRootId: "root" });
+  await h.user.type(h.input(), "thread draft");
+  await h.user.keyboard("{Shift>}{Enter}{/Shift}");
+  expect(h.input()).toHaveValue("thread draft\n");
+  // This checks the composition guard, not native IME behavior.
+  fireEvent.keyDown(h.input(), { key: "Enter", isComposing: true });
+  expect(h.messages.reply).not.toHaveBeenCalled();
+  await h.user.keyboard("{Enter}");
+  expect(h.messages.reply).toHaveBeenCalledExactlyOnceWith(
     "channel",
     "root",
-    "thread draft",
+    "thread draft\n",
     [],
   );
-  expect(thread.messages.send).not.toHaveBeenCalled();
-  expect(thread.onSend).toHaveBeenCalledExactlyOnceWith("reply-id");
-  expect(thread.input().props.value).toBe("");
+  expect(h.messages.send).toHaveBeenCalledTimes(1);
+  expect(h.onSend.mock.calls).toEqual([["channel-id"], ["reply-id"]]);
+  expect(h.input()).toHaveValue("");
 });
-it("keeps channel, separate thread and identity drafts isolated across remounts", () => {
-  mount().type("channel draft");
-  mount("one").type("first thread");
-  mount("two").type("second thread");
-  mount("one", "other identity").type("other identity");
-  expect(mount().input().props.value).toBe("channel draft");
-  expect(mount("one").input().props.value).toBe("first thread");
-  expect(mount("two").input().props.value).toBe("second thread");
-  expect(mount("one", "other identity").input().props.value).toBe(
-    "other identity",
-  );
+
+it("isolates channel, thread and identity drafts through retargeting and remounting", () => {
+  const h = mount();
+  h.fill("channel draft");
+  h.retarget({ threadRootId: "one" });
+  expect(h.input()).toHaveValue("");
+  h.fill("first thread");
+  h.retarget({ threadRootId: "two" });
+  h.fill("second thread");
+  h.retarget({ threadRootId: "one", scope: "other identity" });
+  expect(h.input()).toHaveValue("");
+  h.fill("other identity");
+  h.retarget({ threadRootId: "one", scope: "scope" });
+  expect(h.input()).toHaveValue("first thread");
+  h.retarget({ threadRootId: "two" });
+  expect(h.input()).toHaveValue("second thread");
+  h.unmount();
+  const restored = mount();
+  expect(restored.input()).toHaveValue("channel draft");
+  restored.retarget({ threadRootId: "one", scope: "other identity" });
+  expect(restored.input()).toHaveValue("other identity");
 });
-it("keeps the draft on synchronous rejection and clears only after the outbox accepts intent", () => {
-  const h = mount("root");
-  h.type("retry me");
+
+it("retains rejected intent and clears the draft only after the outbox accepts it", async () => {
+  const h = mount({ threadRootId: "root" });
+  h.fill("retry me");
   h.messages.reply.mockImplementationOnce(() => {
     throw new Error("outbox full");
   });
-  h.submit();
-  expect(h.input().props.value).toBe("retry me");
+  await h.user.click(screen.getByRole("button", { name: "Send message" }));
+  expect(h.input()).toHaveValue("retry me");
   expect(h.onSend).not.toHaveBeenCalled();
-  expect(
-    elements(h.render()).some(
-      (e) => e.props.role === "alert" && e.props.children === "outbox full",
-    ),
-  ).toBe(true);
-  h.submit();
-  expect(h.input().props.value).toBe("");
+  expect(screen.getByRole("alert")).toHaveTextContent("outbox full");
+  await h.user.click(screen.getByRole("button", { name: "Send message" }));
+  expect(h.messages.reply).toHaveBeenCalledTimes(2);
+  expect(h.input()).toHaveValue("");
+  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
 });
-it("gives the channel and thread separate input/label identities, and gates unsupported writes", () => {
-  const channel = mount().render(),
-    thread = mount("root").render();
-  const channelInput = elements(channel).find((e) => e.type === "textarea");
-  const threadInput = elements(thread).find((e) => e.type === "textarea");
-  expect(threadInput?.props.id).not.toBe(channelInput?.props.id);
-  expect(threadInput?.props.placeholder).toBe("Reply to thread");
-  expect(elements(thread).find((e) => e.type === "label")?.props.htmlFor).toBe(
-    threadInput?.props.id,
+
+it("labels simultaneous composers independently and prevents disabled or unsupported writes", async () => {
+  const channel = mount();
+  const thread = mount({ threadRootId: "root" });
+  expect(screen.getByLabelText("Message #General")).toBe(channel.input());
+  expect(screen.getByRole("textbox", { name: "Reply to thread" })).toBe(
+    thread.input(),
   );
+  expect(thread.input().id).not.toBe(channel.input().id);
+  thread.fill("retain me");
+  thread.retarget({ disabled: true });
+  expect(thread.input()).toHaveAttribute("aria-disabled", "true");
+  expect(thread.input()).toHaveAttribute("contenteditable", "false");
+  await thread.user.click(
+    within(thread.container).getByRole("button", { name: "Send message" }),
+  );
+  expect(thread.messages.reply).not.toHaveBeenCalled();
+  expect(thread.input()).toHaveValue("retain me");
+  thread.retarget({
+    session: {
+      ...thread.session,
+      outbox: { supports: () => false },
+    } as unknown as RelaySession,
+  });
   expect(
-    elements(mount("root", "scope", false).render()).some(
-      (e) => e.type === "textarea",
+    within(thread.container).queryByRole("textbox"),
+  ).not.toBeInTheDocument();
+  expect(
+    within(thread.container).getByText(
+      "This relay connection supports reading only.",
     ),
-  ).toBe(false);
+  ).toBeVisible();
+});
+
+it("subscribes to emoji changes and releases the subscription when unmounted", () => {
+  const h = mount();
+  h.fill(":party:");
+  expect(h.input().querySelectorAll("img")).toHaveLength(0);
+  expect(h.emojiListeners.size).toBe(1);
+  expect(h.session.emoji.ensure).toHaveBeenCalled();
+  h.setEmoji([{ shortcode: "party", url: "https://emoji.test/party.png" }]);
+  expect(h.input().querySelectorAll("img")).toHaveLength(1);
+  h.setEmoji([]);
+  expect(h.input().querySelectorAll("img")).toHaveLength(0);
+  h.unmount();
+  expect(h.emojiListeners.size).toBe(0);
 });
 
 it("enlarges Unicode-only drafts and restores normal text presentation", () => {
-  for (const emoji of ["😀", " 👋🏽 ", "👨‍👩‍👧‍👦", "🇬🇧", "1️⃣"])
-    expect(isUnicodeEmojiOnly(emoji)).toBe(true);
-  for (const other of ["", "1", ":party:", "😀a", "😀 hello"])
-    expect(isUnicodeEmojiOnly(other)).toBe(false);
-
   const h = mount();
-  h.type("😀");
-  expect(h.input().props["data-single-emoji"]).toBe(true);
-  h.type("😀 hello");
-  expect(h.input().props["data-single-emoji"]).toBeUndefined();
-  h.type("😀 🙏 👏");
-  expect(h.input().props["data-single-emoji"]).toBe(true);
-  h.type("😀 🙏 👏 😄");
-  expect(h.input().props["data-single-emoji"]).toBeUndefined();
-  h.type("😀 🙏 hello");
-  expect(h.input().props["data-single-emoji"]).toBeUndefined();
-});
-
-it("recognizes an exact custom emoji draft without treating shortcode prose as emoji", () => {
-  const party = { shortcode: "party", url: "https://example.test/party.png" };
-  expect(singleCustomEmoji(":PARTY: ", [party])).toBe(party);
-  expect(singleCustomEmoji("hello :party:", [party])).toBeUndefined();
-  expect(singleCustomEmoji(":missing:", [party])).toBeUndefined();
-  expect(isEmojiOnly(":party: 😀 :PARTY:", [party])).toBe(true);
-  expect(isEmojiOnly(":party: hello", [party])).toBe(false);
-  expect(usesLargeEmojiPresentation(":party: 😀 :PARTY:", [party])).toBe(true);
-  expect(
-    usesLargeEmojiPresentation(":party: 😀 :PARTY: :party:", [party]),
-  ).toBe(false);
+  for (const draft of ["😀", "😀 🙏 👏", "😀 🙏 👏 😄"]) {
+    h.fill(draft);
+    expect(h.input()).toHaveAttribute("data-single-emoji", "true");
+    h.fill(`${draft} hello`);
+    expect(h.input()).not.toHaveAttribute("data-single-emoji");
+  }
 });
 
 it.each([undefined, "root"])(
-  "carries exact namesake selection into %s, restores it, and never resolves typed names",
-  (root) => {
-    const first = { pubkey: "a".repeat(64), name: "Honey" };
-    const second = { pubkey: "b".repeat(64), name: "Honey" };
-    let h = mount(root);
-    h.type("@Honey prose only");
+  "persists exact namesake recipients for %s without resolving typed prose",
+  async (root) => {
+    const options = root ? { threadRootId: root } : {};
+    let h = mount(options);
+    h.fill("@Honey prose only");
     h.submit();
     expect(
       (root ? h.messages.reply : h.messages.send).mock.calls[0]?.at(-1),
     ).toEqual([]);
-    h.type("Please help ");
-    for (const recipient of [first, second]) {
-      const picker = elements(h.render()).find((e) => e.type === ComposerTools);
-      assert.exists(picker);
-      (picker.props.insertMention as (value: unknown) => void)(recipient);
-    }
-    h = mount(root);
+    h.fill("Please help ");
+    await h.user.click(screen.getByRole("button", { name: "First Honey" }));
+    await h.user.click(screen.getByRole("button", { name: "Second Honey" }));
+    h.unmount();
+    h = mount(options);
     expect(
-      elements(h.render()).filter((e) => e.props.title === second.pubkey),
-    ).toHaveLength(1);
+      screen.getByRole("button", {
+        name: `Remove mention Honey ${second.pubkey}`,
+      }),
+    ).toBeVisible();
     h.submit();
     expect(
       (root ? h.messages.reply : h.messages.send).mock.calls[0]?.at(-1),
     ).toEqual([first.pubkey, second.pubkey]);
-    expect(h.input().props.value).toBe("");
-    h = mount(root);
-    h.type("@Honey typed after send");
+    expect(h.input()).toHaveValue("");
+    h.unmount();
+    h = mount(options);
+    h.fill("@Honey typed after send");
     h.submit();
     expect(
       (root ? h.messages.reply : h.messages.send).mock.calls[0]?.at(-1),
     ).toEqual([]);
   },
 );
-it("deleting a mention or removing its chip removes notification intent", () => {
+
+it("deleting a mention or removing its chip removes notification intent", async () => {
   const h = mount();
-  const choose = () => {
-    const picker = elements(h.render()).find((e) => e.type === ComposerTools);
-    assert.exists(picker);
-    (picker.props.insertMention as (v: unknown) => void)({
-      pubkey: "a".repeat(64),
-      name: "Honey",
-    });
-  };
-  choose();
-  h.type("no recipient now");
+  await h.user.click(screen.getByRole("button", { name: "First Honey" }));
+  h.fill("no recipient now");
   h.submit();
   expect(h.messages.send.mock.calls[0]?.at(-1)).toEqual([]);
-  choose();
-  const remove = elements(h.render()).find(
-    (e) => e.props.title === "a".repeat(64),
+  await h.user.click(screen.getByRole("button", { name: "First Honey" }));
+  await h.user.click(
+    screen.getByRole("button", {
+      name: `Remove mention Honey ${first.pubkey}`,
+    }),
   );
-  assert.exists(remove);
-  (remove.props.onClick as () => void)();
   h.submit();
   expect(h.messages.send.mock.calls[1]?.at(-1)).toEqual([]);
 });
 
-it("ambiguous namesake deletion cannot notify the wrong remaining identity", () => {
+it("ambiguous namesake replacement cannot notify the wrong remaining identity", async () => {
   const h = mount();
-  for (const key of ["a", "b"]) {
-    const picker = elements(h.render()).find((e) => e.type === ComposerTools);
-    assert.exists(picker);
-    (picker.props.insertMention as (v: unknown) => void)({
-      pubkey: key.repeat(64),
-      name: "Honey",
-    });
-  }
-  h.type("@Honey help");
+  await h.user.click(screen.getByRole("button", { name: "First Honey" }));
+  await h.user.click(screen.getByRole("button", { name: "Second Honey" }));
+  h.fill("@Honey help");
   h.submit();
   expect(h.messages.send.mock.calls[0]?.at(-1)).toEqual([]);
 });
 
-it("serializes text and mention commands in one turn and rejects malformed recipients", () => {
+it("serializes tool commands in one React batch and rejects malformed recipients", () => {
   const h = mount();
-  h.type("Hi ");
-  const tools = elements(h.render()).find((e) => e.type === ComposerTools);
-  assert.exists(tools);
-  const insertText = tools.props.insertText as (text: string) => boolean;
-  const insertMention = tools.props.insertMention as (
-    recipient: unknown,
-  ) => boolean;
-  expect(insertText("there ")).toBe(true);
-  expect(insertMention({ pubkey: "a".repeat(64), name: "Honey" })).toBe(true);
-  expect(insertText("and ")).toBe(true);
-  expect(insertMention({ pubkey: "b".repeat(64), name: "Honey" })).toBe(true);
-  expect(insertMention({ pubkey: "wrong", name: "Honey" })).toBe(false);
-  expect(insertMention({ pubkey: "a".repeat(64), name: "  " })).toBe(false);
-  expect(insertMention(null)).toBe(false);
+  h.fill("Hi ");
+  act(() => {
+    const { insertText, insertMention } = h.commands();
+    expect(insertText("there ")).toBe(true);
+    expect(insertMention(first)).toBe(true);
+    expect(insertText("and ")).toBe(true);
+    expect(insertMention(second)).toBe(true);
+    expect(insertMention({ pubkey: "wrong", name: "Honey" })).toBe(false);
+    expect(insertMention({ ...first, name: "  " })).toBe(false);
+    expect(insertMention(null as unknown as typeof first)).toBe(false);
+  });
   h.submit();
   expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
     "channel",
     "Hi there @Honey and @Honey ",
-    ["a".repeat(64), "b".repeat(64)],
+    [first.pubkey, second.pubkey],
   );
 });
 
-it("keeps custom emoji shortcode text readable in the draft and sends it unchanged", () => {
-  const h = mount(undefined, "scope", true, [
-    { shortcode: "party", url: "https://emoji.test/party.png" },
-  ]);
-  const tools = elements(h.render()).find((e) => e.type === ComposerTools);
-  assert.exists(tools);
-  const insertText = tools.props.insertText as (text: string) => boolean;
-  expect(insertText(":party:")).toBe(true);
-  expect(h.input().props.value).toBe(":party:");
-  expect(h.input().props["data-custom-emoji-only"]).toBe(true);
-  expect(insertText(":party:")).toBe(true);
-  expect(h.input().props.value).toBe(":party::party:");
-  expect(
-    elements(h.render()).filter((element) => element.type === "img"),
-  ).toHaveLength(2);
+it("revokes captured tool commands after retargeting, disabling and unmounting", () => {
+  const h = mount();
+  h.fill("channel draft");
+  const channel = h.commands();
+  h.retarget({ threadRootId: "root" });
+  act(() => {
+    expect(channel.insertText("stale")).toBe(false);
+    expect(channel.insertMention(first)).toBe(false);
+  });
+  expect(h.input()).toHaveValue("");
+  const thread = h.commands();
+  h.retarget({ disabled: true });
+  act(() => {
+    expect(thread.insertText("disabled")).toBe(false);
+  });
+  h.retarget({ disabled: false });
+  act(() => {
+    expect(h.commands().insertText("current")).toBe(true);
+  });
+  expect(h.input()).toHaveValue("current");
+  const current = h.commands();
+  h.unmount();
+  act(() => {
+    expect(current.insertText("unmounted")).toBe(false);
+  });
+});
+
+it("keeps custom emoji text readable and sends repeated shortcodes unchanged", () => {
+  const h = mount();
+  h.setEmoji([{ shortcode: "party", url: "https://emoji.test/party.png" }]);
+  act(() => {
+    expect(h.commands().insertText(":party:")).toBe(true);
+  });
+  expect(h.input()).toHaveValue(":party:");
+  expect(h.input()).toHaveAttribute("data-single-emoji", "true");
+  act(() => {
+    expect(h.commands().insertText(":party:")).toBe(true);
+  });
+  expect(h.input()).toHaveValue(":party::party:");
+  expect(h.container.querySelectorAll("img")).toHaveLength(2);
   h.submit();
   expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
     "channel",
@@ -401,16 +548,13 @@ it("keeps custom emoji shortcode text readable in the draft and sends it unchang
   );
 });
 
-it("renders a leading custom emoji inline when text follows it", () => {
-  const h = mount(undefined, "scope", true, [
-    { shortcode: "bufo", url: "https://emoji.test/bufo.png" },
-  ]);
-  h.type(":bufo:lakjsdlkjflakjsdf");
-  expect(h.input().props["data-custom-emoji-only"]).toBeUndefined();
-  expect(h.input().props["data-leading-custom-emoji"]).toBe(true);
-  expect(
-    elements(h.render()).filter((element) => element.type === "img"),
-  ).toHaveLength(1);
+it("renders a leading custom emoji inline without changing trailing text", () => {
+  const h = mount();
+  h.setEmoji([{ shortcode: "bufo", url: "https://emoji.test/bufo.png" }]);
+  h.fill(":bufo:lakjsdlkjflakjsdf");
+  expect(h.input()).not.toHaveAttribute("data-single-emoji");
+  expect(h.input()).toHaveValue(":bufo:lakjsdlkjflakjsdf");
+  expect(h.container.querySelectorAll("img")).toHaveLength(1);
   h.submit();
   expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
     "channel",
@@ -419,27 +563,23 @@ it("renders a leading custom emoji inline when text follows it", () => {
   );
 });
 
-it("rejects overlong or over-limit edits without changing the draft", () => {
+it("rejects overlong and over-limit tool edits without changing accepted intent", () => {
   const h = mount();
-  h.type("x".repeat(15999));
-  const tools = () => {
-    const tool = elements(h.render()).find((e) => e.type === ComposerTools);
-    assert.exists(tool);
-    return tool;
-  };
-  const recipient = { pubkey: "a".repeat(64), name: "Honey" };
-  expect(
-    (tools().props.insertMention as (r: unknown) => boolean)(recipient),
-  ).toBe(false);
-  expect(h.input().props.value).toBe("x".repeat(15999));
-  h.type("");
-  for (let i = 0; i < 32; i++)
-    expect(
-      (tools().props.insertMention as (r: unknown) => boolean)(recipient),
-    ).toBe(true);
-  const before = h.input().props.value;
-  expect(
-    (tools().props.insertMention as (r: unknown) => boolean)(recipient),
-  ).toBe(false);
-  expect(h.input().props.value).toBe(before);
+  h.fill("x".repeat(15999));
+  act(() => {
+    expect(h.commands().insertMention(first)).toBe(false);
+  });
+  expect(h.input()).toHaveValue("x".repeat(15999));
+  expect(screen.getByRole("alert")).toHaveTextContent("too long");
+  h.fill("");
+  act(() => {
+    for (let i = 0; i < 32; i++)
+      expect(h.commands().insertMention(first)).toBe(true);
+  });
+  const before = h.input().value;
+  act(() => {
+    expect(h.commands().insertMention(first)).toBe(false);
+  });
+  expect(h.input()).toHaveValue(before);
+  expect(screen.getByRole("alert")).toHaveTextContent("at most 32 recipients");
 });

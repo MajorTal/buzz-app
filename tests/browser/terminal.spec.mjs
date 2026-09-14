@@ -29,7 +29,7 @@ test("web hides the unusable terminal and does not consume its shortcut, includi
   await page.keyboard.press(`${modifier}+j`);
   expect(await page.evaluate(() => window.terminalChordPrevented)).toBe(false);
   await expect(drawer).toHaveCount(0);
-  await expect(composer).toHaveValue("Keep this draft");
+  await expect(composer).toHaveJSProperty("value", "Keep this draft");
   await button(page, "Beta").click();
   await expect(launcher).toHaveCount(0);
   await page.keyboard.press(`${modifier}+,`);

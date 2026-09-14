@@ -12,6 +12,8 @@ import { geometryFor, geometrySignature } from "./geometry";
 import { readView, writeView } from "../../shared/view-state";
 import styles from "./Messages.module.css";
 import { useReading } from "./use-reading";
+import { useMessageReveal } from "./use-message-reveal";
+import type { PageNavigation } from "../navigation/service";
 import { messageViewKey } from "./view-key";
 import { useKnownAgentPubkeys } from "../agents/use-known";
 
@@ -73,7 +75,8 @@ export type ChannelTimelineProps = {
   onOpenLink(url: string): boolean;
   canOpenLink?: ((target: string) => boolean) | undefined;
   revealMessageId?: string | undefined;
-  onOpenThread?(messageId: string): void;
+  navigation?: PageNavigation | undefined;
+  onOpenThread?(messageId: string, threadRootId: string): void;
 };
 
 /** Safe to retarget through ordinary props; callers do not own internal remount keys. */
@@ -95,6 +98,7 @@ function Timeline({
   onOpenLink,
   canOpenLink,
   revealMessageId,
+  navigation,
   onOpenThread,
 }: ChannelTimelineProps) {
   const [initialPosition] = useState(() =>
@@ -110,6 +114,8 @@ function Timeline({
     () => geometrySignature(window.rows, profiles),
     [window.rows, profiles],
   );
+  const [focusedMessageId, setFocusedMessageId] = useState<string>();
+  const focusedIndex = rows.findIndex((row) => row.id === focusedMessageId);
   const scroller = useRef<HTMLElement>(null);
   const handle = useRef<VirtualizerHandle>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
@@ -169,6 +175,31 @@ function Timeline({
     },
     [rows],
   );
+  const targetId =
+    navigation?.target.kind === "conversation"
+      ? navigation.target.messageId
+      : undefined;
+  const targetIndex = rows.findIndex((row) => row.id === targetId);
+  const prepareTarget = useCallback(() => {
+    if (!handle.current) return;
+    intent.current++;
+    follow.current = false;
+    restoredAnchor.current = undefined;
+    settled.current = false;
+    handle.current.scrollToIndex(targetIndex, { align: "center" });
+  }, [targetIndex]);
+  const completeTarget = useCallback(() => {
+    navigation?.complete({ status: "opened" });
+  }, [navigation]);
+  const exactRevealed = useMessageReveal({
+    scroller,
+    settled,
+    messageId: targetId,
+    signal: navigation?.signal,
+    ready: !!size.width && !!size.height && targetIndex >= 0,
+    prepare: prepareTarget,
+    complete: completeTarget,
+  });
   useReading({ session: queries, channelId, scroller, settled });
   const prepend =
     !!edges.current.first &&
@@ -218,6 +249,7 @@ function Timeline({
     // Above-bottom reading and prepend anchoring remain Virtua's responsibility.
     edges.current = { first: rows[0]?.id, last: rows.at(-1)?.id };
     if (
+      (targetId && navigation && exactRevealed.current !== navigation.signal) ||
       !size.width ||
       !size.height ||
       !rows.length ||
@@ -292,7 +324,15 @@ function Timeline({
       cancelAnimationFrame(frame);
       observer?.disconnect();
     };
-  }, [rows, size, prepend, recordPosition]);
+  }, [
+    rows,
+    size,
+    prepend,
+    recordPosition,
+    targetId,
+    navigation,
+    exactRevealed,
+  ]);
   const revealed = useRef<string | undefined>(undefined);
   useLayoutEffect(() => {
     if (!width || !revealMessageId || revealed.current === revealMessageId)
@@ -370,6 +410,16 @@ function Timeline({
       onTouchMove={gesture}
       onKeyDown={gesture}
       onPointerDown={gesture}
+      onFocus={(event) => {
+        setFocusedMessageId(
+          event.target.closest<HTMLElement>("[data-message-id]")?.dataset
+            .messageId,
+        );
+      }}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget))
+          setFocusedMessageId(undefined);
+      }}
       tabIndex={0}
       aria-label="Channel message history"
       onScroll={(event) => {
@@ -412,6 +462,8 @@ function Timeline({
           scrollRef={scroller}
           shift={prepend}
           bufferSize={1600}
+          // Reflow must not evict the focused control and drop keyboard focus.
+          keepMounted={focusedIndex < 0 ? [] : [focusedIndex]}
           as="ol"
           item="li"
           startMargin={EDGE_HEIGHT}
@@ -436,6 +488,8 @@ function Timeline({
               />
             ) : (
               <MessageRow
+                session={queries}
+                scope={scope}
                 key={row.id}
                 row={row}
                 unread={queries.unread}

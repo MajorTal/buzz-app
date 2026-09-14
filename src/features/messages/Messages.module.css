@@ -12,34 +12,12 @@
   border-radius: var(--radius-card);
   box-shadow: var(--elevation-card);
 }
-.heading {
-  min-height: 58px;
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.heading button {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  border: 0;
-  background: var(--surface-control);
-  padding: 7px 9px;
-  font-size: calc(12px * var(--buzz-text-scale, 1));
-}
-.heading button[aria-pressed="true"] {
-  background: var(--selected);
-  color: var(--on-selected);
-}
 .feed {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
   overflow-anchor: none;
-  padding: 0 16px;
+  padding: 0 var(--space-panel-inset);
   scrollbar-width: thin;
 }
 .feed ol {
@@ -53,14 +31,18 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(11px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
   color: var(--text-muted);
-  gap: 8px;
+  gap: var(--space-2);
 }
 .edge button {
   border: 0;
-  padding: 5px 10px;
-  font-size: calc(11px * var(--buzz-text-scale, 1));
+  padding: var(--space-1) var(--space-2);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
   color: var(--text-muted);
   background: var(--surface-control);
 }
@@ -69,8 +51,10 @@
   align-items: center;
   gap: 0;
   color: var(--text);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
-  margin: 10px 0 30px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
+  margin: var(--space-2) 0 var(--space-8);
 }
 .day::before,
 .day::after {
@@ -81,8 +65,8 @@
 }
 .message {
   display: flex;
-  gap: 12px;
-  padding: 8px 0 24px;
+  gap: var(--space-4);
+  padding: var(--space-2) 0 var(--space-section-gap);
 }
 .avatarButton {
   flex-shrink: 0;
@@ -102,7 +86,9 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   color: var(--text-muted);
   display: grid;
   place-items: center;
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
   overflow: hidden;
 }
 .avatar img {
@@ -118,47 +104,51 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 8px;
-  font-size: calc(14px * var(--buzz-text-scale, 1));
-  line-height: calc(20px * var(--buzz-text-scale, 1));
+  gap: var(--space-2);
+  font-size: var(--text-label-sm);
+  line-height: var(--text-label-sm--line-height);
+  letter-spacing: var(--text-label-sm--letter-spacing);
 }
 .byline time {
   color: var(--text-muted);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .text {
-  margin: 4px 0 0;
-  font-size: calc(15px * var(--buzz-text-scale, 1));
-  line-height: 1.5;
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
   white-space: normal;
   overflow-wrap: anywhere;
 }
 .text[data-single-emoji] {
-  --inline-emoji-size: calc(42px * var(--buzz-text-scale, 1));
-  display: flex;
-  align-items: flex-start;
-  min-height: calc(48px * var(--buzz-text-scale, 1));
-  margin-top: 4px;
-  font-size: calc(42px * var(--buzz-text-scale, 1));
-  line-height: calc(42px * var(--buzz-text-scale, 1));
+  --inline-emoji-size: var(--size-emoji-display);
+  min-height: var(--size-emoji-line);
+  margin-top: var(--space-1);
+  font-size: var(--size-emoji-display);
+  line-height: var(--size-emoji-display);
 }
-.text a {
+.text a:not([data-link-renderer]) {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.text a:hover {
+.text a:not([data-link-renderer]):hover {
   text-decoration: underline;
 }
 .reactions {
   display: flex;
-  gap: 4px;
-  margin-top: 6px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-1);
+  margin-top: var(--space-1h);
 }
 .reactions > span {
   background: var(--surface-control);
-  border-radius: 6px;
-  padding: 2px 6px;
+  border-radius: var(--radius-chip);
+  padding: var(--space-half) var(--space-1h);
   max-width: 160px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -167,24 +157,28 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   border: 1px solid transparent;
   border-radius: var(--radius-control);
   background: transparent;
-  padding: 4px 6px;
-  margin-left: -7px;
+  padding: var(--space-1) var(--space-1h);
+  margin-left: calc(-1 * var(--space-1h));
   cursor: pointer;
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  margin-top: 10px;
-  font-size: calc(13px * var(--buzz-text-scale, 1));
+  gap: var(--space-1h);
+  margin-top: var(--space-2);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
   color: var(--text);
 }
 .attachment {
   display: inline-block;
-  padding: 6px 9px;
-  margin: 6px 5px 0 0;
+  padding: var(--space-1h) var(--space-2);
+  margin: var(--space-1h) var(--space-1) 0 0;
   border: 1px solid var(--border);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   color: var(--link);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .attachmentImage {
   /* Reserve geometry even across virtualizer remounts and failed/lazy loads.
@@ -194,9 +188,9 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   width: 360px;
   max-width: 100%;
   aspect-ratio: 360 / 320;
-  margin-top: 8px;
+  margin-top: var(--space-2);
   overflow: hidden;
-  border-radius: 10px;
+  border-radius: var(--radius-row);
   background: var(--surface-hover);
 }
 .attachmentImage canvas,
@@ -213,132 +207,54 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
 .composer {
   border: 1px solid var(--border-input);
   background: var(--surface);
-  border-radius: 16px;
-  padding: 14px 14px 8px;
-  margin: 12px 16px 16px;
+  border-radius: var(--radius-control);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  margin: var(--space-3) var(--space-4) var(--space-4);
   display: flex;
   flex-shrink: 0;
   flex-direction: column;
-  gap: 6px;
+  gap: var(--space-1h);
   color: var(--text);
-  font-size: calc(14px * var(--buzz-text-scale, 1));
+  font-size: var(--text-label-sm);
+  line-height: var(--text-label-sm--line-height);
+  letter-spacing: var(--text-label-sm--letter-spacing);
 }
 .empty {
-  padding: 30px 18px;
+  padding: var(--space-8) var(--space-4);
   color: var(--text-muted);
-  font-size: calc(13px * var(--buzz-text-scale, 1));
-  line-height: 1.6;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
 }
 @media (max-width: 650px) {
-  .heading {
-    padding: 12px;
-  }
   .feed {
-    padding: 0 12px;
+    padding: 0 var(--space-3);
   }
   .composer {
-    margin: 8px 12px 12px;
+    margin: var(--space-2) var(--space-3) var(--space-3);
   }
 }
 .composerInput {
   position: relative;
   width: 100%;
 }
-.composer textarea {
-  position: relative;
-  z-index: 1;
-  display: block;
-  width: 100%;
-  resize: none;
-  min-height: 3rem;
-  max-height: 12rem;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  line-height: 1.5;
-  background: transparent;
-  color: inherit;
-}
-.composer textarea[data-single-emoji] {
-  height: calc(48px * var(--buzz-text-scale, 1));
-  min-height: calc(48px * var(--buzz-text-scale, 1));
-  font-size: calc(42px * var(--buzz-text-scale, 1));
-  line-height: calc(48px * var(--buzz-text-scale, 1));
-}
-.composer textarea[data-custom-emoji-only] {
-  height: calc(48px * var(--buzz-text-scale, 1));
-  min-height: calc(48px * var(--buzz-text-scale, 1));
-  color: transparent;
-  font-size: 0;
-  line-height: calc(48px * var(--buzz-text-scale, 1));
-  caret-color: var(--text);
-}
-.composer textarea[data-leading-custom-emoji] {
-  color: transparent;
-  caret-color: var(--text);
-}
-.composerCustomEmojiGroup {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  display: flex;
-  gap: calc(2px * var(--buzz-text-scale, 1));
-  pointer-events: none;
-  transform: translateY(-50%);
-}
-.composerCustomEmoji {
-  width: calc(42px * var(--buzz-text-scale, 1));
-  height: calc(42px * var(--buzz-text-scale, 1));
-  object-fit: contain;
-}
-.composerCustomEmoji[data-selected] {
-  border-radius: 2px;
-  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
-  opacity: 0.65;
-}
-.composerCustomEmojiMirror {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  overflow: auto;
-  scrollbar-width: none;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  color: var(--text);
-  font: inherit;
-  line-height: 1.5;
-  pointer-events: none;
-}
-.composerInlineCustomEmojiGroup {
-  display: inline-flex;
-  gap: calc(2px * var(--buzz-text-scale, 1));
-  vertical-align: middle;
-}
-.composerInlineCustomEmojiGroup .composerCustomEmoji {
-  width: calc(22px * var(--buzz-text-scale, 1));
-  height: calc(22px * var(--buzz-text-scale, 1));
-}
-.composerCustomEmojiPrefixMeasure {
-  position: absolute;
-  visibility: hidden;
-  white-space: pre;
-  font: inherit;
-}
 .composerActions {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--space-2);
 }
 .composerTools {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: var(--space-half);
   flex: 1;
 }
 .composerHint {
   color: var(--text-muted);
-  font-size: calc(11px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 @media (max-width: 850px) {
   .composerHint {
@@ -349,21 +265,17 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: var(--space-2);
   color: var(--warning);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
-  margin-top: 6px;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
+  margin-top: var(--space-1h);
 }
 .day span {
   border: 1px solid var(--border);
-  border-radius: 999px;
-  padding: 6px 14px;
-}
-.composer textarea::placeholder {
-  color: var(--text-muted);
-}
-.composer textarea:focus-visible {
-  outline: none;
+  border-radius: var(--radius-pill);
+  padding: var(--space-1h) var(--space-3);
 }
 .composer:focus-within {
   border-color: var(--focus);
@@ -380,7 +292,7 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   display: grid;
   place-items: center;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   width: 34px;
   height: 34px;
   padding: 0;
@@ -398,7 +310,7 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   color: var(--on-action);
 }
 .composerActions > .sendButton:hover:not(:disabled) {
-  filter: brightness(0.95);
+  background: var(--neutral-4);
 }
 .composerActions > .sendButton:disabled {
   background: var(--surface-control);
@@ -407,7 +319,7 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
 }
 .delivery button {
   border: 0;
-  padding: 2px 6px;
+  padding: var(--space-half) var(--space-1h);
   font-size: inherit;
   text-decoration: underline;
   color: inherit;
@@ -431,7 +343,7 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  padding: 0 16px;
+  padding: 0 var(--space-panel-inset);
   scrollbar-width: thin;
 }
 .threadHistory ol {
@@ -441,26 +353,32 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
 }
 .threadDivider {
   border-top: 1px solid var(--border);
-  padding: 12px 0;
+  padding: var(--space-3) 0;
   color: var(--text-muted);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .threadHistoryControls {
   flex-shrink: 0;
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
-  padding: 12px 16px;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
 }
 .threadHistoryControls button {
-  padding: 6px 10px;
+  padding: var(--space-1h) var(--space-2);
   background: var(--surface-accent);
   border: 0;
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .threadNote {
   color: var(--text-muted);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .threadHistoryControls .threadNote {
   width: 100%;
@@ -468,7 +386,7 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
 .threadAvatars {
   display: inline-flex;
   align-items: center;
-  padding-right: 3px;
+  padding-right: var(--space-half);
 }
 .threadAvatar {
   position: relative;
@@ -478,13 +396,14 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   flex-shrink: 0;
   width: 24px;
   height: 24px;
-  margin-right: -3px;
+  margin-right: calc(-1 * var(--space-half));
   overflow: hidden;
   border: 2px solid var(--surface);
   background: var(--surface-accent);
   color: var(--text-muted);
-  font-size: calc(9px * var(--buzz-text-scale, 1));
-  line-height: 1;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .threadAvatar img {
   position: absolute;
@@ -498,36 +417,49 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 6px;
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  gap: var(--space-1h);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .mentionRecipients button {
-  border-radius: 6px;
-  padding: 3px 7px;
+  border-radius: var(--radius-chip);
+  padding: var(--space-half) var(--space-1h);
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   border-color: var(--border);
   background: var(--action);
   color: var(--on-action);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .mentionRecipients code {
-  font-size: calc(10px * var(--buzz-text-scale, 1));
+  font-size: var(--text-mono-sm);
+  line-height: var(--text-mono-sm--line-height);
+  letter-spacing: var(--text-mono-sm--letter-spacing);
+}
+.text[data-single-emoji] img {
+  vertical-align: top;
 }
 .text[data-single-emoji] {
-  margin: 4px 0 0;
+  margin: var(--space-1) 0 0;
 }
 
 .text,
 .plainText {
-  margin: 4px 0 0;
-  font-size: calc(15px * var(--buzz-text-scale, 1));
-  line-height: 1.5;
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
   overflow-wrap: anywhere;
 }
 .plainText {
   white-space: pre-wrap;
+}
+.text p {
+  line-height: inherit;
 }
 .text > :first-child:not([data-single-emoji]) {
   margin-top: 0;
@@ -536,31 +468,38 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   margin-bottom: 0;
 }
 .text :where(p, ul, ol, blockquote, pre, table, hr) {
-  margin: 0.65em 0;
+  margin: var(--space-3) 0;
 }
 .text :where(h1, h2, h3, h4, h5, h6) {
-  margin: 1em 0 0.4em;
+  margin: var(--space-4) 0 var(--space-1h);
   color: var(--text);
-  font-size: 1em;
-  line-height: 1.35;
+  font-size: var(--text-body);
+  line-height: var(--text-body--line-height);
+  letter-spacing: var(--text-body--letter-spacing);
 }
 .text h1 {
-  font-size: 1.35em;
+  font-size: var(--text-heading);
+  line-height: var(--text-heading--line-height);
+  letter-spacing: var(--text-heading--letter-spacing);
 }
 .text h2 {
-  font-size: 1.2em;
+  font-size: var(--text-body-lg);
+  line-height: var(--text-body-lg--line-height);
+  letter-spacing: var(--text-body-lg--letter-spacing);
 }
 .text h3 {
-  font-size: 1.08em;
+  font-size: var(--text-label);
+  line-height: var(--text-label--line-height);
+  letter-spacing: var(--text-label--letter-spacing);
 }
 .text :where(h1, h2, h3) {
-  font-weight: 700;
+  font-weight: var(--type-weight-medium);
 }
 .text :where(h4, h5, h6) {
-  font-weight: 650;
+  font-weight: var(--type-weight-medium);
 }
 .text.text :where(ul, ol) {
-  padding-left: 1.5em;
+  padding-left: var(--space-6);
 }
 .text ol {
   list-style: decimal;
@@ -569,31 +508,33 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   list-style: disc;
 }
 .text li + li {
-  margin-top: 0.2em;
+  margin-top: var(--space-1);
 }
 .text li > :where(p, ul, ol) {
-  margin-top: 0.2em;
-  margin-bottom: 0.2em;
+  margin-top: var(--space-1);
+  margin-bottom: var(--space-1);
 }
 .text blockquote {
-  padding: 0.1em 0 0.1em 0.85em;
+  padding: var(--space-half) 0 var(--space-half) var(--space-3);
   border-left: 1px solid var(--border-input);
   color: var(--text-muted);
 }
 .text code {
-  border-radius: 4px;
+  border-radius: var(--radius-chip);
   background: var(--surface-control);
-  padding: 0.12em 0.32em;
-  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  font-size: 0.88em;
+  padding: var(--space-half) var(--space-1h);
+  font-family: var(--font-system-mono);
+  font-size: var(--text-mono-sm);
+  line-height: var(--text-mono-sm--line-height);
+  letter-spacing: var(--text-mono-sm--letter-spacing);
 }
 .text pre {
   max-width: 100%;
   overflow-x: auto;
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-row);
   background: var(--surface-input);
-  padding: 12px 14px;
+  padding: var(--space-3) var(--space-3);
   scrollbar-width: thin;
 }
 .text pre code {
@@ -612,20 +553,22 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
   max-width: 100%;
   overflow-x: auto;
   border-collapse: collapse;
-  font-size: 0.92em;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
   overflow-wrap: normal;
   scrollbar-width: thin;
   white-space: nowrap;
 }
 .text :where(th, td) {
   border: 1px solid var(--border);
-  padding: 5px 9px;
+  padding: var(--space-1) var(--space-2);
   text-align: left;
   vertical-align: top;
 }
 .text th {
   background: var(--surface-control);
-  font-weight: 650;
+  font-weight: var(--type-weight-medium);
 }
 .text hr {
   border: 0;
@@ -634,17 +577,17 @@ html[data-keyboard-navigation] button.avatarButton:focus-visible {
 .text input[type="checkbox"] {
   width: 1em;
   height: 1em;
-  margin: 0 0.4em 0.1em 0;
+  margin: 0 var(--space-1h) var(--space-half) 0;
   vertical-align: middle;
   accent-color: var(--primary);
 }
-.text a {
+.text a:not([data-link-renderer]) {
   color: var(--link);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
-.text a:hover {
+.text a:not([data-link-renderer]):hover {
   text-decoration-thickness: 2px;
 }
 .imageAlt {
@@ -664,9 +607,9 @@ button.avatarButton:hover {
 }
 .mention {
   display: inline;
-  padding: 0 3px;
+  padding: 0 var(--space-half);
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-chip);
   font: inherit;
   line-height: inherit;
   color: var(--on-selected);
@@ -685,10 +628,12 @@ button.avatarButton:hover {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 12px;
-  padding: 8px 0 18px;
+  gap: var(--space-4);
+  padding: var(--space-2) 0 var(--space-4);
   color: var(--text-muted);
-  font-size: calc(13px * var(--buzz-text-scale, 1));
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
 }
 .membership p {
   margin: 0;
@@ -698,7 +643,7 @@ button.avatarButton:hover {
 .membershipAvatars {
   display: flex;
   flex-shrink: 0;
-  padding-right: 6px;
+  padding-right: var(--space-1h);
 }
 .membershipAvatar {
   position: relative;
@@ -706,17 +651,30 @@ button.avatarButton:hover {
   place-items: center;
   width: 28px;
   height: 28px;
-  margin-right: -6px;
+  margin-right: calc(-1 * var(--space-1h));
   border: 2px solid var(--surface);
   overflow: hidden;
   background: var(--surface-accent);
   color: var(--text-muted);
-  font-size: calc(10px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
-.membershipAvatar img {
+.membershipAvatars .membershipAvatar img {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
+}
+
+.typing {
+  color: var(--text-muted);
+  font-size: var(--text-caption);
+  line-height: 1.5;
+  height: 1lh;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }

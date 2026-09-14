@@ -81,7 +81,7 @@ running broker needs one coordinated restart to gain the new filter. Reopening
 the picker reuses its ready catalog; it is not a manual refresh fallback for an
 older broker.
 
-`session.messages.send`, `reply`, and `edit` resolve referenced `:shortcodes:`
+`session.messages.send`, `reply`, `edit`, and `react` resolve referenced `:shortcodes:`
 into original-URL emoji tags **before** the outbox assigns identity or signs. Text
 without shortcode candidates does not wait. A cold/unavailable catalog throws
 synchronously, so a composer retains its draft; plugins can await `ensure()` or
@@ -93,7 +93,10 @@ Message and reaction rendering uses only each event's own emoji tags, never the
 current palette. Tagged edits replace mappings; legacy tagless edits preserve the
 original message's mappings. All thumbnails use the captured session's media
 resolver; unsupported or unloadable images fall back to literal shortcodes.
-Uploads/management and reaction authoring are outside this slice.
+Reaction authoring uses the existing outbox: kind 7, the loaded message's channel
+(`h`) and target (`e`), and event-local custom emoji tags. The development broker
+admits bounded reactions with exactly one canonical target and preserves kind 7
+through signing. Uploads and emoji management remain outside this slice.
 
 ## Thread views
 
@@ -139,6 +142,25 @@ Local replies appear immediately in the thread but do not leak into the top-leve
 channel timeline. Failed content rows stay visible for same-event retry; failed
 auxiliary edits/reactions stop affecting the fold. Verified echo reconciliation and
 persisted signed-event retry remain the same outbox operations as channel sends.
+
+## Exact message navigation
+
+`session.thread(channelId, messageId, { exact: true })` retains the selected
+`target` and `targetStatus` inside the existing thread owner. At most three bounded
+reads fetch the target ID, reference overlays and deletions of those overlays
+before exposing it. The root is resolved from signed ancestry, never a navigation
+hint. Normal bounded thread traversal provides surrounding context; its cursor
+never comes from the selected row. An accessible selected reply remains available
+even if the original root is missing or the reply lies beyond the traversal cap.
+
+Reference queries omit `#h` for legacy edits/deletes but retain session visibility
+checks. Raw target/overlay responses reaching 500 events fail before filtering.
+Evidence shares the thread's 2,000-event / 4 MiB budget and 64-view ceiling.
+Known tombstones survive sparse refreshes and shared-cache eviction. Exact reads
+share verification, admission, access epochs and live reconciliation without
+inserting isolated rows into channel history. Explicit denial revokes the owning
+channel; access loss, cache clear and disposal purge the view. There is no separate
+reader owner, subscription or persistence.
 
 ## Ownership and reconciliation
 
@@ -453,3 +475,24 @@ Exhausted attempts, unsupported pauses, other route/connection failures and
 unfinished finite roster/head failures still show a warning and recovery action.
 This presentation policy does not increase quotas or guarantee that another
 client sharing the account cannot cause a refusal.
+
+## Receive-only typing
+
+Typing indicators show recent activity from another participant in the current
+channel or thread. They identify the signer, including agents; they do not imply
+online presence, ongoing agent execution, or a promise of an answer.
+
+The session owns this temporary state through `session.typing`. Shared conversation
+composers use the same indicator so channel and thread views agree about who is
+active and where. Names reuse already loaded profiles; displaying activity does
+not start extra reads or connections.
+
+A message clears its author's preceding activity in that conversation. Brief
+post-message suppression prevents late activity from immediately bringing the
+indicator back; otherwise silence lets it expire. Only current live activity can
+activate it, never fetched history. Losing access, disconnecting, clearing the
+cache or replacing the session clears it too, so stale activity cannot carry into
+another conversation or account.
+
+Typing stays out of message history, unread counts and persistent storage. This
+is receive-only: opening or using a composer does not publish typing activity.

@@ -1,5 +1,27 @@
 # DESIGN.md
 
+## Current local adoption
+
+The product owner has requested BlockUI foundations in the actual Buzz app.
+Shared neutrals now use BlockUI text and surface values; primary actions are
+neutral. Inter uses the BlockUI 16/24 body, 14/20 small body, 20/28 lead,
+24/24 section, 32/32 title and 56/56 hero settings, with 400/500 weights.
+Labels have separate 16/24 and 14/20 roles; caption is 12/16.
+Buzz retains its 11/13/15 mono roles for source code.
+Existing host color names alias the shared tokens. Panel padding is 24, control
+inset 16, group gap 32 and page-section gap 64 (all rem-based).
+This supersedes the historical 14px body, 400/600 and neutral-ramp values below.
+Dark secondary/tertiary text select the lighter BlockUI ramp steps to preserve
+Buzz’s APCA targets on raised panels; the raw BlockUI grays remain in the palette.
+Buzz keeps its full-window gradient backdrops and glass navigation in both modes.
+The app and shared system use the same backdrop and glass materials; content
+panels keep the new neutral surfaces. Status, picker, dialog and host compatibility colors now resolve to the shared
+palette. Application typography, insets, gaps and corners use shared roles.
+The app-wide foundation guard covers src/ (including the Emoji Mart adapter);
+layout dimensions, emoji artwork geometry and terminal ANSI/artwork remain
+renderer-owned. The terminal UI itself uses the shared colors and mono type.
+
+
 How to design well in this client. The token registry says which value to use; this says what tokens cannot express — the judgement a designer makes without thinking and an agent gets wrong without being told. Read it before building a surface.
 
 Run `pnpm design:dev` and open `/tests/fixtures/design-system.html` to see the system rendered from the tokens themselves.

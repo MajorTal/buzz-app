@@ -51,6 +51,7 @@ impl TerminalContext {
         Ok(())
     }
 
+    #[cfg(unix)]
     pub(super) fn display(&self) -> &str {
         if !self.channel_name.is_empty()
             && self.channel_name.chars().count() <= 64

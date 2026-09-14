@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
@@ -16,8 +16,8 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
   });
   const errors = [];
   page.on("pageerror", (error) => errors.push(String(error)));
-  await server.listen();
   try {
+    await server.listen();
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/mentions.html`,
     );
@@ -64,7 +64,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     );
     await search.fill("grinning");
     await page.getByRole("button", { name: "😀", exact: true }).click();
-    await expect(input).toHaveValue("@Honey @Honey 😀");
+    await expect(input).toHaveJSProperty("value", "@Honey @Honey 😀");
     await expect(
       page
         .getByRole("region", { name: "Notification recipients" })
@@ -74,8 +74,8 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
       .getByRole("region", { name: "Notification recipients" })
       .getByRole("button")
       .first();
-    await expect(chip).toHaveCSS("background-color", "rgb(83, 68, 103)");
-    await expect(chip).toHaveCSS("color", "rgb(245, 234, 255)");
+    await expect(chip).toHaveCSS("background-color", "rgb(26, 26, 26)");
+    await expect(chip).toHaveCSS("color", "rgb(255, 255, 255)");
     await page.screenshot({
       path: test.info().outputPath("mention-recipients.png"),
     });
@@ -146,7 +146,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     );
     await expect(
       page.getByRole("textbox", { name: "Reply to thread" }),
-    ).toHaveValue("@Honey ");
+    ).toHaveJSProperty("value", "@Honey ");
     expect(
       await page.evaluate(() => window.mentionFixture.publications.length),
     ).toBe(2);
@@ -163,7 +163,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     ).toEqual([{ inputDisabled: true, text: false, mention: false }]);
     await expect(
       page.getByRole("textbox", { name: "Reply to thread" }),
-    ).toHaveValue("@Honey ");
+    ).toHaveJSProperty("value", "@Honey ");
     await expect(
       page
         .getByRole("region", { name: "Notification recipients" })
@@ -175,7 +175,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     await choose(keys.second);
     await expect(
       page.getByRole("textbox", { name: "Reply to thread" }),
-    ).toHaveValue("@Honey @Honey ");
+    ).toHaveJSProperty("value", "@Honey @Honey ");
     expect(errors).toEqual([]);
   } finally {
     await server.close();

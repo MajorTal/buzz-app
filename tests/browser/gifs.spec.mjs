@@ -91,11 +91,9 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   );
   releaseInfo();
   await expect(emojiTrigger).not.toHaveAttribute("aria-busy", "true");
-  await expect(page.getByRole("tab", { name: "GIF", exact: true })).toHaveCount(
-    0,
-  );
-  await emojiTrigger.click();
-  await emojiTrigger.click();
+  await expect(
+    page.getByRole("tab", { name: "GIF", exact: true }),
+  ).toBeVisible();
   await expect(picker).toBeVisible();
   await expect(picker).toHaveCSS("border-radius", "24px");
   await expect(picker).toHaveCSS("border-top-width", "1px");
@@ -110,7 +108,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   });
   await expect(emojiSearch).toHaveCSS(
     "box-shadow",
-    "rgb(206, 206, 206) 0px 0px 0px 2px",
+    "rgb(0, 0, 0) 0px 0px 0px 2px",
   );
   const emojiSearchPosition = await emojiSearch.boundingBox();
   const emojiTabPosition = await emojiTab.boundingBox();
@@ -130,8 +128,8 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
     };
   };
   const emojiSearchStyle = await emojiSearch.evaluate(searchStyle);
-  expect(emojiSearchStyle.fontFamily).toMatch(/^Inter, /);
-  expect(emojiSearchStyle.fontFamily).not.toContain("Inter Variable");
+  expect(emojiSearchStyle.fontFamily).toMatch(/Inter Variable/);
+
   const emojiContentHeight = (
     await page.locator("em-emoji-picker").boundingBox()
   ).height;
@@ -160,10 +158,10 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
     (element) => getComputedStyle(element).transform,
   );
   await page.mouse.move(0, 0);
-  await expect(gifTab).toHaveCSS("color", "rgb(141, 141, 141)");
+  await expect(gifTab).toHaveCSS("color", "rgb(82, 82, 82)");
   await gifTab.hover();
   await expect(gifTab).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(gifTab).toHaveCSS("color", "rgb(10, 10, 10)");
+  await expect(gifTab).toHaveCSS("color", "rgb(0, 0, 0)");
   const initialIndicatorBox = await tabIndicator.boundingBox();
   await gifTab.dispatchEvent("pointerdown", {
     button: 0,
@@ -194,12 +192,12 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   const activeTab = gifTab;
   await expect(activeTab).toHaveCSS("align-items", "center");
   await expect(activeTab).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(activeTab).toHaveCSS("color", "rgb(10, 10, 10)");
+  await expect(activeTab).toHaveCSS("color", "rgb(0, 0, 0)");
   await expect(activeTab).toHaveCSS("display", "flex");
   await expect(activeTab).toHaveCSS("height", "30px");
   await expect(tabIndicator).toHaveCSS(
     "background-color",
-    "rgb(240, 240, 240)",
+    "rgb(232, 232, 232)",
   );
   await expect(tabIndicator).toHaveCSS("transition-duration", "0.16s");
   await expect
@@ -211,9 +209,21 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await expect(search).toBeFocused();
   await expect(search).toHaveValue("hello");
   await draft.fill("unfinished draft");
+  // Observe the real key's browser-default boundary, not a guessed network delay.
+  await search.evaluate((input) => {
+    window.gifEnter = { prevented: false, submits: 0 };
+    input.form.addEventListener("submit", () => window.gifEnter.submits++);
+    window.addEventListener("keydown", (event) => {
+      if (event.target === input && event.key === "Enter")
+        window.gifEnter.prevented = event.defaultPrevented;
+    });
+  });
   await search.press("Enter");
-  await page.waitForTimeout(600);
-  await expect(draft).toHaveValue("unfinished draft");
+  expect(await page.evaluate(() => window.gifEnter)).toEqual({
+    prevented: true,
+    submits: 0,
+  });
+  await expect(draft).toHaveJSProperty("value", "unfinished draft");
   expect(signRequests).toBe(0);
   await draft.evaluate((element) => {
     element.value = "";
@@ -224,9 +234,9 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
       }),
     );
   });
-  await expect(draft).toHaveValue("");
+  await expect(draft).toHaveJSProperty("value", "");
   const composer = draft.locator("xpath=ancestor::form");
-  await expect(composer).toHaveCSS("border-top-color", "rgb(138, 148, 152)");
+  await expect(composer).toHaveCSS("border-top-color", "rgb(128, 128, 128)");
   await expect(composer).toHaveCSS("box-shadow", "none");
   await expect(search).toHaveAttribute("spellcheck", "false");
   await expect(search).toHaveAttribute("autocorrect", "off");
@@ -250,10 +260,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   expect(gifSearchPosition.x).toBeCloseTo(emojiSearchPosition.x, 1);
   expect(gifSearchPosition.y).toBeCloseTo(emojiSearchPosition.y, 1);
   expect(gifSearchPosition.width).toBeCloseTo(emojiSearchPosition.width, 1);
-  await expect(search).toHaveCSS(
-    "box-shadow",
-    "rgb(206, 206, 206) 0px 0px 0px 2px",
-  );
+  await expect(search).toHaveCSS("box-shadow", "rgb(0, 0, 0) 0px 0px 0px 2px");
   expect(gifSearchIconPosition.x - gifSearchPosition.x).toBeCloseTo(8, 1);
   expect(gifSearchIconPosition.y - gifSearchPosition.y).toBeCloseTo(6, 1);
   expect(await search.evaluate(searchStyle)).toEqual(emojiSearchStyle);
@@ -261,9 +268,9 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await expect(search).toHaveCSS("margin-left", "2px");
   await expect(search).toHaveCSS("margin-right", "2px");
   await expect(search).toHaveCSS("border-top-width", "0px");
-  await expect(search).toHaveCSS("border-radius", "8px");
-  await expect(search).toHaveCSS("background-color", "rgb(245, 245, 246)");
-  await expect(search).toHaveCSS("color", "rgb(10, 10, 10)");
+  await expect(search).toHaveCSS("border-radius", "10px");
+  await expect(search).toHaveCSS("background-color", "rgb(240, 240, 240)");
+  await expect(search).toHaveCSS("color", "rgb(0, 0, 0)");
   await expect(search).toHaveCSS("animation-name", "none");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(tabIndicator).toHaveCSS("transition-duration", "0s");
@@ -351,17 +358,17 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await expect(clear).toHaveCSS("right", "10px");
   await expect(clear).toHaveCSS("width", "16px");
   await expect(clear).toHaveCSS("height", "16px");
-  await expect(clear).toHaveCSS("color", "rgb(141, 141, 141)");
+  await expect(clear).toHaveCSS("color", "rgb(82, 82, 82)");
   await expect(clearIcon).toHaveAttribute("viewBox", "0 0 24 24");
   await expect(clearIcon).toHaveClass(/lucide-circle-x/);
   await expect(clearIcon.locator("circle")).toHaveCSS(
     "fill",
-    "rgb(141, 141, 141)",
+    "rgb(82, 82, 82)",
   );
   await expect(clearIcon.locator("circle")).toHaveCSS("stroke", "none");
   await expect(clearIcon.locator("path").first()).toHaveCSS(
     "stroke",
-    "rgb(245, 245, 246)",
+    "rgb(240, 240, 240)",
   );
   const filledSearchPosition = await search.boundingBox();
   const clearIconPosition = await clearIcon.boundingBox();
@@ -374,7 +381,8 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await page.screenshot({ path: testInfo.outputPath("gif-picker.png") });
 
   await page.getByRole("button", { name: "Choose Hello", exact: true }).click();
-  await expect(draft).toHaveValue(
+  await expect(draft).toHaveJSProperty(
+    "value",
     "![Hello](https://gif.fixture.invalid/1.gif)",
   );
   await expect(
@@ -383,52 +391,47 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   expect(app.report.unexpected).toEqual([]);
 });
 
-test("GIF discovery retries after a transient relay failure", async ({
-  page,
-  app,
-}) => {
-  let attempts = 0;
-  await page.route("**/api/relay/*/gif-info", async (route) => {
-    attempts += 1;
-    if (attempts === 1) {
+for (const initial of ["invalid response", "unsupported relay"]) {
+  test(`GIF discovery retries after ${initial}`, async ({ page, app }) => {
+    let attempts = 0;
+    await page.route("**/api/relay/*/gif-info", async (route) => {
+      attempts += 1;
+      if (attempts === 1) {
+        await route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: initial === "invalid response" ? "{" : "{}",
+        });
+        return;
+      }
       await route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "{",
+        json: {
+          policy: null,
+          supported_extensions: ["buzz-gif"],
+          gif: { provider: "klipy", search: "/gifs/search" },
+        },
       });
-      return;
-    }
-    await route.fulfill({
-      json: {
-        policy: null,
-        supported_extensions: ["buzz-gif"],
-        gif: { provider: "klipy", search: "/gifs/search" },
-      },
     });
-  });
 
-  await page.goto(app.origin);
-  await page
-    .getByRole("navigation", { name: "Pages", exact: true })
-    .getByRole("button", { name: "Messages", exact: true })
-    .click();
-  const trigger = page.getByRole("button", {
-    name: "Insert emoji",
-    exact: true,
-  });
-  const gifTab = page.getByRole("tab", { name: "GIF", exact: true });
+    await page.goto(app.origin);
+    await page
+      .getByRole("navigation", { name: "Pages", exact: true })
+      .getByRole("button", { name: "Messages", exact: true })
+      .click();
+    const trigger = page.getByRole("button", {
+      name: "Insert emoji",
+      exact: true,
+    });
+    const gifTab = page.getByRole("tab", { name: "GIF", exact: true });
 
-  await trigger.click();
-  await expect.poll(() => attempts).toBe(1);
-  await expect(trigger).not.toHaveAttribute("aria-busy", "true");
-  await expect(gifTab).toHaveCount(0);
-  await trigger.click();
-  await trigger.click();
-  await expect.poll(() => attempts).toBe(2);
-  await expect(trigger).not.toHaveAttribute("aria-busy", "true");
-  if ((await gifTab.count()) === 0) {
+    await trigger.click();
+    await expect.poll(() => attempts).toBe(1);
+    await expect(trigger).not.toHaveAttribute("aria-busy", "true");
+    await expect(gifTab).toHaveCount(0);
     await trigger.click();
     await trigger.click();
-  }
-  await expect(gifTab).toBeVisible();
-});
+    await expect.poll(() => attempts).toBe(2);
+    await expect(trigger).not.toHaveAttribute("aria-busy", "true");
+    await expect(gifTab).toBeVisible();
+  });
+}

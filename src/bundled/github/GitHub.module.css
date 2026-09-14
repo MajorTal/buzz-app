@@ -1,15 +1,17 @@
 .root {
-  padding: 20px;
+  padding: var(--space-5);
   overflow-y: auto;
   min-height: 0;
-  font-size: calc(13px * var(--buzz-text-scale, 1));
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
   color: var(--text);
 }
 .identity,
 .byline {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
 }
 .identity small,
 .identity strong {
@@ -20,7 +22,9 @@
 .byline,
 .note {
   color: var(--text-muted);
-  font-size: calc(11px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .icon {
   display: grid;
@@ -28,7 +32,7 @@
   flex-shrink: 0;
   width: 40px;
   height: 40px;
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: var(--surface-accent);
   color: var(--accent);
 }
@@ -36,9 +40,9 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin: 18px 0;
-  padding: 10px 12px;
-  border-radius: 10px;
+  margin: var(--space-4) 0;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-row);
   background: var(--surface-accent);
   color: var(--accent);
   text-decoration: none;
@@ -47,28 +51,29 @@
   text-decoration: underline;
 }
 .root h2 {
-  margin: 16px 0;
-  font-size: calc(18px * var(--buzz-text-scale, 1));
-  line-height: 1.4;
+  margin: var(--space-4) 0;
+  font-size: var(--text-body-lg);
+  line-height: var(--text-body-lg--line-height);
+  letter-spacing: var(--text-body-lg--letter-spacing);
   overflow-wrap: anywhere;
 }
 .state {
-  border-radius: 6px;
-  padding: 3px 7px;
+  border-radius: var(--radius-chip);
+  padding: var(--space-half) var(--space-1h);
   background: var(--surface-accent);
   text-transform: capitalize;
 }
 .facts {
-  padding: 12px;
+  padding: var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 12px;
+  border-radius: var(--radius-control);
   background: var(--surface);
 }
 .facts > div {
   display: flex;
   justify-content: space-between;
-  gap: 12px;
-  padding: 5px 0;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
 }
 .facts dt {
   color: var(--text-muted);
@@ -83,7 +88,7 @@
   white-space: pre-wrap;
 }
 .note {
-  margin-top: 24px;
-  padding-top: 12px;
+  margin-top: var(--space-6);
+  padding-top: var(--space-3);
   border-top: 1px solid var(--border);
 }

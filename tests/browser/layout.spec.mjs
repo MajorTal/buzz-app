@@ -48,7 +48,16 @@ async function link(page, app, target) {
     }),
   );
   app.append("primary", "alpha", `Please review ${target}`);
-  await page.getByRole("link", { name: target, exact: true }).click();
+  const trigger = page.getByRole("link", { name: target, exact: true });
+  await expect(trigger).toBeVisible();
+  await trigger.scrollIntoViewIfNeeded();
+  // Appending and bringing an offscreen link into view can both scroll Virtua.
+  // These are panel-layout checks, not clicks during an in-flight correction.
+  await settle(page);
+  await expect(
+    page.getByRole("region", { name: "Channel message history" }).locator("ol"),
+  ).toHaveCSS("pointer-events", "auto");
+  await trigger.click();
   await expect(
     panel(page).getByRole("heading", { name: "A useful change" }),
   ).toBeVisible();
@@ -71,6 +80,48 @@ async function shellFits(page, width) {
   }
 }
 
+test("page overscroll is disabled while message history still scrolls", async ({
+  page,
+  app,
+}) => {
+  await open(page, app);
+  // Headless wheel input does not reproduce macOS trackpad rubber-banding.
+  // Check the viewport policy as well as real panel scrolling and shell bounds.
+  await expect(page.locator("html")).toHaveCSS("overscroll-behavior", "none");
+  const shell = page.locator(".shell-background");
+  const bounds = await box(shell);
+  const history = page.getByRole("region", { name: "Channel message history" });
+  await settle(page);
+  const initialOffset = await history.evaluate((el) => el.scrollTop);
+  await history.hover();
+  await page.mouse.wheel(0, -300);
+  await expect
+    .poll(() => history.evaluate((el) => el.scrollTop))
+    .toBeLessThan(initialOffset - 100);
+  await settle(page);
+  expect(await box(shell)).toEqual(bounds);
+
+  // Projects has no overflowing content: gestures must leave the shell in place.
+  await page
+    .getByRole("navigation", { name: "Pages", exact: true })
+    .getByRole("button", { name: "Projects", exact: true })
+    .click();
+  await page.getByRole("heading", { name: "Projects", exact: true }).hover();
+  for (const [x, y] of [
+    [0, -600],
+    [0, 600],
+    [-600, 0],
+    [600, 0],
+  ]) {
+    await page.mouse.wheel(x, y);
+    await page.evaluate(() => new Promise(requestAnimationFrame));
+    expect(await box(shell)).toEqual(bounds);
+    expect(await page.evaluate(() => [window.scrollX, window.scrollY])).toEqual(
+      [0, 0],
+    );
+  }
+});
+
 test("bento surfaces, centered tabs, real link panel and compact community navigation", async ({
   page,
   app,
@@ -87,22 +138,23 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   });
   const before = await box(conversation);
   near(sidebar.x, 16);
-  near(before.x - sidebar.x - sidebar.width, 16);
+  near(before.x - sidebar.x - sidebar.width, 4);
   near(before.y, 56);
   near(before.height, 760);
   const background = await page
     .locator(".shell-background")
     .evaluate((el) => getComputedStyle(el).backgroundImage);
   expect(background).toContain("radial-gradient");
-  expect(background).toContain("/shell-gradient.png");
-  expect(
-    await page.evaluate(async () => {
-      const image = new Image();
-      image.src = "/shell-gradient.png";
-      await image.decode();
-      return [image.naturalWidth, image.naturalHeight];
-    }),
-  ).toEqual([564, 1002]);
+  // The full-bleed backdrop is now the shared gradient rather than a bitmap.
+  const gradient = await page.locator(".shell-background").evaluate((el) => {
+    const probe = document.createElement("span");
+    probe.style.backgroundImage = "var(--bg-app)";
+    el.append(probe);
+    const value = getComputedStyle(probe).backgroundImage;
+    probe.remove();
+    return value;
+  });
+  expect(background).toBe(gradient);
   const composer = page.getByRole("textbox", {
     name: "Message #Alpha",
     exact: true,
@@ -114,9 +166,9 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   const dock = await box(panel(page));
   near(dock.y, main.y);
   near(dock.height, main.height);
-  near(dock.x - main.x - main.width, 16);
+  near(dock.x - main.x - main.width, 4);
   near(dock.x + dock.width, 1264);
-  await expect(composer).toHaveValue("Layout draft");
+  await expect(composer).toHaveJSProperty("value", "Layout draft");
   await expect(composer).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("bento-one-panel.png") });
   const timeline = page.getByRole("region", {
@@ -140,7 +192,7 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   await button(page, "Beta").click();
   await expect(panel(page)).toHaveCount(0);
   await button(page, "Alpha").click();
-  await expect(composer).toHaveValue("Layout draft");
+  await expect(composer).toHaveJSProperty("value", "Layout draft");
   await button(page, "Switch community").click();
   await expect(
     page.getByRole("dialog", { name: "Communities", exact: true }),
@@ -159,10 +211,10 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   await expect(button(page, "Switch community")).toBeFocused();
   await button(page, "Switch community").click();
   await button(page, "Switch to Secondary").click();
-  await expect(composer).toHaveValue("");
+  await expect(composer).toHaveJSProperty("value", "");
   await button(page, "Switch community").click();
   await button(page, "Switch to Primary").click();
-  await expect(composer).toHaveValue("Layout draft");
+  await expect(composer).toHaveJSProperty("value", "Layout draft");
   for (const [width, height] of [
     [1200, 800],
     [800, 600],
@@ -181,7 +233,7 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
       .getByRole("navigation", { name: "Pages", exact: true })
       .getByRole("button", { name: "Messages" })
       .click();
-    await expect(composer).toHaveValue("Layout draft");
+    await expect(composer).toHaveJSProperty("value", "Layout draft");
     await expect(page.locator("[data-message-id]").last()).toBeInViewport();
   }
   await page.screenshot({ path: testInfo.outputPath("bento-narrow.png") });
@@ -295,14 +347,51 @@ readingTest(
     await button(page, "Close channel panel").focus();
     await button(page, "Close channel panel").click();
     const trigger = page.getByRole("link", { name: target, exact: true });
+    await settle(page);
     await expect(trigger).toBeFocused();
     expect(await page.evaluate(() => window.panelFocusScrollDelta)).toBe(0);
-    await settle(page);
     await expectAnchor(page, saved);
     await page.setViewportSize({ width: 1200, height: 700 });
     await settle(page);
     await expectAnchor(page, saved);
     await expectNonPaging(page, app);
+  },
+);
+
+readingTest(
+  "a focused message stays mounted until focus leaves the timeline",
+  async ({ page, app }) => {
+    await open(page, app);
+    await settle(page);
+    const target = "https://example.com/focused-message";
+    const previous = await page
+      .locator("[data-message-id]")
+      .last()
+      .getAttribute("data-message-id");
+    const message = app.append("primary", "alpha", `Keep focus on ${target}`);
+    const trigger = page.getByRole("link", { name: target, exact: true });
+    await expect(trigger).toBeInViewport();
+    await settle(page);
+    await trigger.evaluate((el) => el.focus({ preventScroll: true }));
+    await expect(trigger).toBeFocused();
+    const history = page.getByRole("region", {
+      name: "Channel message history",
+    });
+    await history.hover();
+    await page.mouse.wheel(0, -3500);
+    // The adjacent unpinned row proves that real virtualization has evicted this
+    // range; a timeout or a mocked virtualizer would not establish that boundary.
+    await expect(page.locator(`[data-message-id="${previous}"]`)).toHaveCount(
+      0,
+    );
+    await settle(page);
+    await expect(trigger).toBeFocused();
+    await expect(trigger).not.toBeInViewport();
+    await history.evaluate((el) => el.focus({ preventScroll: true }));
+    await expect(history).toBeFocused();
+    await expect(page.locator(`[data-message-id="${message.id}"]`)).toHaveCount(
+      0,
+    );
   },
 );
 
@@ -368,7 +457,7 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
     main = await box(conversation);
   near(top.height, bottom.height);
   near(top.y, main.y);
-  near(bottom.y - top.y - top.height, 12);
+  near(bottom.y - top.y - top.height, 4);
   near(bottom.y + bottom.height, main.y + main.height);
   near(top.x, bottom.x);
   await page.screenshot({ path: testInfo.outputPath("bestie-two-panels.png") });
@@ -392,7 +481,7 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
   await expect(launch).toBeVisible();
   await expect(bestie).toHaveCount(0);
   await launch.click();
-  await expect(composer).toHaveValue("Companion draft");
+  await expect(composer).toHaveJSProperty("value", "Companion draft");
   await button(page, "Close Bestie panel").click();
   near((await box(panel(page))).height, (await box(conversation)).height);
   await launch.click();
@@ -401,7 +490,7 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
   await button(page, "Beta").click();
   await expect(bestie).toHaveCount(1);
   await button(page, "Alpha").click();
-  await expect(composer).toHaveValue("Companion draft");
+  await expect(composer).toHaveJSProperty("value", "Companion draft");
   await button(page, "Switch community").click();
   await button(page, "Personal space").click();
   await expect(
@@ -435,7 +524,10 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
 
   // Plugin catalogs can outgrow the viewport. Closing restores the launcher,
   // not a Settings row: reach the toggle with real input, not scrollIntoView.
-  const settingsPage = page.getByRole("main").locator(".overflow-y-auto");
+  // Narrow Settings scrolls navigation and details together inside the container.
+  const settingsPage = page
+    .getByRole("region", { name: "Settings", exact: true })
+    .locator(":scope > div");
   await expect(enabled).not.toBeInViewport();
   const viewport = await box(settingsPage);
   await page.mouse.move(
@@ -490,7 +582,7 @@ readingTest(
         page.getByRole("complementary", { name: "Bestie", exact: true }),
       );
       near(top.height, bottom.height);
-      near(bottom.y - top.y - top.height, 12);
+      near(bottom.y - top.y - top.height, 4);
       await expect(button(page, "Close channel panel")).toBeInViewport();
       await expect(button(page, "Close Bestie panel")).toBeInViewport();
     }
@@ -550,7 +642,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
   await page.setViewportSize({ width: 1280, height: 832 });
   await page.goto(app.origin);
   const nav = page.getByRole("navigation", { name: "Pages", exact: true });
-  const titles = ["Home", "Messages", "Projects", "Agents"];
+  const titles = ["Home", "Messages", "Projects", "Agents", "Workflows"];
   await expect(nav.getByRole("button")).toHaveText(titles);
   await nav.getByRole("button", { name: "Projects", exact: true }).click();
   const surface = page.getByRole("region", { name: "Projects", exact: true });
@@ -593,6 +685,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     "Home",
     "Messages",
     "Agents",
+    "Workflows",
   ]);
   await projects.click();
   await expect(nav.getByRole("button")).toHaveText(titles);
@@ -606,6 +699,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     "Home",
     "Projects",
     "Agents",
+    "Workflows",
   ]);
   await channels.click();
   await expect(nav.getByRole("button")).toHaveText(titles);
@@ -614,6 +708,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     "Messages",
     "Projects",
     "Agents",
+    "Workflows",
     "Make it yoursSettings",
   ]);
   await button(page, "Find a page").click();

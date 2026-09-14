@@ -52,7 +52,7 @@ export function PageSearch({
             placeholder="Find a page…"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
-            className="min-w-0 flex-1 rounded bg-transparent py-2 text-sm"
+            className="min-w-0 flex-1 rounded bg-transparent py-2 text-body-sm"
           />
           <button
             type="button"
@@ -79,7 +79,7 @@ export function PageSearch({
             </button>
           ))}
           {!destinations.length && (
-            <p role="status" className="px-3 text-sm text-muted">
+            <p role="status" className="px-3 text-body-sm text-muted">
               No matching pages.
             </p>
           )}

@@ -23,6 +23,7 @@ export type {
   InlineContent,
   InlineRange,
   InlineRenderer,
+  LinkRenderer,
 } from "../features/conversation/contracts";
 export type { RelayData, RelaySnapshot } from "../features/relay/service";
 
@@ -57,3 +58,9 @@ export type {
   JsonValue,
 } from "../features/navigation/targets";
 export type { PageNavigation } from "../features/navigation/service";
+
+export type {
+  Notifications,
+  NotificationInput,
+  NotificationCategoryDescriptor,
+} from "../features/notifications/service";

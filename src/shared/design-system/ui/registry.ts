@@ -181,7 +181,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     purpose:
       "A person or agent identity image with a stable fallback. Circle by default; callers can select the proposed squircle shape from display-only agent evidence.",
     behavior: "Base UI Avatar",
-    variants: ["small", "default", "large", "circle", "squircle"],
+    variants: ["small", "default", "large", "fill", "circle", "squircle"],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Messages",
@@ -194,8 +194,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "PreviewCard",
     purpose:
       "A portal-rendered, non-modal preview of an object's already-available context.",
-    behavior: "Base UI Preview Card",
-    variants: ["default"],
+    behavior:
+      "Base UI Preview Card; optional destination anchor supports pointer and keyboard activation",
+    variants: ["default", "destination"],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Messages",

@@ -12,6 +12,23 @@ before live use.
 Files marked `FOUNDATION` require explicit human guidance before editing and
 stricter review. Escalate needed changes rather than editing without authorization.
 
+## Worktree creation
+
+Before creating a worktree, run `git worktree list` and choose the existing
+checkout whose local development configuration should be inherited. Immediately
+after `git worktree add`, run this from the new worktree:
+
+```sh
+scripts/bootstrap-worktree.sh /absolute/path/to/source/checkout
+```
+
+Do not start development before bootstrap completes. The script copies the
+git-ignored `.env.local` without overwriting an existing target, then uses that
+worktree's Hermit proxy to run `bin/pnpm install --frozen-lockfile`. Do not copy
+other ignored paths: Keychain credentials and pnpm's package cache are
+machine-shared, while dependencies and build output are regenerated. Follow the
+per-worktree hook setup in `docs/contributing.md` before committing or pushing.
+
 ## Engineering standard
 
 Before editing, state the intended outcome and non-goals. Read the owning code,
@@ -22,7 +39,11 @@ deviating from agreed scope or product behavior.
 Target **9/10+ for minimalness, elegance, and correctness**: the smallest complete
 solution, clear ownership, and no known material defects. Prefer existing patterns
 and subtraction. No opportunistic refactors, speculative abstractions, or new
-features disguised as fixes. If the fix keeps growing, revisit the cause and scope.
+features disguised as fixes. Before expanding into another shared subsystem or
+adding alternate-adapter support, show the human the scope change and smallest
+complete alternative. Require a current caller or explicit approval for adapter
+parity. Review necessity separately from correctness; passing tests do not justify
+scope growth. Split at real ownership boundaries, not by deleting safety coverage.
 
 Keep files cohesive and group modules and tests by owner. Treat size as a review
 signal, not a quota. Extract stable boundaries only when they simplify the
@@ -45,6 +66,57 @@ remaining risks or deferred checks. Green CI is evidence, not proof of user beha
 Keep reviews convergent: consolidate actionable findings and clear exit criteria.
 Block on concrete correctness, security, or agreed-contract defects; unrelated
 hardening is follow-up. Reopen scope only when new evidence warrants it.
+
+## Choose tests by behavior
+
+Default to colocated Vitest tests. Mount React with React Testing Library for
+component behavior; do not mock React hooks or implement a substitute lifecycle.
+Use Node for logic/services and opt into jsdom only when a DOM is needed.
+
+Before adding a browser journey, name the browser behavior or integration boundary
+it proves that lower-layer tests cannot. Keep scenario matrices in the lowest
+layer that preserves that contract; retain representative app wiring coverage.
+Do not infer layout, native editing or cross-window correctness from a DOM emulator.
+When moving coverage, map removed assertions to replacements and demonstrate that
+the replacement catches the regression before deleting the browser case.
+
+Generate only the fixture data the test needs. Share immutable builds and stateless
+servers, never mutable test state, identities or browser contexts. Preserve large
+datasets and isolated runners when scale or performance is the behavior under test.
+Record browser cases added/removed, their browser-only justification, replacement
+coverage and fail-then-pass evidence in the PR description. For test infrastructure
+changes, report before/after setup and execution timings with the command, engine,
+environment and checked snapshots; distinguish local measurements from hosted CI.
+List deferred checks. Do not meet time budgets by skipping engines, dropping
+failure paths or weakening assertions. Enforce these rules during agent review;
+do not rely on contributors filling in a PR template. Follow the
+[test-layer review rules](docs/contributing.md#choosing-a-test-layer).
+
+## Deterministic tests
+
+Tests must control the ordering they assert, not depend on runner speed.
+
+- For intermediate states (loading, disabled, closing), hold the responsible
+  operation with an explicit fixture gate or deferred promise. Observe that it
+  started, assert the pending state, release it in `finally`, then verify recovery.
+  A short artificial delay is not a synchronization primitive.
+- Before capturing request counts, scroll anchors, or other baselines, establish
+  the relevant lifecycle boundary: completed startup/catch-up, mounted result,
+  applied layout, or observed event. Visible initial content does not prove that
+  background work finished. Register event observers before triggering actions.
+- Wait for observable conditions with retrying assertions, not fixed sleeps or
+  immediate snapshots of asynchronous effects. Negative assertions need a
+  completion barrier proving the work that could violate them has finished.
+  Scope selectors to the semantic content being tested, not unrelated UI.
+- When elapsed time is the behavior under test (expiry, debounce, retry), use a
+  controlled clock and assert before/after the boundary. Keep real clocks for
+  performance measurements; preserve their documented isolation and budgets.
+- Do not hide failures with test retries, longer delays/timeouts, relaxed counts
+  or tolerances, disabled animation, or broad error allowlists. Establish whether
+  the defect belongs to the product, fixture, or assertion and repair that owner.
+  Exercise adversarial ordering and the affected full test files in both browser
+  engines for browser changes. Report exact validation scope and remaining gaps;
+  a green run does not establish that all flakes are gone.
 
 ## Commit attribution and DCO
 

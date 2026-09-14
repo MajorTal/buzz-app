@@ -1,5 +1,5 @@
 import { test, expect } from "./fixture.mjs";
-test.use({ pluginFixtures: true });
+test.use({ pluginFixtures: true, historyCounts: { alpha: 0, beta: 0 } });
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 
 test("Local Settings retain plugin recovery without blocking Profile and Appearance", async ({

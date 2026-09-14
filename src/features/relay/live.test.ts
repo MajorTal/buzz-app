@@ -5,7 +5,8 @@ import {
   subscribeRelayTraffic,
   type LiveCallbacks,
 } from "./live";
-import { keypair, message, signed } from "./testing";
+import { keypair, message, roster, signed, scriptedTransport } from "./testing";
+import { createRelaySession } from "./session";
 class Socket {
   readyState = 1;
   onmessage?: (event: { data: string }) => Promise<void>;
@@ -103,7 +104,15 @@ it("uses independent explicit channel routes and self-p globals; equal interests
   const event = message(keypair(), "a", "incoming", 1700000000);
   await h.first.receive(["EVENT", request[1], event]);
   await h.first.receive(["EOSE", request[1]]);
-  expect(h.callbacks.receive).toHaveBeenCalledWith([event]);
+  expect(h.callbacks.receive).toHaveBeenCalledWith([event], {
+    phase: "replay",
+    channelId: "a",
+  });
+  await h.first.receive(["EVENT", request[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "live",
+    channelId: "a",
+  });
   expect(h.callbacks.established).toHaveBeenCalledWith("a");
   expect(
     h.callbacks.state.mock.lastCall?.[0].routes.find(
@@ -571,8 +580,71 @@ it("requests community emoji on the existing profile route and delivers verified
     ],
   });
   await h.first.receive(["EVENT", req?.[1], event]);
-  expect(h.callbacks.receive).toHaveBeenCalledWith([event]);
+  expect(h.callbacks.receive).toHaveBeenCalledWith([event], {
+    phase: "replay",
+  });
   h.owner.dispose();
+});
+
+it("a reconnect starts a new replay phase even for previously established routes", async () => {
+  vi.useFakeTimers();
+  const h = setup(["a"]);
+  await h.first.auth();
+  await vi.advanceTimersByTimeAsync(750);
+  const request = h.first.requests()[2];
+  assert.exists(request);
+  await h.first.receive(["EOSE", request[1]]);
+  const event = message(keypair(), "a", "live", 1700000000);
+  await h.first.receive(["EVENT", request[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "live",
+    channelId: "a",
+  });
+  h.first.close();
+  await vi.advanceTimersByTimeAsync(500);
+  const socket = h.sockets[1];
+  assert.exists(socket);
+  await socket.auth();
+  await vi.advanceTimersByTimeAsync(750);
+  const replay = socket.requests()[2];
+  assert.exists(replay);
+  await socket.receive(["EVENT", replay[1], event]);
+  expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+    phase: "replay",
+    channelId: "a",
+  });
+  h.owner.dispose();
+});
+
+it("live channel provenance excludes observer telemetry while preserving membership traffic", async () => {
+  vi.useFakeTimers();
+  const h = setup(["a"]);
+  try {
+    await h.first.auth();
+    await vi.advanceTimersByTimeAsync(750);
+    const route = h.first.requests()[2];
+    assert.exists(route);
+    await h.first.receive(["EOSE", route[1]]);
+    const telemetry = signed(h.key, {
+      kind: 24200,
+      content: "opaque",
+      tags: [],
+    });
+    await h.first.receive(["EVENT", route[1], telemetry]);
+    expect(h.callbacks.receive).not.toHaveBeenCalled();
+    const membership = signed(h.key, {
+      kind: 40099,
+      content: "{}",
+      tags: [["h", "a"]],
+    });
+    await h.first.receive(["EVENT", route[1], membership]);
+    expect(h.callbacks.receive).toHaveBeenCalledExactlyOnceWith([membership], {
+      phase: "live",
+      channelId: "a",
+    });
+  } finally {
+    h.owner.dispose();
+  }
 });
 
 it("observer route is optional, live-only at dispatch/retry, separately fenced and never ordinary replay", async () => {
@@ -623,5 +695,117 @@ it("observer route is optional, live-only at dispatch/retry, separately fenced a
   ).toBe(false);
   expect(h.sockets).toHaveLength(1);
   h.owner.dispose();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("admits signed typing only on its authenticated channel route, without extra subscriptions", async () => {
+  vi.useFakeTimers();
+  const h = setup();
+  await h.first.auth();
+  await vi.advanceTimersByTimeAsync(750);
+  const requests = h.first.requests();
+  expect(requests).toHaveLength(4);
+  const route = requests[2];
+  assert.exists(route);
+  expect(route[2].kinds).toContain(20002);
+  const event = signed(keypair(), {
+    kind: 20002,
+    content: "",
+    tags: [["h", "a"]],
+  });
+  await h.first.receive(["EVENT", requests[0]?.[1], event]);
+  await h.first.receive(["EVENT", requests[3]?.[1], event]);
+  expect(h.callbacks.receive).not.toHaveBeenCalled();
+  await h.first.receive(["EVENT", route[1], event]);
+  expect(h.callbacks.receive).toHaveBeenCalledExactlyOnceWith([event], {
+    channelId: "a",
+    phase: "replay",
+  });
+  await h.first.receive([
+    "EVENT",
+    route[1],
+    { ...event, sig: "0".repeat(128) },
+  ]);
+  expect(h.callbacks.receive).toHaveBeenCalledTimes(1);
+  h.owner.dispose();
+  expect(vi.getTimerCount()).toBe(0);
+});
+
+it("keeps misrouted activity out of accessible conversations; session rejects ambiguous scope", async () => {
+  vi.useFakeTimers();
+  const h = setup();
+  const relay = keypair();
+  const wire = scriptedTransport(h.key.pubkey, relay.pubkey);
+  const owner = createRelaySession({
+    ...wire.transport,
+    subscribe(callbacks) {
+      h.callbacks.receive.mockImplementation(callbacks.receive);
+      h.callbacks.state.mockImplementation(callbacks.state);
+      return h.owner;
+    },
+  });
+  // Establish both accessible channels before starting their live routes.
+  h.callbacks.receive([
+    roster(relay, "a", [h.key.pubkey]),
+    roster(relay, "b", [h.key.pubkey]),
+  ]);
+  await h.first.auth();
+  await vi.advanceTimersByTimeAsync(750);
+  const requests = h.first.requests();
+  const a = requests.find((r) => r[2]["#h"]?.includes("a"));
+  const b = requests.find((r) => r[2]["#h"]?.includes("b"));
+  assert.exists(a);
+  assert.exists(b);
+  const agent = keypair();
+  const activity = (tags: string[][]) =>
+    signed(agent, {
+      kind: 20002,
+      created_at: Math.floor(Date.now() / 1000),
+      content: "",
+      tags,
+    });
+  const pulse = activity([["h", "b"]]);
+  const snapshot = owner.session.typing.snapshot;
+  for (const route of [requests[0], requests[1], a]) {
+    await h.first.receive(["EVENT", route?.[1], pulse]);
+    expect(snapshot()).toEqual([]);
+  }
+  for (const tags of [
+    [],
+    [["h"]],
+    [["h", "bad channel"]],
+    [["h", "denied"]],
+    [
+      ["h", "b"],
+      ["h", "b"],
+    ],
+    [
+      ["h", "b"],
+      ["h", "a"],
+    ],
+    [
+      ["h", "b"],
+      ["e", "bad", "", "reply"],
+    ],
+  ]) {
+    const event = activity(tags);
+    await h.first.receive(["EVENT", b[1], event]);
+    expect(snapshot()).toEqual([]);
+    // Even a host that has already discarded route metadata cannot activate these.
+    h.callbacks.receive([event]);
+    expect(snapshot()).toEqual([]);
+  }
+  await h.first.receive(["EVENT", b[1], pulse]);
+  expect(snapshot()).toEqual([{ channelId: "b", pubkey: agent.pubkey }]);
+  // Once route metadata is gone, the session can only use the event's own scope.
+  const other = activity([["h", "a"]]);
+  await h.first.receive(["EVENT", b[1], other]);
+  expect(snapshot()).toHaveLength(1);
+  h.callbacks.receive([other]);
+  expect(snapshot()).toEqual([
+    { channelId: "b", pubkey: agent.pubkey },
+    { channelId: "a", pubkey: agent.pubkey },
+  ]);
+  owner.dispose();
   expect(vi.getTimerCount()).toBe(0);
 });

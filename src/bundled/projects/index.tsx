@@ -16,7 +16,7 @@ function ProjectsPage() {
     <div className="h-full min-h-0">
       <FullPageSurface aria-label="Projects">
         <div className="flex h-full min-h-0 items-center justify-center overflow-auto p-6 text-center">
-          <h1 className="m-0 text-3xl font-medium tracking-tight">Projects</h1>
+          <h1 className="m-0 text-title font-medium">Projects</h1>
         </div>
       </FullPageSurface>
     </div>

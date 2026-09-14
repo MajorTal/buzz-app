@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:desktop": "vite --strictPort",
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "author:build": "node scripts/build-author.mjs",
@@ -29,7 +30,7 @@
     "design:build": "pnpm design:typecheck && vite build --config vite.design.config.ts",
     "design:preview": "vite preview --config vite.design.config.ts",
     "design:typecheck": "tsc -p tsconfig.design.json",
-    "design:check": "node scripts/design-system/check-type.mjs && node scripts/design-system/check-color.mjs && node scripts/design-system/check-contrast.mjs",
+    "design:check": "node scripts/design-system/check-type.mjs && node scripts/design-system/check-color.mjs && node scripts/design-system/check-contrast.mjs && node scripts/design-system/check-app-foundations.mjs",
     "design:census": "node scripts/design-system/token-consumers.mjs",
     "design:test": "vitest run --config vitest.design.config.ts",
     "design:test:browser": "pnpm build && pnpm design:build && playwright test --config tests/fixtures/design-system/playwright.config.ts"
@@ -57,17 +58,23 @@
     "react-markdown": "10.1.0",
     "remark-breaks": "4.0.0",
     "remark-gfm": "4.0.1",
-    "virtua": "0.51.0"
+    "virtua": "0.51.0",
+    "yaml": "2.8.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",
     "@playwright/test": "1.60.0",
     "@tailwindcss/postcss": "4.3.3",
     "@tauri-apps/cli": "2.11.4",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/jest-dom": "7.0.1",
+    "@testing-library/react": "16.3.3",
+    "@testing-library/user-event": "14.6.7",
     "@types/node": "24.13.3",
     "@types/react": "19.2.18",
     "@types/react-dom": "19.2.7",
     "@vitejs/plugin-react": "6.1.1",
+    "jsdom": "30.0.1",
     "postcss": "8.5.28",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",

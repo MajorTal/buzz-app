@@ -36,6 +36,7 @@ export function AppShell({
   companion?: ReactNode;
   children: ReactNode;
 }) {
+  const fillsWorkspace = workspace || selected === "settings";
   return (
     <div
       data-shell-tone={tone}
@@ -109,14 +110,14 @@ export function AppShell({
           <PanelFrame companion={companion}>
             <div
               className={
-                workspace
+                fillsWorkspace
                   ? "h-full min-h-0"
                   : "h-full min-h-0 overflow-y-auto px-2 pt-10 pb-8 sm:px-4 sm:pt-14 sm:pb-10"
               }
             >
               <div
                 className={
-                  workspace ? "h-full min-h-0" : "mx-auto w-full max-w-4xl"
+                  fillsWorkspace ? "h-full min-h-0" : "mx-auto w-full max-w-4xl"
                 }
               >
                 {children}

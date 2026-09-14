@@ -13,17 +13,17 @@
 }
 .emojiPopover {
   --picker-container-radius: var(--radius-card);
-  --picker-inner-radius: calc(var(--picker-container-radius) - 8px);
-  --picker-search-radius: 8px;
-  --picker-scrollbar-space: 16px;
-  --picker-search-background: #f5f5f6;
-  --picker-search-foreground: #0a0a0a;
-  --picker-search-muted: #8d8d8d;
-  --picker-search-ring: #cecece;
-  --picker-tab-foreground: #0a0a0a;
-  --picker-tab-muted: #8d8d8d;
-  --picker-tab-selected: #f0f0f0;
-  --picker-scrollbar-thumb: #e8e8e8;
+  --picker-inner-radius: calc(var(--picker-container-radius) - var(--space-2));
+  --picker-search-radius: var(--radius-row);
+  --picker-scrollbar-space: var(--space-4);
+  --picker-search-background: var(--neutral-2);
+  --picker-search-foreground: var(--text-primary);
+  --picker-search-muted: var(--text-secondary);
+  --picker-search-ring: var(--text-primary);
+  --picker-tab-foreground: var(--text-primary);
+  --picker-tab-muted: var(--text-secondary);
+  --picker-tab-selected: var(--neutral-3);
+  --picker-scrollbar-thumb: var(--neutral-7);
   position: absolute;
   bottom: 42px;
   left: 0;
@@ -35,26 +35,53 @@
   background: var(--surface);
   box-shadow: var(--elevation-card);
 }
+.emojiPopover:not([data-has-tabs]) {
+  /* Search sits inside 8px of picker padding plus its 2px margin. */
+  --picker-search-radius: max(
+    0px,
+    calc(var(--picker-container-radius) - var(--space-2) - var(--space-half))
+  );
+  --picker-search-top-space: 0px;
+}
 .sharedSearchIcon {
   position: absolute;
-  top: 19px;
+  top: 15px;
   left: 18px;
   z-index: 4;
   color: var(--picker-search-muted);
   pointer-events: none;
 }
+.reactionPositioner {
+  z-index: 100;
+}
+.reactionPopover {
+  position: relative;
+  bottom: auto;
+  left: auto;
+  max-width: calc(100vw - 32px);
+}
+.reactionTrigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-chip);
+  background: var(--surface-control);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.reactionTrigger:hover {
+  color: var(--text);
+}
+.reactionTrigger:focus-visible {
+  outline: 2px solid var(--text);
+  outline-offset: 2px;
+}
 .emojiPopover[data-has-tabs] .sharedSearchIcon {
   top: 67px;
-}
-[data-color-mode="dark"] .emojiPopover {
-  --picker-search-background: #161616;
-  --picker-search-foreground: #f5f5f5;
-  --picker-search-muted: #a6a6a6;
-  --picker-search-ring: #424242;
-  --picker-tab-foreground: #f5f5f5;
-  --picker-tab-muted: #a6a6a6;
-  --picker-tab-selected: #1c1c1c;
-  --picker-scrollbar-thumb: #424242;
 }
 @media (max-width: 900px) {
   .emojiPopover {
@@ -65,8 +92,8 @@
 .pickerTabs {
   position: relative;
   display: flex;
-  gap: 4px;
-  padding: 8px;
+  gap: var(--space-1);
+  padding: var(--space-2);
   border-bottom: 1px solid var(--border);
 }
 .pickerTabs button {
@@ -79,10 +106,11 @@
   justify-content: center;
   flex: 1;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   background: transparent;
-  font-weight: 600;
-  line-height: 1;
+  font-size: var(--text-label-sm);
+  font-weight: var(--text-label-sm--font-weight);
+  line-height: var(--text-label-sm--line-height);
 }
 .pickerTabs button:first-of-type {
   border-top-left-radius: var(--picker-inner-radius);
@@ -110,7 +138,7 @@
   bottom: 8px;
   left: 8px;
   width: calc((100% - 20px) / 2);
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   background: var(--picker-tab-selected);
   pointer-events: none;
   transform: translateX(var(--tab-indicator-x))
@@ -143,18 +171,20 @@
   --shadow: none;
 }
 .emojiStatus {
-  padding: 8px;
-  border-radius: 10px;
+  padding: var(--space-2);
+  border-radius: var(--radius-row);
   background: var(--surface);
   box-shadow: var(--elevation-card);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .emojiStatus button {
   width: auto;
   height: auto;
-  padding: 4px 8px;
-  border-radius: 6px;
-  margin: 8px 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-chip);
+  margin: var(--space-2) 0;
 }
 .gifPicker {
   position: relative;
@@ -168,21 +198,22 @@
   display: flex;
   height: 48px;
   align-items: center;
-  margin: 4px 8px;
+  margin: var(--space-1) var(--space-2);
 }
 .gifSearch input {
   width: calc(100% - 4px);
   height: 28px;
-  padding: 0 32px;
-  margin-inline: 2px;
+  padding: 0 var(--space-8);
+  margin-inline: var(--space-half);
   border: 0;
   border-radius: var(--picker-search-radius);
   background: var(--picker-search-background);
   box-shadow: 0 0 0 1px var(--picker-search-background);
   color: var(--picker-search-foreground);
   font-family: var(--font-legacy-sans);
-  font-size: calc(14px * var(--buzz-text-scale, 1));
-  line-height: normal;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
   appearance: none;
   transition:
     opacity 100ms ease,
@@ -246,7 +277,7 @@
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  padding: 0 12px 8px;
+  padding: 0 var(--space-3) var(--space-2);
   scrollbar-width: none;
 }
 .gifResults::-webkit-scrollbar {
@@ -266,23 +297,23 @@
   left: 0;
   width: 8px;
   min-height: 32px;
-  border-radius: 9999rem;
+  border-radius: var(--radius-pill);
   background: var(--picker-scrollbar-thumb);
 }
 .gifGrid {
   columns: 2;
-  column-gap: 6px;
+  column-gap: var(--space-1h);
 }
 .gifGrid button {
   display: block;
   width: 100%;
   height: auto;
   padding: 0;
-  margin: 0 0 6px;
+  margin: 0 0 var(--space-1h);
   overflow: hidden;
   break-inside: avoid;
   border: 0;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   background: var(--surface-hover);
 }
 .gifGrid button:hover {
@@ -296,11 +327,11 @@
 .gifLoading {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 6px;
+  gap: var(--space-1h);
 }
 .gifLoading span {
   height: 82px;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   background: var(--surface-hover);
 }
 .gifLoading span:nth-child(4n + 1),
@@ -314,19 +345,21 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: 20px;
+  padding: var(--space-5);
   color: var(--text-muted);
   text-align: center;
 }
 .gifEmpty button {
   width: auto;
   height: auto;
-  padding: 5px 9px;
+  padding: var(--space-1) var(--space-2);
 }
 .gifAttribution {
-  padding: 7px 8px;
+  padding: var(--space-1h) var(--space-2);
   border-top: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: calc(11px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
   text-align: center;
 }

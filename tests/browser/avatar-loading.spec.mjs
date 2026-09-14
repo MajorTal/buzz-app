@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import { createServer } from "vite";
+import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
@@ -14,8 +14,8 @@ test("shared avatars defer offscreen artwork, omit the referrer and recover from
     logLevel: "error",
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
-  await server.listen();
   try {
+    await server.listen();
     const requests = [];
     await page.route("https://images.example/avatar.png", async (route) => {
       requests.push(route.request().headers());

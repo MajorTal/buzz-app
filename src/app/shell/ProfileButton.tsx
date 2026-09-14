@@ -58,7 +58,7 @@ export function ProfileButton({
         aria-expanded={open}
         aria-controls={id}
         title={profile.name || "Your profile"}
-        className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-0 bg-surface/65 p-0 text-ink"
+        className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full border-0 glass-primary-interactive p-0 text-ink"
       >
         {/* Keep mouse-origin Tab traversal rooted at the button in WebKit. */}
         <span className="pointer-events-none flex size-full items-center justify-center">
@@ -84,7 +84,7 @@ export function ProfileButton({
         hidden={!open}
         className="absolute top-full right-0 z-50 mt-2 w-56 max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-surface p-2 shadow-surface"
       >
-        <p className="m-0 truncate px-3 py-2 text-sm font-medium">
+        <p className="m-0 truncate px-3 py-2 text-label-sm">
           {profile.name || "Your account"}
         </p>
         <button

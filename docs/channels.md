@@ -97,7 +97,8 @@ The port retains the prepared-store implementation and its behavior tests:
   Selecting an already-queued catch-up promotes that existing read without adding
   a request or resetting its deadline.
 - 1,024 profile entries / 2 MiB signed-record budget, narrow row profile selectors,
-  and a bounded avatar preparation cache. Signature verification yields in batches.
+  and request-warmed avatars (fetched and decoded, nothing retained; disabled
+  under the Save-Data preference). Signature verification yields in batches.
 - Account/relay-scoped IndexedDB: 64 records / 8 MiB global disk budget, 24-hour
   expiry. Cached events are reverified only after fresh roster authorization.
 - A 60-second head freshness lease; warm revisits reuse heads without new reads.

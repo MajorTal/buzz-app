@@ -17,7 +17,7 @@ import type { ProfileDirectory } from "./profile-directory";
 import { parseWindow, windowFilter, type WindowCursor } from "./window";
 import { ByteLru, byteSize } from "./budget";
 import type { HeadPersistence, SavedHead } from "./persistence";
-import { createMediaPreparation } from "./media";
+import { createMediaPreparation, saveData } from "./media";
 
 type Listener = () => void;
 type WindowState = {
@@ -921,6 +921,7 @@ export function createChannelStore(
       const head = heads.get(channelId);
       if (head) prepareMedia(channelId);
       if (
+        saveData() ||
         preparing ||
         (head && !head.cached && now() - head.savedAt < FRESH_FOR)
       )

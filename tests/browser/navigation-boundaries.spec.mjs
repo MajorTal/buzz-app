@@ -1,6 +1,6 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
-test.use({ pluginFixtures: true });
+test.use({ pluginFixtures: true, historyCounts: { alpha: 1, beta: 0 } });
 
 // Regressions from the independent review, exercised through production composition.
 test("cold destination waits for its enabled provider to activate", async ({

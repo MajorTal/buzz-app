@@ -830,6 +830,7 @@ function InlineChipSpecimen() {
 
 function SwitchSpecimen() {
   const [checked, setChecked] = useState(false);
+  const [busyChecked, setBusyChecked] = useState(true);
   return (
     <div className="component-specimen-stack">
       <Switch
@@ -839,6 +840,16 @@ function SwitchSpecimen() {
       />
       <Switch checked label="Show agent activity" />
       <Switch disabled label="Show agent activity" />
+      <div className="component-specimen-row">
+        <span className="text-body">Plugin enabled (saving)</span>
+        <Switch
+          checked={busyChecked}
+          onCheckedChange={setBusyChecked}
+          readOnly
+          aria-disabled="true"
+          aria-label="Enable busy plugin"
+        />
+      </div>
     </div>
   );
 }

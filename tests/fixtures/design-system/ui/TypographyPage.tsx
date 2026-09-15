@@ -38,12 +38,12 @@ export function TypographyPage() {
     <>
       <PageHeader
         title="Typography"
-        intro="Block UI typography, rendered in Inter and JetBrains Mono, with xsmall mapped to 12px in Buzz. Buzz utilities map to the resolved Block UI roles below."
+        intro="Type roles combine size, line height, letter spacing and weight. Use Inter for interface and reading text, and JetBrains Mono for code and identifiers."
       />
 
       <Section
         title="The faces"
-        description="Buzz keeps its existing font families. Role settings follow the linked Block UI specification, with the documented xsmall size override."
+        description="Two font families, each with a defined purpose."
       >
         <Specimens>
           {TYPE_FAMILIES.map((family) => (
@@ -66,7 +66,7 @@ export function TypographyPage() {
 
       <Section
         title="The roles"
-        description="Current Buzz utilities and their Block UI role mappings. Each sample uses the role it documents. The three legacy mono utilities now share the same 12/16 xsmall detail setting."
+        description="Choose a role for the job the text does. Each sample uses its named utility; values list size, line height, letter spacing and weight."
       >
         <Specimens>
           {TYPE_ROLES.map((role) => (
@@ -96,12 +96,10 @@ export function TypographyPage() {
       ))}
 
       <Note>
-        Source: <a href={TYPE_SOURCE}>Block UI typography resolution</a>{" "}
-        (eff76616). The upstream specification is provisional. Buzz keeps
-        rem-based scaling and its Inter/JetBrains Mono font bindings; it no
-        longer has a separate 11/13/15px monospace scale. Role line heights take
-        precedence over the primitive defaults: for example, section titles use
-        24/24.
+        Values are shown at 100% text size and scale with the text-size
+        preference. A role supplies its own line height; section titles use 24px
+        type on a 24px line. Reference:{" "}
+        <a href={TYPE_SOURCE}>Typography source specification</a>.
       </Note>
     </>
   );

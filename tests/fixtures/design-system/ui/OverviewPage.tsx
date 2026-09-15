@@ -23,7 +23,7 @@ export function OverviewPage() {
     <>
       <PageHeader
         title="Buzz Design System"
-        intro="A colour system small enough to hold in your head and precise enough that an agent picks the right value unsupervised. Structural colour is named and closed, because there are only a few right answers. Accent colour is a slot a theme or a person fills, because it should change without touching a component."
+        intro="Shared foundations and components for the interface. Tokens define color, typography, spacing and materials; components combine them with consistent interaction and accessibility."
       />
 
       <Section
@@ -60,8 +60,8 @@ export function OverviewPage() {
       </Section>
 
       <Section
-        title="Where this stands"
-        description="The design system for new and migrated Buzz UI. This initial port does not restyle existing surfaces; they move onto it incrementally. Foundations and shared components are ready to inspect; layout playgrounds are still experiments. Composer, conversation, and agent feature examples are intentionally excluded."
+        title="Explore the system"
+        description="Foundations document the available tokens and their use. Component pages show live examples, variants and interaction states. Layout playgrounds contain experimental compositions."
       >
         <div className="flex flex-wrap gap-2">
           <Link

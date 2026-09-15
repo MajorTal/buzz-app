@@ -29,7 +29,6 @@ import { MotionPage } from "./ui/MotionPage";
 import { BaseUiPage } from "./ui/BaseUiPage";
 import { SystemDocumentPage } from "./ui/SystemDocumentPage";
 import { MissingPage } from "./ui/MissingPage";
-import { ComponentAdoptionPage } from "./ui/ComponentAdoptionPage";
 import { FoundationAlignmentPage } from "./ui/FoundationAlignmentPage";
 
 // Explicit design-only routes: no import of the app route tree or native startup.
@@ -47,11 +46,6 @@ const detail = createRoute({
   component: () => <ComponentDetailPage slug={detail.useParams().component} />,
 });
 const pages = [
-  createRoute({
-    getParentRoute: () => design,
-    path: "component-adoption",
-    component: ComponentAdoptionPage,
-  }),
   createRoute({
     getParentRoute: () => design,
     path: "/",

@@ -1,28 +1,26 @@
 # DESIGN.md
 
-## Current local adoption
+## Foundations
 
-The product owner has requested BlockUI foundations in the actual Buzz app.
-Shared neutrals now use BlockUI text and surface values; primary actions are
-neutral. Inter uses the BlockUI 16/24 body, 14/20 small body, 20/28 lead,
-24/24 section, 32/32 title and 56/56 hero settings, with 400/500 weights.
-Labels have separate 16/24 and 14/20 roles; caption is 12/16.
-Mono retains Block UI’s xsmall semantic at 12/16 in Buzz; old size names remain compatibility aliases.
-Existing host color names alias the shared tokens. Panel padding is 24, control
-inset 16, group gap 32 and page-section gap 64 (all rem-based).
-This replaces the earlier 14px body, 400/600 weights and neutral-ramp values.
-Dark secondary/tertiary text select the lighter BlockUI ramp steps to preserve
-Buzz’s APCA targets on raised panels; the raw BlockUI grays remain in the palette.
-Buzz keeps its full-window gradient backdrops and glass navigation in both modes.
-The app and shared system use the same backdrop and glass materials; content
-panels keep the new neutral surfaces. Status, picker, dialog and host compatibility colors now resolve to the shared
-palette. Application typography, insets, gaps and corners use shared roles.
-The app-wide foundation guard covers src/ (including the Emoji Mart adapter);
-layout dimensions, emoji artwork geometry and terminal ANSI/artwork remain
-renderer-owned. The terminal UI itself uses the shared colors and mono type.
+The interface uses shared color, type, spacing and shape roles. Primary actions
+are neutral. Text uses Inter for reading and labels, and JetBrains Mono for code
+and identifiers. Regular (400) supports reading; Medium (500) marks labels and
+structure. The Typography page documents each role’s complete setting.
 
+Panel padding is 24px, control inset 16px, group gap 32px and page-section gap
+64px at the default scale. Values are rem-based. Full-window gradient backdrops
+and glass navigation support both color modes; content panels use opaque neutral
+surfaces. Dark text roles are selected for contrast on their intended surfaces.
+Host compatibility names resolve to the shared tokens.
 
-How to design well in this client. The token registry says which value to use; this says what tokens cannot express — the judgement a designer makes without thinking and an agent gets wrong without being told. Read it before building a surface.
+Features own layout, data and behavior. The foundation guard covers `src/`,
+including the Emoji Mart adapter. Layout dimensions, emoji artwork geometry and
+terminal ANSI/artwork remain renderer-owned; terminal controls use shared colors
+and mono type.
+
+This guide describes how to use the system: surface relationships, hierarchy,
+identity, interaction and composition. The token registry documents the available
+values and their purpose.
 
 Run `pnpm design:dev` and open `/tests/fixtures/design-system.html` to see the system rendered from the tokens themselves.
 
@@ -85,27 +83,27 @@ namespaces: colour registers as `--color-*` and is named for emphasis
 (`text-body`). So `text-primary text-body` is one colour plus one setting, and no
 name ever means both.
 
-The size ramp follows [Block UI’s typography resolution](https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json)
-at `eff76616`, with the product-directed xsmall override: 12px instead of 10px.
-The active sizes are 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72 and 96.
-The upstream specification is provisional. Buzz binds sans roles to Inter and
-mono to JetBrains Mono, retaining rem-based host text scaling.
+The active sizes are 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72 and 96px
+at 100% text size. Sans roles use Inter and mono roles use JetBrains Mono.
+Values scale with the host text-size preference.
 
 - Components use named roles, never private primitive sizes. The viewer shows
-  each Buzz utility's Block UI role mapping alongside the complete size ladder.
+  each utility’s semantic role and complete setting alongside the size ladder.
 - A role carries size, leading, tracking and weight together. Display roles have
   solid leading; the 24px section title uses 24/24, not the primitive's 24/32.
 - Regular (400) is for reading; Medium (500) is for labels and structure.
   Existing `font-semibold` consumers resolve to Medium.
-- Mono uses `detail/body-xsmall`, mapped to 12/16 with 0.03em tracking in Buzz.
+- Mono uses `detail/body-xsmall` at 12/16 with 0.03em tracking.
   `--type-xsmall-size` points to the existing 12px step, keeping the semantic
   independent from caption even though their sizes currently match. `text-mono-lg` and
   `text-mono-sm` are compatibility aliases for this same setting, not extra sizes.
 - Caption uses 12/16 and 0.0133em tracking. Default reading text is 16/24.
-- Font-family choice is a Buzz binding; matching the numeric settings does not
-  imply Inter has the same optical metrics as Cash Sans.
 - Preserve text preferences and browser zoom. Author values in scaled rem and
   keep layout geometry independent of text scaling.
+
+Typography provenance: the ramp and role settings derive from the pinned
+[Block UI typography specification](https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json).
+The values documented above define this system, including the 12px xsmall role.
 
 ## Both modes
 

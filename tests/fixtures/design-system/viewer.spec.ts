@@ -35,7 +35,6 @@ test("built viewer loads every specimen and foundation without app connections",
     "Motion",
     "Base UI backing",
     "Foundation alignment",
-    "Component adoption",
     "Maintaining the system",
     "DESIGN.md",
     "AGENTS.md",
@@ -405,62 +404,44 @@ test("a stale or renamed link explains itself instead of rendering blank", async
   expect(failures).toEqual([]);
 });
 
-test("component adoption uses real controls with labels and focusable busy switches", async ({
+test("switch labels activate the control and busy switches preserve focus", async ({
   page,
 }) => {
-  await page.goto(`${viewer}#/design/component-adoption`);
-  const after = (name: string) =>
-    page.getByRole("group", { name: `After: ${name}`, exact: true });
-  const notification = after("Notification switch");
-  const alerts = notification.getByRole("switch", { name: "Desktop alerts" });
-  await expect(alerts).toBeChecked();
-  await notification.locator("label").click();
-  await expect(alerts).not.toBeChecked();
-  await alerts.focus();
-  await page.keyboard.press("Space");
-  await expect(alerts).toBeChecked();
-  const busy = after("Plugin switch").getByRole("switch", {
-    name: "Enable busy plugin",
-  });
+  await page.goto(`${viewer}#/design/components/switch`);
+  const control = page
+    .getByRole("switch", { name: "Show agent activity" })
+    .first();
+  await expect(control).not.toBeChecked();
+  await page
+    .locator("label")
+    .filter({ hasText: "Show agent activity" })
+    .first()
+    .click();
+  await expect(control).toBeChecked();
+  const busy = page.getByRole("switch", { name: "Enable busy plugin" });
+  await expect(busy).toHaveAttribute("aria-disabled", "true");
   await busy.focus();
   await expect(busy).toBeFocused();
-  await page.keyboard.press("Space");
+  for (const key of ["Space", "Enter"]) {
+    await page.keyboard.press(key);
+    await expect(busy).toBeChecked();
+    await expect(busy).toBeFocused();
+  }
+  await busy.click({ force: true });
   await expect(busy).toBeChecked();
-  await expect(busy).toBeFocused();
-  const toggle = after("Plugin switch").getByRole("switch", {
-    name: "Enable example plugin",
-  });
-  await toggle.click();
-  await expect(toggle).not.toBeChecked();
-  await after("Action buttons")
-    .getByRole("button", { name: "Save profile" })
-    .click();
-  await expect(page.getByRole("status")).toHaveText(
-    "Action received. No app data was changed.",
-  );
-  await expect(
-    after("Action buttons").getByRole("button", { name: "Save", exact: true }),
-  ).toBeDisabled();
+});
+
+test("avatar specimens preserve human and agent identity shapes in both modes", async ({
+  page,
+}) => {
+  await page.goto(`${viewer}#/design/components/avatar`);
   for (const mode of ["light", "dark"]) {
     const change = page.getByRole("button", { name: `Use ${mode} mode` });
     if (await change.count()) await change.click();
     await expect(
-      after("Shell actions").getByRole("button", { name: "Go back" }),
-    ).toHaveCSS("width", "36px");
-    await expect(
-      after("Mention avatars").getByRole("img", {
-        name: "Alex Lee",
-        exact: true,
-      }),
-    ).toHaveCSS("width", "24px");
-    const avatars = after("Mention avatars");
-    for (const name of ["Brain", "Brain, small size"]) {
-      await expect(avatars.getByRole("img", { name, exact: true })).toHaveCSS(
-        "border-radius",
-        "10px",
-      );
-    }
-    const human = avatars.getByRole("img", { name: "Alex Lee", exact: true });
+      page.getByRole("img", { name: "Brain", exact: true }),
+    ).toHaveCSS("border-radius", "10px");
+    const human = page.getByRole("img", { name: "Alex Lee", exact: true });
     expect(
       await human.evaluate(
         (element) =>
@@ -468,23 +449,14 @@ test("component adoption uses real controls with labels and focusable busy switc
           element.clientWidth / 2,
       ),
     ).toBe(true);
-    await expect(after("Message avatars").getByRole("button")).toHaveCSS(
-      "width",
-      "40px",
-    );
+    const sizes = page.getByRole("img", { name: "Morgan Martin", exact: true });
+    for (const [index, size] of [24, 32, 40].entries()) {
+      await expect(sizes.nth(index)).toHaveCSS("width", `${size}px`);
+    }
   }
-  await page.setViewportSize({ width: 600, height: 900 });
-  await expect(
-    page.getByRole("region", { name: "Component comparison" }),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () => document.documentElement.scrollWidth <= innerWidth,
-    ),
-  ).toBe(true);
 });
 
-test("typography shows the Block UI ladder and renders the mapped mono tier", async ({
+test("typography shows the size ramp and renders xsmall mono details", async ({
   page,
 }) => {
   await page.goto(`${viewer}#/design/typography`);
@@ -501,6 +473,6 @@ test("typography shows the Block UI ladder and renders the mapped mono tier", as
     await expect(sample).toHaveCSS("font-family", /JetBrains Mono/);
   }
   await expect(
-    page.getByRole("link", { name: "Block UI typography resolution" }),
+    page.getByRole("link", { name: "Typography source specification" }),
   ).toHaveAttribute("href", /eff766161ba8aaee3258ca107f0d904dd542c708/);
 });

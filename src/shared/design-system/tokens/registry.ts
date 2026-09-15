@@ -453,7 +453,7 @@ export const GROWTH_PROCEDURE = [
 export interface TypeRole {
   /** The Tailwind class, e.g. `text-body`. */
   token: string;
-  /** Block UI role this local utility maps to. */
+  /** Semantic role represented by this utility. */
   pointsAt: string;
   /** Rendered size at the default preference and zoom, for display only —
    *  never a value a component may use. */
@@ -562,7 +562,7 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-mono-lg",
-    pointsAt: "detail/body-xsmall · Buzz size override",
+    pointsAt: "detail/body-xsmall",
     size: "12px",
     lineHeight: "16px",
     tracking: "0.03em",
@@ -573,7 +573,7 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-mono",
-    pointsAt: "detail/body-xsmall · Buzz size override",
+    pointsAt: "detail/body-xsmall",
     size: "12px",
     lineHeight: "16px",
     tracking: "0.03em",
@@ -584,7 +584,7 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-mono-sm",
-    pointsAt: "detail/body-xsmall · Buzz size override",
+    pointsAt: "detail/body-xsmall",
     size: "12px",
     lineHeight: "16px",
     tracking: "0.03em",
@@ -595,17 +595,17 @@ export const TYPE_ROLES: TypeRole[] = [
   },
 ];
 
-/** Buzz font-family bindings; the size and role settings come from Block UI. */
+/** Font families used by the type roles. */
 export const TYPE_FAMILIES = [
   {
     token: "font-sans",
     name: "Inter Variable",
-    use: "Interface and reading text. Buzz keeps Inter while adopting Block UI’s type ramp.",
+    use: "Interface, labels and reading text.",
   },
   {
     token: "font-mono",
     name: "JetBrains Mono",
-    use: "Monospace detail text. Retains Block UI’s xsmall semantic, mapped to 12/16 in Buzz.",
+    use: "Code, keys and identifiers, set in the xsmall detail role at 12/16.",
   },
 ];
 
@@ -613,13 +613,13 @@ export const TYPE_FAMILIES = [
 export const TYPE_SOURCE =
   "https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json";
 
-/** Active Buzz sizes from Block UI, with xsmall sharing the 12px step. */
+/** Active size primitives, with xsmall sharing the 12px step. */
 export const TYPE_RAMPS = [
   {
     id: "size",
     name: "Size",
     description:
-      "Block UI sizes with Buzz’s xsmall mapped to 12px. Caption and xsmall share one size but retain separate semantics. Values shown at 100% text size.",
+      "Thirteen size steps. Caption and xsmall detail both use 12px, with separate semantic tokens so each can evolve independently. Values shown at 100% text size.",
     steps: [
       {
         step: 12,
@@ -629,22 +629,22 @@ export const TYPE_RAMPS = [
       {
         step: 14,
         value: "14px",
-        job: "small (shadcn prose anchor)",
+        job: "small body and labels",
       },
       {
         step: 16,
         value: "16px",
-        job: "body anchor (Arcade)",
+        job: "body and labels",
       },
       {
         step: 18,
         value: "18px",
-        job: "shadcn text-lg (Large)",
+        job: "Primitive only; no role assigned.",
       },
       {
         step: 20,
         value: "20px",
-        job: "large body/label tier",
+        job: "large body",
       },
       {
         step: 24,
@@ -654,37 +654,37 @@ export const TYPE_RAMPS = [
       {
         step: 28,
         value: "28px",
-        job: "Primitive only; no resolved role assigned.",
+        job: "Primitive only; no role assigned.",
       },
       {
         step: 32,
         value: "32px",
-        job: "page title / numeral-small",
+        job: "page title",
       },
       {
         step: 36,
         value: "36px",
-        job: "Primitive only; no resolved role assigned.",
+        job: "Primitive only; no role assigned.",
       },
       {
         step: 44,
         value: "44px",
-        job: "headline-large",
+        job: "Primitive only; no role assigned.",
       },
       {
         step: 56,
         value: "56px",
-        job: "hero / numeral-large",
+        job: "hero",
       },
       {
         step: 72,
         value: "72px",
-        job: "Primitive only; no resolved role assigned.",
+        job: "Primitive only; no role assigned.",
       },
       {
         step: 96,
         value: "96px",
-        job: "Primitive only; no resolved role assigned.",
+        job: "Primitive only; no role assigned.",
       },
     ],
   },

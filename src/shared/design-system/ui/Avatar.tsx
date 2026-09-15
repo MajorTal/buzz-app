@@ -36,11 +36,14 @@ export function Avatar({
   alt,
   fallback,
   size = "default",
+  shape,
 }: {
   src?: string | null | undefined;
   alt: string;
   fallback: string;
   size?: AvatarSize;
+  /** Humans are circular; agents use rounded rectangles. Omit for inherited fill geometry. */
+  shape?: "circle" | "rounded";
 }) {
   const initial = Array.from(fallback.trim())[0]?.toUpperCase() || "?";
   return (
@@ -48,6 +51,7 @@ export function Avatar({
       data-buzz-ui=""
       className="buzz-avatar"
       data-size={size}
+      data-shape={shape}
       role={alt ? "img" : undefined}
       aria-label={alt || undefined}
       aria-hidden={!alt || undefined}

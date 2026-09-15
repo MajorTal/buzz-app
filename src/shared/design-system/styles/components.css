@@ -229,6 +229,14 @@
     border-radius: inherit;
   }
 
+  .buzz-avatar[data-shape="circle"] {
+    border-radius: var(--radius-pill);
+  }
+
+  .buzz-avatar[data-shape="rounded"] {
+    border-radius: var(--radius-row);
+  }
+
   .buzz-avatar img {
     position: absolute;
     inset: 0;

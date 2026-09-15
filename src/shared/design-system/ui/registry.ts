@@ -178,9 +178,10 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
   {
     slug: "avatar",
     name: "Avatar",
-    purpose: "A person or agent identity image with a stable fallback.",
+    purpose:
+      "An identity image with a stable fallback: circles for humans, rounded rectangles for agents.",
     behavior: "Base UI Avatar",
-    variants: ["small", "default", "large", "fill"],
+    variants: ["small", "default", "large", "fill", "shape: circle | rounded"],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Messages",

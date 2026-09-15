@@ -448,8 +448,26 @@ test("component adoption uses real controls with labels and focusable busy switc
       after("Shell actions").getByRole("button", { name: "Go back" }),
     ).toHaveCSS("width", "36px");
     await expect(
-      after("Mention avatars").getByRole("img", { name: "Alex Lee" }),
+      after("Mention avatars").getByRole("img", {
+        name: "Alex Lee",
+        exact: true,
+      }),
     ).toHaveCSS("width", "24px");
+    const avatars = after("Mention avatars");
+    for (const name of ["Brain", "Brain, small size"]) {
+      await expect(avatars.getByRole("img", { name, exact: true })).toHaveCSS(
+        "border-radius",
+        "10px",
+      );
+    }
+    const human = avatars.getByRole("img", { name: "Alex Lee", exact: true });
+    expect(
+      await human.evaluate(
+        (element) =>
+          parseFloat(getComputedStyle(element).borderTopLeftRadius) >=
+          element.clientWidth / 2,
+      ),
+    ).toBe(true);
     await expect(after("Message avatars").getByRole("button")).toHaveCSS(
       "width",
       "40px",

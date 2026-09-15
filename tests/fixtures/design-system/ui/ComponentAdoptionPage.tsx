@@ -257,7 +257,7 @@ export function ComponentAdoptionPage() {
             <ComparisonRow
               name="Mention avatars"
               source="bundled/mentions/MentionCompletion.tsx"
-              change="Local 28px rounded avatars become the existing 24px small Avatar; picker rows use the 32px default. One shared initial/fallback treatment."
+              change="Circle means human; rounded rectangle means agent. Both shapes share the 24px small and 32px default sizes. Mention identity mapping is pending a reliable type source."
               before={
                 <>
                   <span className="adoption-old-mention text-caption">AL</span>
@@ -268,8 +268,30 @@ export function ComponentAdoptionPage() {
               }
               after={
                 <>
-                  <Avatar alt="Alex Lee" fallback="Alex Lee" size="small" />
-                  <Avatar alt="Jamie Diaz" fallback="Jamie Diaz" />
+                  <div className="adoption-identity-samples">
+                    <span className="text-caption text-secondary">Human</span>
+                    <Avatar
+                      alt="Alex Lee"
+                      fallback="Alex Lee"
+                      size="small"
+                      shape="circle"
+                    />
+                    <Avatar
+                      alt="Alex Lee, default size"
+                      fallback="Alex Lee"
+                      shape="circle"
+                    />
+                  </div>
+                  <div className="adoption-identity-samples">
+                    <span className="text-caption text-secondary">Agent</span>
+                    <Avatar
+                      alt="Brain, small size"
+                      fallback="Brain"
+                      size="small"
+                      shape="rounded"
+                    />
+                    <Avatar alt="Brain" fallback="Brain" shape="rounded" />
+                  </div>
                 </>
               }
             />

@@ -15,6 +15,11 @@ sizes and variants. Features continue to own layout, data and behavior.
   mention results share `Avatar`. Media resolution remains with callers. The
   existing single-initial treatment replaces local two-initial fallbacks;
   `alt=""` marks decorative artwork without duplicating its parent's label.
+  Shared shapes preserve identity meaning: `circle` for humans, `rounded` for
+  agents, at every size. The comparison demonstrates both. Mention profiles
+  currently expose only name/picture/about, so automatic identity-to-shape mapping
+  remains pending a reliable type source; no name or library-membership heuristic
+  is introduced.
 - React UI icons use Tabler. Emoji Mart's internal SVG adapter and supplied
   launcher/identity artwork remain outside this migration.
 - Removed the legacy shared avatar, local avatar appearance and shell icon CSS.

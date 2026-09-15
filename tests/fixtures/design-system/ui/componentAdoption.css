@@ -175,3 +175,13 @@ html[data-keyboard-navigation]
 .design-system-reading-column:has(.adoption-page) {
   max-width: 76rem;
 }
+
+.adoption-identity-samples {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: var(--space-3);
+}
+.adoption-identity-samples > span:first-child {
+  width: 4rem;
+}

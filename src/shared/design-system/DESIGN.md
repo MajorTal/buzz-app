@@ -26,6 +26,14 @@ How to design well in this client. The token registry says which value to use; t
 
 Run `pnpm design:dev` and open `/tests/fixtures/design-system.html` to see the system rendered from the tokens themselves.
 
+## Identity shapes
+
+Human avatars are circular. Agent avatars are rounded rectangles. Use the shared
+Avatar `shape="circle"` or `shape="rounded"`; the shape carries identity meaning,
+not density or emphasis. The caller supplies identity type from domain data,
+never a name or picture heuristic. `size="fill"` inherits the owning layout’s
+corners unless an explicit shape is supplied.
+
 ## Posture
 
 Buzz is a place where people build together and bring their agents into the room. Everyday surfaces stay quiet, crisp, and highly functional; character shows up in identity, guidance, transitions, and ceremony rather than in the chrome of ordinary work. Colour is signal, not decoration. When in doubt, the interface gets out of the way of the conversation.

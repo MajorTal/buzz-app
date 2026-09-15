@@ -167,7 +167,7 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   near(dock.height, main.height);
   near(dock.x - main.x - main.width, 16);
   near(dock.x + dock.width, 1264);
-  await expect(composer).toHaveValue("Layout draft");
+  await expect(composer).toHaveJSProperty("value", "Layout draft");
   await expect(composer).toBeInViewport();
   await page.screenshot({ path: testInfo.outputPath("bento-one-panel.png") });
   const timeline = page.getByRole("region", {
@@ -191,7 +191,7 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   await button(page, "Beta").click();
   await expect(panel(page)).toHaveCount(0);
   await button(page, "Alpha").click();
-  await expect(composer).toHaveValue("Layout draft");
+  await expect(composer).toHaveJSProperty("value", "Layout draft");
   await button(page, "Switch community").click();
   await expect(
     page.getByRole("dialog", { name: "Communities", exact: true }),
@@ -210,10 +210,10 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   await expect(button(page, "Switch community")).toBeFocused();
   await button(page, "Switch community").click();
   await button(page, "Switch to Secondary").click();
-  await expect(composer).toHaveValue("");
+  await expect(composer).toHaveJSProperty("value", "");
   await button(page, "Switch community").click();
   await button(page, "Switch to Primary").click();
-  await expect(composer).toHaveValue("Layout draft");
+  await expect(composer).toHaveJSProperty("value", "Layout draft");
   for (const [width, height] of [
     [1200, 800],
     [800, 600],
@@ -232,7 +232,7 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
       .getByRole("navigation", { name: "Pages", exact: true })
       .getByRole("button", { name: "Messages" })
       .click();
-    await expect(composer).toHaveValue("Layout draft");
+    await expect(composer).toHaveJSProperty("value", "Layout draft");
     await expect(page.locator("[data-message-id]").last()).toBeInViewport();
   }
   await page.screenshot({ path: testInfo.outputPath("bento-narrow.png") });
@@ -480,7 +480,7 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
   await expect(launch).toBeVisible();
   await expect(bestie).toHaveCount(0);
   await launch.click();
-  await expect(composer).toHaveValue("Companion draft");
+  await expect(composer).toHaveJSProperty("value", "Companion draft");
   await button(page, "Close Bestie panel").click();
   near((await box(panel(page))).height, (await box(conversation)).height);
   await launch.click();
@@ -489,7 +489,7 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
   await button(page, "Beta").click();
   await expect(bestie).toHaveCount(1);
   await button(page, "Alpha").click();
-  await expect(composer).toHaveValue("Companion draft");
+  await expect(composer).toHaveJSProperty("value", "Companion draft");
   await button(page, "Switch community").click();
   await button(page, "Personal space").click();
   await expect(

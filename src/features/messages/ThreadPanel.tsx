@@ -320,9 +320,9 @@ function ThreadMessages({
         {snapshot.root ? (
           <MessageRow
             extensions={extensions}
-            row={snapshot.root}
             session={session}
             scope={scope}
+            row={snapshot.root}
             profile={profiles.get(snapshot.root.authorId)}
             participantProfiles={profiles}
             media={session.media}
@@ -345,9 +345,9 @@ function ThreadMessages({
             <li key={row.id}>
               <MessageRow
                 extensions={extensions}
-                row={row}
                 session={session}
                 scope={scope}
+                row={row}
                 profile={profiles.get(row.authorId)}
                 participantProfiles={profiles}
                 media={session.media}

@@ -16,6 +16,7 @@ import { CustomEmoji } from "../../bundled/emoji/CustomEmoji";
 import { emojiMatches } from "../relay/emoji";
 import { profileTarget } from "../profiles/target";
 import styles from "./Messages.module.css";
+import { LinkLabel } from "../../bundled/links/InlineLink";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { safeMessageUrl } from "../relay/message-content";
 import type { ChannelMessage } from "../relay/contracts";
@@ -72,18 +73,21 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   return [node, ...elements(node.props.children as ReactNode)];
 }
 function profileButtons(content: string, options: RenderOptions = {}) {
-  const markdown = elements(MessageMarkdown(props(content, options))).find(
-    (node) => node.type === Markdown,
-  );
+  const rendered = elements(MessageMarkdown(props(content, options)));
+  const markdown = rendered.find((node) => node.type === Markdown);
   if (!markdown) throw new Error("Missing Markdown");
   const parsed = Markdown(markdown.props as ComponentProps<typeof Markdown>);
-  const Span = (markdown.props.components as Components).span as (
-    props: ComponentProps<"span">,
-  ) => ReactNode;
-  if (typeof Span !== "function") throw new Error("Missing inline renderer");
+  const Span = (markdown.props.components as Components).span;
+  const renderSpan = (
+    rendered.find((node) =>
+      Boolean((node.props.value as Components | undefined)?.span),
+    )?.props.value as Components | undefined
+  )?.span as (props: ComponentProps<"span">) => ReactNode;
+  if (typeof renderSpan !== "function")
+    throw new Error("Missing inline renderer");
   return elements(parsed)
     .filter((node) => node.type === Span)
-    .flatMap((node) => elements(Span(node.props)))
+    .flatMap((node) => elements(renderSpan(node.props)))
     .filter((node) => node.type === "button");
 }
 
@@ -208,9 +212,9 @@ second
 describe("Markdown profile mentions", () => {
   it("binds exact signed names longest-first through surrounding emphasis", () => {
     const html = render("**@Mic Smith**, _@Mic_! @Other @Missing @Microscopic");
-    expect(html).toContain(
-      `<strong><button type="button" class="${styles.mention}" aria-label="View Mic Smith profile">@Mic Smith</button></strong>`,
-    );
+    expect(html).toContain("<strong><button");
+    expect(html).toContain('aria-label="View Mic Smith profile"');
+    expect(html).toContain("</svg>Mic Smith</button></strong>");
     // The raw helper conservatively treats trailing underscore as a name suffix.
     expect(html.match(/<button/g)).toHaveLength(1);
     expect(html).toContain("<em>@Mic</em>");
@@ -226,9 +230,8 @@ describe("Markdown profile mentions", () => {
       emoji: [party],
       extensions,
     });
-    expect(html).toContain(
-      `aria-label="View ${name} profile">@${name}</button></strong>`,
-    );
+    expect(html).toContain(`aria-label="View ${name} profile"`);
+    expect(html).toContain(`</svg>${name}</button></strong>`);
     expect(html).not.toContain("<em>");
     expect(html).not.toContain("<img");
   });
@@ -424,4 +427,72 @@ describe("Markdown inline extensions", () => {
       'data-single-emoji="true">😀</p>',
     );
   });
+});
+
+it.each([false, true])(
+  "retains formatting inside labeled links (plugin enabled: %s)",
+  (enabled) => {
+    const links = {
+      snapshot: () =>
+        enabled
+          ? [
+              {
+                id: "link",
+                title: "Links",
+                key: "links/link",
+                pluginId: "links",
+                revision: "one",
+                matches: () => true,
+                component: ({ url }: { url: string }) => (
+                  <LinkLabel href={url} />
+                ),
+              },
+            ]
+          : [],
+      subscribe: () => () => {},
+    };
+    const html = render(
+      "[**Important** or `code`](https://github.com/block/buzz-app)",
+      { extensions: { ...extensions, links } },
+    );
+    expect(html).toContain("<strong>Important</strong>");
+    expect(html).toContain("<code>code</code>");
+    expect(html).toContain('href="https://github.com/block/buzz-app"');
+    expect(html.includes('data-link-kind="github"')).toBe(enabled);
+  },
+);
+
+it("keeps resolved channel labels for Buzz autolinks", () => {
+  const entry = {
+    id: "link",
+    title: "Links",
+    key: "links/link",
+    pluginId: "links",
+    revision: "one",
+    matches: () => true,
+    component: ({ url }: { url: string }) => <LinkLabel href={url} />,
+  };
+  const href = `buzz://message?channel=design&id=${"a".repeat(64)}`;
+  const html = render(`<${href}> <buzz://channel/design>`, {
+    directory: {
+      profiles: new Map(),
+      agents: [],
+      channels: [
+        {
+          id: "design",
+          name: "design",
+          channelType: "forum",
+        },
+      ],
+    },
+    extensions: {
+      ...extensions,
+      links: { snapshot: () => [entry], subscribe: () => () => {} },
+    },
+  });
+  expect(html).toContain('data-link-kind="message"');
+  expect(html).toContain('data-link-kind="channel"');
+  const text = html.replace(/<[^>]*>/g, "");
+  expect(text).toContain("design");
+  expect(text).not.toContain("buzz://");
 });

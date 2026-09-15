@@ -1,9 +1,10 @@
+import type { ComposerInputElement } from "../messages/composer-dom";
 import { useLayoutEffect, useRef, type RefObject } from "react";
 
 /** Portal positioning belongs to the host, not provider previews. The available
  * visual viewport bounds the menu even inside clipped/narrow conversation panels. */
 export function useCompletionPosition(
-  input: RefObject<HTMLTextAreaElement | null>,
+  input: RefObject<ComposerInputElement | null>,
   widthRatio = 1,
 ) {
   const popup = useRef<HTMLElement>(null);

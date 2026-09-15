@@ -5,6 +5,7 @@ import { keypair, message, signed } from "../relay/testing";
 import { MessageRow } from "./MessageRow";
 import type { ChannelMessage } from "../relay/contracts";
 import type { UnreadCapability, UnreadSnapshot } from "../relay/unread";
+import { LinkLabel } from "../../bundled/links/InlineLink";
 
 const row: ChannelMessage = {
   id: "root",
@@ -18,6 +19,61 @@ const row: ChannelMessage = {
   reactions: [],
   replyCount: 23,
 };
+it.each(["bare", "angle", "markdown", "escaped"] as const)(
+  "renders link contributions inside message prose, preserving punctuation and plain-link fallback (%s)",
+  (format) => {
+    const url = "https://github.com/block/buzz/issues/1234";
+    const label =
+      format === "markdown" || format === "escaped" ? "Repository" : url;
+    const content = {
+      bare: url,
+      angle: `<${url}>`,
+      markdown: `[Repository](${url})`,
+      escaped: `[Repository]\\([${url}](${url}))`,
+    }[format];
+    const entry = {
+      id: "link",
+      title: "Link",
+      key: "buzz.links/link",
+      pluginId: "buzz.links",
+      revision: "one",
+      matches: () => true,
+      component: ({ url }: { url: string }) => <LinkLabel href={url} />,
+    };
+    const render = (enabled: boolean) =>
+      renderToStaticMarkup(
+        <MessageRow
+          row={{
+            ...row,
+            content: `Before ${content}. After`,
+            replyCount: 0,
+          }}
+          profile={undefined}
+          media={() => undefined}
+          onOpenLink={() => false}
+          day={false}
+          retry={undefined}
+          extensions={{
+            tools: { snapshot: () => [], subscribe: () => () => {} },
+            inline: { snapshot: () => [], subscribe: () => () => {} },
+            links: {
+              snapshot: () => (enabled ? [entry] : []),
+              subscribe: () => () => {},
+            },
+          }}
+        />,
+      );
+    const enabled = render(true);
+    expect(enabled).toContain(`href="${url}"`);
+    expect(enabled).toContain('data-link-kind="github"');
+    expect(enabled.replace(/<[^>]+>/g, "")).toContain(`Before ${label}. After`);
+    expect(enabled).not.toContain("&lt;");
+    expect(enabled).not.toContain("&gt;");
+    expect(render(false)).not.toContain("data-link-kind");
+    expect(render(false)).toContain(`>${label}</a>`);
+  },
+);
+
 it.each([
   ["😀 🙏 👏 😄", [], true],
   ["😀".repeat(40), [], true],

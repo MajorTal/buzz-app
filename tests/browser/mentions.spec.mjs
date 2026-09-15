@@ -64,7 +64,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     );
     await search.fill("grinning");
     await page.getByRole("button", { name: "😀", exact: true }).click();
-    await expect(input).toHaveValue("@Honey @Honey 😀");
+    await expect(input).toHaveJSProperty("value", "@Honey @Honey 😀");
     await expect(
       page
         .getByRole("region", { name: "Notification recipients" })
@@ -146,7 +146,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     );
     await expect(
       page.getByRole("textbox", { name: "Reply to thread" }),
-    ).toHaveValue("@Honey ");
+    ).toHaveJSProperty("value", "@Honey ");
     expect(
       await page.evaluate(() => window.mentionFixture.publications.length),
     ).toBe(2);
@@ -163,7 +163,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     ).toEqual([{ inputDisabled: true, text: false, mention: false }]);
     await expect(
       page.getByRole("textbox", { name: "Reply to thread" }),
-    ).toHaveValue("@Honey ");
+    ).toHaveJSProperty("value", "@Honey ");
     await expect(
       page
         .getByRole("region", { name: "Notification recipients" })
@@ -175,7 +175,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     await choose(keys.second);
     await expect(
       page.getByRole("textbox", { name: "Reply to thread" }),
-    ).toHaveValue("@Honey @Honey ");
+    ).toHaveJSProperty("value", "@Honey @Honey ");
     expect(errors).toEqual([]);
   } finally {
     await server.close();

@@ -138,7 +138,7 @@ test("storage denial is visible and retryable; another window updates a live con
     );
     await expect(emojiSearch).toHaveValue("grinning");
     expect(await emojiNode.evaluate((el) => el.isConnected)).toBe(true);
-    await expect(composer).toHaveValue("Unsent appearance draft");
+    await expect(composer).toHaveJSProperty("value", "Unsent appearance draft");
     expect(await node.evaluate((el) => el.isConnected)).toBe(true);
     await expectAnchor(page, before);
     // The second window legitimately creates its own session; a mode change must not add a third.

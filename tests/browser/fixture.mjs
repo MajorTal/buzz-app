@@ -743,6 +743,7 @@ export const test = base.extend({
                   relayUrl: fixtureRelayUrl,
                   communityAliases: fixtureAliases,
                   identity: () => userKey.slice(),
+                  agentLibrary: () => [],
                   ...(readState
                     ? {}
                     : {

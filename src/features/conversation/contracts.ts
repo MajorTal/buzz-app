@@ -51,6 +51,14 @@ export type InlineRenderer = Readonly<{
     media(url: string): string | undefined;
   }>;
 }>;
+/** Link presentation only. The host retains the anchor, destination and activation. */
+export type LinkRenderer = Readonly<{
+  id: string;
+  title: string;
+  matches(url: string): boolean;
+  className?: string | undefined;
+  component: ComponentType<{ url: string }>;
+}>;
 export type ContributionReader<T> = Readonly<{
   snapshot(): readonly Contribution<T>[];
   subscribe(listener: () => void): () => void;
@@ -59,6 +67,7 @@ export type ConversationExtensions = Readonly<{
   tools: ContributionReader<ComposerTool>;
   inline: ContributionReader<InlineRenderer>;
   completions?: ContributionReader<ComposerCompletion>;
+  links?: ContributionReader<LinkRenderer>;
 }>;
 
 /** Immutable host-issued evidence, scoped to one live editor observation. */

@@ -1,0 +1,4 @@
+/* Judge inline links on the conversation's panel surface. */
+body {
+  background: var(--bg-panel);
+}

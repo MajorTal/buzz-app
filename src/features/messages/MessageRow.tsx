@@ -1,4 +1,5 @@
 import { memo, useCallback, useSyncExternalStore } from "react";
+import type { RelaySession } from "../relay/session";
 import type { UnreadCapability } from "../relay/unread";
 import { profileTarget } from "../profiles/target";
 import { InlineText } from "../conversation/InlineText";
@@ -6,12 +7,12 @@ import type { ConversationExtensions } from "../conversation/contracts";
 import type { ChannelMessage, Profile } from "../relay/contracts";
 import { AttachmentImage } from "./AttachmentImage";
 import { DeliveryNotice } from "./DeliveryNotice";
+import { useReferenceDirectory } from "./ReferenceText";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { safeMessageUrl } from "../relay/message-content";
 import styles from "./Messages.module.css";
 import { usesLargeEmojiPresentation } from "./emoji-size";
 import { ReactionTool } from "../conversation/ReactionTool";
-import type { RelaySession } from "../relay/session";
 
 const emptySubscribe = () => () => {};
 const EMPTY_CHANNEL_LIST = Object.freeze({
@@ -53,6 +54,7 @@ export const MessageRow = memo(function MessageRow({
   onOpenThread,
   participantProfiles,
 }: MessageRowProps) {
+  const directory = useReferenceDirectory(session, row.mentions.length > 0);
   const threadUnread = useThreadUnread(
     row.replyCount > 0 && onOpenThread ? unread : undefined,
     row.channelId,
@@ -131,6 +133,9 @@ export const MessageRow = memo(function MessageRow({
             </time>
           </div>
           <MessageMarkdown
+            directory={directory}
+            session={session}
+            scope={scope}
             row={row}
             extensions={extensions}
             media={media}

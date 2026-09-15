@@ -98,7 +98,7 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
               );
               const check = () => {
                 const composer = document.querySelector(
-                  `textarea[placeholder="Message #${name}"]`,
+                  `[role="textbox"][aria-label="Message #${name}"]`,
                 );
                 const history = document.querySelector(
                   '[aria-label="Channel message history"]',

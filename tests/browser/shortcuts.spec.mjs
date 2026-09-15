@@ -45,7 +45,7 @@ test("real Settings keys respect dialogs and modifiers, focus main, and preserve
   ).toBeVisible();
   await expect(page.getByRole("main")).toBeFocused();
   await button(page, "Messages").first().click();
-  await expect(composer).toHaveValue("Keep my draft");
+  await expect(composer).toHaveJSProperty("value", "Keep my draft");
 });
 
 test("zoom keys resize real message/composer text, not window or spacing, and persist/reset", async ({
@@ -108,7 +108,7 @@ test("zoom keys resize real message/composer text, not window or spacing, and pe
   await page.keyboard.press(`${modifier}+=`);
   await scale(page, 1.1);
   expect(await node.evaluate((el) => el.isConnected)).toBe(true);
-  await expect(composer).toHaveValue("Unsent zoom draft");
+  await expect(composer).toHaveJSProperty("value", "Unsent zoom draft");
   expect((await page.locator(".shell-header").boundingBox()).height).toBe(
     header.height,
   );
@@ -116,7 +116,7 @@ test("zoom keys resize real message/composer text, not window or spacing, and pe
   await page.reload();
   await scale(page, 1.1);
   await button(page, "Messages").first().click();
-  await expect(composer).toHaveValue("Unsent zoom draft");
+  await expect(composer).toHaveJSProperty("value", "Unsent zoom draft");
   await composer.focus();
   for (let i = 0; i < 15; i++) await page.keyboard.press(`${modifier}+=`);
   await scale(page, 2);

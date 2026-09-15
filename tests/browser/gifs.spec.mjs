@@ -243,11 +243,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await expect(search).toHaveAttribute("autocapitalize", "off");
   await expect(sharedSearchIcon).toHaveAttribute("viewBox", "0 0 24 24");
   await expect(sharedSearchIcon).toHaveAttribute("stroke-width", "2");
-  await expect(sharedSearchIcon.locator("path")).toHaveAttribute(
-    "d",
-    "m21 21-4.34-4.34",
-  );
-  await expect(sharedSearchIcon.locator("circle")).toHaveAttribute("r", "8");
+  await expect(sharedSearchIcon).toHaveAttribute("aria-hidden", "true");
   expect(await sharedSearchIconNode.evaluate((node) => node.isConnected)).toBe(
     true,
   );

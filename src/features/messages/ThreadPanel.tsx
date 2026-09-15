@@ -221,10 +221,9 @@ function ThreadMessages({
     scroller,
     settled: positioned,
     messageId,
-    signal: navigation?.signal,
-    ready: rootTarget
-      ? snapshot.root?.id === messageId
-      : snapshot.targetStatus === "ready" && snapshot.target?.id === messageId,
+    signal: rootTarget ? undefined : navigation?.signal,
+    ready:
+      snapshot.targetStatus === "ready" && snapshot.target?.id === messageId,
     complete: completeTarget,
     prepare: prepareTarget,
   });
@@ -248,9 +247,20 @@ function ThreadMessages({
   // biome-ignore lint/correctness/useExhaustiveDependencies: Rendered rows/profiles change scroll height; sending is explicit navigation intent.
   useLayoutEffect(() => {
     const element = scroller.current;
+    if (!element || navigation?.signal.aborted) return;
+    // A mounted ordinary thread acknowledges the visit before slow history can
+    // exhaust navigation's deadline. Positioning still waits for bounded loading.
     if (
-      !element ||
-      (navigation && revealed.current !== navigation.signal) ||
+      rootTarget &&
+      snapshot.status !== "error" &&
+      snapshot.root?.id === messageId &&
+      revealed.current !== navigation.signal
+    ) {
+      revealed.current = navigation.signal;
+      navigation.complete({ status: "opened" });
+    }
+    if (
+      (navigation && !rootTarget && revealed.current !== navigation.signal) ||
       (!positioned.current &&
         (snapshot.status !== "ready" || snapshot.canLoadMore))
     )
@@ -272,10 +282,13 @@ function ThreadMessages({
   }, [
     snapshot.status,
     snapshot.canLoadMore,
+    snapshot.root,
+    messageId,
     rows,
     profiles,
     sent,
     navigation,
+    rootTarget,
     revealed,
     selectedRow,
   ]);

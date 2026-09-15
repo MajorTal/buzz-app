@@ -936,7 +936,7 @@ export const test = base.extend({
           targetEvents.push(event);
           relay.publish("primary", event);
         },
-        reply(rootId, own = false) {
+        reply(rootId, own = false, deliver = true) {
           const replies = threadReplies.get(rootId);
           if (!replies) throw new Error("Unknown fixture thread");
           const event = sign(
@@ -950,7 +950,7 @@ export const test = base.extend({
             replies.at(-1).created_at + 1,
           );
           replies.push(event);
-          relay.publish("primary", event);
+          if (deliver) relay.publish("primary", event);
           return event;
         },
         append(community, channel, content, deliver = true, own = true) {

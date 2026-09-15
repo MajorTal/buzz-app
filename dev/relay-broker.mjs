@@ -35,7 +35,7 @@ import {
   apiFailure,
 } from "../src/features/relay/http-admission.ts";
 import { execFileSync } from "node:child_process";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import dc from "node:diagnostics_channel";
 import { finalizeEvent, getPublicKey, nip19, verifyEvent } from "nostr-tools";
 import { Agent, fetch as upstreamHttp, interceptors } from "undici";
@@ -46,6 +46,60 @@ const MAX_FILTERS = 4,
   MAX_MEDIA_BYTES = 20 * 1024 * 1024,
   UPSTREAM_TIMEOUT_MS = 20000,
   KEEPALIVE_MS = 60000;
+
+const LIVE_ROOM_PREFIX = "Live: ";
+const HEX_PUBKEY = /^[0-9a-f]{64}$/;
+
+function liveRoomCommand(route, value, viewer) {
+  if (!value || typeof value !== "object" || Array.isArray(value))
+    throw new Error("Invalid live room request");
+  if (route === "/api/relay/huddle-auth") {
+    if (
+      typeof value.challenge !== "string" ||
+      !/^[\x21-\x7e]{1,512}$/.test(value.challenge)
+    )
+      throw new Error("Invalid audio challenge");
+    return { challenge: value.challenge };
+  }
+  if (route === "/api/relay/rooms-create") {
+    const name = typeof value.name === "string" ? value.name.trim() : "";
+    if (
+      !name ||
+      name.length > 80 ||
+      [...name].some((character) => {
+        const code = character.charCodeAt(0);
+        return code < 32 || code === 127;
+      })
+    )
+      throw new Error("Live room name must be 1-80 characters");
+    if (!Array.isArray(value.invited) || value.invited.length > 20)
+      throw new Error("A live room supports up to 20 invited people");
+    const invited = [
+      ...new Set(
+        value.invited.map((pubkey) => {
+          if (typeof pubkey !== "string" || !HEX_PUBKEY.test(pubkey))
+            throw new Error("Invalid invited identity");
+          return pubkey;
+        }),
+      ),
+    ].filter((pubkey) => pubkey !== viewer);
+    return { name, invited };
+  }
+  if (route === "/api/relay/rooms-invite") {
+    if (
+      typeof value.roomId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        value.roomId,
+      ) ||
+      typeof value.pubkey !== "string" ||
+      !HEX_PUBKEY.test(value.pubkey) ||
+      value.pubkey === viewer
+    )
+      throw new Error("Invalid live room invitation");
+    return { roomId: value.roomId, pubkey: value.pubkey };
+  }
+  throw new Error("Unknown live room command");
+}
 
 /** Warm, long-lived upstream connections. Node's default pool drops idle sockets after
  * four seconds, so every send after a short pause paid DNS + TCP + TLS again; a cold
@@ -297,6 +351,69 @@ export function relayBrokerPlugin({
       let libraryRead;
       const streams = new Map();
       const admissions = createHostAdmission();
+      const publishLiveRoomEvent = async (relay, template, signal) => {
+        const event = finalizeEvent(
+          { ...template, created_at: Math.floor(Date.now() / 1000) },
+          key,
+        );
+        const body = JSON.stringify(event);
+        const response = await admittedApiRequest(
+          admissions(relay, viewer).api,
+          () => {
+            signal.throwIfAborted();
+            const auth = finalizeEvent(
+              {
+                kind: 27235,
+                created_at: Math.floor(Date.now() / 1000),
+                content: "",
+                tags: [
+                  ["u", `${relay}/events`],
+                  ["method", "POST"],
+                  ["payload", createHash("sha256").update(body).digest("hex")],
+                  ["nonce", randomBytes(16).toString("hex")],
+                ],
+              },
+              key,
+            );
+            return fetchUpstream(`${relay}/events`, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization:
+                  "Nostr " +
+                  Buffer.from(JSON.stringify(auth)).toString("base64"),
+              },
+              body,
+              redirect: "error",
+              signal,
+            });
+          },
+          signal,
+          "foreground",
+        );
+        const text = await response.text();
+        if (!response.ok) {
+          let failure;
+          try {
+            failure = apiFailure(response.status, JSON.parse(text));
+          } catch {
+            failure = apiFailure(response.status, undefined);
+          }
+          const error = new Error(failure.error);
+          error.status = response.status;
+          error.failure = failure;
+          throw error;
+        }
+        let receipt;
+        try {
+          receipt = JSON.parse(text);
+        } catch {
+          throw new Error("Live room publication returned an invalid receipt");
+        }
+        if (receipt.event_id !== event.id || receipt.accepted !== true)
+          throw new Error("Live room publication was not confirmed");
+        return event;
+      };
       server.httpServer?.once("close", () => {
         for (const { close } of streams.values()) close();
         key.fill(0);
@@ -470,6 +587,137 @@ export function relayBrokerPlugin({
               agentLibrary: true,
               live: true,
             });
+          if (
+            [
+              "/api/relay/huddle-auth",
+              "/api/relay/rooms-create",
+              "/api/relay/rooms-invite",
+            ].includes(route) &&
+            req.method === "POST"
+          ) {
+            let raw = "";
+            for await (const part of req) {
+              raw += part;
+              if (Buffer.byteLength(raw) > 16_384)
+                return json(res, 413, { error: "Live room request too large" });
+            }
+            let command;
+            try {
+              command = liveRoomCommand(route, JSON.parse(raw), viewer);
+            } catch (error) {
+              return json(res, 400, {
+                error:
+                  error instanceof Error
+                    ? error.message
+                    : "Invalid live room request",
+              });
+            }
+            if (route === "/api/relay/huddle-auth") {
+              const event = finalizeEvent(
+                {
+                  kind: 22242,
+                  created_at: Math.floor(Date.now() / 1000),
+                  content: "",
+                  tags: [
+                    ["relay", relay.replace(/^http/, "ws")],
+                    ["challenge", command.challenge],
+                  ],
+                },
+                key,
+              );
+              return json(res, 200, event);
+            }
+            if (inflight >= MAX_INFLIGHT)
+              return json(res, 429, {
+                error: "Query concurrency limit",
+                sent: false,
+              });
+            inflight++;
+            const cancel = new AbortController();
+            const release = () => cancel.abort();
+            res.once("close", release);
+            try {
+              const signal = AbortSignal.any([
+                cancel.signal,
+                AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
+              ]);
+              if (route === "/api/relay/rooms-create") {
+                const roomId = randomUUID();
+                await publishLiveRoomEvent(
+                  relay,
+                  {
+                    kind: 9007,
+                    content: "",
+                    tags: [
+                      ["h", roomId],
+                      ["name", `${LIVE_ROOM_PREFIX}${command.name}`],
+                      ["visibility", "private"],
+                      ["channel_type", "stream"],
+                      ["about", "buzz.live-room.v1"],
+                    ],
+                  },
+                  signal,
+                );
+                for (const pubkey of command.invited)
+                  await publishLiveRoomEvent(
+                    relay,
+                    {
+                      kind: 9000,
+                      content: "",
+                      tags: [
+                        ["h", roomId],
+                        ["p", pubkey],
+                      ],
+                    },
+                    signal,
+                  );
+                return json(res, 200, { roomId });
+              }
+              await publishLiveRoomEvent(
+                relay,
+                {
+                  kind: 9000,
+                  content: "",
+                  tags: [
+                    ["h", command.roomId],
+                    ["p", command.pubkey],
+                  ],
+                },
+                signal,
+              );
+              return json(res, 200, { accepted: true });
+            } catch (error) {
+              stats.errors++;
+              if (error instanceof ApiPaused)
+                return json(res, 429, {
+                  error: error.message,
+                  sent: false,
+                  paused: true,
+                  retryAfterMs: error.retryAfterMs,
+                });
+              if (error instanceof ApiCapacity)
+                return json(res, 429, {
+                  error: "Query concurrency limit",
+                  sent: false,
+                });
+              if (error?.failure)
+                return json(res, error.status ?? 502, error.failure);
+              if (isConnectFailure(error))
+                return json(res, 502, {
+                  error: "Relay unreachable",
+                  sent: false,
+                });
+              server.config.logger.error(
+                `[relay-broker] ${error instanceof Error ? error.message : String(error)}`,
+              );
+              return json(res, 502, {
+                error: "Live room operation could not be confirmed",
+              });
+            } finally {
+              res.off("close", release);
+              inflight--;
+            }
+          }
           if (
             ["/api/relay/stream-retry", "/api/relay/stream-priority"].includes(
               route,

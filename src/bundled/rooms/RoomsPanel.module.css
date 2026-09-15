@@ -1,0 +1,682 @@
+.root {
+  position: relative;
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  color: var(--text);
+}
+
+.roomHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 16px 14px;
+  border-bottom: 1px solid var(--border);
+}
+
+.roomSwitcher {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  align-items: center;
+  gap: 10px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  padding: 7px 8px;
+  color: inherit;
+  text-align: left;
+}
+
+.roomSwitcher:hover,
+.iconButton:hover {
+  background: var(--surface-hover);
+}
+
+.roomSwitcher > span:nth-child(2) {
+  min-width: 0;
+  flex: 1;
+}
+
+.roomSwitcher strong,
+.roomSwitcher small {
+  display: block;
+}
+
+.roomSwitcher strong {
+  overflow: hidden;
+  font-size: calc(14px * var(--buzz-text-scale, 1));
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.roomSwitcher small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+}
+
+.roomMark {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 11px;
+  background: #e6f0ea;
+  color: #345e50;
+}
+
+.iconButton {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--text-muted);
+  padding: 0;
+}
+
+.popover {
+  position: absolute;
+  z-index: 3;
+  top: 53px;
+  right: 16px;
+  left: 16px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  box-shadow: var(--elevation-popover);
+}
+.popover button {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  padding: 10px;
+  color: var(--text);
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+  text-align: left;
+}
+.popover button:hover,
+.popover button[aria-current="true"] {
+  background: var(--surface-hover);
+}
+.popover small {
+  flex-shrink: 0;
+  color: var(--text-muted);
+}
+.popover .menuAction {
+  justify-content: flex-start;
+  margin-top: 5px;
+  border-top: 1px solid var(--border);
+  border-radius: 0 0 9px 9px;
+}
+.optionsMenu {
+  left: auto;
+  width: 210px;
+}
+.optionsMenu button {
+  justify-content: flex-start;
+}
+.optionsMenu .dangerAction {
+  color: var(--danger);
+}
+.emptyRooms {
+  position: relative;
+  display: grid;
+  min-height: 100%;
+  place-content: center;
+  justify-items: center;
+  padding: 32px;
+  text-align: center;
+  color: var(--text);
+}
+.emptyRoomMark {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 15px;
+  background: var(--surface-accent);
+}
+.emptyRooms h2 {
+  margin: 16px 0 0;
+  font-size: calc(18px * var(--buzz-text-scale, 1));
+}
+.emptyRooms p {
+  max-width: 30ch;
+  margin: 6px 0 18px;
+  color: var(--text-muted);
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+}
+.emptyRooms > button,
+.sheetPrimary {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-color: var(--border-input);
+  background: var(--surface-control);
+  color: var(--text);
+}
+.sheetBackdrop {
+  position: absolute;
+  z-index: 5;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  padding: 12px;
+  background: var(--overlay);
+}
+.sheet {
+  width: 100%;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface-elevated);
+  color: var(--text);
+  box-shadow: var(--elevation-dialog);
+}
+.sheet header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.sheet h2 {
+  margin: 0;
+  font-size: calc(16px * var(--buzz-text-scale, 1));
+}
+.sheet header button {
+  display: grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border: 0;
+  padding: 0;
+  background: var(--surface-control);
+  color: var(--text);
+}
+.sheetNote {
+  margin: 0 0 14px;
+  color: var(--text-muted);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+  line-height: 1.5;
+}
+
+.sheetCentered {
+  max-width: 320px;
+  margin-inline: auto;
+}
+
+.sheetCentered > header h2,
+.sheetCentered > .sheetNote {
+  text-align: center;
+}
+
+.sheetCentered > .sheetNote {
+  max-width: 28ch;
+  margin-inline: auto;
+}
+
+.sheetCentered > header h2 {
+  flex: 1;
+  padding-left: 32px;
+}
+.sheet form label {
+  display: grid;
+  gap: 6px;
+  color: var(--text);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+  font-weight: 600;
+}
+.sheet input {
+  width: 100%;
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  padding: 9px 10px;
+  background: var(--surface-input);
+  color: var(--text);
+  font: inherit;
+}
+.sheetPrimary {
+  width: 100%;
+  margin-top: 14px;
+}
+.deleteButton {
+  width: 100%;
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+.members {
+  margin: 0 0 14px;
+  padding: 0;
+  list-style: none;
+}
+.members li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 9px 0;
+  border-bottom: 1px solid var(--border);
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+}
+.members small {
+  color: var(--text-muted);
+}
+.members .memberRemove {
+  padding: 5px 8px;
+  border: 0;
+  background: var(--surface-control);
+  color: var(--text);
+  font-size: calc(10px * var(--buzz-text-scale, 1));
+}
+
+.presence {
+  margin: 18px 16px 8px;
+  padding: 16px;
+  border-radius: 16px;
+  background: var(--surface-accent);
+}
+
+.presence > div {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.presenceDot {
+  width: 9px;
+  height: 9px;
+  flex-shrink: 0;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--toggle-track);
+}
+
+.presenceDot[data-present="true"] {
+  background: #3c8a5a;
+  box-shadow: 0 2px 8px #3c8a5a55;
+}
+
+.presence strong {
+  display: block;
+  font-size: calc(13px * var(--buzz-text-scale, 1));
+}
+
+.presence p {
+  margin: 4px 0 0;
+  color: var(--text-muted);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+  line-height: 1.45;
+}
+
+.primaryButton,
+.secondaryButton {
+  width: 100%;
+  margin-top: 14px;
+  padding: 8px 12px;
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  background: var(--surface-control);
+  color: var(--text);
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-weight: 600;
+}
+
+.primaryButton:hover,
+.secondaryButton:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.peopleSection {
+  min-height: 0;
+  flex: 1;
+  padding: 12px 16px 16px;
+}
+
+.sectionHeading {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+
+.sectionHeading h3 {
+  margin: 0;
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-weight: 650;
+}
+
+.sectionHeading span {
+  color: var(--text-muted);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+}
+
+.emptyPeople {
+  padding: 18px 4px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.emptyPeople p {
+  margin: 0;
+  color: var(--text);
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-weight: 600;
+}
+
+.emptyPeople small {
+  display: block;
+  max-width: 28ch;
+  margin: 5px auto 0;
+  font-size: calc(10px * var(--buzz-text-scale, 1));
+  line-height: 1.45;
+}
+
+.participants {
+  display: grid;
+  gap: 2px;
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.participants li {
+  position: relative;
+  display: grid;
+  min-width: 0;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 9px;
+  overflow: hidden;
+  padding: 8px;
+  border-radius: 8px;
+}
+
+.participantInfo {
+  z-index: 1;
+  min-width: 0;
+}
+
+.participants strong,
+.participants small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.participants strong {
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+}
+
+.participants small {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: calc(10px * var(--buzz-text-scale, 1));
+}
+
+.speakerLevel {
+  position: absolute;
+  inset: auto 0 0;
+  height: 2px;
+  transform-origin: left;
+  background: var(--focus);
+  transition: transform 80ms linear;
+}
+
+.audioDock {
+  margin: 0 12px 12px;
+  padding: 14px;
+  border-radius: 16px;
+  background: var(--surface-accent);
+  color: var(--text);
+}
+
+.audioDock[data-listening="true"] {
+  background: var(--selected);
+  color: var(--on-selected);
+}
+
+.audioStatus {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.audioIcon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 11px;
+  background: var(--surface);
+  color: var(--text);
+}
+
+.audioStatus strong,
+.audioStatus small {
+  display: block;
+}
+
+.audioStatus strong {
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+}
+
+.audioStatus small {
+  margin-top: 2px;
+  color: currentColor;
+  font-size: calc(10px * var(--buzz-text-scale, 1));
+  opacity: 0.76;
+}
+
+.listenButton,
+.leaveButton {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 12px;
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+  padding: 9px 12px;
+  background: var(--surface-control);
+  color: var(--text);
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-weight: 650;
+}
+
+.listenButton:hover,
+.leaveButton:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.listenButton:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.audioActions {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr);
+  gap: 7px;
+  margin-top: 12px;
+}
+
+.audioControl,
+.liveControl,
+.leaveButton {
+  min-height: 38px;
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
+}
+
+.audioControl,
+.liveControl {
+  display: grid;
+  width: 40px;
+  place-items: center;
+  padding: 0;
+  background: var(--surface-control);
+  color: var(--text);
+}
+
+.audioControl:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.liveControl,
+.liveControl:hover {
+  border-color: var(--focus);
+  background: var(--selected);
+  color: var(--on-selected);
+}
+
+.liveMic {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.levelBars {
+  display: flex;
+  height: 14px;
+  align-items: center;
+  gap: 1px;
+  transform-origin: center;
+  transition: transform 80ms linear;
+}
+
+.levelBars i {
+  width: 2px;
+  border-radius: 2px;
+  background: currentColor;
+}
+
+.levelBars i:nth-child(1) {
+  height: 5px;
+}
+
+.levelBars i:nth-child(2) {
+  height: 9px;
+}
+
+.levelBars i:nth-child(3) {
+  height: 6px;
+}
+
+.leaveButton {
+  display: flex;
+  width: auto;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+  margin: 0;
+  padding: 0 9px;
+  border-color: var(--border-input);
+  background: var(--surface-control);
+  color: var(--text);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+}
+
+.leaveButton:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.operationError {
+  margin: 0 16px 12px;
+  color: var(--danger);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+  line-height: 1.4;
+}
+
+.emptyRooms > .operationError {
+  max-width: 34ch;
+  margin-top: 12px;
+}
+
+@media (max-width: 650px) {
+  .roomHeading {
+    padding-inline: 12px;
+  }
+
+  .presence,
+  .peopleSection {
+    margin-inline: 12px;
+  }
+}
+
+.inviteError {
+  margin: 8px 0 0;
+  color: var(--danger);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+}
+
+.identityChoices {
+  max-height: 220px;
+  margin-top: 10px;
+  overflow-y: auto;
+}
+
+.identityChoice {
+  display: flex;
+  width: 100%;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+  border: 0;
+  padding: 8px;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+}
+
+.identityChoice:hover {
+  background: var(--surface-hover);
+}
+
+.identityChoice > span {
+  min-width: 0;
+}
+
+.identityChoices strong,
+.identityChoices code {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.identityChoices strong {
+  font-size: calc(12px * var(--buzz-text-scale, 1));
+}
+
+.identityChoices code {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: calc(9px * var(--buzz-text-scale, 1));
+}
+
+.identityChoices p {
+  margin: 10px 4px;
+  color: var(--text-muted);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+}

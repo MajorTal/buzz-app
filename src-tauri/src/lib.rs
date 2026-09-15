@@ -5,6 +5,8 @@ use buzzodz_plugins::{
 use std::sync::{Arc, Mutex};
 use tauri_plugin_dialog::DialogExt;
 
+mod live_audio;
+
 #[derive(Clone, Default)]
 struct Imports(Arc<Mutex<Option<PreparedImport>>>);
 
@@ -150,6 +152,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .manage(Imports::default())
         .manage(PluginManager(Manager::from_env()))
+        .manage(live_audio::LiveAudioRegistry::default())
         .invoke_handler(tauri::generate_handler![
             plugin_import_folder,
             plugin_import_git,
@@ -158,7 +161,12 @@ pub fn run() {
             plugin_catalog,
             plugin_change,
             plugin_module,
-            plugin_recover
+            plugin_recover,
+            live_audio::live_audio_prepare,
+            live_audio::live_audio_authenticate,
+            live_audio::live_audio_push_pcm,
+            live_audio::live_audio_set_output_muted,
+            live_audio::live_audio_leave
         ])
         .run(tauri::generate_context!())
         .expect("failed to run Buzz Foundation");

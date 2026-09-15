@@ -273,6 +273,7 @@ fn bundled_plugins_have_independent_flags_and_all_ids_are_reserved() {
     );
     for id in [
         "buzz.bestie",
+        "buzz.live-rooms",
         "buzz.projects",
         "buzz.agents",
         "buzz.emoji",

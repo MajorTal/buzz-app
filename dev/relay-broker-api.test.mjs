@@ -320,3 +320,72 @@ test("both real sign and publish routes admit direct replies but reject arbitrar
     await h.close();
   }
 });
+
+test("live room commands construct fixed private-channel events and audio auth stays challenge-scoped", async () => {
+  const invited = "a".repeat(64);
+  const h = await harness((call) =>
+    Response.json({ accepted: true, event_id: call.body.id }),
+  );
+  try {
+    const authResponse = await h.post("huddle-auth", {
+      challenge: "relay-issued-challenge",
+      kind: 1,
+      content: "ignored",
+    });
+    expect(authResponse.status).toBe(200);
+    const auth = await authResponse.json();
+    expect(verifyEvent(auth)).toBe(true);
+    expect(auth).toMatchObject({
+      kind: 22242,
+      content: "",
+      pubkey: getPublicKey(new Uint8Array([...Array(31).fill(0), 7])),
+    });
+    expect(auth.tags).toEqual([
+      ["relay", fixtureRelayUrl.replace(/^http/, "ws")],
+      ["challenge", "relay-issued-challenge"],
+    ]);
+    expect(h.calls).toHaveLength(0);
+
+    const createdResponse = await h.post("rooms-create", {
+      name: "Design pairing",
+      invited: [invited, invited],
+      visibility: "open",
+    });
+    expect(createdResponse.status).toBe(200);
+    const { roomId } = await createdResponse.json();
+    expect(roomId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(h.calls.map((call) => call.body.kind)).toEqual([9007, 9000]);
+    expect(h.calls[0].body.tags).toEqual([
+      ["h", roomId],
+      ["name", "Live: Design pairing"],
+      ["visibility", "private"],
+      ["channel_type", "stream"],
+      ["about", "buzz.live-room.v1"],
+    ]);
+    expect(h.calls[1].body.tags).toEqual([
+      ["h", roomId],
+      ["p", invited],
+    ]);
+    expect(h.calls.every((call) => verifyEvent(call.body))).toBe(true);
+  } finally {
+    await h.close();
+  }
+});
+
+test("live room commands reject malformed names, identities, room ids and challenges without upstream I/O", async () => {
+  const h = await harness(success);
+  try {
+    for (const [route, body] of [
+      ["rooms-create", { name: "", invited: [] }],
+      ["rooms-create", { name: "Valid", invited: ["not-a-pubkey"] }],
+      ["rooms-invite", { roomId: "not-a-room", pubkey: "a".repeat(64) }],
+      ["huddle-auth", { challenge: "line\nbreak" }],
+    ]) {
+      const response = await h.post(route, body);
+      expect(response.status).toBe(400);
+    }
+    expect(h.calls).toHaveLength(0);
+  } finally {
+    await h.close();
+  }
+});

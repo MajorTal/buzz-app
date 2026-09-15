@@ -57,6 +57,8 @@ pub fn bundled_manifests() -> Vec<Manifest> {
             .expect("github manifest"),
         serde_json::from_str(include_str!("../../../src/bundled/bestie/manifest.json"))
             .expect("bestie manifest"),
+        serde_json::from_str(include_str!("../../../src/bundled/rooms/manifest.json"))
+            .expect("rooms manifest"),
         serde_json::from_str(include_str!("../../../src/bundled/projects/manifest.json"))
             .expect("projects manifest"),
         serde_json::from_str(include_str!("../../../src/bundled/agents/manifest.json"))

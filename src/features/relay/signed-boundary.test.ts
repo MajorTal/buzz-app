@@ -2,7 +2,7 @@
 
 import { assert, afterEach, expect, it, vi } from "vitest";
 import { connectSignedTransport } from "./transport";
-import { ApiCapacity } from "./http-admission";
+import { ApiCapacity, ApiPaused } from "./http-admission";
 import { PublishRejected } from "./outbox";
 import { signed, keypair } from "./testing";
 function required<T>(value: T | undefined): T {
@@ -88,47 +88,51 @@ it("positive control: immediate signer keeps signed fetches 500ms apart", async 
       required(starts[i]) - required(starts[i - 1]),
     ).toBeGreaterThanOrEqual(500);
 });
-it("a signer already waiting cannot bypass a newly learned shared cooldown", async () => {
-  vi.useFakeTimers();
-  const key = keypair();
-  const pending: Array<() => void> = [];
-  const starts: number[] = [];
-  const identity = {
-    getPublicKey: async () => key.pubkey,
-    signEvent: (t: Parameters<typeof signed>[1]) =>
-      new Promise<ReturnType<typeof signed>>((resolve) =>
-        pending.push(() => resolve(signed(key, t))),
-      ),
-  };
-  vi.stubGlobal("fetch", async () => {
-    starts.push(performance.now());
-    return starts.length === 1
-      ? Response.json(
-          { error: "rate-limited: quota exceeded; retry in 2s" },
-          { status: 429 },
-        )
-      : Response.json([]);
-  });
-  const t = await connectSignedTransport(
-    identity,
-    "https://pause-during-sign.test",
-    "relay",
-  );
-  const one = t.query([{ kinds: [0], limit: 1 }]).catch((e) => e);
-  const two = t.query([{ kinds: [0], limit: 2 }]).catch((e) => e);
-  await vi.advanceTimersByTimeAsync(600);
-  await vi.waitFor(() => expect(pending).toHaveLength(2));
-  required(pending[0])();
-  await tick();
-  await vi.advanceTimersByTimeAsync(1);
-  await one;
-  required(pending[1])();
-  await tick();
-  await vi.advanceTimersByTimeAsync(1);
-  expect(starts).toHaveLength(1);
-  await vi.advanceTimersByTimeAsync(3500);
-  await two;
-});
+it.each([0, 1])(
+  "a signer already waiting cannot bypass a newly learned shared cooldown (signer %i completes first)",
+  async (first) => {
+    vi.useFakeTimers();
+    const key = keypair();
+    const pending: Array<() => void> = [];
+    const starts: number[] = [];
+    const identity = {
+      getPublicKey: async () => key.pubkey,
+      signEvent: (t: Parameters<typeof signed>[1]) =>
+        new Promise<ReturnType<typeof signed>>((resolve) =>
+          pending.push(() => resolve(signed(key, t))),
+        ),
+    };
+    vi.stubGlobal("fetch", async () => {
+      starts.push(performance.now());
+      return starts.length === 1
+        ? Response.json(
+            { error: "rate-limited: quota exceeded; retry in 2s" },
+            { status: 429 },
+          )
+        : Response.json([]);
+    });
+    const t = await connectSignedTransport(
+      identity,
+      "https://pause-during-sign.test",
+      "relay",
+    );
+    const one = t.query([{ kinds: [0], limit: 1 }]).catch((e) => e);
+    const two = t.query([{ kinds: [0], limit: 2 }]).catch((e) => e);
+    await vi.advanceTimersByTimeAsync(600);
+    await vi.waitFor(() => expect(pending).toHaveLength(2));
+    required(pending[first])();
+    await tick();
+    await vi.advanceTimersByTimeAsync(1);
+    await Promise.race([one, two]);
+    required(pending[1 - first])();
+    await tick();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(starts).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(3500);
+    expect(await Promise.all([one, two])).toContainEqual(expect.any(ApiPaused));
+    expect(starts).toHaveLength(1);
+  },
+);
 
 function deferredSigner() {
   const key = keypair();

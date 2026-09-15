@@ -2,6 +2,7 @@ import { Switch } from "../shared/design-system/ui/Switch";
 import { Button } from "../shared/design-system/ui/Button";
 import { useSyncExternalStore } from "react";
 import type { NotificationsService } from "../features/notifications/service";
+import styles from "./NotificationSettings.module.css";
 
 export function NotificationSettings({
   notifications,
@@ -14,11 +15,14 @@ export function NotificationSettings({
   );
   const { preferences, permission } = state;
   return (
-    <section aria-labelledby="notification-settings-title">
+    <section
+      className={styles.root}
+      aria-labelledby="notification-settings-title"
+    >
       <h2 id="notification-settings-title" className="mt-0 mb-6 text-label">
         Notifications
       </h2>
-      <div className="space-y-5">
+      <div className="grid gap-5">
         <p className="text-body-sm text-muted">
           Choices are saved for this account on this device. System permission
           is separate.
@@ -44,7 +48,7 @@ export function NotificationSettings({
                     : "Allow notifications to receive alerts."}
         </p>
         {!state.systemManaged && (
-          <div className="flex gap-2">
+          <div className={styles.actions}>
             {permission === "default" && (
               <Button
                 type="button"
@@ -91,7 +95,7 @@ export function NotificationSettings({
             </p>
           </>
         )}
-        <fieldset className="m-0 space-y-3 border-0 p-0">
+        <fieldset className="m-0 grid gap-3 border-0 p-0">
           <legend className="mb-3 font-medium">Notify me about</legend>
           {state.categories.map(({ key, label }) => (
             <Switch

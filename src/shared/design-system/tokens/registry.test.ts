@@ -2,7 +2,7 @@ import { readFileSync } from "node:fs";
 
 import { describe, expect, it } from "vitest";
 
-import { PALETTE, RAMPS, ROLE_GROUPS } from "./registry";
+import { PALETTE, RAMPS, ROLE_GROUPS, TYPE_RAMPS } from "./registry";
 
 /**
  * `tokens.css` as text.
@@ -139,4 +139,24 @@ describe("token registry — colour namespaces do not collide", () => {
     );
     expect(roles.filter((role) => !registered.has(role))).toEqual([]);
   });
+});
+
+// Contract pinned to Block UI type.resolution.draft.json at eff76616.
+it("documents and declares the Block UI size ladder without a separate mono scale", () => {
+  const sizes = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72, 96];
+  const ramp = TYPE_RAMPS.find((ramp) => ramp.id === "size");
+  expect(ramp?.steps.map((step) => step.step)).toEqual(sizes);
+  const css = readFileSync(
+    new URL("../styles/typography.css", import.meta.url),
+    "utf8",
+  );
+  for (const size of sizes) {
+    expect(css).toContain(
+      `--type-size-${size}: calc(var(--type-rem) * ${size / 16});`,
+    );
+  }
+  for (const role of ["mono", "mono-sm", "mono-lg"]) {
+    expect(css).toContain(`--text-${role}: var(--type-size-10);`);
+    expect(css).toContain(`--text-${role}--line-height: 1.6;`);
+  }
 });

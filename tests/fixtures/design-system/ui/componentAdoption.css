@@ -54,8 +54,8 @@
 
 /* Frozen #59 presentation only. Never import these recipes into product code.
    Sources: shared/styles/globals.css, app/Settings.tsx, shared/Avatar.tsx,
-   features/messages/Messages.module.css at 95a0196. Tokens stay shared because
-   this PR changes component ownership, not palette or typography values. */
+   features/messages/Messages.module.css at 95a0196. Both columns use current shared tokens; these are historical component
+   recipes, not frozen typography measurements. */
 .adoption-old-button {
   @apply text-label;
   cursor: pointer;

@@ -483,3 +483,24 @@ test("component adoption uses real controls with labels and focusable busy switc
     ),
   ).toBe(true);
 });
+
+test("typography shows the Block UI ladder and renders the mapped mono tier", async ({
+  page,
+}) => {
+  await page.goto(`${viewer}#/design/typography`);
+  for (const size of [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72, 96]) {
+    await expect(page.getByText(`size.${size}`, { exact: true })).toBeVisible();
+  }
+  const samples = page.getByText("createChannel(name, members)", {
+    exact: true,
+  });
+  await expect(samples).toHaveCount(3);
+  for (const sample of await samples.all()) {
+    await expect(sample).toHaveCSS("font-size", "10px");
+    await expect(sample).toHaveCSS("line-height", "16px");
+    await expect(sample).toHaveCSS("font-family", /JetBrains Mono/);
+  }
+  await expect(
+    page.getByRole("link", { name: "Block UI typography resolution" }),
+  ).toHaveAttribute("href", /eff766161ba8aaee3258ca107f0d904dd542c708/);
+});

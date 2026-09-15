@@ -7,10 +7,10 @@ Shared neutrals now use BlockUI text and surface values; primary actions are
 neutral. Inter uses the BlockUI 16/24 body, 14/20 small body, 20/28 lead,
 24/24 section, 32/32 title and 56/56 hero settings, with 400/500 weights.
 Labels have separate 16/24 and 14/20 roles; caption is 12/16.
-Buzz retains its 11/13/15 mono roles for source code.
+Mono uses Block UI’s 10/16 detail tier; the old size names remain compatibility aliases.
 Existing host color names alias the shared tokens. Panel padding is 24, control
 inset 16, group gap 32 and page-section gap 64 (all rem-based).
-This supersedes the historical 14px body, 400/600 and neutral-ramp values below.
+This replaces the earlier 14px body, 400/600 weights and neutral-ramp values.
 Dark secondary/tertiary text select the lighter BlockUI ramp steps to preserve
 Buzz’s APCA targets on raised panels; the raw BlockUI grays remain in the palette.
 Buzz keeps its full-window gradient backdrops and glass navigation in both modes.
@@ -85,26 +85,24 @@ namespaces: colour registers as `--color-*` and is named for emphasis
 (`text-body`). So `text-primary text-body` is one colour plus one setting, and no
 name ever means both.
 
-Nine roles. Sans: `text-display` 32, `text-title` 24, `text-heading` 16/600,
-`text-body-lg` 16, `text-body` 14, `text-body-sm` 12. Mono: `text-mono-lg` 15,
-`text-mono` 13, `text-mono-sm` 11. Two faces — `font-sans` (Inter Variable) and
-`font-mono` (JetBrains Mono) — both already shipped in every current Buzz client.
+The size ramp follows [Block UI’s typography resolution](https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json)
+at `eff76616`: 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72 and 96.
+The upstream specification is provisional. Buzz binds sans roles to Inter and
+mono to JetBrains Mono, retaining rem-based host text scaling.
 
-- **A type role carries its whole setting.** Size, line height, letter spacing, and weight are one decision, not four. `text-body` alone produces correctly set text, and its line height is never overridden — that is how two supposedly identical labels drift apart.
-- **There are two weights: 400 and 600.** 400 is content — everything read. 600 is structure and emphasis: the thing that names what you are looking at, or the words a sentence leans on. `font-semibold` is what bold means here.
-- **Bold body text is two utilities, composed.** `text-body font-semibold`, `text-body-sm font-semibold`. This is the one place a component adds a weight, and it is deliberate: **the size is the paragraph's decision, the weight is the phrase's.** A `text-body-bold` role would fuse them, so an agent emphasising three words would also be re-asserting a size it has no business choosing. Composing also means one rule covers every size instead of doubling the ramp.
-- **500 and 700 are not in the system.** 500 was measured against 400 at body size and does not read as intent in a scanned list — subtle enough to miss, heavy enough to muddy a column. 700 is louder than anything here needs. Weight is not a ramp; it is two values with two jobs.
-- **State is not weight.** Selected, active, and unread are said with colour, a fill, or a dot — all three already exist in the colour system. Reserve 600 for structure and emphasis, or it stops meaning either.
-- **The guard has a named escape hatch, and using it is normal.** `scripts/design-system/check-type.mjs` rejects other weights because an agent has no basis for preferring `font-medium` to `font-semibold` and will otherwise pick either. A designer who finds a genuine optical exception adds it to `OVERRIDES` with a reason and moves on — that is an ordinary edit, not an escalation. The point is that the next person reads a decision instead of guessing at an accident. If overrides start accumulating in one direction, the system is missing a role; fix the system rather than adding a tenth entry.
-- **Roles are named for the job the text does, never for its size.** `text-title`, not `text-28`. A size name is a value in disguise and goes stale the moment the ramp moves.
-- **The ramp is short because the product is.** Across 73 real Buzz screens, 90% of all text is one size and two cover 93%; 16/18/20/22 together were 1.5%, scattered and inconsistent. So there is nothing between 16 and 24, and that gap is deliberate — an app has panels with names, not a document outline. Four steps above body invited a hierarchy the product does not have.
-- **A heading is body-large in a different weight.** `text-heading` and `text-body-lg` are both 16px, separated by weight alone — which is what the shipping client does at 16/600, and the only text on a channel screen larger than a message. In a dense app a section name needs to be identifiable, not loud.
-- **12px is the floor.** Nothing readable goes below it: the most compressed text in Berd — a timestamp in a hover slot, a model name in a 24px pill — is 12px. If something must be smaller it is not text, it is a glyph inside a component, and that component owns the size as a documented exception. Do not add a general-purpose smaller step.
-- **Mono is one step below its sans partner, always.** 11↔12, 13↔14, 15↔16. At equal size a monospace face reads larger than Inter and pulls the eye off the sentence, so the correction is a rule rather than a judgement: pick the sans size, step down. Mono never exceeds body size in ordinary interface text; the one exception is a code or key a person must transcribe, which is what `text-mono-lg` is for.
-- **Mono roles are named for the setting, not the content.** `text-mono`, not `text-code` — most mono in a product is a pubkey, a path, a branch name, or a hex value. Calling the role `code` made it read as a lie everywhere except an actual code block.
-- **Never all-caps, and never tracked-out labels.** A capitalised label is harder to read than its sentence-case version and reads as enterprise chrome. A quiet label earns its quietness from size and colour — `text-body-sm` on `text-tertiary` — rather than from being shouted. There is deliberately no uppercase utility in this system.
-- **Every size is relative.** Nothing may be expressed in px: fixed pixel text freezes against keyboard zoom and ignores the person's font-size preference. The existing client shipped a regression from exactly this. Everything derives from one virtual rem, so zoom and the font-size preference both work by construction — which is why an arbitrary rem literal is rejected too. It zooms correctly and still re-fragments the scale.
-- **Tracking is an optical correction, not a style.** Inter needs progressively tighter spacing as it grows. The ramp already applies it per step; do not add tracking by hand.
+- Components use named roles, never private primitive sizes. The viewer shows
+  each Buzz utility's Block UI role mapping alongside the complete size ladder.
+- A role carries size, leading, tracking and weight together. Display roles have
+  solid leading; the 24px section title uses 24/24, not the primitive's 24/32.
+- Regular (400) is for reading; Medium (500) is for labels and structure.
+  Existing `font-semibold` consumers resolve to Medium.
+- Mono uses `detail/body-xsmall`, 10/16 with 0.03em tracking. `text-mono-lg` and
+  `text-mono-sm` are compatibility aliases for this same setting, not extra sizes.
+- Caption uses 12/16 and 0.0133em tracking. Default reading text is 16/24.
+- Font-family choice is a Buzz binding; matching the numeric settings does not
+  imply Inter has the same optical metrics as Cash Sans.
+- Preserve text preferences and browser zoom. Author values in scaled rem and
+  keep layout geometry independent of text scaling.
 
 ## Both modes
 

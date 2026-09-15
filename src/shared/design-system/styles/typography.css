@@ -1,12 +1,27 @@
-/* BlockUI reading, title and label sizes/leading, rendered in Inter.
-   Sizes follow the host text preference and root zoom. Mono retains Buzz's
-   existing readable 11/13/15 steps for source code, paths and identifiers.
-   Cash Sans kerning is not assumed to be exact for Inter. */
+/* Block UI size ramp and resolved role settings, rendered in Inter and JetBrains Mono.
+   Source: https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json
+   The upstream spec is provisional. Values use rem to preserve host text scaling. */
 :root {
   --font-system-mono:
     "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --type-scale: 1;
   --type-rem: calc(1rem * var(--type-scale));
+
+  /* Primitive sizes are private; application code consumes named roles. */
+  --type-size-10: calc(var(--type-rem) * 0.625);
+  --type-size-12: calc(var(--type-rem) * 0.75);
+  --type-size-14: calc(var(--type-rem) * 0.875);
+  --type-size-16: calc(var(--type-rem) * 1);
+  --type-size-18: calc(var(--type-rem) * 1.125);
+  --type-size-20: calc(var(--type-rem) * 1.25);
+  --type-size-24: calc(var(--type-rem) * 1.5);
+  --type-size-28: calc(var(--type-rem) * 1.75);
+  --type-size-32: calc(var(--type-rem) * 2);
+  --type-size-36: calc(var(--type-rem) * 2.25);
+  --type-size-44: calc(var(--type-rem) * 2.75);
+  --type-size-56: calc(var(--type-rem) * 3.5);
+  --type-size-72: calc(var(--type-rem) * 4.5);
+  --type-size-96: calc(var(--type-rem) * 6);
   --type-weight-normal: 400;
   --type-weight-medium: 500;
   --type-weight-semibold: var(--type-weight-medium); /* Existing consumers. */
@@ -22,52 +37,53 @@
     "Inter Variable", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: var(--font-system-mono);
   --font-weight-semibold: 500; /* Legacy emphasis resolves to the shared medium weight. */
-  --text-display: calc(var(--type-rem) * 3.5);
+  --text-display: var(--type-size-56);
   --text-display--line-height: 1;
   --text-display--letter-spacing: -0.04em;
   --text-display--font-weight: var(--type-weight-normal);
-  --text-title: calc(var(--type-rem) * 2);
+  --text-title: var(--type-size-32);
   --text-title--line-height: 1;
   --text-title--letter-spacing: -0.015em;
   --text-title--font-weight: var(--type-weight-medium);
-  --text-heading: calc(var(--type-rem) * 1.5);
+  --text-heading: var(--type-size-24);
   --text-heading--line-height: 1;
   --text-heading--letter-spacing: -0.0075em;
   --text-heading--font-weight: var(--type-weight-medium);
-  --text-body-lg: calc(var(--type-rem) * 1.25);
+  --text-body-lg: var(--type-size-20);
   --text-body-lg--line-height: 1.4;
   --text-body-lg--letter-spacing: -0.01em;
   --text-body-lg--font-weight: var(--type-weight-normal);
-  --text-body: calc(var(--type-rem) * 1);
+  --text-body: var(--type-size-16);
   --text-body--line-height: 1.5;
   --text-body--letter-spacing: -0.005em;
   --text-body--font-weight: var(--type-weight-normal);
-  --text-body-sm: calc(var(--type-rem) * 0.875);
-  --text-body-sm--line-height: 1.42857;
+  --text-body-sm: var(--type-size-14);
+  --text-body-sm--line-height: 1.4285714285714286;
   --text-body-sm--letter-spacing: -0.0025em;
   --text-body-sm--font-weight: var(--type-weight-normal);
-  --text-label: calc(var(--type-rem) * 1);
+  --text-label: var(--type-size-16);
   --text-label--line-height: 1.5;
   --text-label--letter-spacing: 0em;
   --text-label--font-weight: var(--type-weight-medium);
-  --text-label-sm: calc(var(--type-rem) * 0.875);
-  --text-label-sm--line-height: 1.42857;
+  --text-label-sm: var(--type-size-14);
+  --text-label-sm--line-height: 1.4285714285714286;
   --text-label-sm--letter-spacing: 0.0025em;
   --text-label-sm--font-weight: var(--type-weight-medium);
-  --text-caption: calc(var(--type-rem) * 0.75);
-  --text-caption--line-height: 1.33333;
-  --text-caption--letter-spacing: 0em;
+  --text-caption: var(--type-size-12);
+  --text-caption--line-height: 1.3333333333333333;
+  --text-caption--letter-spacing: 0.0133em;
   --text-caption--font-weight: var(--type-weight-normal);
-  --text-mono-lg: calc(var(--type-rem) * 0.9375);
-  --text-mono-lg--line-height: 1.5;
-  --text-mono-lg--letter-spacing: 0em;
+  /* Legacy mono size names share Block UI detail/body-xsmall (10/16). */
+  --text-mono-lg: var(--type-size-10);
+  --text-mono-lg--line-height: 1.6;
+  --text-mono-lg--letter-spacing: 0.03em;
   --text-mono-lg--font-weight: var(--type-weight-normal);
-  --text-mono: calc(var(--type-rem) * 0.8125);
-  --text-mono--line-height: 1.5;
-  --text-mono--letter-spacing: 0em;
+  --text-mono: var(--type-size-10);
+  --text-mono--line-height: 1.6;
+  --text-mono--letter-spacing: 0.03em;
   --text-mono--font-weight: var(--type-weight-normal);
-  --text-mono-sm: calc(var(--type-rem) * 0.6875);
-  --text-mono-sm--line-height: 1.45455;
-  --text-mono-sm--letter-spacing: 0em;
+  --text-mono-sm: var(--type-size-10);
+  --text-mono-sm--line-height: 1.6;
+  --text-mono-sm--letter-spacing: 0.03em;
   --text-mono-sm--font-weight: var(--type-weight-normal);
 }

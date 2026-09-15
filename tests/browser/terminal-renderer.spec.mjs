@@ -124,7 +124,7 @@ test("real xterm retains output across detach, handles input and resize, and rel
       expect(actual.renderedSize).toBe(actual.size);
       return Number.parseFloat(actual.size);
     };
-    expect(await assertSystemAppearance()).toBe(13);
+    expect(await assertSystemAppearance()).toBe(10);
     const lightBackground = await xterm.evaluate(
       (el) => getComputedStyle(el).backgroundColor,
     );
@@ -139,7 +139,7 @@ test("real xterm retains output across detach, handles input and resize, and rel
     await expect(splash).toHaveCSS("--splash-lightness", "80%");
     await expect(splash).toHaveCSS("--splash-chroma", "0.16");
     await assertAnsiContrast();
-    expect(await assertSystemAppearance()).toBe(13);
+    expect(await assertSystemAppearance()).toBe(10);
     await page.screenshot({
       path: test.info().outputPath("buzzterm-dark.png"),
     });
@@ -174,7 +174,7 @@ test("real xterm retains output across detach, handles input and resize, and rel
           .evaluate((el) => getComputedStyle(el).fontSize),
       )
       .not.toBe(fontSize);
-    expect(await assertSystemAppearance()).toBe(19.5);
+    expect(await assertSystemAppearance()).toBe(15);
     const dimensions = await page.getByLabel("Dimensions").textContent();
     await page.setViewportSize({ width: 800, height: 600 });
     await expect(page.getByLabel("Dimensions")).not.toHaveText(dimensions);

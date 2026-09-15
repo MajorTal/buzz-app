@@ -1,7 +1,14 @@
 # Design-system adoption
 
-Base: PR #59 (`95a0196`). Adoption uses the existing palette, typography,
-sizes and variants. Features continue to own layout, data and behavior.
+Base: PR #59 (`95a0196`). Adoption uses the shared palette and component
+variants, with the Block UI typography alignment described below. Features continue to own layout, data and behavior.
+
+Typography now uses the complete Block UI 10–96px size ladder. Existing sans
+role sizes already matched; the legacy 11/13/15px mono sizes now resolve to
+the 10/16 detail role. Inter and JetBrains Mono remain the font bindings.
+The Typography viewer links the pinned source and maps each local role.
+The component comparison retains #59 markup, but both columns use the current
+shared typography; it is not a historical font-metric screenshot.
 
 ## PR A: actions, switches, avatars and icons
 
@@ -27,8 +34,8 @@ sizes and variants. Features continue to own layout, data and behavior.
 The viewer's **Component adoption** page at
 `/tests/fixtures/design-system.html#/design/component-adoption` compares historical
 presentation specimens from #59 with the live shared components. The before
-recipes are scoped to the viewer and retain #59's tokens, which this PR does not
-change. They are not complete-screen screenshots. Both columns support light and
+recipes are scoped to the viewer and use the current shared tokens in both
+columns. They are not complete-screen screenshots. Both columns support light and
 dark mode; synthetic controls never invoke app services. Keep these historical
 recipes out of production imports.
 

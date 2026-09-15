@@ -15,7 +15,7 @@ import "./componentAdoption.css";
 
 /** Historical presentation specimens from #59 (95a0196), isolated to this viewer.
  * The left column is frozen markup/CSS, not a second product implementation.
- * Both columns intentionally share #59's unchanged palette and typography tokens.
+ * Both columns use the current shared palette and typography tokens.
  */
 function ComparisonRow({
   name,
@@ -65,8 +65,8 @@ export function ComponentAdoptionPage() {
       />
       <p className="text-body-sm text-secondary adoption-context">
         Before: PR #59, 95a0196. After: the shared components used by PR A. Both
-        use Inter and the same foundation tokens. Use the viewer’s light/dark
-        control to compare both modes.
+        use Inter and the current shared tokens, including the Block UI type
+        ramp. Use the viewer’s light/dark control to compare both modes.
       </p>
       <section
         className="adoption-table-scroll"

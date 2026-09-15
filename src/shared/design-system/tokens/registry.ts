@@ -453,7 +453,7 @@ export const GROWTH_PROCEDURE = [
 export interface TypeRole {
   /** The Tailwind class, e.g. `text-body`. */
   token: string;
-  /** Step on the size ramp this points at, for display. */
+  /** Block UI role this local utility maps to. */
   pointsAt: string;
   /** Rendered size at the default preference and zoom, for display only —
    *  never a value a component may use. */
@@ -472,9 +472,9 @@ export interface TypeRole {
 export const TYPE_ROLES: TypeRole[] = [
   {
     token: "text-display",
-    pointsAt: "type-rem",
+    pointsAt: "display/hero",
     size: "56px",
-    lineHeight: "1",
+    lineHeight: "56px",
     tracking: "-0.04em",
     weight: "400",
     use: "Expressive welcome or hero.",
@@ -482,9 +482,9 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-title",
-    pointsAt: "type-rem",
+    pointsAt: "display/page-title",
     size: "32px",
-    lineHeight: "1",
+    lineHeight: "32px",
     tracking: "-0.015em",
     weight: "500",
     use: "Screen title.",
@@ -492,9 +492,9 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-heading",
-    pointsAt: "type-rem",
+    pointsAt: "display/section-title",
     size: "24px",
-    lineHeight: "1",
+    lineHeight: "24px",
     tracking: "-0.0075em",
     weight: "500",
     use: "Content section title.",
@@ -502,9 +502,9 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-body-lg",
-    pointsAt: "type-rem",
+    pointsAt: "body/body-large",
     size: "20px",
-    lineHeight: "1.4",
+    lineHeight: "28px",
     tracking: "-0.01em",
     weight: "400",
     use: "Lead paragraph.",
@@ -512,9 +512,9 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-body",
-    pointsAt: "type-rem",
+    pointsAt: "body/body-medium",
     size: "16px",
-    lineHeight: "1.5",
+    lineHeight: "24px",
     tracking: "-0.005em",
     weight: "400",
     use: "Reading text and messages.",
@@ -522,9 +522,9 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-body-sm",
-    pointsAt: "type-rem",
+    pointsAt: "body/body-small",
     size: "14px",
-    lineHeight: "1.42857",
+    lineHeight: "20px",
     tracking: "-0.0025em",
     weight: "400",
     use: "Supporting or dense reading text.",
@@ -532,9 +532,9 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-label",
-    pointsAt: "type-rem",
+    pointsAt: "body/label-medium",
     size: "16px",
-    lineHeight: "1.5",
+    lineHeight: "24px",
     tracking: "0em",
     weight: "500",
     use: "Controls and panel titles.",
@@ -542,9 +542,9 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-label-sm",
-    pointsAt: "type-rem",
+    pointsAt: "body/label-small",
     size: "14px",
-    lineHeight: "1.42857",
+    lineHeight: "20px",
     tracking: "0.0025em",
     weight: "500",
     use: "Compact controls and row labels.",
@@ -552,31 +552,31 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-caption",
-    pointsAt: "type-rem",
+    pointsAt: "detail/caption",
     size: "12px",
-    lineHeight: "1.33333",
-    tracking: "0em",
+    lineHeight: "16px",
+    tracking: "0.0133em",
     weight: "400",
     use: "Timestamps and metadata.",
     status: "core",
   },
   {
     token: "text-mono-lg",
-    pointsAt: "type-rem",
-    size: "15px",
-    lineHeight: "1.5",
-    tracking: "0em",
+    pointsAt: "detail/body-xsmall",
+    size: "10px",
+    lineHeight: "16px",
+    tracking: "0.03em",
     weight: "400",
-    use: "Transcribed codes.",
+    use: "Compatibility alias for text-mono; use text-mono in new code.",
     status: "core",
     mono: true,
   },
   {
     token: "text-mono",
-    pointsAt: "type-rem",
-    size: "13px",
-    lineHeight: "1.5",
-    tracking: "0em",
+    pointsAt: "detail/body-xsmall",
+    size: "10px",
+    lineHeight: "16px",
+    tracking: "0.03em",
     weight: "400",
     use: "Code and identifiers.",
     status: "core",
@@ -584,51 +584,122 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-mono-sm",
-    pointsAt: "type-rem",
-    size: "11px",
-    lineHeight: "1.45455",
-    tracking: "0em",
+    pointsAt: "detail/body-xsmall",
+    size: "10px",
+    lineHeight: "16px",
+    tracking: "0.03em",
     weight: "400",
-    use: "Compact code metadata.",
+    use: "Compatibility alias for text-mono; use text-mono in new code.",
     status: "core",
     mono: true,
   },
 ];
 
-/** The two faces. Both already shipped in every current Buzz client. */
+/** Buzz font-family bindings; the size and role settings come from Block UI. */
 export const TYPE_FAMILIES = [
   {
     token: "font-sans",
     name: "Inter Variable",
-    use: "Everything. Drawn for interface text at small sizes, and already the sans in desktop, web, and mobile.",
+    use: "Interface and reading text. Buzz keeps Inter while adopting Block UI’s type ramp.",
   },
   {
     token: "font-mono",
     name: "JetBrains Mono",
-    use: "Code, keys, and identifiers. Already the mono in the existing client's terminal.",
+    use: "Monospace detail text. Uses the Block UI 10/16 detail tier.",
   },
 ];
 
-/** The private ramps a type role points at. Components never reference these. */
+/** Source for the primitive ladder and resolved roles displayed below. */
+export const TYPE_SOURCE =
+  "https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json";
+
+/** The actual Block UI ladder, not an enumeration of Buzz's role aliases. */
 export const TYPE_RAMPS = [
   {
     id: "size",
     name: "Size",
     description:
-      "BlockUI reading and title sizes in Inter, with Buzz's existing monospace sizes.",
-    steps: TYPE_ROLES.map((role, index) => ({
-      step: index + 1,
-      job: role.token,
-      value: role.size,
-    })),
+      "Block UI’s 14 primitive sizes. Named roles select from this ladder and carry their own line height, tracking and weight. Values shown at 100% text size.",
+    steps: [
+      {
+        step: 10,
+        value: "10px",
+        job: "detail/body-xsmall, detail/label-xsmall, detail/link-xsmall",
+      },
+      {
+        step: 12,
+        value: "12px",
+        job: "caption",
+      },
+      {
+        step: 14,
+        value: "14px",
+        job: "small (shadcn prose anchor)",
+      },
+      {
+        step: 16,
+        value: "16px",
+        job: "body anchor (Arcade)",
+      },
+      {
+        step: 18,
+        value: "18px",
+        job: "shadcn text-lg (Large)",
+      },
+      {
+        step: 20,
+        value: "20px",
+        job: "large body/label tier",
+      },
+      {
+        step: 24,
+        value: "24px",
+        job: "section title",
+      },
+      {
+        step: 28,
+        value: "28px",
+        job: "Primitive only; no resolved role assigned.",
+      },
+      {
+        step: 32,
+        value: "32px",
+        job: "page title / numeral-small",
+      },
+      {
+        step: 36,
+        value: "36px",
+        job: "Primitive only; no resolved role assigned.",
+      },
+      {
+        step: 44,
+        value: "44px",
+        job: "headline-large",
+      },
+      {
+        step: 56,
+        value: "56px",
+        job: "hero / numeral-large",
+      },
+      {
+        step: 72,
+        value: "72px",
+        job: "Primitive only; no resolved role assigned.",
+      },
+      {
+        step: 96,
+        value: "96px",
+        job: "Primitive only; no resolved role assigned.",
+      },
+    ],
   },
   {
     id: "weight",
     name: "Weight",
     description: "400 for reading, 500 for labels and structure.",
     steps: [
-      { step: 1, job: "reading", value: "400" },
-      { step: 2, job: "structure", value: "500" },
+      { step: 400, job: "reading", value: "400" },
+      { step: 500, job: "structure", value: "500" },
     ],
   },
 ];

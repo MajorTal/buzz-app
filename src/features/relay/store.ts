@@ -12,9 +12,10 @@ import type {
 import { DiscoveryState } from "./discovery";
 import { foldMessages } from "./fold";
 import { eventDto, hasTag, tag, type RelayEvent } from "./events";
-import type { RelayReader, Priority } from "./reader";
+import type { RelayReader, ReadOptions, Priority } from "./reader";
 import type { ProfileDirectory } from "./profile-directory";
 import { parseWindow, windowFilter, type WindowCursor } from "./window";
+import { readSessionWindow } from "./session-window";
 import { ByteLru, byteSize } from "./budget";
 import type { HeadPersistence, SavedHead } from "./persistence";
 import { createMediaPreparation, saveData } from "./media";
@@ -88,6 +89,14 @@ export function createChannelStore(
   directory: ProfileDirectory,
   options: ChannelStoreOptions = {},
 ) {
+  const foldChannelMessages = (
+    channelId: string,
+    author: string,
+    events: readonly import("./events").EventData[],
+  ) =>
+    foldMessages(channelId, author, events, {
+      includeReplies: discovery?.isSession(channelId) ?? false,
+    });
   const {
     maxWindows = 3,
     unavailableReason,
@@ -166,6 +175,8 @@ export function createChannelStore(
         old.preview === preview &&
         old.hidden === channel.hidden &&
         old.channelType === channel.channelType &&
+        old.parentChannelId === channel.parentChannelId &&
+        old.updatedAt === channel.updatedAt &&
         old.archived === channel.archived &&
         old.members?.length === channel.members?.length &&
         (old.members ?? []).every(
@@ -299,6 +310,7 @@ export function createChannelStore(
         channelId,
         transport?.relayAuthor ?? "",
         profiling,
+        () => discovery?.isSession(channelId) ?? false,
       ),
       channelId,
       snapshot: idleWindow(channelId),
@@ -367,6 +379,8 @@ export function createChannelStore(
   function save(channelId: string, head: Head, previousProfiles?: string) {
     if (
       !persistence ||
+      // Compatibility queries have no signed bounds to restore from disk.
+      isSession(channelId) ||
       !authorized(channelId) ||
       disposed ||
       heads.peek(channelId) !== head
@@ -420,6 +434,31 @@ export function createChannelStore(
       void persistence?.remove(channelId).catch(() => {});
     });
   }
+  const isSession = (channelId: string) => !!discovery?.isSession(channelId);
+  async function readPage(
+    channelId: string,
+    cursor: WindowCursor | null,
+    settings: ReadOptions,
+  ) {
+    if (!transport) throw new Error("Relay is unavailable");
+    if (isSession(channelId)) {
+      const page = await readSessionWindow(
+        transport,
+        channelId,
+        cursor,
+        settings,
+      );
+      return { events: page.events, page };
+    }
+    const events = await transport.read(
+      [windowFilter(channelId, cursor)],
+      settings,
+    );
+    return {
+      events,
+      page: parseWindow(channelId, cursor, transport.relayAuthor, events),
+    };
+  }
   async function requestHead(
     channelId: string,
     priority: Priority,
@@ -433,7 +472,7 @@ export function createChannelStore(
     try {
       if (disposed || !transport || !authorized(channelId))
         throw new DOMException("Stale request", "AbortError");
-      const events = await transport.read([windowFilter(channelId, null)], {
+      const { events, page } = await readPage(channelId, null, {
         signal: controller.signal,
         priority,
       });
@@ -446,10 +485,9 @@ export function createChannelStore(
         throw new DOMException("Stale request", "AbortError");
       const retained = heads.peek(channelId);
       if (retained?.events === events) return retained;
-      const page = parseWindow(channelId, null, transport.relayAuthor, events);
       head = {
         rows: Object.freeze(
-          foldMessages(channelId, transport.relayAuthor, page.events),
+          foldChannelMessages(channelId, transport.relayAuthor, page.events),
         ),
         cursor: page.cursor,
         hasMore: page.hasMore,
@@ -509,24 +547,17 @@ export function createChannelStore(
         setWindow(state, patchFromHead(head));
         return;
       }
-      const events = await transport.read(
-        [windowFilter(state.channelId, cursor)],
-        { signal: controller.signal },
-      );
+      const { page } = await readPage(state.channelId, cursor, {
+        signal: controller.signal,
+      });
       if (!live(state, generation)) return;
-      const page = parseWindow(
-        state.channelId,
-        cursor,
-        transport.relayAuthor,
-        events,
-      );
       const combined = new Map(
         (cursor ? state.events : []).map((event) => [event.id, event]),
       );
       for (const event of page.events) combined.set(event.id, event);
       const retained = [...combined.values()];
       const rows = Object.freeze(
-        foldMessages(state.channelId, transport.relayAuthor, retained),
+        foldChannelMessages(state.channelId, transport.relayAuthor, retained),
       );
       if (
         rows.length > maxHistoryRows ||
@@ -596,6 +627,7 @@ export function createChannelStore(
       if (disposed || generation !== epoch) return;
       if (
         !allowed?.has(record.channelId) ||
+        isSession(record.channelId) ||
         heads.peek(record.channelId) ||
         !Number.isFinite(record.savedAt) ||
         record.savedAt > now() ||
@@ -631,7 +663,11 @@ export function createChannelStore(
           accessibleEvents,
         );
         const rows = Object.freeze(
-          foldMessages(record.channelId, transport.relayAuthor, page.events),
+          foldChannelMessages(
+            record.channelId,
+            transport.relayAuthor,
+            page.events,
+          ),
         );
         const head: Head = {
           rows,
@@ -1155,7 +1191,7 @@ export function createChannelStore(
       const preview = windows.has(channelId)
         ? tails.peek(channelId)?.preview
         : messagePreview(
-            foldMessages(channelId, transport.relayAuthor, [
+            foldChannelMessages(channelId, transport.relayAuthor, [
               ...new Map(
                 [...(heads.peek(channelId)?.events ?? []), ...retained].map(
                   (event) => [event.id, event],
@@ -1260,7 +1296,9 @@ export function createChannelStore(
         heads.set(id, {
           ...head,
           events,
-          rows: Object.freeze(foldMessages(id, transport.relayAuthor, events)),
+          rows: Object.freeze(
+            foldChannelMessages(id, transport.relayAuthor, events),
+          ),
         });
     }
     for (const [id, tail] of tails.entries()) {
@@ -1272,7 +1310,7 @@ export function createChannelStore(
       tails.set(id, {
         events,
         preview: messagePreview(
-          foldMessages(id, transport.relayAuthor, [
+          foldChannelMessages(id, transport.relayAuthor, [
             ...(heads.peek(id)?.events ?? []),
             ...events,
           ]),

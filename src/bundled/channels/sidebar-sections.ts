@@ -8,7 +8,9 @@ export function sidebarSections(
 ) {
   const active = channels.filter(
     (channel) =>
-      !channel.archived && (!channel.hidden || channel.channelType === "dm"),
+      !channel.archived &&
+      channel.channelType !== "session" &&
+      (!channel.hidden || channel.channelType === "dm"),
   );
   const streams = active.filter(
     (channel) =>

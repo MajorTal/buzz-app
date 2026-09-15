@@ -9,6 +9,7 @@ import {
   profile,
   roster,
   scriptedTransport,
+  signed,
 } from "./testing";
 
 const relay = keypair(),
@@ -208,4 +209,115 @@ describe("channel store", () => {
       hasMore: true,
     });
   });
+});
+
+it("keeps session replies in the main timeline and observes parent changes", async () => {
+  const { store, queries, next } = setup();
+  const parent = "11111111-1111-4111-8111-111111111111";
+  const sessionMetadata = (time: number, moved = false) =>
+    signed(relay, {
+      kind: 39000,
+      content: "",
+      created_at: time,
+      tags: [
+        ["d", "work"],
+        ["name", "Work topic"],
+        ["t", "stream"],
+        ["private"],
+        [
+          "about",
+          `Buzz session (buzz.sessions/v1)${moved ? `\nparent:${parent}` : ""}`,
+        ],
+      ],
+    });
+  queries.ensureList();
+  next().respond([roster(relay, "work", [viewer.pubkey]), sessionMetadata(10)]);
+  await flush();
+  expect(queries.list().channels[0]).toMatchObject({
+    channelType: "session",
+    name: "Work topic",
+  });
+  queries.ensure("work");
+  const request = next();
+  expect(request.filters[0]).not.toHaveProperty("top_level");
+  const root = message(viewer, "work", "Prompt", 20);
+  const reply = message(alice, "work", "Reply", 21, [
+    ["e", root.id, "", "root"],
+    ["e", root.id, "", "reply"],
+  ]);
+  request.respond([root, reply]);
+  await flush();
+  next().respond([]); // Load message overlays before exposing the conversation.
+  await flush();
+  expect(queries.window("work").rows.map((row) => row.content)).toEqual([
+    "Prompt",
+    "Reply",
+  ]);
+  // Drain profile lookup, then refresh the same roster with only a parent change.
+  next().respond([]);
+  await flush();
+  queries.refreshList?.();
+  next().respond([
+    roster(relay, "work", [viewer.pubkey]),
+    sessionMetadata(30, true),
+  ]);
+  await flush();
+  expect(queries.list().channels[0]).toMatchObject({
+    parentChannelId: parent,
+    updatedAt: 30,
+  });
+  store.dispose();
+});
+
+it("opens an ordinary private session with existing agent replies in its main timeline", async () => {
+  const { store, queries, next } = setup();
+  queries.ensureList();
+  next().respond([
+    roster(relay, "work", [viewer.pubkey]),
+    signed(relay, {
+      kind: 39000,
+      content: "",
+      tags: [
+        ["d", "work"],
+        ["name", "Work"],
+        ["t", "stream"],
+        ["private"],
+        ["about", "Buzz session (buzz.sessions/v1)"],
+      ],
+    }),
+    profile(alice, { name: "Alice" }),
+    profile(viewer, { name: "Viewer" }),
+  ]);
+  await flush();
+  queries.ensure("work");
+  const request = next();
+  expect(request.filters[0]).not.toHaveProperty("top_level");
+  expect(request.filters[0]).not.toHaveProperty("session_timeline");
+  const root = message(viewer, "work", "Prompt", 20);
+  const reply = message(alice, "work", "Answer", 21, [
+    ["e", root.id, "", "reply"],
+  ]);
+  request.respond([reply, root]);
+  await flush();
+  expect(queries.window("work").rows).toEqual([]);
+  next().respond([]); // Fetch message overlays before presenting the page.
+  await flush();
+  expect(queries.window("work").rows.map((row) => row.content)).toEqual([
+    "Prompt",
+    "Answer",
+  ]);
+  expect(queries.window("work").hasMore).toBe(true);
+  next().respond([]); // Optional profile enrichment is independent of history.
+  await flush();
+  queries.loadOlder("work");
+  const older = next();
+  expect(older.filters[0]).toMatchObject({ until: 20, before_id: root.id });
+  older.respond([]);
+  await flush();
+  expect(queries.window("work").hasMore).toBe(false);
+  expect(queries.window("work").rows.map((row) => row.content)).toEqual([
+    "Prompt",
+    "Answer",
+  ]);
+  store.dispose();
 });

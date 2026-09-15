@@ -9,6 +9,10 @@ export function createMessages(
   find: (id: string) => EventData | undefined,
   emojiTags: (content: string) => string[][],
   validateMentions: (channelId: string, pubkeys: readonly string[]) => void,
+  resolveRecipients: (
+    channelId: string,
+    pubkeys: readonly string[],
+  ) => readonly string[],
 ) {
   const writer = (kind: number) => {
     if (!outbox?.supports(kind))
@@ -26,7 +30,7 @@ export function createMessages(
       pubkeys.some((key) => !/^[0-9a-f]{64}$/.test(key))
     )
       throw new Error("Choose at most 32 valid mention recipients");
-    const unique = [...new Set(pubkeys)];
+    const unique = [...new Set(resolveRecipients(channelId, pubkeys))];
     validateMentions(channelId, unique);
     return unique.map((key) => ["p", key]);
   };

@@ -1,3 +1,4 @@
+import { sessionMetadata } from "../sessions/metadata";
 import { objectBody } from "./body";
 import { newer, hasTag, tag, type RelayEvent } from "./events";
 import type { ChannelSummary } from "./contracts";
@@ -95,17 +96,31 @@ export class DiscoveryState {
     const event = this.metadata.get(id);
     return !!event && event.tags.some((entry) => entry[0] === "hidden");
   }
+  isSession(id: string): boolean {
+    const event = this.metadata.get(id);
+    return (
+      !!event &&
+      tag(event, "t") === "stream" &&
+      event.tags.some(([name]) => name === "private") &&
+      sessionMetadata(tag(event, "about")) !== undefined
+    );
+  }
   channels(): ChannelSummary[] {
     return [...this.rosters.keys()]
       .filter((id) => this.authorized(id))
       .map((id): ChannelSummary => {
         const event = this.metadata.get(id);
-        const type = event && tag(event, "t");
+        const type = this.isSession(id) ? "session" : event && tag(event, "t");
         const channelType =
-          type === "stream" || type === "forum" || type === "dm"
+          type === "stream" ||
+          type === "forum" ||
+          type === "dm" ||
+          (type === "session" && this.isSession(id))
             ? type
             : undefined;
         const roster = this.rosters.get(id);
+        const parentId =
+          event && sessionMetadata(tag(event, "about"))?.parentId;
         return {
           id,
           name: this.name(id),
@@ -122,6 +137,16 @@ export class DiscoveryState {
           ),
           ...(this.hidden(id) ? { hidden: true } : {}),
           ...(channelType ? { channelType } : {}),
+          ...(channelType === "session" && event
+            ? {
+                updatedAt: event.created_at,
+                ...(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(
+                  parentId ?? "",
+                )
+                  ? { parentChannelId: parentId }
+                  : {}),
+              }
+            : {}),
           ...(event && hasTag(event, "archived", "true")
             ? { archived: true }
             : {}),

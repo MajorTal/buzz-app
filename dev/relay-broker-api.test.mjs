@@ -7,7 +7,7 @@ import { test, expect, vi, beforeEach, afterEach } from "vitest";
 import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools";
 import { relayBrokerPlugin } from "./relay-broker.mjs";
 import { connectBrokerTransport } from "../src/features/relay/transport.ts";
-import { PublishRejected } from "../src/features/relay/outbox.ts";
+import { createOutbox, PublishRejected } from "../src/features/relay/outbox.ts";
 
 // Only wall time is controlled. Real timers/performance.now still exercise HTTP pacing.
 let wallClock;
@@ -18,7 +18,7 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks());
 
 // Real browser HTTP -> production broker. Ephemeral key; upstream I/O is entirely local.
-async function harness(respond) {
+async function harness(respond, capabilities = {}) {
   const key = new Uint8Array(32);
   key[31] = 7;
   const viewer = getPublicKey(key);
@@ -36,7 +36,7 @@ async function harness(respond) {
     relayUrl: fixtureRelayUrl,
     communityAliases: fixtureAliases,
     identity: () => key,
-    authority: async () => ({ relayAuthor: viewer }),
+    authority: async () => ({ relayAuthor: viewer, ...capabilities }),
     upstreamFetch: async (url, init) => {
       const upstreamUrl = String(url);
       const authorization = new Headers(init?.headers).get("Authorization");
@@ -494,3 +494,92 @@ test("both real sign and publish routes admit direct replies but reject arbitrar
     await h.close();
   }
 });
+
+test.each([undefined, "22222222-2222-4222-8222-222222222222"])(
+  "real outbox creates, invites and sends without Sessions support (parent: %s)",
+  async (parent) => {
+    const h = await harness(
+      (call) =>
+        Response.json(
+          call.url.endsWith("/events")
+            ? { accepted: true, event_id: call.body.id }
+            : [],
+        ),
+      { channelCreation: true },
+    );
+    let owner;
+    try {
+      const transport = await connectBrokerTransport(h.base);
+      expect(transport.writer.kinds).toContain(9007);
+      expect(transport.writer.kinds).not.toContain(9050);
+      owner = createOutbox(transport.viewer, transport.writer, {
+        load: () => [],
+        save: () => {},
+      });
+      const id = "11111111-1111-4111-8111-111111111111";
+      const creationId = owner.outbox.send({
+        kind: 9007,
+        content: "",
+        tags: [
+          ["h", id],
+          ["name", "Work"],
+          ["visibility", "private"],
+          ["channel_type", "stream"],
+          [
+            "about",
+            `Buzz session (buzz.sessions/v1)${parent ? `\nparent:${parent}` : ""}`,
+          ],
+        ],
+      });
+      await vi.waitFor(() =>
+        expect(
+          owner.local.snapshot().find((row) => row.event.id === creationId)
+            ?.delivery,
+        ).toBe("accepted"),
+      );
+      const invitationId = owner.outbox.send({
+        kind: 9000,
+        content: "",
+        tags: [
+          ["h", id],
+          ["p", "a".repeat(64)],
+        ],
+      });
+      await vi.waitFor(() =>
+        expect(
+          owner.local.snapshot().find((row) => row.event.id === invitationId)
+            ?.delivery,
+        ).toBe("accepted"),
+      );
+      const messageId = owner.outbox.send({
+        kind: 9,
+        content: "Hello",
+        tags: [
+          ["h", id],
+          ["p", "a".repeat(64)],
+        ],
+      });
+      await vi.waitFor(() =>
+        expect(
+          owner.local.snapshot().find((row) => row.event.id === messageId)
+            ?.delivery,
+        ).toBe("accepted"),
+      );
+      expect(
+        h.calls
+          .filter((call) => call.url.endsWith("/events"))
+          .map((call) => call.body.kind),
+      ).toEqual([9007, 9000, 9]);
+      const denied = await h.post("sign", {
+        kind: 9050,
+        created_at: 1700000000,
+        content: JSON.stringify({ action: "create", title: "Work" }),
+        tags: [["h", id]],
+      });
+      expect(denied.status).toBe(400);
+    } finally {
+      owner?.dispose();
+      await h.close();
+    }
+  },
+);

@@ -77,6 +77,7 @@ function protectInlineContent(
   row: ChannelMessage,
   profiles: ReadonlyMap<string, Profile> | undefined,
   tree: MarkdownNode,
+  agents: typeof emptyReferenceDirectory.agents,
 ): ProtectedContent {
   const literalRanges: { start: number; end: number }[] = [];
   const visit = (node: MarkdownNode) => {
@@ -124,7 +125,7 @@ function protectInlineContent(
     return `${prefix}${parts.length - 1}\uE002`;
   };
   let offset = 0;
-  const content = profileMentionParts(row, profiles)
+  const content = profileMentionParts(row, profiles, agents)
     .map((segment) => {
       const start = offset;
       offset += segment.text.length;
@@ -354,6 +355,7 @@ export function MessageMarkdown({
     row,
     participantProfiles ?? directory.profiles,
     scan.tree,
+    directory.agents,
   );
   const components: MessageComponents = {
     p: ({ node: _node, ...props }) => (
@@ -381,26 +383,28 @@ export function MessageMarkdown({
           "data-inline-text"?: unknown;
           "data-profile-target"?: unknown;
         };
+      const key = typeof target === "string" ? profileKey(target) : undefined;
+      const agent =
+        !!key &&
+        (directory.agents.some((agent) => agent.pubkey === key) ||
+          (participantProfiles ?? directory.profiles).get(key)?.isAgent);
+      const clickable =
+        interactive && typeof target === "string" && !!canOpenLink?.(target);
       if (
         typeof text === "string" &&
         typeof target === "string" &&
-        (!interactive || canOpenLink?.(target))
+        (!interactive || clickable || agent)
       ) {
-        const agent = directory.agents.some(
-          (agent) => agent.pubkey === profileKey(target),
-        );
         const Icon = agent ? IconRobot : IconAt;
-        const Mention = interactive ? "button" : "span";
+        const Mention = clickable ? "button" : "span";
         return (
           <Mention
-            type={interactive ? "button" : undefined}
+            type={clickable ? "button" : undefined}
             className={referenceStyles.link}
             data-mention-kind={agent ? "agent" : "person"}
-            aria-label={
-              interactive ? `View ${text.slice(1)} profile` : undefined
-            }
+            aria-label={clickable ? `View ${text.slice(1)} profile` : undefined}
             onClick={
-              interactive
+              clickable
                 ? (event) => {
                     event.currentTarget.focus();
                     onOpenLink(target);

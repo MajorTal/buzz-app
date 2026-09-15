@@ -1,3 +1,4 @@
+import type { AgentLibrary } from "../agents/library";
 import type { ChannelMessage, Profile } from "../relay/contracts";
 import { profileTarget } from "../profiles/target";
 
@@ -7,23 +8,27 @@ type Part = { text: string; target?: string | undefined };
 export function profileMentionParts(
   row: ChannelMessage,
   profiles: ReadonlyMap<string, Profile> | undefined,
+  agents: AgentLibrary["identities"] = [],
 ): Part[] {
   const text = row.content;
-  if (
-    row.edited ||
-    row.attachmentContentRemoved ||
-    !profiles ||
-    !row.mentions.length
-  )
+  if (row.edited || row.attachmentContentRemoved || !row.mentions.length)
     return [{ text }];
   const names = new Map<string, Set<string>>();
   for (const id of new Set(row.mentions)) {
-    const name = profiles.get(id)?.name;
     const target = profileTarget(id);
-    if (!name || !target || /[\r\n]/.test(name)) continue;
-    const keys = names.get(name) ?? new Set<string>();
-    keys.add(target);
-    names.set(name, keys);
+    if (!target) continue;
+    const labels = [
+      profiles?.get(id)?.name,
+      ...agents
+        .filter((agent) => agent.pubkey === id)
+        .map((agent) => agent.name),
+    ];
+    for (const name of labels) {
+      if (!name || /[\r\n]/.test(name)) continue;
+      const keys = names.get(name) ?? new Set<string>();
+      keys.add(target);
+      names.set(name, keys);
+    }
   }
   // Ambiguous long names must still consume their span, never fall back to a prefix.
   const candidates = [...names].sort(([a], [b]) => b.length - a.length);

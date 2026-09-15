@@ -8,7 +8,11 @@ export type ChannelSummary = Readonly<{
   /** Members-only channel omitted from directories (NIP-29 `hidden`), such as a DM. */
   hidden?: true;
   /** Relay-authored metadata; absent while metadata is unavailable. */
-  channelType?: "stream" | "forum" | "dm";
+  channelType?: "stream" | "forum" | "dm" | "session";
+  /** Presentation-only parent from signed channel metadata; never grants access. */
+  parentChannelId?: string | undefined;
+  /** Metadata update time used for stable work-history ordering. */
+  updatedAt?: number;
   archived?: true;
   /** Exact members from the relay-signed roster; absent means unknown. */
   members?: readonly string[];
@@ -16,6 +20,8 @@ export type ChannelSummary = Readonly<{
   participants?: readonly string[];
 }>;
 export type Profile = Readonly<{
+  /** Agent identity advertised by signed kind-0 NIP-OA metadata; not ownership authority. */
+  isAgent?: true;
   name: string;
   picture?: string;
   about?: string;

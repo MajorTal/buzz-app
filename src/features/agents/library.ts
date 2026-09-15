@@ -14,7 +14,7 @@ export type AgentLibrary = Readonly<{
   }>[];
 }>;
 export type AgentLibraryReader = (signal: AbortSignal) => Promise<AgentLibrary>;
-type Snapshot = AgentLibrary &
+export type AgentLibrarySnapshot = AgentLibrary &
   Readonly<{
     status: "unavailable" | "idle" | "loading" | "ready" | "error";
     error?: string;
@@ -27,9 +27,12 @@ export function createAgentLibrary(
   let closed = false;
   let controller: AbortController | undefined;
   let pending: Promise<void> | undefined;
-  let snapshot: Snapshot = { ...empty, status: read ? "idle" : "unavailable" };
+  let snapshot: AgentLibrarySnapshot = {
+    ...empty,
+    status: read ? "idle" : "unavailable",
+  };
   const listeners = new Set<() => void>();
-  function publish(next: Snapshot) {
+  function publish(next: AgentLibrarySnapshot) {
     snapshot = Object.freeze(next);
     for (const listener of listeners) notify(listener);
   }
@@ -38,7 +41,7 @@ export function createAgentLibrary(
     if (pending) return pending;
     const owned = new AbortController();
     controller = owned;
-    publish({ ...empty, status: "loading" });
+    publish({ ...snapshot, status: "loading" });
     pending = Promise.resolve()
       .then(() => {
         if (closed || owned.signal.aborted)
@@ -52,7 +55,7 @@ export function createAgentLibrary(
       .catch(() => {
         if (!closed && !owned.signal.aborted)
           publish({
-            ...empty,
+            ...snapshot,
             status: "error",
             error:
               "Could not read the current Buzz agent library. Open Buzz and retry; its saved library is left unchanged.",

@@ -16,7 +16,7 @@ const viewer = keypair(),
   honey = keypair(),
   namesake = keypair();
 const owners: ReturnType<typeof createRelaySession>[] = [];
-function setup() {
+function setup(sessionMode = false) {
   const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
   let release: (() => void) | undefined;
   let held = false;
@@ -29,15 +29,26 @@ function setup() {
     return signed(viewer, template);
   });
   let currentRoster: RelayEvent | undefined;
+  const profileEvents: RelayEvent[] = [];
   const owner = createRelaySession(
     {
       ...wire.transport,
-      query: (filters, ...args) =>
-        filters[0]?.authors?.[0] === relay.pubkey &&
-        filters[0]?.kinds?.[0] === 39002 &&
-        filters[0]?.limit === 1
-          ? Promise.resolve(currentRoster ? [currentRoster] : [])
-          : wire.transport.query(filters, ...args),
+      query: (filters, ...args) => {
+        if (
+          filters[0]?.authors?.[0] === relay.pubkey &&
+          filters[0]?.kinds?.[0] === 39002 &&
+          filters[0]?.limit === 1
+        )
+          return Promise.resolve(currentRoster ? [currentRoster] : []);
+        if (
+          sessionMode &&
+          filters.every((filter) => filter.kinds?.every((kind) => kind === 0))
+        )
+          return Promise.resolve(profileEvents);
+        if (sessionMode && filters.every((filter) => !!filter.ids))
+          return Promise.resolve(publish.mock.calls.map(([event]) => event));
+        return wire.transport.query(filters, ...args);
+      },
       writer: { sign, publish },
     },
     {
@@ -65,13 +76,37 @@ function setup() {
       pending = wire.next();
     }
     currentRoster = roster(author, "c", keys, time);
-    pending.respond([currentRoster, metadata(relay, "c", "General")]);
+    pending.respond([
+      currentRoster,
+      sessionMode
+        ? signed(relay, {
+            kind: 39000,
+            content: JSON.stringify({ name: "Work" }),
+            tags: [
+              ["d", "c"],
+              ["t", "stream"],
+              ["private"],
+              ["about", "Buzz session (buzz.sessions/v1)"],
+            ],
+          })
+        : metadata(relay, "c", "General"),
+    ]);
     await read;
   }
   return {
     ...wire,
     ...owner,
     members,
+    async agentProfile(key: typeof honey) {
+      profileEvents.push(
+        signed(key, {
+          kind: 0,
+          content: JSON.stringify({ name: "Honey" }),
+          tags: [["auth", viewer.pubkey, "", "a".repeat(128)]],
+        }),
+      );
+      await owner.session.profiles.ensure([key.pubkey]);
+    },
     sign,
     publish,
     hold: () => {
@@ -192,3 +227,39 @@ it("disposal during signing fences publication to a retired session", async () =
   await flush();
   expect(h.publish).not.toHaveBeenCalled();
 });
+
+it.each([false, true])(
+  "routes a sole session agent automatically and requires explicit choice after another joins, reply=%s",
+  async (reply) => {
+    const h = setup(true);
+    await h.members([viewer.pubkey, honey.pubkey]);
+    await h.agentProfile(honey);
+    const send = (mentions: readonly string[] = []) =>
+      reply
+        ? h.session.messages.reply("c", "a".repeat(64), "Keep going", mentions)
+        : h.session.messages.send("c", "Keep going", mentions);
+    send();
+    await flush();
+    expect(
+      h.publish.mock.calls[0]?.[0].tags.filter(([name]) => name === "p"),
+    ).toEqual([["p", honey.pubkey]]);
+
+    await h.members([viewer.pubkey, honey.pubkey, namesake.pubkey], 1700000001);
+    expect(() => send()).toThrow(/participants are still loading/);
+    await h.agentProfile(namesake);
+    expect(() => send()).toThrow(/multiple agents/);
+    send([namesake.pubkey]);
+    await flush();
+    expect(
+      h.publish.mock.calls.at(-1)?.[0].tags.filter(([name]) => name === "p"),
+    ).toEqual([["p", namesake.pubkey]]);
+    expect(h.publish).toHaveBeenCalledTimes(2);
+
+    await h.members([viewer.pubkey, namesake.pubkey], 1700000002);
+    send();
+    await flush();
+    expect(
+      h.publish.mock.calls.at(-1)?.[0].tags.filter(([name]) => name === "p"),
+    ).toEqual([["p", namesake.pubkey]]);
+  },
+);

@@ -50,6 +50,7 @@ it("lazy fresh reads replace, fail visibly, retry, and fence late results", asyn
       }),
   );
   const pending = owner.queries.refresh();
+  expect(owner.queries.snapshot().identities).toEqual(library.identities);
   await Promise.resolve();
   owner.clear();
   release(library);

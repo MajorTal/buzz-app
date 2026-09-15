@@ -44,6 +44,7 @@ export interface ReadTransport {
   readonly workflows?: WorkflowHost;
   /** Purpose-bound observer decoding on the shared host live stream. */
   readonly agentActivity?: boolean;
+  /** Explicit relay-advertised session command support. */
   /** Host-projected local library; display only, never relay authority. */
   readonly readAgentLibrary?: AgentLibraryReader;
   /** Host-only decoder of the viewer's two signed sidebar preference coordinates. */

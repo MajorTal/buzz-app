@@ -496,3 +496,67 @@ it("keeps resolved channel labels for Buzz autolinks", () => {
   expect(text).toContain("design");
   expect(text).not.toContain("buzz://");
 });
+
+it("renders tagged agent library names and profile names with the same agent icon", () => {
+  const directory = {
+    profiles: new Map([[mic, { name: "Fizz" }]]),
+    channels: [],
+    agents: [{ pubkey: mic, name: "Fast Fizz" }],
+  };
+  const options = {
+    directory,
+    participantProfiles: directory.profiles,
+    patch: { mentions: [mic] },
+  };
+  for (const name of ["Fast Fizz", "Fizz"]) {
+    const html = render(`@${name} can you also join`, options);
+    expect(html).toContain('data-mention-kind="agent"');
+    expect(html).toContain(`aria-label="View ${name} profile"`);
+    expect(html).toContain("tabler-icon-robot");
+  }
+  expect(
+    render("@Fast Fizz", { ...options, participantProfiles: new Map() }),
+  ).toContain('data-mention-kind="agent"');
+  for (const patch of [
+    { mentions: [] },
+    { edited: true as const },
+    { attachmentContentRemoved: true as const },
+  ])
+    expect(
+      render("@Fast Fizz", {
+        ...options,
+        patch: { ...options.patch, ...patch },
+      }),
+    ).not.toContain("data-mention-kind=");
+  expect(render("`@Fast Fizz`", options)).not.toContain("data-mention-kind=");
+  expect(
+    render("@Fast Fizz", {
+      ...options,
+      participantProfiles: new Map([[other, { name: "Fast Fizz" }]]),
+      patch: { mentions: [mic, other] },
+    }),
+  ).not.toContain("data-mention-kind=");
+});
+
+it("uses the agent icon for a known agent profile outside the local library", () => {
+  expect(
+    render("@Mic", {
+      participantProfiles: new Map([[mic, { name: "Mic", isAgent: true }]]),
+    }),
+  ).toContain('data-mention-kind="agent"');
+});
+
+it("keeps the agent icon without presenting an unavailable profile action", () => {
+  const html = render("@Fast Fizz can you also join", {
+    directory: {
+      profiles: new Map(),
+      channels: [],
+      agents: [{ pubkey: mic, name: "Fast Fizz" }],
+    },
+    canOpenLink: undefined,
+  });
+  expect(html).toContain('data-mention-kind="agent"');
+  expect(html).toContain("tabler-icon-robot");
+  expect(html).not.toContain("<button");
+  expect(html).not.toContain('aria-label="View');
+});

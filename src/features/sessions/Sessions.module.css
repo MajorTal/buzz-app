@@ -1,0 +1,193 @@
+.work {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+.workHeader {
+  min-height: 58px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.workTitle {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-width: 0;
+}
+.workTitle h2 {
+  margin: 0;
+  font-size: inherit;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.timeline {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.timeline > * {
+  flex: 1;
+  min-height: 0;
+}
+.composer {
+  padding: 12px 24px;
+}
+.composer > p {
+  color: var(--text-muted);
+  font-size: calc(0.75rem * var(--buzz-text-scale, 1));
+  padding: 8px 4px 0;
+}
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 32px;
+  height: 100%;
+  text-align: center;
+}
+.empty p {
+  color: var(--text-muted);
+  max-width: 420px;
+}
+.empty h1,
+.empty h2 {
+  font-size: calc(1.5rem * var(--buzz-text-scale, 1));
+  font-weight: 600;
+}
+@media (max-width: 720px) {
+  .composer {
+    padding: 8px;
+  }
+}
+.actions button {
+  cursor: pointer;
+}
+
+.availability {
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 12px 16px 0;
+}
+.actions select {
+  max-width: 100%;
+  padding: 7px;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+}
+.actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 0;
+  font-size: 13px;
+}
+.actions form {
+  width: 100%;
+  padding: 16px;
+  border-radius: var(--radius-control);
+  background: var(--surface-input);
+}
+.actions form > div {
+  display: flex;
+  gap: 16px;
+  margin-top: 14px;
+}
+.actions p {
+  color: var(--text-muted);
+}
+
+.start {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 16px;
+  overflow-y: auto;
+}
+
+.startContent {
+  width: 100%;
+  max-width: 680px;
+  margin-top: auto;
+}
+
+@media (max-width: 760px) {
+  .start {
+    padding: 8px;
+  }
+}
+
+.agentTrigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: min(240px, 45vw);
+  height: 32px;
+  padding: 3px 7px 3px 3px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.agentTrigger:hover,
+.agentTrigger[data-popup-open] {
+  background: var(--surface-hover);
+}
+.agentTrigger:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.agentTrigger .agentAvatar,
+.agentOption .agentAvatar {
+  width: 24px;
+  height: 24px;
+  border-radius: 7px;
+  font-size: 10px;
+}
+.agentPositioner {
+  z-index: 50;
+}
+.agentPositioner .agentMenu {
+  position: relative;
+  max-width: min(340px, var(--available-width));
+  max-height: min(360px, var(--available-height));
+  font-size: 13px;
+  outline: none;
+}
+.agentOption {
+  outline: none;
+}
+.agentOption[data-highlighted] {
+  background: var(--completion-highlight);
+}
+.agentCheck {
+  margin-left: auto;
+  padding-left: 8px;
+}
+
+.agentName {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.agentTrigger > svg,
+.agentTrigger .agentAvatar {
+  flex-shrink: 0;
+}

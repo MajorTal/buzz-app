@@ -9,6 +9,8 @@ export type ComposerToolProps = Readonly<{
   scope: string;
   channelId: string;
   threadRootId?: string | undefined;
+  /** Sessions may offer library agents; the host confirms channel admission before sending. */
+  inviteAgents?: boolean | undefined;
   disabled: boolean;
   /** False after removal, destination change, read-only state or a rejected edit. */
   insertText(text: string): boolean;
@@ -79,7 +81,7 @@ export type ComposerObservation = Readonly<{
 }>;
 export type CompletionContext = Pick<
   ComposerToolProps,
-  "session" | "scope" | "channelId" | "threadRootId"
+  "session" | "scope" | "channelId" | "threadRootId" | "inviteAgents"
 >;
 export type CompletionQuery = Readonly<{
   start: number;

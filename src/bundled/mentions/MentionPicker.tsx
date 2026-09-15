@@ -1,3 +1,4 @@
+import { useAgentChoices } from "./use-agent-choices";
 import { Avatar } from "../../shared/Avatar";
 import { AtSign } from "lucide-react";
 import {
@@ -17,11 +18,13 @@ export function MentionPicker({
   session,
   channelId,
   disabled,
+  inviteAgents,
   select,
 }: {
   session: RelaySession;
   channelId: string;
   disabled: boolean;
+  inviteAgents?: boolean | undefined;
   select: ComposerToolProps["insertMention"];
 }) {
   const [open, setOpen] = useState(false);
@@ -39,7 +42,11 @@ export function MentionPicker({
     session.profiles.snapshot,
     session.profiles.snapshot,
   );
+  const agents = useAgentChoices(session, inviteAgents && open);
   const channel = list.channels.find((item) => item.id === channelId);
+  const parentAdmission =
+    !!channel &&
+    (channel.channelType !== "session" || !!channel.parentChannelId);
   const memberKey = channel?.members?.join(":") ?? "";
   useEffect(() => {
     if (!open || !memberKey) return;
@@ -56,14 +63,23 @@ export function MentionPicker({
       current = false;
     };
   }, [session, open, memberKey]);
-  const candidates = (channel?.members ?? [])
-    .map((pubkey) => ({
+  const choices = new Map(
+    agents.identities.map((agent) => [
+      agent.pubkey,
+      { pubkey: agent.pubkey, name: agent.name },
+    ]),
+  );
+  for (const pubkey of channel?.members ?? [])
+    choices.set(pubkey, {
       pubkey,
-      name: profiles.get(pubkey)?.name ?? pubkey.slice(0, 12),
-    }))
-    .filter(({ name, pubkey }) =>
-      `${name} ${pubkey}`.toLowerCase().includes(search.trim().toLowerCase()),
-    );
+      name:
+        profiles.get(pubkey)?.name ??
+        choices.get(pubkey)?.name ??
+        pubkey.slice(0, 12),
+    });
+  const candidates = [...choices.values()].filter(({ name, pubkey }) =>
+    `${name} ${pubkey}`.toLowerCase().includes(search.trim().toLowerCase()),
+  );
   return (
     <fieldset
       disabled={disabled}
@@ -99,7 +115,9 @@ export function MentionPicker({
           aria-label="Mention a channel member"
         >
           <label>
-            Search channel members
+            {inviteAgents
+              ? "Search members and agents"
+              : "Search channel members"}
             <input
               type="search"
               value={search}
@@ -109,12 +127,27 @@ export function MentionPicker({
               }}
             />
           </label>
-          <p>Only members of this channel are shown.</p>
+          <p>
+            {inviteAgents
+              ? parentAdmission
+                ? "Agents you mention join this session and its parent channel when you send, with access to their history."
+                : "Agents you mention join this session when you send, with access to its history."
+              : "Only members of this channel are shown."}
+          </p>
+          {agents.status === "loading" && <p role="status">Loading agents…</p>}
+          {agents.status === "error" && (
+            <button
+              type="button"
+              onClick={() => void session.agentLibrary.refresh()}
+            >
+              Retry agent list
+            </button>
+          )}
           {error && <p role="status">{error}</p>}
           {list.error && (
             <p role="alert">Could not refresh channel membership.</p>
           )}
-          {!channel?.members && (
+          {(!inviteAgents || !!channel) && !channel?.members && (
             <p role="status">Channel membership unavailable.</p>
           )}
           <button

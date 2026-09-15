@@ -8,6 +8,7 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useLayoutEffect } from "react";
@@ -110,7 +111,11 @@ function mount(options: Partial<MessageComposerProps> = {}) {
   const session = {
     messages,
     typing: { snapshot: () => typing, subscribe: () => () => {} },
-    profiles: { snapshot: () => profiles, subscribe: () => () => {} },
+    profiles: {
+      snapshot: () => profiles,
+      subscribe: () => () => {},
+      ensure: vi.fn(async () => {}),
+    },
     emoji: {
       snapshot: () => emoji,
       subscribe(listener: () => void) {
@@ -582,4 +587,138 @@ it("rejects overlong and over-limit tool edits without changing accepted intent"
   });
   expect(h.input()).toHaveValue(before);
   expect(screen.getByRole("alert")).toHaveTextContent("at most 32 recipients");
+});
+
+it.each(
+  ["send", "unmount", "disabled", "denied"].flatMap((outcome) =>
+    ["mention", "avatar"].flatMap((recipient) =>
+      (recipient === "mention" ? [true, false] : [true]).map((parent) => ({
+        outcome,
+        recipient,
+        parent,
+      })),
+    ),
+  ),
+)(
+  "waits for parent agent admission before saved session messages: $recipient / $outcome / parent=$parent",
+  async ({ outcome, recipient, parent }) => {
+    const view = mount();
+    const list = {
+      status: "ready",
+      channels: [
+        {
+          id: "channel",
+          channelType: "session",
+          ...(parent ? { parentChannelId: "parent" } : {}),
+          members: [],
+        },
+      ],
+    };
+    const library = { status: "ready", definitions: [], identities: [first] };
+    let release = () => {};
+    const addAgents = vi.fn(
+      () =>
+        new Promise<void>((resolve, reject) => {
+          release = () =>
+            outcome === "denied"
+              ? reject(new Error("Cannot add agents"))
+              : resolve();
+        }),
+    );
+    const session = {
+      ...view.session,
+      channels: { list: () => list, subscribeList: () => () => {} },
+      agentLibrary: {
+        snapshot: () => library,
+        subscribe: () => () => {},
+        refresh: async () => {},
+      },
+      workSessions: { addAgents },
+    } as unknown as RelaySession;
+    view.retarget({ session, sessionConversation: true });
+    expect(view.commands().inviteAgents).toBe(true);
+    if (recipient === "mention") {
+      await view.user.click(
+        screen.getByRole("button", { name: "First Honey" }),
+      );
+    } else {
+      await view.user.click(
+        screen.getByRole("button", { name: "Choose an agent" }),
+      );
+      await view.user.click(
+        await screen.findByRole("menuitemradio", {
+          name: "Honey — adds to channel",
+        }),
+      );
+      await view.user.type(view.input(), "Hello Honey");
+    }
+    view.submit();
+    await waitFor(() =>
+      expect(addAgents).toHaveBeenCalledWith(
+        "channel",
+        [first.pubkey],
+        expect.any(Function),
+      ),
+    );
+    expect(view.messages.send).not.toHaveBeenCalled();
+    if (outcome === "unmount") view.unmount();
+    if (outcome === "disabled") view.retarget({ disabled: true });
+    await act(async () => release());
+    if (outcome === "send")
+      await waitFor(() => expect(view.messages.send).toHaveBeenCalledOnce());
+    else expect(view.messages.send).not.toHaveBeenCalled();
+    if (outcome === "denied") {
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Cannot add agents",
+      );
+      expect(view.input()).toHaveTextContent("Honey");
+    }
+  },
+);
+
+it("routes to the avatar choice and lets an explicit mention override it", async () => {
+  const view = mount();
+  const library = {
+    status: "ready",
+    definitions: [],
+    identities: [first, { ...second, name: "Fizz" }],
+  };
+  const list = {
+    status: "ready",
+    channels: [
+      {
+        id: "channel",
+        channelType: "session",
+        members: [first.pubkey, second.pubkey],
+      },
+    ],
+  };
+  const session = {
+    ...view.session,
+    channels: { list: () => list, subscribeList: () => () => {} },
+    agentLibrary: {
+      snapshot: () => library,
+      subscribe: () => () => {},
+      refresh: async () => {},
+    },
+  } as unknown as RelaySession;
+  view.retarget({ session, sessionConversation: true });
+  await view.user.click(
+    screen.getByRole("button", { name: "Choose an agent" }),
+  );
+  await view.user.click(
+    await screen.findByRole("menuitemradio", { name: "Fizz" }),
+  );
+  await view.user.type(view.input(), "Hello");
+  await view.user.keyboard("{Enter}");
+  expect(view.messages.send).toHaveBeenLastCalledWith("channel", "Hello", [
+    second.pubkey,
+  ]);
+  await view.user.click(screen.getByRole("button", { name: "First Honey" }));
+  view.submit();
+  expect(view.messages.send).toHaveBeenLastCalledWith(
+    "channel",
+    expect.any(String),
+    [first.pubkey],
+  );
 });

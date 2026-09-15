@@ -16,6 +16,7 @@ it("intersects groups/stars with active authorized streams, keeping forums and D
     row("dm", { channelType: "dm", hidden: true }),
     row("group-dm", { channelType: "dm", participants: ["a", "b"] }),
     row("forum", { channelType: "forum" }),
+    row("session", { channelType: "session" }),
   ];
   const preferences = {
     sections: [{ id: "channels", name: "Channels", order: 0 }],
@@ -26,7 +27,15 @@ it("intersects groups/stars with active authorized streams, keeping forums and D
       "group-dm": "channels",
       other: "missing",
     },
-    starred: ["star", "archived", "hidden", "revoked", "dm", "forum"],
+    starred: [
+      "star",
+      "archived",
+      "hidden",
+      "revoked",
+      "dm",
+      "forum",
+      "session",
+    ],
   };
   const project = (channels: readonly ChannelSummary[]) =>
     sidebarSections(channels, preferences).map((section) => [

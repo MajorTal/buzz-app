@@ -8,6 +8,7 @@ import {
 } from "./reader";
 import { createAgentActivity } from "../agents/activity";
 import { OBSERVER_KIND } from "../agents/observer";
+import { createWorkSessions } from "./work-sessions";
 import { createAgentLibrary } from "../agents/library";
 import { createIdentityArchives } from "./identity-archives";
 import {
@@ -44,6 +45,7 @@ import {
   createOutbox,
   type OutboxStorage,
 } from "./outbox";
+import { sessionRecipients } from "../sessions/recipients";
 import { createMessages } from "./messages";
 import { createThreadView } from "./threads";
 import { ByteLru } from "./budget";
@@ -629,6 +631,7 @@ export function createRelaySession(
     notify,
   );
   const session = Object.freeze({
+    viewer: transport?.viewer,
     /** Verified new live-route messages, after reconciliation. Never history or local intent. */
     subscribeIncoming(listener: IncomingListener) {
       if (closed) return () => {};
@@ -638,6 +641,30 @@ export function createRelaySession(
       };
     },
     typing: typing.capability,
+    workSessions: createWorkSessions(
+      writes?.outbox,
+      channels.queries,
+      verified,
+      lifetime.signal,
+      writes?.local,
+      async (id) => {
+        if (!transport) return false;
+        // Confirm only this viewer's exact creation receipt. Discovery may be
+        // incomplete; this never admits the channel or grants content access.
+        const events = await requests.reader.read(
+          [{ kinds: [9007], ids: [id], authors: [transport.viewer], limit: 1 }],
+          { signal: lifetime.signal, fresh: true },
+        );
+        return events.some(
+          (event) =>
+            event.id === id &&
+            event.kind === 9007 &&
+            event.pubkey === transport.viewer,
+        );
+      },
+      () =>
+        agentLibrary.queries.snapshot().identities.map((agent) => agent.pubkey),
+    ),
     unread: unread.capability,
     sidebarPreferences: sidebarPreferences.queries,
     live,
@@ -651,6 +678,16 @@ export function createRelaySession(
         retainedEvent(id),
       emoji.tags,
       validateMentions,
+      (channelId, explicit) =>
+        sessionRecipients(
+          channels.queries
+            .list()
+            .channels.find((channel) => channel.id === channelId),
+          profiles.queries.snapshot(),
+          agentLibrary.queries.snapshot(),
+          transport?.viewer,
+          explicit,
+        ),
     ),
     /** An owned bounded thread reader. Dispose on close; the session retains access/lifetime authority. */
     thread(

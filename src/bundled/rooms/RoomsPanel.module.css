@@ -114,6 +114,22 @@
   flex-shrink: 0;
   color: var(--text-muted);
 }
+.roomOptionLabel {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 7px;
+}
+.newRoomBadge {
+  border-radius: 5px;
+  padding: 2px 5px;
+  background: var(--success-surface);
+  color: var(--success);
+  font-size: calc(9px * var(--buzz-text-scale, 1));
+  font-style: normal;
+  font-weight: 700;
+  line-height: 1.2;
+}
 .popover .menuAction {
   justify-content: flex-start;
   margin-top: 5px;
@@ -128,6 +144,11 @@
   justify-content: flex-start;
 }
 .optionsMenu .dangerAction {
+  color: var(--danger);
+}
+.sheet .dangerAction {
+  border-color: var(--danger);
+  background: transparent;
   color: var(--danger);
 }
 .emptyRooms {
@@ -283,68 +304,19 @@
   font-size: calc(10px * var(--buzz-text-scale, 1));
 }
 
-.presence {
-  margin: 18px 16px 8px;
-  padding: 16px;
-  border-radius: 16px;
-  background: var(--surface-accent);
-}
-
-.presence > div {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-}
-
-.presenceDot {
-  width: 9px;
-  height: 9px;
-  flex-shrink: 0;
-  margin-top: 5px;
-  border-radius: 50%;
-  background: var(--toggle-track);
-}
-
-.presenceDot[data-present="true"] {
-  background: #3c8a5a;
-  box-shadow: 0 2px 8px #3c8a5a55;
-}
-
-.presence strong {
-  display: block;
-  font-size: calc(13px * var(--buzz-text-scale, 1));
-}
-
-.presence p {
-  margin: 4px 0 0;
-  color: var(--text-muted);
-  font-size: calc(11px * var(--buzz-text-scale, 1));
-  line-height: 1.45;
-}
-
-.primaryButton,
-.secondaryButton {
-  width: 100%;
-  margin-top: 14px;
-  padding: 8px 12px;
-  border: 1px solid var(--border-input);
-  border-radius: 10px;
-  background: var(--surface-control);
-  color: var(--text);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
-  font-weight: 600;
-}
-
-.primaryButton:hover,
-.secondaryButton:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+.peopleSections {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
 }
 
 .peopleSection {
-  min-height: 0;
-  flex: 1;
-  padding: 12px 16px 16px;
+  padding: 12px 16px 8px;
+}
+
+.peopleSection + .peopleSection {
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
 }
 
 .sectionHeading {
@@ -363,6 +335,27 @@
 .sectionHeading span {
   color: var(--text-muted);
   font-size: calc(11px * var(--buzz-text-scale, 1));
+}
+
+.sectionHeadingAction {
+  display: inline-flex;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  justify-content: center;
+  margin: -6px 0 -6px auto;
+  border: 0;
+  border-radius: 10px;
+  padding: 0;
+  background: transparent;
+  color: var(--text-muted);
+  line-height: 0;
+}
+
+.sectionHeadingAction:hover {
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .emptyPeople {
@@ -429,6 +422,57 @@
   font-size: calc(10px * var(--buzz-text-scale, 1));
 }
 
+.participantInfo .personStatus {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.presenceIndicator {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 50%;
+  background: transparent;
+}
+
+.presenceIndicator[data-status="around"],
+.presenceIndicator[data-status="connecting"],
+.presenceIndicator[data-status="listening"] {
+  border-color: var(--focus);
+  background: var(--focus);
+}
+
+.presenceIndicator[data-status="connecting"],
+.presenceIndicator[data-status="listening"] {
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--focus) 25%, transparent);
+}
+
+.presenceIndicator[data-status="mic-on"],
+.presenceIndicator[data-status="talking"] {
+  border-color: var(--success);
+  background: var(--success);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--success) 25%, transparent);
+}
+
+.presenceIndicator[data-status="connecting"],
+.presenceIndicator[data-status="talking"] {
+  animation: presencePulse 1.2s ease-in-out infinite;
+}
+
+@keyframes presencePulse {
+  50% {
+    transform: scale(1.2);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .presenceIndicator[data-status] {
+    animation: none;
+  }
+}
+
 .speakerLevel {
   position: absolute;
   inset: auto 0 0;
@@ -438,7 +482,7 @@
   transition: transform 80ms linear;
 }
 
-.audioDock {
+.presenceDock {
   margin: 0 12px 12px;
   padding: 14px;
   border-radius: 16px;
@@ -446,97 +490,89 @@
   color: var(--text);
 }
 
-.audioDock[data-listening="true"] {
-  background: var(--selected);
-  color: var(--on-selected);
-}
-
-.audioStatus {
+.presenceStatus {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
 }
 
-.audioIcon {
-  display: grid;
-  width: 34px;
-  height: 34px;
-  flex-shrink: 0;
-  place-items: center;
-  border-radius: 11px;
-  background: var(--surface);
-  color: var(--text);
+.presenceStatus > .presenceIndicator {
+  margin-top: 5px;
 }
 
-.audioStatus strong,
-.audioStatus small {
+.presenceStatus strong,
+.presenceStatus small {
   display: block;
 }
 
-.audioStatus strong {
+.presenceStatus strong {
   font-size: calc(12px * var(--buzz-text-scale, 1));
 }
 
-.audioStatus small {
-  margin-top: 2px;
-  color: currentColor;
+.presenceStatus small {
+  margin-top: 3px;
+  color: var(--text-muted);
   font-size: calc(10px * var(--buzz-text-scale, 1));
-  opacity: 0.76;
+  line-height: 1.4;
 }
 
+.checkInButton,
 .listenButton,
-.leaveButton {
-  display: flex;
-  width: 100%;
-  align-items: center;
-  justify-content: center;
-  gap: 7px;
-  margin-top: 12px;
+.audioExitButton,
+.checkOutButton {
+  min-height: 38px;
   border: 1px solid var(--border-input);
   border-radius: 10px;
-  padding: 9px 12px;
+  padding: 8px 12px;
   background: var(--surface-control);
   color: var(--text);
   font-size: calc(12px * var(--buzz-text-scale, 1));
   font-weight: 650;
 }
 
-.listenButton:hover,
-.leaveButton:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+.checkInButton,
+.checkedInActions,
+.audioActions {
+  width: 100%;
+  margin-top: 12px;
 }
 
-.listenButton:disabled {
-  cursor: not-allowed;
-  opacity: 0.45;
+.listenButton {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.checkedInActions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 7px;
 }
 
 .audioActions {
   display: grid;
-  grid-template-columns: auto auto minmax(0, 1fr);
+  grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr);
   gap: 7px;
-  margin-top: 12px;
-}
-
-.audioControl,
-.liveControl,
-.leaveButton {
-  min-height: 38px;
-  border: 1px solid var(--border-input);
-  border-radius: 10px;
 }
 
 .audioControl,
 .liveControl {
   display: grid;
   width: 40px;
+  min-height: 38px;
   place-items: center;
+  border: 1px solid var(--border-input);
+  border-radius: 10px;
   padding: 0;
   background: var(--surface-control);
   color: var(--text);
 }
 
+.checkInButton:hover,
+.listenButton:hover,
+.audioExitButton:hover,
+.checkOutButton:hover,
 .audioControl:hover {
   background: var(--surface-hover);
   color: var(--text);
@@ -547,6 +583,17 @@
   border-color: var(--focus);
   background: var(--selected);
   color: var(--on-selected);
+}
+
+.checkOutButton {
+  color: var(--text-muted);
+}
+
+.listenButton:disabled,
+.audioExitButton:disabled,
+.audioControl:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 
 .liveMic {
@@ -571,34 +618,50 @@
 }
 
 .levelBars i:nth-child(1) {
-  height: 5px;
+  height: 7px;
 }
 
 .levelBars i:nth-child(2) {
-  height: 9px;
+  height: 13px;
 }
 
 .levelBars i:nth-child(3) {
-  height: 6px;
+  height: 9px;
 }
 
-.leaveButton {
+.roomNotice {
   display: flex;
-  width: auto;
-  min-width: 0;
   align-items: center;
-  justify-content: center;
-  margin: 0;
-  padding: 0 9px;
-  border-color: var(--border-input);
-  background: var(--surface-control);
+  gap: 8px;
+  margin: 0 12px 12px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: var(--surface);
   color: var(--text);
+  box-shadow: var(--elevation-popover);
   font-size: calc(11px * var(--buzz-text-scale, 1));
 }
-
-.leaveButton:hover {
-  background: var(--surface-hover);
-  color: var(--text);
+.roomNoticeMessage {
+  min-width: 0;
+  flex: 1;
+}
+.roomNoticeAction {
+  flex-shrink: 0;
+  border: 0;
+  padding: 5px 7px;
+  background: transparent;
+  color: var(--focus);
+  font-size: calc(11px * var(--buzz-text-scale, 1));
+  font-weight: 650;
+}
+.roomNotice .noticeDismiss {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  padding: 0;
+  color: var(--text-muted);
 }
 
 .operationError {
@@ -653,7 +716,7 @@
   background: var(--surface-hover);
 }
 
-.identityChoice > span {
+.identityChoiceLabel {
   min-width: 0;
 }
 

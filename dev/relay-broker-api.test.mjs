@@ -366,6 +366,43 @@ test("live room commands construct fixed private-channel events and audio auth s
       ["h", roomId],
       ["p", invited],
     ]);
+    const renameResponse = await h.post("rooms-rename", {
+      roomId,
+      name: "Team focus",
+    });
+    expect(renameResponse.status).toBe(200);
+    expect(await renameResponse.json()).toEqual({ renamed: true });
+    expect(h.calls[2].body.kind).toBe(9002);
+    expect(h.calls[2].body.tags).toEqual([
+      ["h", roomId],
+      ["name", "Live: Team focus"],
+    ]);
+    const deleteResponse = await h.post("rooms-delete", { roomId });
+    expect(deleteResponse.status).toBe(200);
+    expect(await deleteResponse.json()).toEqual({ deleted: true });
+    expect(h.calls.slice(3, 5).map((call) => call.body.kind)).toEqual([
+      9002, 9008,
+    ]);
+    expect(h.calls[3].body.tags).toEqual([
+      ["h", roomId],
+      ["archived", "false"],
+    ]);
+    expect(h.calls[4].body.tags).toEqual([["h", roomId]]);
+    const audioResponse = await h.post("rooms-audio-start", {
+      parentRoomId: roomId,
+      members: [invited],
+    });
+    expect(audioResponse.status).toBe(200);
+    const { audioRoomId } = await audioResponse.json();
+    expect(audioRoomId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(h.calls.slice(5).map((call) => call.body.kind)).toEqual([
+      9007, 9000, 48100,
+    ]);
+    expect(h.calls[5].body.tags).toContainEqual(["ttl", "3600"]);
+    expect(h.calls[7].body.tags).toEqual([["h", roomId]]);
+    expect(JSON.parse(h.calls[7].body.content)).toEqual({
+      ephemeral_channel_id: audioRoomId,
+    });
     expect(h.calls.every((call) => verifyEvent(call.body))).toBe(true);
   } finally {
     await h.close();
@@ -379,6 +416,10 @@ test("live room commands reject malformed names, identities, room ids and challe
       ["rooms-create", { name: "", invited: [] }],
       ["rooms-create", { name: "Valid", invited: ["not-a-pubkey"] }],
       ["rooms-invite", { roomId: "not-a-room", pubkey: "a".repeat(64) }],
+      ["rooms-rename", { roomId: "not-a-room", name: "Valid" }],
+      ["rooms-rename", { roomId: crypto.randomUUID(), name: "" }],
+      ["rooms-delete", { roomId: "not-a-room" }],
+      ["rooms-audio-start", { parentRoomId: "not-a-room", members: [] }],
       ["huddle-auth", { challenge: "line\nbreak" }],
     ]) {
       const response = await h.post(route, body);

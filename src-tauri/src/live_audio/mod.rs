@@ -17,6 +17,7 @@ use tokio_util::sync::CancellationToken;
 use wire::{audio_level_dbov, parse_relay_frame, FrameHeader, FLAG_DTX, PROTOCOL_VERSION};
 
 const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(5);
+const OUTPUT_SETUP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_CHALLENGE_BYTES: usize = 512;
 const PCM_FRAME_BYTES: usize = FRAME_SAMPLES * size_of::<f32>();
 const LIVE_AUDIO_EVENT: &str = "live-audio-state";
@@ -42,6 +43,7 @@ enum Slot {
 struct PendingSession {
     generation: u64,
     relay_tag: String,
+    parent_room_id: String,
     challenge: String,
     socket: WsStream,
 }
@@ -190,13 +192,21 @@ fn clear_generation(registry: &LiveAudioRegistry, generation: u64) {
 pub async fn live_audio_prepare(
     relay_url: String,
     room_id: String,
+    parent_room_id: String,
     registry: tauri::State<'_, LiveAudioRegistry>,
 ) -> Result<PreparedAudioSession, String> {
+    uuid::Uuid::parse_str(&parent_room_id)
+        .map_err(|_| "Invalid parent Live room identifier".to_string())?;
     let (socket_url, relay_tag) = audio_socket_url(&relay_url, &room_id)?;
+    let _ = rustls::crypto::ring::default_provider().install_default();
     let generation = {
         let mut state = lock_registry(&registry)?;
-        if state.slot.is_some() {
-            return Err("Leave the current Live room before joining another".to_string());
+        // The browser can lose a pending generation during a failed handshake,
+        // reload, or hot update. A new explicit join owns the single native slot
+        // and fences the abandoned task with a fresh generation.
+        if let Some(Slot::Active(active)) = state.slot.take() {
+            active.cancel.cancel();
+            let _ = active.control_tx.try_send(Control::Leave);
         }
         state.next_generation = state.next_generation.wrapping_add(1).max(1);
         let generation = state.next_generation;
@@ -246,6 +256,7 @@ pub async fn live_audio_prepare(
             state.slot = Some(Slot::Pending(Box::new(PendingSession {
                 generation,
                 relay_tag,
+                parent_room_id,
                 challenge: challenge.clone(),
                 socket,
             })));
@@ -348,7 +359,7 @@ pub async fn live_audio_authenticate(
     let auth = serde_json::json!({
         "type": "auth",
         "event": auth_event,
-        "parent_channel_id": null,
+        "parent_channel_id": pending.parent_room_id,
         "protocol_version": PROTOCOL_VERSION,
     });
     if let Err(error) = socket.send(WsMessage::Text(auth.to_string().into())).await {
@@ -362,15 +373,24 @@ pub async fn live_audio_authenticate(
             return Err(error);
         }
     };
-    let sink = match tauri::async_runtime::spawn_blocking(open_output).await {
-        Ok(Ok(sink)) => sink,
-        Ok(Err(error)) => {
+    let sink = match tokio::time::timeout(
+        OUTPUT_SETUP_TIMEOUT,
+        tauri::async_runtime::spawn_blocking(open_output),
+    )
+    .await
+    {
+        Ok(Ok(Ok(sink))) => sink,
+        Ok(Ok(Err(error))) => {
             clear_generation(&registry, generation);
             return Err(error);
         }
-        Err(error) => {
+        Ok(Err(error)) => {
             clear_generation(&registry, generation);
             return Err(format!("Live audio output setup failed: {error}"));
+        }
+        Err(_) => {
+            clear_generation(&registry, generation);
+            return Err("Live audio output setup timed out".to_string());
         }
     };
 

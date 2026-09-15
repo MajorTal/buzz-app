@@ -85,6 +85,53 @@ function liveRoomCommand(route, value, viewer) {
     ].filter((pubkey) => pubkey !== viewer);
     return { name, invited };
   }
+  if (route === "/api/relay/rooms-rename") {
+    const name = typeof value.name === "string" ? value.name.trim() : "";
+    if (
+      typeof value.roomId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        value.roomId,
+      ) ||
+      !name ||
+      name.length > 80 ||
+      [...name].some((character) => {
+        const code = character.charCodeAt(0);
+        return code < 32 || code === 127;
+      })
+    )
+      throw new Error("Live room name must be 1-80 characters");
+    return { roomId: value.roomId, name };
+  }
+  if (route === "/api/relay/rooms-delete") {
+    if (
+      typeof value.roomId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        value.roomId,
+      )
+    )
+      throw new Error("Invalid Live room delete request");
+    return { roomId: value.roomId };
+  }
+  if (route === "/api/relay/rooms-audio-start") {
+    if (
+      typeof value.parentRoomId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        value.parentRoomId,
+      ) ||
+      !Array.isArray(value.members) ||
+      value.members.length > 20 ||
+      value.members.some(
+        (pubkey) => typeof pubkey !== "string" || !HEX_PUBKEY.test(pubkey),
+      )
+    )
+      throw new Error("Invalid Live room audio request");
+    return {
+      parentRoomId: value.parentRoomId,
+      members: [...new Set(value.members)].filter(
+        (pubkey) => pubkey !== viewer,
+      ),
+    };
+  }
   if (route === "/api/relay/rooms-invite") {
     if (
       typeof value.roomId !== "string" ||
@@ -351,7 +398,12 @@ export function relayBrokerPlugin({
       let libraryRead;
       const streams = new Map();
       const admissions = createHostAdmission();
-      const publishLiveRoomEvent = async (relay, template, signal) => {
+      const publishLiveRoomEvent = async (
+        relay,
+        template,
+        signal,
+        stage = "Live room update",
+      ) => {
         const event = finalizeEvent(
           { ...template, created_at: Math.floor(Date.now() / 1000) },
           key,
@@ -399,6 +451,10 @@ export function relayBrokerPlugin({
           } catch {
             failure = apiFailure(response.status, undefined);
           }
+          failure = {
+            ...failure,
+            error: `${stage} failed: ${failure.error}`,
+          };
           const error = new Error(failure.error);
           error.status = response.status;
           error.failure = failure;
@@ -592,6 +648,9 @@ export function relayBrokerPlugin({
               "/api/relay/huddle-auth",
               "/api/relay/rooms-create",
               "/api/relay/rooms-invite",
+              "/api/relay/rooms-rename",
+              "/api/relay/rooms-delete",
+              "/api/relay/rooms-audio-start",
             ].includes(route) &&
             req.method === "POST"
           ) {
@@ -672,6 +731,98 @@ export function relayBrokerPlugin({
                     signal,
                   );
                 return json(res, 200, { roomId });
+              }
+              if (route === "/api/relay/rooms-rename") {
+                await publishLiveRoomEvent(
+                  relay,
+                  {
+                    kind: 9002,
+                    content: "",
+                    tags: [
+                      ["h", command.roomId],
+                      ["name", `${LIVE_ROOM_PREFIX}${command.name}`],
+                    ],
+                  },
+                  signal,
+                  "Renaming Live room",
+                );
+                return json(res, 200, { renamed: true });
+              }
+              if (route === "/api/relay/rooms-delete") {
+                // The relay makes archived channels read-only, including for
+                // kind:9008. Restore first so stale archived rooms can still be
+                // permanently removed by their owner.
+                await publishLiveRoomEvent(
+                  relay,
+                  {
+                    kind: 9002,
+                    content: "",
+                    tags: [
+                      ["h", command.roomId],
+                      ["archived", "false"],
+                    ],
+                  },
+                  signal,
+                  "Preparing Live room deletion",
+                );
+                await publishLiveRoomEvent(
+                  relay,
+                  {
+                    kind: 9008,
+                    content: "",
+                    tags: [["h", command.roomId]],
+                  },
+                  signal,
+                  "Deleting Live room",
+                );
+                return json(res, 200, { deleted: true });
+              }
+              if (route === "/api/relay/rooms-audio-start") {
+                const audioRoomId = randomUUID();
+                await publishLiveRoomEvent(
+                  relay,
+                  {
+                    kind: 9007,
+                    content: "",
+                    tags: [
+                      ["h", audioRoomId],
+                      ["name", `live-audio-${audioRoomId.slice(0, 8)}`],
+                      ["visibility", "private"],
+                      ["channel_type", "stream"],
+                      ["ttl", "3600"],
+                      ["about", "buzz.live-room.audio.v1"],
+                    ],
+                  },
+                  signal,
+                  "Starting room audio",
+                );
+                for (const pubkey of command.members)
+                  await publishLiveRoomEvent(
+                    relay,
+                    {
+                      kind: 9000,
+                      content: "",
+                      tags: [
+                        ["h", audioRoomId],
+                        ["p", pubkey],
+                      ],
+                    },
+                    signal,
+                    "Preparing room audio access",
+                  );
+                await publishLiveRoomEvent(
+                  relay,
+                  {
+                    kind: 48100,
+                    content: JSON.stringify({
+                      ephemeral_channel_id: audioRoomId,
+                    }),
+                    tags: [["h", command.parentRoomId]],
+                  },
+                  signal,
+                  "Linking room audio",
+                );
+                return json(res, 200, { audioRoomId });
               }
               await publishLiveRoomEvent(
                 relay,

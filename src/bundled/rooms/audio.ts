@@ -1,7 +1,11 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { RelaySnapshot } from "../../features/relay/service";
-import { liveAudioRelayUrl, signHuddleChallenge } from "./api";
+import {
+  liveAudioRelayUrl,
+  signHuddleChallenge,
+  startLiveRoomAudio,
+} from "./api";
 
 const SAMPLE_RATE = 48_000;
 const FRAME_SAMPLES = 960;
@@ -63,14 +67,34 @@ function errorMessage(error: unknown) {
   return error instanceof Error ? error.message : String(error);
 }
 
+async function within<T>(
+  promise: Promise<T>,
+  milliseconds: number,
+  message: string,
+): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(message)), milliseconds);
+      }),
+    ]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function connectLiveAudio({
   connection,
   roomId,
+  roomMembers,
   onState,
   signal,
 }: {
   connection: RelaySnapshot;
   roomId: string;
+  roomMembers: readonly string[];
   onState(state: LiveAudioState): void;
   signal?: AbortSignal;
 }): Promise<LiveAudioSession> {
@@ -181,10 +205,20 @@ export async function connectLiveAudio({
         void invokeRawPcm(event.data.samples).catch(() => {});
     };
 
-    const prepared = await invoke<PreparedSession>("live_audio_prepare", {
-      relayUrl: liveAudioRelayUrl(connection),
-      roomId,
-    });
+    const started = await within(
+      startLiveRoomAudio(connection, roomId, roomMembers),
+      12_000,
+      "Buzz couldn’t start room audio. Try again.",
+    );
+    const prepared = await within(
+      invoke<PreparedSession>("live_audio_prepare", {
+        relayUrl: liveAudioRelayUrl(connection),
+        roomId: started.audioRoomId,
+        parentRoomId: roomId,
+      }),
+      7_000,
+      "The audio relay didn’t respond. Try again.",
+    );
     generation = prepared.generation;
     signal?.throwIfAborted();
 
@@ -201,16 +235,24 @@ export async function connectLiveAudio({
         publish({ status: "connected" });
       }
     });
-    const authEvent = await signHuddleChallenge(
-      connection,
-      prepared.challenge,
-      signal ?? new AbortController().signal,
+    const authEvent = await within(
+      signHuddleChallenge(
+        connection,
+        prepared.challenge,
+        signal ?? new AbortController().signal,
+      ),
+      7_000,
+      "Buzz couldn’t authorize room audio. Try again.",
     );
     signal?.throwIfAborted();
-    const joined = await invoke<NativeAudioState>("live_audio_authenticate", {
-      generation,
-      authEvent,
-    });
+    const joined = await within(
+      invoke<NativeAudioState>("live_audio_authenticate", {
+        generation,
+        authEvent,
+      }),
+      12_000,
+      "The audio session didn’t finish connecting. Try again.",
+    );
     signal?.throwIfAborted();
     peers = Object.freeze(joined.peers);
     nativeConnected = true;

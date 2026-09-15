@@ -64,6 +64,29 @@ export function inviteToLiveRoom(
   });
 }
 
+export function renameLiveRoom(
+  connection: RelaySnapshot,
+  roomId: string,
+  name: string,
+) {
+  return post<{ renamed: true }>(connection, "rooms-rename", { roomId, name });
+}
+
+export function deleteLiveRoom(connection: RelaySnapshot, roomId: string) {
+  return post<{ deleted: true }>(connection, "rooms-delete", { roomId });
+}
+
+export function startLiveRoomAudio(
+  connection: RelaySnapshot,
+  parentRoomId: string,
+  members: readonly string[],
+) {
+  return post<{ audioRoomId: string }>(connection, "rooms-audio-start", {
+    parentRoomId,
+    members,
+  });
+}
+
 export function signHuddleChallenge(
   connection: RelaySnapshot,
   challenge: string,

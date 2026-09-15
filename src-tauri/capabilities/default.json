@@ -1,10 +1,11 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "Allow the main window title bar to drag and maximize the native window.",
+  "description": "Allow the main window to use its title bar and receive scoped native feature events.",
   "windows": ["main"],
   "permissions": [
     "core:window:allow-start-dragging",
-    "core:window:allow-internal-toggle-maximize"
+    "core:window:allow-internal-toggle-maximize",
+    "core:event:allow-listen"
   ]
 }

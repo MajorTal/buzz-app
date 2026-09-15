@@ -376,14 +376,14 @@
 .channelLabel:has(~ .unreadState),
 .channelLabel:has(~ .threadActivityDot) {
   color: var(--text);
-  font-weight: 650;
+  font-weight: var(--type-weight-medium);
 }
 .unreadState {
   position: absolute;
   width: 1px;
   height: 1px;
   padding: 0;
-  margin: -1px;
+  margin: calc(-0.5 * var(--space-half));
   overflow: hidden;
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
@@ -408,7 +408,7 @@
   max-height: min(420px, calc(100vh - 24px));
   overflow: hidden;
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-control);
   background: var(--surface-elevated);
   box-shadow: var(--elevation-popover);
   transform-origin: var(--transform-origin);
@@ -423,9 +423,11 @@
 }
 .activityStale {
   margin: 0;
-  padding: 6px 12px;
+  padding: var(--space-1h) var(--space-3);
   color: var(--text-muted);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .activityList {
   max-height: 360px;
@@ -436,8 +438,8 @@
   grid-template-columns: 30px minmax(0, 1fr);
   align-items: start;
   width: 100%;
-  gap: 9px;
-  padding: 10px 12px;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
   border: 0;
   border-radius: 0;
   background: transparent;
@@ -455,21 +457,25 @@
 .activityAvatar {
   width: 30px;
   height: 30px;
-  border-radius: 10px;
-  font-size: 11px;
+  border-radius: var(--radius-row);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .activityItemBody {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .activityItemHeading {
   display: flex;
   min-width: 0;
   align-items: baseline;
   justify-content: space-between;
-  gap: 12px;
-  font-size: calc(14px * var(--buzz-text-scale, 1));
+  gap: var(--space-3);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
 }
 .activityItemHeading strong {
   overflow: hidden;
@@ -479,7 +485,9 @@
 .activityItemHeading > span.activityTimestamp,
 .activityItemMeta {
   color: var(--text-muted);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .activityItemPreview {
   display: -webkit-box;
@@ -487,7 +495,9 @@
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
   white-space: normal;
-  font-size: calc(14px * var(--buzz-text-scale, 1));
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
 }
 @media (prefers-reduced-motion: reduce) {
   .activityPopover {

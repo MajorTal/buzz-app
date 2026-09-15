@@ -348,8 +348,11 @@ for (const kind of ["mention", "thread reply"]) {
       await row.evaluate((element) => {
         element.style.paddingBottom = "0.5px";
       });
-      await end(page);
-      await expect(row).toBeInViewport({ ratio: 1 });
+      for (const width of [1440, 640]) {
+        await page.setViewportSize({ width, height: 950 });
+        await end(page);
+        await expect(row).toBeInViewport({ ratio: 1 });
+      }
     }
   });
 }

@@ -343,6 +343,7 @@ dependencies = [
  "gtk",
  "libc",
  "mac-notification-sys",
+ "objc2-foundation",
  "portable-pty",
  "serde",
  "tauri",

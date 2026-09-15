@@ -62,10 +62,14 @@ lights have a reserved 104px left area before the community switcher only in the
 macOS desktop runtime. This inset does not move the centered tabs. Web gets no
 inset or imitation window controls. Other
 platforms retain their native decorations. Drag regions are limited to the
-header background; controls remain clickable. The main-window capability grants
-only titlebar dragging and the internal native maximize action used by Tauri's drag
-handler, plus scoped HTTP(S) opening for [external links](channels.md#run-the-integration).
-See [Tauri window customization](https://v2.tauri.app/learn/window-customization/).
+header background; controls remain clickable. On macOS, double-clicking that
+background follows the current system title-bar preference (Fill/Zoom, Minimize,
+or no action); changing the preference does not require restarting Buzz. Other
+platforms retain Tauri's native drag-region behavior. The main-window capability
+grants only titlebar dragging and the internal maximize action used by that
+handler, plus scoped HTTP(S) opening for
+[external links](channels.md#run-the-integration). See
+[Tauri window customization](https://v2.tauri.app/learn/window-customization/).
 
 The top-right group contains enabled plugin launchers (Bestie supplies the snake),
 a page finder, and the local avatar. `ProfileButton.tsx` subscribes to the community
@@ -103,7 +107,8 @@ behind, never over, opaque cards; it makes no relay request at runtime.
 Run `just iterate` for UI changes and `just scan` for the broader review checks.
 Check Home, Messages, and Settings; toggle a bundled plugin off/on and confirm its
 navigation entry follows; inspect a narrow viewport. On macOS, verify titlebar
-alignment, dragging, double-click zoom, and Settings access in a built app.
+alignment, dragging, each macOS title-bar double-click preference, and Settings
+access in a built app.
 
 ## Messages
 

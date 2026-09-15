@@ -17,6 +17,52 @@ use tauri_plugin_dialog::DialogExt;
 #[derive(Clone, Default)]
 struct Imports(Arc<Mutex<Option<PreparedImport>>>);
 
+#[derive(Debug, PartialEq, Eq)]
+enum TitleBarDoubleClickAction {
+    Maximize,
+    Minimize,
+    None,
+}
+
+fn title_bar_double_click_action(preference: Option<&str>) -> TitleBarDoubleClickAction {
+    match preference {
+        Some("Maximize" | "Zoom" | "Fill") => TitleBarDoubleClickAction::Maximize,
+        Some("Minimize") => TitleBarDoubleClickAction::Minimize,
+        _ => TitleBarDoubleClickAction::None,
+    }
+}
+
+#[tauri::command]
+fn title_bar_double_click(window: tauri::Window) -> Result<(), String> {
+    #[cfg(target_os = "macos")]
+    {
+        use objc2_foundation::{ns_string, NSUserDefaults};
+
+        let preference = NSUserDefaults::standardUserDefaults()
+            .stringForKey(ns_string!("AppleActionOnDoubleClick"))
+            .map(|value| value.to_string());
+        match title_bar_double_click_action(preference.as_deref()) {
+            TitleBarDoubleClickAction::Maximize => {
+                if window.is_maximized().map_err(|error| error.to_string())? {
+                    window.unmaximize()
+                } else {
+                    window.maximize()
+                }
+                .map_err(|error| error.to_string())?;
+            }
+            TitleBarDoubleClickAction::Minimize => {
+                window.minimize().map_err(|error| error.to_string())?;
+            }
+            TitleBarDoubleClickAction::None => {}
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    let _ = window;
+
+    Ok(())
+}
+
 async fn prepare_import(
     imports: Imports,
     operation: impl FnOnce() -> Result<Option<PreparedImport>, String> + Send + 'static,
@@ -163,6 +209,7 @@ pub fn run() {
         .manage(Notifications::default())
         .manage(PluginManager(Manager::from_env()))
         .invoke_handler(tauri::generate_handler![
+            title_bar_double_click,
             notification_show,
             terminal_create_owner,
             terminal_spawn,
@@ -189,4 +236,33 @@ pub fn run() {
                 }
             }
         });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{title_bar_double_click_action, TitleBarDoubleClickAction};
+
+    #[test]
+    fn title_bar_double_click_preferences_map_to_native_actions() {
+        assert_eq!(
+            title_bar_double_click_action(Some("Maximize")),
+            TitleBarDoubleClickAction::Maximize
+        );
+        assert_eq!(
+            title_bar_double_click_action(Some("Fill")),
+            TitleBarDoubleClickAction::Maximize
+        );
+        assert_eq!(
+            title_bar_double_click_action(Some("Minimize")),
+            TitleBarDoubleClickAction::Minimize
+        );
+        assert_eq!(
+            title_bar_double_click_action(Some("None")),
+            TitleBarDoubleClickAction::None
+        );
+        assert_eq!(
+            title_bar_double_click_action(None),
+            TitleBarDoubleClickAction::None
+        );
+    }
 }

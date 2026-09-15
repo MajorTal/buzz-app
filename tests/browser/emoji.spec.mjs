@@ -511,6 +511,9 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     );
     await expect(search).toHaveValue("party");
     await expect(page.locator("em-emoji-picker nav")).toHaveCount(0);
+    // Reflow can move this standalone fixture below the viewport. CSS visibility
+    // alone does not establish that elementFromPoint can reach every result.
+    await region.scrollIntoViewIfNeeded();
     const narrowRegion = await region.boundingBox();
     const narrowSurface = await surface.boundingBox();
     expect(narrowRegion.width).toBe(narrowSurface.width + 2);

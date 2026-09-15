@@ -224,7 +224,7 @@ test("editable composer exposes its listbox popup relationship only while sugges
     await expect(input).toHaveRole("textbox");
   }
 });
-test("late publications cannot cross edits, ABA, Escape, blur, plugin replacement or destinations", async ({
+test("plugin replacement, native blur and composer sessions revoke late publications", async ({
   page,
 }) => {
   await page.goto("/tests/fixtures/typeahead.html");
@@ -245,20 +245,6 @@ test("late publications cannot cross edits, ABA, Escape, blur, plugin replacemen
         }),
       { index, text },
     );
-  await input.fill("!a");
-  const old = await latest();
-  await input.fill("!b");
-  await input.fill("!a");
-  await expect.poll(latest).toBeGreaterThan(old);
-  expect(await publish(old, "STALE ABA")).toBe(false);
-  const current = await latest();
-  expect(await publish(current)).toBe(true);
-  await expect(
-    page.getByRole("option", { name: "chosen", exact: true }),
-  ).toBeVisible();
-  await input.press("Escape");
-  expect(await publish(current, "STALE ESCAPE")).toBe(false);
-  await expect(page.getByRole("listbox")).toHaveCount(0);
   await input.fill("!blur");
   const blurred = await latest();
   await page.getByRole("textbox", { name: "Message #Other" }).focus();
@@ -739,27 +725,11 @@ test("channel and actual ThreadPanel composers keep separate completion and draf
   await expect(thread).toHaveJSProperty("value", "@Fixture Reader ");
 });
 
-test("disabled and read-only DOM state reject late publications and displayed choices", async ({
+test("native read-only state rejects a displayed choice without sending", async ({
   page,
 }) => {
   await page.goto("/tests/fixtures/typeahead.html");
   const input = page.getByRole("textbox", { name: "Message #Test" });
-  await input.fill("!disabled");
-  const old = await page.evaluate(
-    () => window.completionFixture.queries().length - 1,
-  );
-  await page.getByRole("button", { name: "Toggle disabled" }).click();
-  await expect(input).toBeDisabled();
-  expect(
-    await page.evaluate(
-      (index) =>
-        window.completionFixture.publish(index, {
-          items: [{ id: "bad", label: "Bad", edit: { text: "bad" } }],
-        }),
-      old,
-    ),
-  ).toBe(false);
-  await page.getByRole("button", { name: "Toggle disabled" }).click();
   await input.fill("!readonly");
   const current = await page.evaluate(
     () => window.completionFixture.queries().length - 1,

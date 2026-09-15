@@ -12,9 +12,13 @@ import artwork from "./design-system/assets/avatar.png";
 
 const agent = "a".repeat(64),
   human = "b".repeat(64);
+// Flat color lets the paint test distinguish clipping from photo texture.
+const insetArtwork = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><path fill="#ff00ff" d="M0 0h32v32H0z"/></svg>',
+)}`;
 const profiles = new Map([
-  [agent, { name: "Agent", picture: artwork }],
-  [human, { name: "Human", picture: artwork }],
+  [agent, { name: "Agent", picture: insetArtwork }],
+  [human, { name: "Human", picture: insetArtwork }],
 ]);
 const agentPubkeys = new Set([agent]);
 const row: ChannelMessage = {
@@ -32,29 +36,34 @@ const row: ChannelMessage = {
 function Fixture() {
   useKeyboardFocusVisibility();
   const [opened, setOpened] = useState(false);
+  const [pictures, setPictures] = useState(true);
   return (
     <main style={{ padding: 24 }}>
       <button type="button">Before avatars</button>
       <section
         aria-label="System avatars"
-        style={{ display: "flex", gap: 16, marginBlock: 24 }}
+        style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBlock: 24 }}
       >
-        {(["small", "default", "large"] as const).flatMap((size) =>
+        {(["small", "default", "large", "fill"] as const).flatMap((size) =>
           (["circle", "squircle"] as const).map((shape) => (
-            <Avatar
+            <div
               key={`${size}-${shape}`}
-              size={size}
-              shape={shape}
-              src={size === "small" ? undefined : artwork}
-              alt={`${size} ${shape}`}
-              fallback="Avatar"
-            />
+              style={size === "fill" ? { width: 128, height: 128 } : undefined}
+            >
+              <Avatar
+                size={size}
+                shape={shape}
+                src={size === "small" ? undefined : artwork}
+                alt={`${size} ${shape}`}
+                fallback="Avatar"
+              />
+            </div>
           )),
         )}
       </section>
       <section
         aria-label="Legacy avatars"
-        style={{ display: "flex", gap: 16, marginBlock: 24 }}
+        style={{ display: "flex", flexWrap: "wrap", gap: 16, marginBlock: 24 }}
       >
         <LegacyAvatar
           name="Human"
@@ -74,7 +83,7 @@ function Fixture() {
         profile={profiles.get(agent)}
         participantProfiles={profiles}
         agentPubkeys={agentPubkeys}
-        media={(url) => url}
+        media={(url) => (pictures ? url : undefined)}
         canOpenLink={() => true}
         onOpenLink={() => {
           setOpened(true);
@@ -84,16 +93,28 @@ function Fixture() {
         retry={undefined}
         onOpenThread={() => {}}
       />
-      <MembershipRow
-        row={{
-          ...row,
-          membership: { type: "member_joined", actor: agent, target: agent },
-        }}
-        profiles={profiles}
-        agentPubkeys={agentPubkeys}
-        media={(url) => url}
-        day={false}
-      />
+      {[agent, human].map((target) => (
+        <MembershipRow
+          key={target}
+          row={{
+            ...row,
+            id: `membership-${target}`,
+            membership: { type: "member_joined", actor: agent, target },
+          }}
+          profiles={profiles}
+          agentPubkeys={agentPubkeys}
+          media={(url) => (pictures ? url : undefined)}
+          day={false}
+        />
+      ))}
+      <label>
+        <input
+          type="checkbox"
+          checked={pictures}
+          onChange={(event) => setPictures(event.currentTarget.checked)}
+        />
+        Show pictures
+      </label>
       {opened && <p role="status">Profile opened</p>}
     </main>
   );

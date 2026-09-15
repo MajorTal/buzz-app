@@ -50,7 +50,12 @@ let failMissing = true;
 const data = [
   profile(viewer, { name: "Viewer", about: "Human profile", picture }),
   profile(mic, { name: "Mic", about: "Mic biography" }),
-  profile(pinky, { name: "Pinky", about: "Agent profile", is_agent: true }),
+  profile(pinky, {
+    name: "Pinky",
+    about: "Agent profile",
+    is_agent: true,
+    picture,
+  }),
 ];
 function session() {
   return createRelaySession({

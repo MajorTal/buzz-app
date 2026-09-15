@@ -54,18 +54,20 @@ export const MembershipRow = memo(function MembershipRow({
                 }
                 key={id}
               >
-                {name.slice(0, 2).toUpperCase()}
-                {picture && (
-                  <img
-                    key={picture}
-                    src={picture}
-                    alt=""
-                    loading="lazy"
-                    onError={(event) => {
-                      event.currentTarget.hidden = true;
-                    }}
-                  />
-                )}
+                <span className={styles.insetAvatarArtwork}>
+                  {name.slice(0, 2).toUpperCase()}
+                  {picture && (
+                    <img
+                      key={picture}
+                      src={picture}
+                      alt=""
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.hidden = true;
+                      }}
+                    />
+                  )}
+                </span>
               </span>
             );
           })}
@@ -74,7 +76,9 @@ export const MembershipRow = memo(function MembershipRow({
               className={styles.membershipAvatar}
               data-avatar-shape="circle"
             >
-              +{targets.length - 3}
+              <span className={styles.insetAvatarArtwork}>
+                +{targets.length - 3}
+              </span>
             </span>
           )}
         </span>

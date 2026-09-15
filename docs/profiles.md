@@ -64,7 +64,9 @@ with the existing public live-mode pin; run only one dev target at a time.
 ## Evidence and remaining checks
 
 `avatar-shapes.spec.mjs` covers painted pixels and focus across sizes, themes and
-viewports in Chromium/WebKit. Completion tests cover loaded-library changes without
+viewports in Chromium/WebKit, including the artwork inside participant/membership
+overlap borders (pictures and initials). Shape attributes alone do not prove that
+inset artwork is clipped. Completion tests cover loaded-library changes without
 another keystroke; profile-directory tests cover marker-only updates.
 
 `tests/browser/profiles.spec.mjs` runs real React/ChannelsPage, thread reading,

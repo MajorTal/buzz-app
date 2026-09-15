@@ -120,9 +120,14 @@ const library = {
   identities: [{ pubkey: "b".repeat(64), name: "Build Bot" }],
 };
 const emoji = { status: "ready", entries: [] };
+const typing = Object.freeze([]);
 const sent: Array<{ text: string; mentions: readonly string[] }> = [];
 Object.assign(window, { linkComposerFixture: { sent } });
 const previewSession = {
+  typing: {
+    snapshot: () => typing,
+    subscribe: () => () => {},
+  },
   outbox: { supports: () => true },
   emoji: {
     snapshot: () => emoji,

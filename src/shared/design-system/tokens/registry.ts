@@ -562,8 +562,8 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-mono-lg",
-    pointsAt: "detail/body-xsmall",
-    size: "10px",
+    pointsAt: "detail/body-xsmall · Buzz size override",
+    size: "12px",
     lineHeight: "16px",
     tracking: "0.03em",
     weight: "400",
@@ -573,8 +573,8 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-mono",
-    pointsAt: "detail/body-xsmall",
-    size: "10px",
+    pointsAt: "detail/body-xsmall · Buzz size override",
+    size: "12px",
     lineHeight: "16px",
     tracking: "0.03em",
     weight: "400",
@@ -584,8 +584,8 @@ export const TYPE_ROLES: TypeRole[] = [
   },
   {
     token: "text-mono-sm",
-    pointsAt: "detail/body-xsmall",
-    size: "10px",
+    pointsAt: "detail/body-xsmall · Buzz size override",
+    size: "12px",
     lineHeight: "16px",
     tracking: "0.03em",
     weight: "400",
@@ -605,7 +605,7 @@ export const TYPE_FAMILIES = [
   {
     token: "font-mono",
     name: "JetBrains Mono",
-    use: "Monospace detail text. Uses the Block UI 10/16 detail tier.",
+    use: "Monospace detail text. Retains Block UI’s xsmall semantic, mapped to 12/16 in Buzz.",
   },
 ];
 
@@ -613,23 +613,18 @@ export const TYPE_FAMILIES = [
 export const TYPE_SOURCE =
   "https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json";
 
-/** The actual Block UI ladder, not an enumeration of Buzz's role aliases. */
+/** Active Buzz sizes from Block UI, with xsmall sharing the 12px step. */
 export const TYPE_RAMPS = [
   {
     id: "size",
     name: "Size",
     description:
-      "Block UI’s 14 primitive sizes. Named roles select from this ladder and carry their own line height, tracking and weight. Values shown at 100% text size.",
+      "Block UI sizes with Buzz’s xsmall mapped to 12px. Caption and xsmall share one size but retain separate semantics. Values shown at 100% text size.",
     steps: [
-      {
-        step: 10,
-        value: "10px",
-        job: "detail/body-xsmall, detail/label-xsmall, detail/link-xsmall",
-      },
       {
         step: 12,
         value: "12px",
-        job: "caption",
+        job: "caption and xsmall detail",
       },
       {
         step: 14,

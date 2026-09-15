@@ -141,9 +141,9 @@ describe("token registry — colour namespaces do not collide", () => {
   });
 });
 
-// Contract pinned to Block UI type.resolution.draft.json at eff76616.
-it("documents and declares the Block UI size ladder without a separate mono scale", () => {
-  const sizes = [10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72, 96];
+// Block UI eff76616, with the product-directed Buzz xsmall override to 12px.
+it("keeps xsmall semantic while sharing the 12px size step", () => {
+  const sizes = [12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72, 96];
   const ramp = TYPE_RAMPS.find((ramp) => ramp.id === "size");
   expect(ramp?.steps.map((step) => step.step)).toEqual(sizes);
   const css = readFileSync(
@@ -155,8 +155,10 @@ it("documents and declares the Block UI size ladder without a separate mono scal
       `--type-size-${size}: calc(var(--type-rem) * ${size / 16});`,
     );
   }
+  expect(css).toContain("--type-xsmall-size: var(--type-size-12);");
+  expect(css).not.toContain("--type-size-10:");
   for (const role of ["mono", "mono-sm", "mono-lg"]) {
-    expect(css).toContain(`--text-${role}: var(--type-size-10);`);
-    expect(css).toContain(`--text-${role}--line-height: 1.6;`);
+    expect(css).toContain(`--text-${role}: var(--type-xsmall-size);`);
+    expect(css).toContain(`--text-${role}--line-height: calc(16 / 12);`);
   }
 });

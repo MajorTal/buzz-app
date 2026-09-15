@@ -57,7 +57,7 @@ for (const mode of ["light", "dark"]) {
     await expect(
       panel.getByRole("heading", { name: "Fixture Reader", exact: true }),
     ).toHaveCSS("font-size", "24px");
-    await expect(key).toHaveCSS("font-size", "10px");
+    await expect(key).toHaveCSS("font-size", "12px");
     await expect(key).toHaveCSS("font-family", /JetBrains Mono/);
     await expect(copy).toHaveCSS("height", "30px");
     await expect(copy).toHaveCSS("border-radius", "10px");
@@ -80,7 +80,7 @@ for (const mode of ["light", "dark"]) {
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+=`);
     await expect(region).toHaveCSS("font-size", "17.6px");
-    await expect(key).toHaveCSS("font-size", "11px");
+    await expect(key).toHaveCSS("font-size", "13.2px");
     await expect(copy).toHaveCSS("height", "30px");
     await page.keyboard.press(`${modifier}+0`);
     for (const width of [1280, 900, 390]) {

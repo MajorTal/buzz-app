@@ -3,9 +3,10 @@
 Base: PR #59 (`95a0196`). Adoption uses the shared palette and component
 variants, with the Block UI typography alignment described below. Features continue to own layout, data and behavior.
 
-Typography now uses the complete Block UI 10–96px size ladder. Existing sans
+Typography uses the Block UI size ladder with xsmall mapped to 12px in Buzz. Existing sans
 role sizes already matched; the legacy 11/13/15px mono sizes now resolve to
-the 10/16 detail role. Inter and JetBrains Mono remain the font bindings.
+the 12/16 xsmall detail role. Xsmall retains a separate semantic token while
+sharing the caption size, so it can be adjusted independently later. Inter and JetBrains Mono remain the font bindings.
 The Typography viewer links the pinned source and maps each local role.
 The component comparison retains #59 markup, but both columns use the current
 shared typography; it is not a historical font-metric screenshot.

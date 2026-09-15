@@ -7,7 +7,7 @@ Shared neutrals now use BlockUI text and surface values; primary actions are
 neutral. Inter uses the BlockUI 16/24 body, 14/20 small body, 20/28 lead,
 24/24 section, 32/32 title and 56/56 hero settings, with 400/500 weights.
 Labels have separate 16/24 and 14/20 roles; caption is 12/16.
-Mono uses Block UI’s 10/16 detail tier; the old size names remain compatibility aliases.
+Mono retains Block UI’s xsmall semantic at 12/16 in Buzz; old size names remain compatibility aliases.
 Existing host color names alias the shared tokens. Panel padding is 24, control
 inset 16, group gap 32 and page-section gap 64 (all rem-based).
 This replaces the earlier 14px body, 400/600 weights and neutral-ramp values.
@@ -86,7 +86,8 @@ namespaces: colour registers as `--color-*` and is named for emphasis
 name ever means both.
 
 The size ramp follows [Block UI’s typography resolution](https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json)
-at `eff76616`: 10, 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72 and 96.
+at `eff76616`, with the product-directed xsmall override: 12px instead of 10px.
+The active sizes are 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72 and 96.
 The upstream specification is provisional. Buzz binds sans roles to Inter and
 mono to JetBrains Mono, retaining rem-based host text scaling.
 
@@ -96,7 +97,9 @@ mono to JetBrains Mono, retaining rem-based host text scaling.
   solid leading; the 24px section title uses 24/24, not the primitive's 24/32.
 - Regular (400) is for reading; Medium (500) is for labels and structure.
   Existing `font-semibold` consumers resolve to Medium.
-- Mono uses `detail/body-xsmall`, 10/16 with 0.03em tracking. `text-mono-lg` and
+- Mono uses `detail/body-xsmall`, mapped to 12/16 with 0.03em tracking in Buzz.
+  `--type-xsmall-size` points to the existing 12px step, keeping the semantic
+  independent from caption even though their sizes currently match. `text-mono-lg` and
   `text-mono-sm` are compatibility aliases for this same setting, not extra sizes.
 - Caption uses 12/16 and 0.0133em tracking. Default reading text is 16/24.
 - Font-family choice is a Buzz binding; matching the numeric settings does not

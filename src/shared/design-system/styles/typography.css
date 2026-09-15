@@ -8,7 +8,6 @@
   --type-rem: calc(1rem * var(--type-scale));
 
   /* Primitive sizes are private; application code consumes named roles. */
-  --type-size-10: calc(var(--type-rem) * 0.625);
   --type-size-12: calc(var(--type-rem) * 0.75);
   --type-size-14: calc(var(--type-rem) * 0.875);
   --type-size-16: calc(var(--type-rem) * 1);
@@ -22,6 +21,8 @@
   --type-size-56: calc(var(--type-rem) * 3.5);
   --type-size-72: calc(var(--type-rem) * 4.5);
   --type-size-96: calc(var(--type-rem) * 6);
+  /* Buzz maps Block UI xsmall to 12px while retaining its semantic identity. */
+  --type-xsmall-size: var(--type-size-12);
   --type-weight-normal: 400;
   --type-weight-medium: 500;
   --type-weight-semibold: var(--type-weight-medium); /* Existing consumers. */
@@ -73,17 +74,17 @@
   --text-caption--line-height: 1.3333333333333333;
   --text-caption--letter-spacing: 0.0133em;
   --text-caption--font-weight: var(--type-weight-normal);
-  /* Legacy mono size names share Block UI detail/body-xsmall (10/16). */
-  --text-mono-lg: var(--type-size-10);
-  --text-mono-lg--line-height: 1.6;
+  /* Legacy mono size names share Block UI detail/body-xsmall, mapped to 12/16 in Buzz. */
+  --text-mono-lg: var(--type-xsmall-size);
+  --text-mono-lg--line-height: calc(16 / 12);
   --text-mono-lg--letter-spacing: 0.03em;
   --text-mono-lg--font-weight: var(--type-weight-normal);
-  --text-mono: var(--type-size-10);
-  --text-mono--line-height: 1.6;
+  --text-mono: var(--type-xsmall-size);
+  --text-mono--line-height: calc(16 / 12);
   --text-mono--letter-spacing: 0.03em;
   --text-mono--font-weight: var(--type-weight-normal);
-  --text-mono-sm: var(--type-size-10);
-  --text-mono-sm--line-height: 1.6;
+  --text-mono-sm: var(--type-xsmall-size);
+  --text-mono-sm--line-height: calc(16 / 12);
   --text-mono-sm--letter-spacing: 0.03em;
   --text-mono-sm--font-weight: var(--type-weight-normal);
 }

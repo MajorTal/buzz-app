@@ -38,12 +38,12 @@ export function TypographyPage() {
     <>
       <PageHeader
         title="Typography"
-        intro="Block UI’s 14-step type ramp, rendered in Inter and JetBrains Mono. Buzz utilities map to the resolved Block UI roles below."
+        intro="Block UI typography, rendered in Inter and JetBrains Mono, with xsmall mapped to 12px in Buzz. Buzz utilities map to the resolved Block UI roles below."
       />
 
       <Section
         title="The faces"
-        description="Buzz keeps its existing font families. Sizes, line heights, tracking and weights follow the linked Block UI specification."
+        description="Buzz keeps its existing font families. Role settings follow the linked Block UI specification, with the documented xsmall size override."
       >
         <Specimens>
           {TYPE_FAMILIES.map((family) => (
@@ -66,7 +66,7 @@ export function TypographyPage() {
 
       <Section
         title="The roles"
-        description="Current Buzz utilities and their Block UI role mappings. Each sample uses the role it documents. The three legacy mono utilities now share the same 10/16 detail setting."
+        description="Current Buzz utilities and their Block UI role mappings. Each sample uses the role it documents. The three legacy mono utilities now share the same 12/16 xsmall detail setting."
       >
         <Specimens>
           {TYPE_ROLES.map((role) => (

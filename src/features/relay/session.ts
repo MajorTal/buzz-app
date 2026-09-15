@@ -19,6 +19,7 @@ import {
   browserReadStateStorage,
   type ReadStateStorage,
 } from "./read-state-storage";
+import { createTyping } from "./typing";
 import { createUnread } from "./unread";
 import type { IncomingListener, IncomingMessage } from "./incoming";
 import { objectBody } from "./body";
@@ -86,6 +87,14 @@ export function createRelaySession(
     else listener();
   };
   let canAccess: (id: string) => boolean = () => true;
+  const typing = createTyping(
+    transport?.viewer ?? "",
+    (id) =>
+      !closed &&
+      canAccess(id) &&
+      channels.queries.list().channels.some((channel) => channel.id === id),
+    notify,
+  );
   const recent = new ByteLru<{ event: RelayEvent; revision: number }>(
     4096,
     8 * 1024 * 1024,
@@ -183,6 +192,7 @@ export function createRelaySession(
     revoking++;
     try {
       accessEpoch++;
+      typing.clear();
       // Filters cannot tell us ownership of broad/ID/reference reads. Infrequent
       // authoritative access loss cancels them all, not merely explicit #h reads.
       requests.invalidate();
@@ -265,10 +275,13 @@ export function createRelaySession(
       events.some((event) => [39000, 39002].includes(event.kind))
     )
       channels.acceptDiscovery(events);
+    // Ephemeral typing and observer telemetry never enter retained content views.
     const visible = events
-      .filter((event) => event.kind !== OBSERVER_KIND)
+      .filter((event) => event.kind !== OBSERVER_KIND && event.kind !== 20002)
       .filter(visibility(events));
     const epoch = accessEpoch;
+    typing.accept(visible);
+    if (closed || epoch !== accessEpoch) return [];
     profiling.measure(
       "events.reconcile",
       events[0]?.id ?? "empty",
@@ -624,6 +637,7 @@ export function createRelaySession(
         incomingListeners.delete(listener);
       };
     },
+    typing: typing.capability,
     unread: unread.capability,
     sidebarPreferences: sidebarPreferences.queries,
     live,
@@ -1014,9 +1028,28 @@ export function createRelaySession(
         )
       )
         refreshRoster();
-      const visible = accept(events);
-      if (closed || !candidates.size || !provenance?.channelId) return;
       const epoch = accessEpoch;
+      const generation = liveGeneration;
+      const visible = accept(events);
+      // Completion subscribers can synchronously clear, revoke or retire this
+      // live delivery. Do not admit its remaining pulses into the new lifetime.
+      if (
+        !closed &&
+        epoch === accessEpoch &&
+        generation === liveGeneration &&
+        liveSnapshot.status === "connected"
+      )
+        typing.accept(
+          events.filter((event) => event.kind === 20002),
+          true,
+        );
+      if (
+        closed ||
+        epoch !== accessEpoch ||
+        !candidates.size ||
+        !provenance?.channelId
+      )
+        return;
       const delivered = new Set<string>();
       const incoming: readonly IncomingMessage[] = Object.freeze(
         visible.flatMap((event) => {
@@ -1046,6 +1079,7 @@ export function createRelaySession(
     state(snapshot) {
       if (closed) return;
       activity.state(snapshot);
+      if (snapshot.status !== "connected") typing.clear();
       if (
         snapshot.status !== "connected" &&
         liveSnapshot.status === "connected"
@@ -1110,6 +1144,7 @@ export function createRelaySession(
       accessEpoch++;
       cacheClearEpoch++;
       activity.clear();
+      typing.clear();
       sidebarPreferences.clear();
       // New windows must not yield to or receive errors from retired owners.
       catchups.clear();
@@ -1128,6 +1163,7 @@ export function createRelaySession(
     },
     dispose() {
       closed = true;
+      typing.dispose();
       lifetime.abort();
       activity.dispose();
       sidebarPreferences.dispose();

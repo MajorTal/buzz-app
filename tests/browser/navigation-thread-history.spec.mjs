@@ -41,7 +41,9 @@ test("Back restores each thread visit before the previous channel", async ({
   );
   await expect(panel.getByText("Thread root 1", { exact: true })).toBeVisible();
   expect(await openThread.evaluate((node) => node.isConnected)).toBe(true);
-  await page.getByRole("button", { name: "Beta", exact: true }).click();
+  const beta = page.locator('[data-channel-id="beta"]');
+  await expect(beta.locator("[data-channel-unread]")).toBeVisible();
+  await beta.click();
   await expect(
     page.getByRole("textbox", { name: "Message #Beta", exact: true }),
   ).toBeVisible();

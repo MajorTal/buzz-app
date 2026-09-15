@@ -130,7 +130,7 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   await expect(ordinary.locator("[data-channel-priority]")).toHaveCount(0);
   await expect(ordinary.locator("span").first()).toHaveCSS(
     "font-weight",
-    "650",
+    "500",
   );
   await expect(directed).toBeVisible();
   await expect(directed).toHaveCSS("width", "6px");

@@ -9,7 +9,6 @@
 }
 
 .actions > button {
-  flex: 1 1 max-content;
   height: auto;
   min-height: var(--size-control);
   padding-block: var(--space-2);

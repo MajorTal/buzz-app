@@ -7,6 +7,38 @@ test.use({
   threadUnread: true,
   largeSidebar: true,
 });
+test.describe("mentioned reply priority", () => {
+  test.use({ threadUnreadMentions: true });
+
+  test("a mention and broadcast remain distinguishable in Activity", async ({
+    page,
+    app,
+  }) => {
+    await open(page, app);
+    const alpha = page.locator('button[data-channel-id="alpha"]');
+    await expect(
+      alpha.getByRole("img", { name: /unread threads?/ }),
+    ).toBeVisible();
+    await alpha.hover();
+    const popover = page.getByRole("dialog", { name: "Activity in Alpha" });
+    await expect(popover).toBeVisible();
+    const items = popover.getByRole("button", {
+      name: /Open unread thread from/,
+    });
+    await expect(items).toHaveCount(2);
+    const names = await items.evaluateAll((rows) =>
+      rows.map((row) => row.getAttribute("aria-label")),
+    );
+
+    expect(
+      names.every((name) => name?.startsWith("Open unread thread from ")),
+    ).toBe(true);
+    expect(new Set(names.map((name) => name?.split(": ").at(-1)))).toEqual(
+      new Set(["Broadcast reply", "Unread reply 1"]),
+    );
+  });
+});
+
 test("thread buttons show observed unread independently, clear only after reading, and expose hover/focus affordance", async ({
   page,
   app,
@@ -64,19 +96,7 @@ test("thread buttons show observed unread independently, clear only after readin
   });
   await expect(
     popover.getByRole("button", { name: /Open unread thread from/ }),
-  ).toHaveCount(2);
-  const activityNames = await popover
-    .getByRole("button", { name: /Open unread thread from/ })
-    .evaluateAll((items) =>
-      items.map((item) => item.getAttribute("aria-label")),
-    );
-  expect(activityNames).toHaveLength(2);
-  expect(
-    activityNames.every((name) => name?.startsWith("Open unread thread from ")),
-  ).toBe(true);
-  expect(
-    new Set(activityNames.map((name) => name?.split(": ").at(-1))),
-  ).toEqual(new Set(["Unread reply 0", "Unread reply 1"]));
+  ).toHaveCount(1);
   const queries = () =>
     app.report.queries.filter(({ filter }) => filter.depth_limit);
   expect(queries()).toHaveLength(0); // Merely displaying buttons never fetches threads.

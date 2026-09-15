@@ -88,6 +88,15 @@ test("foreground send and cold channel entry remain available during a profile s
   page,
   app,
 }) => {
+  // Hold preferences outside broker admission so roster warming cannot pre-load
+  // Beta. Demand reads and presence still use their real owners and admission.
+  const preferences = Promise.withResolvers();
+  let preferencesPending = false;
+  await page.route("**/sidebar-preferences", async (route) => {
+    preferencesPending = true;
+    await preferences.promise;
+    await route.fallback();
+  });
   app.relay.holdPresence();
   await open(page, app);
   await expect.poll(() => app.relay.hasRoute("primary", "alpha")).toBe(true);
@@ -135,52 +144,51 @@ test("foreground send and cold channel entry remain available during a profile s
           filter["#h"]?.includes("beta") &&
           filter.until === undefined,
       );
+    await expect.poll(() => preferencesPending).toBe(true);
     expect(betaHeads()).toHaveLength(0);
-    const visibleMs = await page
-      .getByRole("button", { name: "Beta", exact: true })
-      .evaluate(
-        async (button, ids) => {
-          const start = performance.now();
-          button.click();
-          await new Promise((resolve, reject) => {
-            const deadline = setTimeout(
-              () => reject(new Error("cold channel did not paint")),
-              5000,
+    const visibleMs = await page.locator('[data-channel-id="beta"]').evaluate(
+      async (button, ids) => {
+        const start = performance.now();
+        button.click();
+        await new Promise((resolve, reject) => {
+          const deadline = setTimeout(
+            () => reject(new Error("cold channel did not paint")),
+            5000,
+          );
+          const check = () => {
+            const history = document.querySelector(
+              '[aria-label="Channel message history"]',
             );
-            const check = () => {
-              const history = document.querySelector(
-                '[aria-label="Channel message history"]',
-              );
-              const bounds = history?.getBoundingClientRect();
-              const visible =
-                bounds &&
-                [...history.querySelectorAll("[data-message-id]")].some(
-                  (row) => {
-                    const rect = row.getBoundingClientRect();
-                    return (
-                      ids.includes(row.dataset.messageId) &&
-                      rect.height > 0 &&
-                      rect.bottom > bounds.top &&
-                      rect.top < bounds.bottom
-                    );
-                  },
+            const bounds = history?.getBoundingClientRect();
+            const visible =
+              bounds &&
+              [...history.querySelectorAll("[data-message-id]")].some((row) => {
+                const rect = row.getBoundingClientRect();
+                return (
+                  ids.includes(row.dataset.messageId) &&
+                  rect.height > 0 &&
+                  rect.bottom > bounds.top &&
+                  rect.top < bounds.bottom
                 );
-              if (
-                !visible ||
-                !document.querySelector('textarea[placeholder="Message #Beta"]')
-              )
-                return requestAnimationFrame(check);
-              requestAnimationFrame(() => {
-                clearTimeout(deadline);
-                resolve();
               });
-            };
-            requestAnimationFrame(check);
-          });
-          return performance.now() - start;
-        },
-        app.histories.get("primary/beta").map(({ id }) => id),
-      );
+            if (
+              !visible ||
+              !document.querySelector(
+                '[role="textbox"][aria-label="Message #Beta"]',
+              )
+            )
+              return requestAnimationFrame(check);
+            requestAnimationFrame(() => {
+              clearTimeout(deadline);
+              resolve();
+            });
+          };
+          requestAnimationFrame(check);
+        });
+        return performance.now() - start;
+      },
+      app.histories.get("primary/beta").map(({ id }) => id),
+    );
     expect(betaHeads().length).toBeGreaterThan(0);
     // Closing the contextual profile may abort optional work; do not require
     // an unnecessary snapshot to survive navigation just to satisfy this test.
@@ -190,6 +198,7 @@ test("foreground send and cold channel entry remain available during a profile s
       note: "send includes automation/polling; cold uses browser click-to-paint clock",
     });
   } finally {
+    preferences.resolve();
     app.relay.releasePresence();
   }
 });
@@ -392,5 +401,73 @@ test("real same-origin windows queue one publisher and transfer its Web Lock on 
     });
   } finally {
     await second.close();
+  }
+});
+
+test("presence becomes usable during held HTTP work and unfinished subscription setup", async ({
+  page,
+  app,
+}) => {
+  app.relay.holdEose("alpha");
+  app.relay.holdUnread();
+  const snapshotStart = Promise.withResolvers();
+  await page.route("**/presence-snapshot", async (route) => {
+    await snapshotStart.promise;
+    await route.fallback();
+  });
+  const receipts = [];
+  page.on("response", async (response) => {
+    if (response.url().endsWith("/stream-presence"))
+      receipts.push(await response.json());
+  });
+  try {
+    await open(page, app);
+    await expect
+      .poll(() => app.report.unreadHolds.some((hold) => hold.pending))
+      .toBe(true);
+    await expect.poll(() => app.relay.hasRoute("primary", "alpha")).toBe(true);
+    snapshotStart.resolve(); // Begin broker dispatch only after ordinary HTTP is held.
+    await expect
+      .poll(() => receipts.some(({ accepted }) => accepted === true))
+      .toBe(true);
+    await expect(
+      page
+        .locator("[data-channel-timeline]")
+        .getByRole("img", { name: "Presence: online" })
+        .first(),
+    ).toBeVisible();
+    expect(app.report.unreadHolds.some((hold) => hold.pending)).toBe(true);
+    expect(
+      app.report.wireFrames.some(
+        ([kind, id]) =>
+          kind === "EOSE" &&
+          app.relay.requests.some(
+            (req) => req.id === id && req.route === "alpha",
+          ),
+      ),
+    ).toBe(false);
+    const composer = page.getByRole("textbox", {
+      name: "Message #Alpha",
+      exact: true,
+    });
+    await composer.fill("Presence and chat during startup");
+    await composer.press("Enter");
+    await expect
+      .poll(() =>
+        app.report.publications.some(
+          ({ event }) => event.content === "Presence and chat during startup",
+        ),
+      )
+      .toBe(true);
+    expect(app.report.unreadHolds.some((hold) => hold.pending)).toBe(true);
+    expect(
+      app.report.presencePublications.some(
+        ({ event }) => event.content === "online",
+      ),
+    ).toBe(true);
+  } finally {
+    snapshotStart.resolve();
+    app.relay.releaseUnread();
+    app.relay.releaseEose("alpha");
   }
 });

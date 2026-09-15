@@ -324,3 +324,38 @@ it("retains profile priority across duplicate cleanup and refills released slots
   expect(h.read).toHaveBeenCalledOnce();
   h.owner.dispose();
 });
+
+it.each([null, false, true, "error"] as const)(
+  "renewal retries only locally unsent status promptly: %s",
+  async (result) => {
+    const h = setup();
+    h.owner.dispose();
+    vi.stubGlobal("navigator", {
+      locks: {
+        request: async (
+          _name: string,
+          _options: unknown,
+          work: () => Promise<void>,
+        ) => work(),
+      },
+    });
+    const publish = vi.fn(async (): Promise<boolean | null> => {
+      if (result === "error") throw new Error("unconfirmed");
+      return result;
+    });
+    const owner = createPresence(h.transport, h.activity, publish, (fn) =>
+      fn(),
+    );
+    owner.connected(true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(publish).toHaveBeenCalledOnce();
+    const delay = result === null ? 5000 : 60000;
+    await vi.advanceTimersByTimeAsync(delay - 1);
+    expect(publish).toHaveBeenCalledOnce();
+    await vi.advanceTimersByTimeAsync(1);
+    expect(publish).toHaveBeenCalledTimes(2);
+    owner.dispose();
+    await vi.advanceTimersByTimeAsync(60000);
+    expect(publish).toHaveBeenCalledTimes(2);
+  },
+);

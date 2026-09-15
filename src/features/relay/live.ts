@@ -27,9 +27,7 @@ export function createLiveAdmission() {
       if (busy) pending.add(owner);
       else pending.delete(owner);
     },
-    presenceReady: () =>
-      !pending.size &&
-      performance.now() >= Math.max(next, cooldown, presenceNext),
+    presenceReady: () => performance.now() >= Math.max(cooldown, presenceNext),
     tryPresence() {
       if (presenceBusy || !this.presenceReady()) return;
       presenceBusy = true;
@@ -105,11 +103,11 @@ export type LiveSubscription = {
   /** Host demand only: reorder existing pending routes, never grant new interests. */
   prioritize?(channels: readonly string[]): void;
   observe?(generation: number | null): void;
-  /** One ephemeral status on this authenticated connection; false means not sent. */
+  /** One ephemeral status: true = accepted, null = locally unsent, false = unconfirmed/refused. */
   publishPresence?(
     status: "online" | "away",
     signal: AbortSignal,
-  ): Promise<boolean>;
+  ): Promise<boolean | null>;
   retry(): void;
   dispose(): void;
 };
@@ -571,9 +569,9 @@ export function subscribeRelayTraffic(
         closed ||
         !authenticated
       )
-        return false;
+        return null;
       const release = admission.tryPresence();
-      if (!release) return false;
+      if (!release) return null;
       const current = generation;
       const bounded = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
       try {
@@ -593,7 +591,7 @@ export function subscribeRelayTraffic(
           socket?.readyState !== 1 ||
           !admission.presenceReady()
         )
-          return false;
+          return null;
         if (
           event.pubkey !== viewer ||
           event.kind !== 20001 ||

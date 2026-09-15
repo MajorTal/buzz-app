@@ -29,11 +29,15 @@ an immediate live-status stream.
 - Renewal uses the existing authenticated socket, with a Web Lock per scope/viewer
   serializing same-origin windows. Publication is lossy and bounded; it never
   enters the durable outbox, replays missed ticks, or publishes Offline on close.
-  Hidden observation does not stop connected-community renewal. Ordinary setup and
-  actual shared relay cooldowns still take priority.
+  Hidden observation does not stop connected-community renewal. Actual shared
+  relay cooldowns still take priority. A locally unsent publication
+  retries current status after 5–6 seconds through the same renewal timer; refused
+  or unconfirmed publications retain the 60–65 second interval.
 
-Sustained ordinary traffic may starve optional reads and renewal. Unknown can last
-indefinitely when busy/unavailable. These limits bound client work; they do not
+Bounded presence reads and publications can run during ordinary HTTP work and
+channel subscription setup; neither waits for the entire host to become idle.
+Unknown can persist during relay cooldowns or unavailability. These limits bound
+client work; they do not
 promise zero CPU/network/backend cost, instant transitions, or a delivery SLA.
 There are no presence REQs, added sockets, relay changes, or direct-adapter parity.
 

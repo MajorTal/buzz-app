@@ -156,7 +156,10 @@ export function createApiAdmission() {
   return {
     /** Lossy snapshot lease; never consumes ordinary slots or start credit. */
     tryPresence() {
-      if (!this.idle() || presenceBusy || performance.now() < presenceNext)
+      if (
+        presenceBusy ||
+        performance.now() < Math.max(pausedUntil, presenceNext)
+      )
         return;
       presenceBusy = true;
       presenceNext = performance.now() + 5000;

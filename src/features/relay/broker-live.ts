@@ -252,7 +252,7 @@ export function subscribeBrokerTraffic(
   return {
     async publishPresence(status, signal) {
       if (closed || !streamId || !controller || latest.status !== "connected")
-        return false;
+        return null;
       const current = generation;
       const response = await fetch(`${endpoint}/stream-presence`, {
         method: "POST",
@@ -266,7 +266,8 @@ export function subscribeBrokerTraffic(
         ]),
       });
       if (closed || current !== generation || !response.ok) return false;
-      return (await response.json()).accepted === true;
+      const { accepted } = await response.json();
+      return accepted === null ? null : accepted === true;
     },
     observe(value) {
       const next = observerGeneration(value);

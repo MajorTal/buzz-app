@@ -124,6 +124,14 @@ const typing = Object.freeze([]);
 const sent: Array<{ text: string; mentions: readonly string[] }> = [];
 Object.assign(window, { linkComposerFixture: { sent } });
 const previewSession = {
+  presence: {
+    status: () => "unknown",
+    limited: () => false,
+    subscribe: () => () => {},
+  } satisfies Pick<
+    RelaySession["presence"],
+    "status" | "limited" | "subscribe"
+  >,
   typing: {
     snapshot: () => typing,
     subscribe: () => () => {},

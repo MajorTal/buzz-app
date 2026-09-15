@@ -39,7 +39,11 @@ function fixture() {
             live: true,
           }),
         );
-      if (url.endsWith("/stream-retry") || url.endsWith("/stream-observer")) {
+      if (
+        url.endsWith("/stream-retry") ||
+        url.endsWith("/stream-observer") ||
+        url.endsWith("/stream-presence")
+      ) {
         const d = deferred<Response>();
         controls.push(d);
         signals.push(init.signal as AbortSignal);
@@ -283,3 +287,29 @@ it.each([undefined, { phase: "fresh" }, { phase: "live", channelId: ["a"] }])(
     }
   },
 );
+
+it("preserves locally-unsent presence separately from refusal and unknown responses", async () => {
+  vi.useFakeTimers();
+  const f = fixture();
+  const t = await connectBrokerTransport();
+  const owner = required(t.subscribe)(f.callbacks);
+  try {
+    expect(
+      await owner.publishPresence?.("online", new AbortController().signal),
+    ).toBeNull();
+    f.accept(0);
+    await tick();
+    f.publish(0);
+    await tick();
+    for (const accepted of [null, false, true, undefined, "null"]) {
+      const result = owner.publishPresence?.(
+        "online",
+        new AbortController().signal,
+      );
+      required(f.controls.at(-1)).resolve(Response.json({ accepted }));
+      expect(await result).toBe(accepted === null ? null : accepted === true);
+    }
+  } finally {
+    owner.dispose();
+  }
+});

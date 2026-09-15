@@ -193,12 +193,14 @@ export function createPresence(
             stopPublisher = resolve;
             const renew = async () => {
               if (!valid()) return;
+              let delay = minute();
               try {
-                await publish(activity.status(), owned.signal);
+                if ((await publish(activity.status(), owned.signal)) === null)
+                  delay = 5000 + Math.random() * 1000;
               } catch {
                 /* Lossy; next renewal owns current state. */
               }
-              if (valid()) renewal = setTimeout(() => void renew(), minute());
+              if (valid()) renewal = setTimeout(() => void renew(), delay);
             };
             renewal = setTimeout(() => void renew(), 250 + Math.random() * 750);
           });

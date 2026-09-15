@@ -606,7 +606,7 @@ export function relayBrokerPlugin({
               return json(res, 400, { error: "Invalid live control" });
             const stream = streams.get(streamId);
             if (publishingPresence && (!stream || stream.relay !== relay))
-              return json(res, 200, { accepted: false });
+              return json(res, 200, { accepted: null });
             if (!stream || stream.relay !== relay)
               return json(res, 404, {
                 error: "Live stream no longer available",
@@ -994,8 +994,7 @@ export function relayBrokerPlugin({
           const lane = admissions(relay, viewer).api;
           let releasePresence;
           if (presence) {
-            releasePresence =
-              !presenceFlight && !inflight ? lane.tryPresence() : undefined;
+            releasePresence = !presenceFlight ? lane.tryPresence() : undefined;
             if (!releasePresence) {
               res.writeHead(204);
               return res.end();

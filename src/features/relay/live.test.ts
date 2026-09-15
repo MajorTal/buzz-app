@@ -701,12 +701,11 @@ it("observer route is optional, live-only at dispatch/retry, separately fenced a
 it("presence holds its receipt without delaying ordinary setup and shares correlated cooldown", async () => {
   vi.useFakeTimers();
   const h = setup([]);
-  await h.first.auth();
   expect(
     await h.owner.publishPresence?.("online", new AbortController().signal),
-  ).toBe(false);
-  await vi.advanceTimersByTimeAsync(500);
-  for (const [, id] of h.first.requests()) await h.first.receive(["EOSE", id]);
+  ).toBeNull();
+  await h.first.auth();
+  // No EOSE: ordinary setup and its 250ms start clock are still pending.
   const abort = new AbortController();
   const result = h.owner.publishPresence?.("online", abort.signal);
   await vi.advanceTimersByTimeAsync(0);
@@ -714,8 +713,10 @@ it("presence holds its receipt without delaying ordinary setup and shares correl
     id: string;
     content: string;
   };
+  assert.exists(event);
   expect(event.content).toBe("online");
   h.owner.update(["foreground"]);
+  await vi.advanceTimersByTimeAsync(500);
   expect(h.first.requests().at(-1)?.[2]["#h"]).toEqual(["foreground"]);
   abort.abort(); // Keep the receipt correlation after cancellation, to honor late quota.
   await h.first.receive(["OK", "unrelated", true]);
@@ -775,9 +776,9 @@ it("an outstanding presence signer pins its principal flight across socket repla
   for (const [, id] of next.requests()) await next.receive(["EOSE", id]);
   expect(
     await owner.publishPresence?.("online", new AbortController().signal),
-  ).toBe(false);
+  ).toBeNull();
   release();
-  expect(await result).toBe(false);
+  expect(await result).toBeNull();
   expect(
     sockets.flatMap((s) => s.sent).filter(([kind]) => kind === "EVENT"),
   ).toEqual([]);

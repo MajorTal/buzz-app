@@ -540,3 +540,40 @@ test("held optional snapshot body leaves ordinary broker capacity free and start
     await h.close();
   }
 });
+
+test("presence snapshot progresses while an ordinary response body is held", async () => {
+  let release;
+  const h = await harness((call) => {
+    if (call.body?.[0]?.kinds?.includes(20001)) return Response.json([]);
+    return new Response(
+      new ReadableStream({
+        start(controller) {
+          release = () => {
+            controller.enqueue(new TextEncoder().encode("[]"));
+            controller.close();
+          };
+        },
+      }),
+    );
+  });
+  let ordinary;
+  try {
+    ordinary = h.post("query", filters, undefined, "background");
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const snapshot = await h.post("presence-snapshot", [
+      { kinds: [20001], authors: [h.event.pubkey], limit: 1 },
+    ]);
+    expect(snapshot.status).toBe(200);
+    expect(await snapshot.json()).toEqual([]);
+    expect(h.calls).toHaveLength(2);
+    const missing = await h.post("stream-presence", {
+      streamId: "0".repeat(32),
+      status: "online",
+    });
+    expect(await missing.json()).toEqual({ accepted: null });
+  } finally {
+    release?.();
+    await ordinary;
+    await h.close();
+  }
+});

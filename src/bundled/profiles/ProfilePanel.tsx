@@ -1,3 +1,4 @@
+import { PresenceIndicator } from "../../features/presence/react";
 import {
   useEffect,
   useMemo,
@@ -102,6 +103,7 @@ function ProfileDetails({
         />
         <h2 className="text-heading">{name}</h2>
       </div>
+      <PresenceIndicator presence={session.presence} pubkey={pubkey} profile />
       {profile?.about && <p className={styles.about}>{profile.about}</p>}
       {context?.canOpen(activity) && (
         <div>

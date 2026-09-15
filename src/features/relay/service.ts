@@ -1,3 +1,4 @@
+import type { PresenceActivity } from "../presence/activity";
 import type { Context } from "@deepseek-ai/cordis";
 import { createRelaySession, type RelaySession } from "./session";
 import { createHeadPersistence } from "./persistence";
@@ -29,6 +30,7 @@ declare module "@deepseek-ai/cordis" {
 export function provideRelay(
   ctx: Context,
   connect?: (signal: AbortSignal) => Promise<ReadTransport>,
+  presenceActivity?: PresenceActivity,
 ) {
   let disposed = false;
   let generation = 0;
@@ -85,6 +87,7 @@ export function provideRelay(
             if (disposed || signal.aborted || current !== generation) return;
             store.dispose();
             store = createRelaySession(transport, {
+              ...(presenceActivity ? { presenceActivity } : {}),
               prepared: true,
               persistence: createHeadPersistence(
                 transport.viewer,

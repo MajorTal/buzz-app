@@ -17,9 +17,31 @@ const MAX_QUOTA_RETRIES = 3;
 export function createLiveAdmission() {
   let next = 0;
   let cooldown = 0;
+  let presenceBusy = false,
+    presenceNext = 0;
+  const pending = new Set<object>();
   return {
     delay: () =>
       Math.max(0, next - performance.now(), cooldown - performance.now()),
+    setup(owner: object, busy: boolean) {
+      if (busy) pending.add(owner);
+      else pending.delete(owner);
+    },
+    presenceReady: () =>
+      !pending.size &&
+      performance.now() >= Math.max(next, cooldown, presenceNext),
+    tryPresence() {
+      if (presenceBusy || !this.presenceReady()) return;
+      presenceBusy = true;
+      return () => {
+        presenceBusy = false;
+      };
+    },
+    presenceSent() {
+      presenceNext = performance.now() + 5000;
+    },
+    presenceIdle: () =>
+      !presenceBusy && performance.now() >= presenceNext && !pending.size,
     take() {
       next = performance.now() + REQUEST_INTERVAL_MS;
     },
@@ -83,6 +105,11 @@ export type LiveSubscription = {
   /** Host demand only: reorder existing pending routes, never grant new interests. */
   prioritize?(channels: readonly string[]): void;
   observe?(generation: number | null): void;
+  /** One ephemeral status on this authenticated connection; false means not sent. */
+  publishPresence?(
+    status: "online" | "away",
+    signal: AbortSignal,
+  ): Promise<boolean>;
   retry(): void;
   dispose(): void;
 };
@@ -138,9 +165,18 @@ export function subscribeRelayTraffic(
   let interests: string[] = [];
   let priority: string[] = [];
   let observer: number | null = null;
+  let presenceReceipt:
+    | { id: string; finish(accepted: boolean): void }
+    | undefined;
   const routes = new Map<string, Route>();
   const wires = new Map<string, Route>();
   const notify = () => {
+    admission.setup(
+      routes,
+      !closed &&
+        connection !== "error" &&
+        [...routes.values()].some((route) => route.status === "pending"),
+    );
     if (closed) return;
     callbacks.state(
       Object.freeze({
@@ -340,6 +376,8 @@ export function subscribeRelayTraffic(
   function clearSocket() {
     generation++;
     authenticated = false;
+    presenceReceipt?.finish(false);
+    admission.setup(routes, false);
     clearTimeout(dispatchTimer);
     clearTimeout(deadline);
     for (const route of routes.values()) clearTimeout(route.deadline);
@@ -447,6 +485,23 @@ export function subscribeRelayTraffic(
         notify();
         return;
       }
+      if (data[0] === "OK" && presenceReceipt?.id === data[1]) {
+        if (
+          data[2] === false &&
+          typeof data[3] === "string" &&
+          data[3].startsWith("rate-limited:")
+        ) {
+          const hint = /^rate-limited: quota exceeded; retry in (\d+)s$/.exec(
+            data[3],
+          );
+          const seconds = hint ? Number(hint[1]) : 86400;
+          admission.pause(
+            Number.isSafeInteger(seconds) && seconds <= 86400 ? seconds : 86400,
+          );
+        }
+        presenceReceipt?.finish(data[2] === true);
+        return;
+      }
       const route =
         typeof data[1] === "string" ? wires.get(data[1]) : undefined;
       if (!authenticated || !route) return;
@@ -497,6 +552,65 @@ export function subscribeRelayTraffic(
   }
   connect();
   return {
+    async publishPresence(status, signal) {
+      if (
+        (status !== "online" && status !== "away") ||
+        signal.aborted ||
+        closed ||
+        !authenticated
+      )
+        return false;
+      const release = admission.tryPresence();
+      if (!release) return false;
+      const current = generation;
+      const bounded = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
+      try {
+        const event = eventDto(
+          await sign({
+            kind: 20001,
+            content: status,
+            tags: [],
+            created_at: Math.floor(Date.now() / 1000),
+          }),
+        );
+        if (
+          bounded.aborted ||
+          closed ||
+          current !== generation ||
+          !authenticated ||
+          socket?.readyState !== 1 ||
+          !admission.presenceReady()
+        )
+          return false;
+        if (
+          event.pubkey !== viewer ||
+          event.kind !== 20001 ||
+          event.content !== status ||
+          event.tags.length
+        )
+          throw new Error("Presence signer changed intent");
+        return await new Promise<boolean>((resolve, reject) => {
+          const finish = (accepted: boolean) => {
+            clearTimeout(receiptTimeout);
+            presenceReceipt = undefined;
+            resolve(accepted);
+          };
+          // Once sent, retain the correlated receipt even if the caller leaves:
+          // a late quota refusal still belongs to the shared host cooldown.
+          const receiptTimeout = setTimeout(() => finish(false), 10000);
+          presenceReceipt = { id: event.id, finish };
+          try {
+            admission.presenceSent();
+            send(["EVENT", event]);
+          } catch (error) {
+            finish(false);
+            reject(error);
+          }
+        });
+      } finally {
+        release();
+      }
+    },
     observe(value) {
       const next = observerGeneration(value);
       if (closed || observer === next) return;

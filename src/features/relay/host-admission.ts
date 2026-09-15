@@ -17,7 +17,13 @@ export function createHostAdmission() {
     let principal = principals.get(key);
     if (!principal) {
       for (const [id, entry] of principals)
-        if (!entry.streams && entry.api.idle() && entry.live.delay() === 0)
+        if (
+          !entry.streams &&
+          entry.api.idle() &&
+          entry.api.presenceIdle() &&
+          entry.live.delay() === 0 &&
+          entry.live.presenceIdle()
+        )
           principals.delete(id);
       if (principals.size >= 64)
         throw new Error("Relay admission owner capacity reached");

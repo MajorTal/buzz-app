@@ -13,6 +13,8 @@ import {
   ApiPaused,
   ApiNotSent,
   readApiFailure,
+  presenceFilter,
+  presenceText,
 } from "./http-admission";
 import { yieldToHost } from "./yield";
 import { createRelayProfiler, type RelayProfiler } from "./profiling";
@@ -47,6 +49,11 @@ export interface ReadTransport {
     requestId: string,
     priority: "foreground" | "background",
   ): Promise<RelayEvent[]>;
+  /** Broker-only, complete bounded presence read. null is a local admission skip. */
+  presenceSnapshot?(
+    authors: readonly string[],
+    signal: AbortSignal,
+  ): Promise<ReadonlyMap<string, "online" | "away" | "offline"> | null>;
   readonly profiling?: RelayProfiler;
   /** Verified incoming traffic. The session owns this subscription and fences late delivery. */
   subscribe?(callbacks: LiveCallbacks): LiveSubscription;
@@ -103,6 +110,45 @@ async function parseEvents(
   return events;
 }
 
+async function parsePresence(
+  raw: unknown,
+  authors: readonly string[],
+  relay: string,
+  signal: AbortSignal,
+) {
+  if (!Array.isArray(raw) || raw.length > authors.length)
+    throw new Error("Invalid presence snapshot");
+  const values = new Map<string, "online" | "away" | "offline">();
+  for (const event of await parseEvents(raw, signal)) {
+    const subjects = event.tags.filter(([tag]) => tag === "p");
+    const subject = subjects[0]?.[1];
+    let status: unknown = event.content;
+    if (event.content.startsWith("{")) {
+      try {
+        status = JSON.parse(event.content).status;
+      } catch {
+        status = undefined;
+      }
+    }
+    if (
+      event.kind !== 20001 ||
+      event.pubkey !== relay ||
+      subjects.length !== 1 ||
+      subjects[0]?.length !== 2 ||
+      !subject ||
+      !authors.includes(subject) ||
+      values.has(subject) ||
+      (status !== "online" && status !== "away" && status !== "offline")
+    )
+      throw new Error("Untrusted presence snapshot");
+    values.set(subject, status);
+  }
+  signal.throwIfAborted();
+  for (const author of authors)
+    if (!values.has(author)) values.set(author, "offline");
+  return values;
+}
+
 /** Register trusted-app-origin intent before contacting a new destination. No remote join. */
 export async function registerBrokerCommunity(
   community: string,
@@ -145,6 +191,7 @@ export async function connectBrokerTransport(
     writeKinds?: number[];
     relayUrl?: string;
     live?: boolean;
+    presence?: boolean;
     sidebarPreferences?: boolean;
     agentLibrary?: boolean;
     agentActivity?: boolean;
@@ -165,6 +212,47 @@ export async function connectBrokerTransport(
     );
   return {
     profiling,
+    ...(session.presence && session.live
+      ? {
+          async presenceSnapshot(
+            authors: readonly string[],
+            signal: AbortSignal,
+          ) {
+            const filters = [
+              { kinds: [20001], authors, limit: authors.length },
+            ];
+            if (!presenceFilter(filters))
+              throw new Error("Invalid presence demand");
+            const bounded = AbortSignal.any([
+              signal,
+              AbortSignal.timeout(10000),
+            ]);
+            const result = await fetch(`${endpoint}/presence-snapshot`, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(filters),
+              signal: bounded,
+            });
+            if (result.status === 204) return null;
+            if (!result.ok) {
+              const failure = await readApiFailure(result);
+              throw new ReadError(
+                "unavailable",
+                failure.error,
+                result.status,
+                failure.retryAfterMs,
+              );
+            }
+            return parsePresence(
+              JSON.parse(await presenceText(result)),
+              authors,
+              session.relayAuthor as string,
+              bounded,
+            );
+          },
+        }
+      : {}),
     agentActivity: session.agentActivity === true && session.live === true,
     ...(session.live
       ? {

@@ -250,6 +250,24 @@ export function subscribeBrokerTraffic(
   }
   start();
   return {
+    async publishPresence(status, signal) {
+      if (closed || !streamId || !controller || latest.status !== "connected")
+        return false;
+      const current = generation;
+      const response = await fetch(`${endpoint}/stream-presence`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ streamId, status }),
+        signal: AbortSignal.any([
+          signal,
+          controller.signal,
+          AbortSignal.timeout(10000),
+        ]),
+      });
+      if (closed || current !== generation || !response.ok) return false;
+      return (await response.json()).accepted === true;
+    },
     observe(value) {
       const next = observerGeneration(value);
       if (closed || observer === next) return;

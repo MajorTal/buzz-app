@@ -1,3 +1,4 @@
+import type { ReadFilter } from "./events.ts";
 import { ReadError } from "./errors.ts";
 
 /** Admission owns starts, not retries or delivery semantics. An admitted write is
@@ -117,7 +118,9 @@ export function createApiAdmission() {
   let next = 0,
     pausedUntil = 0,
     active = 0,
-    preparing = 0;
+    preparing = 0,
+    presenceBusy = false,
+    presenceNext = 0;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const queue: Ticket[] = [];
   const pauseError = () =>
@@ -151,6 +154,17 @@ export function createApiAdmission() {
     pump();
   }
   return {
+    /** Lossy snapshot lease; never consumes ordinary slots or start credit. */
+    tryPresence() {
+      if (!this.idle() || presenceBusy || performance.now() < presenceNext)
+        return;
+      presenceBusy = true;
+      presenceNext = performance.now() + 5000;
+      return () => {
+        presenceBusy = false;
+      };
+    },
+    presenceIdle: () => !presenceBusy && performance.now() >= presenceNext,
     /** Retain bounded ownership across asynchronous auth and its final dispatch.
      * A cancelled unabortable signer keeps its slot until it settles: repeatedly
      * cancelling must not admit an unbounded number of outstanding sign prompts. */
@@ -243,4 +257,45 @@ export async function admittedApiRequest(
     signal,
     priority,
   );
+}
+
+/** The optional lane accepts only this bounded presence shape, never a priority hint. */
+export function presenceFilter(raw: unknown): raw is ReadFilter[] {
+  if (!Array.isArray(raw) || raw.length !== 1) return false;
+  const filter = raw[0];
+  return (
+    !!filter &&
+    Object.keys(filter).sort().join(",") === "authors,kinds,limit" &&
+    Array.isArray(filter.kinds) &&
+    filter.kinds.length === 1 &&
+    filter.kinds[0] === 20001 &&
+    Array.isArray(filter.authors) &&
+    filter.authors.length > 0 &&
+    filter.authors.length <= 256 &&
+    filter.limit === filter.authors.length &&
+    new Set(filter.authors).size === filter.authors.length &&
+    filter.authors.every(
+      (key: unknown) => typeof key === "string" && /^[0-9a-f]{64}$/.test(key),
+    )
+  );
+}
+export async function presenceText(response: Response): Promise<string> {
+  if (!response.body) throw new Error("Presence body missing");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder("utf-8", { fatal: true });
+  let bytes = 0,
+    text = "";
+  try {
+    while (true) {
+      const { value, done } = await reader.read();
+      if (done) return text + decoder.decode();
+      bytes += value.byteLength;
+      if (bytes > 1024 * 1024)
+        throw new Error("Presence response exceeds capacity");
+      text += decoder.decode(value, { stream: true });
+    }
+  } finally {
+    await reader.cancel().catch(() => {});
+    reader.releaseLock();
+  }
 }

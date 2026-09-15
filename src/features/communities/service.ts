@@ -1,4 +1,5 @@
 // FOUNDATION: Client identity and membership selection outlive community query sessions.
+import { createPresenceActivity } from "../presence/activity";
 import { Context } from "@deepseek-ai/cordis";
 import { provideRelay, type RelayData } from "../relay/service";
 import { connectBrokerTransport } from "../relay/transport";
@@ -31,6 +32,7 @@ export function createCommunities(ctx: Context, live: boolean) {
   let unresolvedSelection: string | null = null;
   let disposed = false;
   const controller = new AbortController();
+  const presenceActivity = createPresenceActivity();
   const listeners = new Set<() => void>();
   const relayListeners = new Set<() => void>();
   const sessions = new Map<string, RelayData>();
@@ -72,8 +74,10 @@ export function createCommunities(ctx: Context, live: boolean) {
   const acquire = (id: string) => {
     let session = sessions.get(id);
     if (!session) {
-      session = provideRelay(newScope(), (signal) =>
-        connectBrokerTransport("", signal, id),
+      session = provideRelay(
+        newScope(),
+        (signal) => connectBrokerTransport("", signal, id),
+        presenceActivity,
       );
       sessions.set(id, session);
       session.subscribe(() => {
@@ -185,6 +189,7 @@ export function createCommunities(ctx: Context, live: boolean) {
   ctx.effect(() => () => {
     disposed = true;
     controller.abort();
+    presenceActivity.dispose();
     listeners.clear();
     relayListeners.clear();
     return Promise.all(scopes.map((scope) => scope.fiber.dispose()));

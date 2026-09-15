@@ -184,3 +184,78 @@ it("uses each signed transport's own origin for protected media, never a deploym
   );
   expect(a.media("http://images.example/insecure.png")).toBeUndefined();
 });
+
+it("presence validates whole snapshots before omission means Offline; busy is not empty", async () => {
+  const relay = keypair(),
+    author = keypair().pubkey,
+    absent = keypair().pubkey;
+  const event = signed(relay, {
+    kind: 20001,
+    content: "online",
+    tags: [["p", author]],
+  });
+  let response = () => Response.json([event]);
+  const fetcher = vi.fn(async (url: string) =>
+    url.endsWith("/session")
+      ? Response.json({
+          viewer: key.pubkey,
+          relayAuthor: relay.pubkey,
+          live: true,
+          presence: true,
+        })
+      : response(),
+  );
+  vi.stubGlobal("fetch", fetcher);
+  const transport = await connectBrokerTransport();
+  assert.exists(transport.presenceSnapshot);
+  const snapshot = transport.presenceSnapshot;
+  const read = () => snapshot([author, absent], new AbortController().signal);
+  expect(await read()).toEqual(
+    new Map([
+      [author, "online"],
+      [absent, "offline"],
+    ]),
+  );
+  response = () => new Response(null, { status: 204 });
+  expect(await read()).toBeNull();
+  for (const events of [
+    [event, event],
+    [{ ...event, sig: "0".repeat(128) }],
+    [signed(key, { kind: 20001, content: "online", tags: [["p", author]] })],
+    [
+      signed(relay, {
+        kind: 20001,
+        content: "online",
+        tags: [["p", key.pubkey]],
+      }),
+    ],
+    [signed(relay, { kind: 20001, content: "maybe", tags: [["p", author]] })],
+    [
+      signed(relay, {
+        kind: 20001,
+        content: "away",
+        tags: [
+          ["p", author],
+          ["p", absent],
+        ],
+      }),
+    ],
+  ]) {
+    response = () => Response.json(events);
+    await expect(read()).rejects.toThrow();
+  }
+  response = () =>
+    Response.json([
+      signed(relay, {
+        kind: 20001,
+        content: '{"status":"away"}',
+        tags: [["p", author]],
+      }),
+    ]);
+  expect((await read())?.get(author)).toBe("away");
+  response = () => new Response(" ".repeat(1024 * 1024 + 1));
+  await expect(read()).rejects.toThrow("capacity");
+  await expect(snapshot([], new AbortController().signal)).rejects.toThrow(
+    "demand",
+  );
+});

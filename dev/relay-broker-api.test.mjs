@@ -494,3 +494,49 @@ test("both real sign and publish routes admit direct replies but reject arbitrar
     await h.close();
   }
 });
+
+test("held optional snapshot body leaves ordinary broker capacity free and start credit untouched", async () => {
+  let release;
+  const h = await harness((call) => {
+    if (call.body?.[0]?.kinds?.includes(20001))
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            release = () => {
+              controller.enqueue(new TextEncoder().encode("[]"));
+              controller.close();
+            };
+          },
+        }),
+      );
+    return Response.json([]);
+  });
+  const presence = [{ kinds: [20001], authors: [h.event.pubkey], limit: 1 }];
+  try {
+    const snapshot = h.post("presence-snapshot", presence);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    const duplicate = await h.post("presence-snapshot", presence);
+    expect(duplicate.status).toBe(204);
+    expect((await h.post("query", filters)).status).toBe(200);
+    expect(h.calls).toHaveLength(2);
+    expect(h.calls[1].at - h.calls[0].at).toBeLessThan(400);
+    release();
+    release = undefined;
+    expect(await (await snapshot).json()).toEqual([]);
+    expect(
+      (await h.post("presence-snapshot", [{ ...presence[0], authors: [] }]))
+        .status,
+    ).toBe(400);
+    expect(
+      (
+        await h.post("presence-snapshot", [
+          { ...presence[0], authors: Array(257).fill(h.event.pubkey) },
+        ])
+      ).status,
+    ).toBe(400);
+    expect(h.calls).toHaveLength(2);
+  } finally {
+    release?.();
+    await h.close();
+  }
+});

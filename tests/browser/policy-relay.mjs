@@ -14,6 +14,10 @@ export function policyRelay({
   acceptPublication,
 }) {
   const sockets = [];
+  let presenceHeld = false;
+  const presenceWaiters = [];
+  report.presenceSnapshots = [];
+  report.presencePublications = [];
   const requests = [];
   const rejected = [];
   report.liveRequests = requests;
@@ -54,6 +58,13 @@ export function policyRelay({
       socket.onmessage?.({ data: JSON.stringify(frame) });
   }
   return {
+    holdPresence() {
+      presenceHeld = true;
+    },
+    releasePresence() {
+      presenceHeld = false;
+      for (const release of presenceWaiters.splice(0)) release();
+    },
     holdContent() {
       heldContent = true;
     },
@@ -163,6 +174,43 @@ export function policyRelay({
         const filter = filters[0],
           community = communityOf(url);
         report.queries.push({ community, filter, at: performance.now() });
+        if (filter.kinds?.includes(20001)) {
+          expect(Object.keys(filter).sort()).toEqual([
+            "authors",
+            "kinds",
+            "limit",
+          ]);
+          expect(filter.authors.length).toBeGreaterThan(0);
+          expect(filter.authors.length).toBeLessThanOrEqual(256);
+          expect(filter.limit).toBe(filter.authors.length);
+          const snapshot = {
+            community,
+            filter,
+            pending: presenceHeld,
+            aborted: false,
+          };
+          report.presenceSnapshots.push(snapshot);
+          // Return the pending fetch, like the profile/content holds below.
+          // Awaiting it inside the fixture assertion catch misclassifies normal
+          // consumer cancellation as an unexpected protocol assertion failure.
+          if (presenceHeld)
+            return new Promise((resolve, reject) => {
+              const abort = () => {
+                snapshot.pending = false;
+                snapshot.aborted = true;
+                reject(init.signal.reason);
+              };
+              if (init.signal.aborted) return abort();
+              presenceWaiters.push(() => {
+                init.signal.removeEventListener("abort", abort);
+                snapshot.pending = false;
+                if (!snapshot.aborted)
+                  resolve(Response.json(answer(community, filter)));
+              });
+              init.signal.addEventListener("abort", abort, { once: true });
+            });
+          return Response.json(answer(community, filter));
+        }
         if (heldContent && filter.kinds?.includes(9))
           return new Promise((_resolve, reject) => {
             if (init.signal.aborted) reject(init.signal.reason);
@@ -283,6 +331,20 @@ export function policyRelay({
             }
             if (kind === "CLOSE") {
               this.routes.delete(id);
+              return;
+            }
+            if (kind === "EVENT") {
+              expect(this.authenticated).toBe(true);
+              expect(verifyEvent(id)).toBe(true);
+              expect(id.pubkey).toBe(viewer);
+              expect(id.kind).toBe(20001);
+              expect(["online", "away"]).toContain(id.content);
+              expect(id.tags).toEqual([]);
+              report.presencePublications.push({
+                community: this.community,
+                event: id,
+              });
+              queueMicrotask(() => emit(this, ["OK", id.id, true]));
               return;
             }
             expect(kind).toBe("REQ");

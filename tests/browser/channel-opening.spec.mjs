@@ -163,3 +163,86 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
     app.relay.releaseProfiles();
   }
 });
+
+test.describe("large thread opening", () => {
+  test.use({
+    readState: true,
+    largeSidebar: false,
+    threadUnread: true,
+    presenceThreadAuthors: 300,
+  });
+  test("300-author thread opening retains bounded traversal and measures cold/reopened rendering", async ({
+    page,
+    app,
+  }) => {
+    await open(page, app);
+    const { root } = app.presenceThread;
+    const trigger = page
+      .locator(`[data-channel-timeline] [data-message-id="${root.id}"]`)
+      .getByRole("button", { name: /^View thread:/ });
+    const history = page.getByRole("region", {
+      name: "Thread messages",
+      exact: true,
+    });
+    for (const phase of ["cold", "reopened"]) {
+      const timing = await trigger.evaluate(async (button) => {
+        const start = performance.now();
+        button.click();
+        let firstPaint;
+        await new Promise((resolve, reject) => {
+          const deadline = setTimeout(
+            () => reject(new Error("thread did not finish traversal")),
+            10000,
+          );
+          const check = () => {
+            const panel = document.querySelector(
+              '[aria-label="Thread messages"]',
+            );
+            const rows = panel?.querySelectorAll("[data-message-id]");
+            const rect = panel?.getBoundingClientRect();
+            const visible =
+              rect &&
+              [...rows].some((row) => {
+                const bounds = row.getBoundingClientRect();
+                return (
+                  bounds.height > 0 &&
+                  bounds.bottom > rect.top &&
+                  bounds.top < rect.bottom
+                );
+              });
+            if (visible && firstPaint === undefined)
+              firstPaint = performance.now() - start;
+            if (
+              !visible ||
+              rows.length !== 301 ||
+              panel.textContent.includes("Loading thread…")
+            )
+              return requestAnimationFrame(check);
+            requestAnimationFrame(() => {
+              clearTimeout(deadline);
+              resolve();
+            });
+          };
+          requestAnimationFrame(check);
+        });
+        return {
+          firstVisibleMs: firstPaint,
+          fullTraversalPaintMs: performance.now() - start,
+        };
+      });
+      app.report.measurements.push({
+        scenario: "300-author-thread",
+        phase,
+        ...timing,
+      });
+      await expect(history.locator("[data-message-id]")).toHaveCount(301);
+      await expect(
+        history.getByText("Distinct author reply 299", { exact: true }),
+      ).toBeInViewport();
+      await page
+        .getByRole("button", { name: "Close thread", exact: true })
+        .click();
+      await expect(history).toHaveCount(0);
+    }
+  });
+});

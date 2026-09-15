@@ -27,6 +27,7 @@ export const test = base.extend({
   productionBroker: [false, { option: true }],
   readState: [false, { option: true }],
   threadUnread: [false, { option: true }],
+  presenceThreadAuthors: [0, { option: true }],
   exactMessages: [false, { option: true }],
   sidebarUnread: [false, { option: true }],
   savedSidebar: [false, { option: true }],
@@ -47,6 +48,7 @@ export const test = base.extend({
       productionBroker,
       readState,
       threadUnread,
+      presenceThreadAuthors,
       exactMessages,
       sidebarUnread,
       savedSidebar,
@@ -320,6 +322,42 @@ export const test = base.extend({
         ),
       );
     }
+    // Signed upstream-only stress data; production traversal and mounting stay real.
+    let presenceThread;
+    if (presenceThreadAuthors) {
+      const threadRoot = histories
+        .get("primary/alpha")
+        .find((event) => event.content === "Thread root 0");
+      if (!threadRoot) throw new Error("Presence thread requires threadUnread");
+      const replies = Array.from({ length: presenceThreadAuthors }, (_, i) =>
+        sign(
+          9,
+          [
+            ["h", "alpha"],
+            ["e", threadRoot.id, "", "reply"],
+          ],
+          `Distinct author reply ${i}`,
+          generateSecretKey(),
+          threadRoot.created_at + i + 20,
+        ),
+      );
+      threadReplies.set(threadRoot.id, replies);
+      // The ordinary unread fixture also broadcasts one reply into the timeline.
+      // This stress case owns exactly the distinct replies above, not that extra row.
+      histories.set(
+        "primary/alpha",
+        histories
+          .get("primary/alpha")
+          .filter(
+            (event) =>
+              !event.tags.some(
+                ([key, value]) =>
+                  key === "e" && value.toLowerCase() === threadRoot.id,
+              ),
+          ),
+      );
+      presenceThread = { root: threadRoot, replies };
+    }
     const report = {
       state: {
         head: execFileSync("git", ["rev-parse", "HEAD"], {
@@ -369,6 +407,10 @@ export const test = base.extend({
       response.end(JSON.stringify(body));
     };
     const answer = (community, filter) => {
+      if (filter.kinds?.includes(20001))
+        return filter.authors.map((author) =>
+          sign(20001, [["p", author]], "online"),
+        );
       if (filter.kinds?.includes(39002))
         return rosterIds.map((id) =>
           sign(39002, [
@@ -599,6 +641,15 @@ export const test = base.extend({
                 acceptPublication: (community, event) => {
                   expect(verifyEvent(event)).toBe(true);
                   expect(event.pubkey).toBe(viewer);
+                  if (event.kind === 9) {
+                    report.publications.push({ community, event });
+                    const channel = event.tags.find(
+                      ([name]) => name === "h",
+                    )?.[1];
+                    histories.get(`${community}/${channel}`).push(event);
+                    relay.publish(community, event);
+                    return;
+                  }
                   expect(event.kind).toBe(30078);
                   expect(event.tags).toContainEqual(["t", "read-state"]);
                   const blob = JSON.parse(
@@ -818,6 +869,7 @@ export const test = base.extend({
         report,
         pending,
         histories,
+        presenceThread,
         exact,
         membership(
           type,

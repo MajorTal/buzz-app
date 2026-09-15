@@ -696,3 +696,90 @@ it("observer route is optional, live-only at dispatch/retry, separately fenced a
   h.owner.dispose();
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it("presence holds its receipt without delaying ordinary setup and shares correlated cooldown", async () => {
+  vi.useFakeTimers();
+  const h = setup([]);
+  await h.first.auth();
+  expect(
+    await h.owner.publishPresence?.("online", new AbortController().signal),
+  ).toBe(false);
+  await vi.advanceTimersByTimeAsync(500);
+  for (const [, id] of h.first.requests()) await h.first.receive(["EOSE", id]);
+  const abort = new AbortController();
+  const result = h.owner.publishPresence?.("online", abort.signal);
+  await vi.advanceTimersByTimeAsync(0);
+  const event = h.first.sent.find(([kind]) => kind === "EVENT")?.[1] as {
+    id: string;
+    content: string;
+  };
+  expect(event.content).toBe("online");
+  h.owner.update(["foreground"]);
+  expect(h.first.requests().at(-1)?.[2]["#h"]).toEqual(["foreground"]);
+  abort.abort(); // Keep the receipt correlation after cancellation, to honor late quota.
+  await h.first.receive(["OK", "unrelated", true]);
+  await h.first.receive([
+    "OK",
+    event.id,
+    false,
+    "rate-limited: quota exceeded; retry in 3s",
+  ]);
+  expect(await result).toBe(false);
+  const count = h.first.requests().length;
+  h.owner.update(["foreground", "next"]);
+  expect(h.first.requests()).toHaveLength(count);
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(h.first.requests()).toHaveLength(count + 1);
+  h.owner.dispose();
+});
+
+it("an outstanding presence signer pins its principal flight across socket replacement", async () => {
+  vi.useFakeTimers();
+  const key = keypair(),
+    sockets: Socket[] = [];
+  const admission = createLiveAdmission();
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const callbacks = { receive() {}, state() {}, established() {}, denied() {} };
+  const owner = subscribeRelayTraffic(
+    "wss://relay.test",
+    async (event) => {
+      if (event.kind === 20001) await gate;
+      return signed(key, event);
+    },
+    key.pubkey,
+    callbacks,
+    () => {
+      const s = new Socket();
+      sockets.push(s);
+      return s as unknown as WebSocket;
+    },
+    admission,
+  );
+  const first = sockets[0];
+  assert.exists(first);
+  await first.auth();
+  await vi.advanceTimersByTimeAsync(500);
+  for (const [, id] of first.requests()) await first.receive(["EOSE", id]);
+  const result = owner.publishPresence?.("away", new AbortController().signal);
+  expect(admission.presenceIdle()).toBe(false);
+  first.close();
+  await vi.advanceTimersByTimeAsync(500);
+  const next = sockets[1];
+  assert.exists(next);
+  await next.auth();
+  await vi.advanceTimersByTimeAsync(500);
+  for (const [, id] of next.requests()) await next.receive(["EOSE", id]);
+  expect(
+    await owner.publishPresence?.("online", new AbortController().signal),
+  ).toBe(false);
+  release();
+  expect(await result).toBe(false);
+  expect(
+    sockets.flatMap((s) => s.sent).filter(([kind]) => kind === "EVENT"),
+  ).toEqual([]);
+  expect(admission.presenceIdle()).toBe(true);
+  owner.dispose();
+});

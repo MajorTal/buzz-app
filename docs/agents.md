@@ -212,7 +212,7 @@ There is no agent-global sequence gate: producer sequences reset, skip and inter
 ### Try with an existing owner account
 
 Use the [README's public-pin/Keychain setup](../README.md#relay-channels) and run
-`bin/just web` (or `bin/just desktop`, not both). Open http://localhost:1430, choose
+`bin/just web` (or `bin/just desktop`). Open the printed Local URL, choose
 the agent's community and click **Agent Activity**. Keep the existing Buzz runner
 active, with telemetry publication enabled on the agent, then give it work. This
 app does not start agents or turn publishing on. No records may mean publishing

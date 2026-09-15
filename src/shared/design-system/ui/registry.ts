@@ -180,7 +180,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "Avatar",
     purpose: "A person or agent identity image with a stable fallback.",
     behavior: "Base UI Avatar",
-    variants: ["small", "default", "large"],
+    variants: ["small", "default", "large", "fill"],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Messages",

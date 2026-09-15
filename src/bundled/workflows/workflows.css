@@ -1,0 +1,129 @@
+.workflows-page {
+  height: 100%;
+  overflow: auto;
+  padding: 24px;
+  color: var(--text-primary);
+}
+.workflows-page h1,
+.workflows-page h2,
+.workflows-page h3 {
+  margin: 0;
+}
+.workflow-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-block: 16px;
+}
+.workflow-list {
+  list-style: none;
+  padding: 0;
+  margin: 16px 0;
+}
+.workflow-list li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 16px;
+  padding-block: 8px;
+  border-bottom: 1px solid var(--border-primary);
+}
+.workflow-detail {
+  border-top: 1px solid var(--border-primary);
+  padding-block: 16px;
+}
+.workflow-editor,
+.workflow-form {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.workflow-form {
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+.workflow-field {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.workflow-name {
+  flex: 1 1 240px;
+}
+.workflow-field input,
+.workflow-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  color: var(--text-primary);
+  background: var(--bg-inset);
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  padding: 10px 12px;
+  font: inherit;
+}
+.workflow-field textarea {
+  resize: vertical;
+}
+.workflow-field textarea.workflow-yaml {
+  font-family: var(--font-mono);
+}
+.workflow-steps {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 20px;
+}
+.workflow-step {
+  display: grid;
+  gap: 12px;
+  padding-block: 16px;
+  border-bottom: 1px solid var(--border-primary);
+}
+.workflow-step p {
+  margin: 0;
+}
+.workflow-key,
+.workflow-trace {
+  overflow-wrap: anywhere;
+}
+.workflow-trace {
+  white-space: pre-wrap;
+  max-height: 400px;
+  overflow: auto;
+  background: var(--bg-inset);
+  padding: 12px;
+}
+.workflow-operations {
+  border-top: 1px solid var(--border-primary);
+  padding-block: 16px;
+}
+.workflow-dialog-backdrop {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay);
+}
+.workflow-dialog {
+  position: fixed;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  width: min(480px, calc(100vw - 32px));
+  padding: 24px;
+  box-sizing: border-box;
+  background: var(--bg-float);
+  color: var(--text-primary);
+  border: 1px solid var(--border-primary);
+  border-radius: 16px;
+}
+html[data-keyboard-navigation] .workflow-field input:focus-visible,
+html[data-keyboard-navigation] .workflow-field textarea:focus-visible {
+  outline: 2px solid var(--purple-8);
+  outline-offset: 2px;
+}
+@media (max-width: 640px) {
+  .workflows-page {
+    padding: 16px;
+  }
+}

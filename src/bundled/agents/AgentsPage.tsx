@@ -191,7 +191,7 @@ function AgentCard({
   const picture = source?.startsWith("data:")
     ? source
     : source
-      ? session.media(source)
+      ? session.media(source, "small")
       : undefined;
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border border-primary p-4">

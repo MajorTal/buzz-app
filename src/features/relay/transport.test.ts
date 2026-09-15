@@ -105,6 +105,30 @@ it("the broker advertises and supplies writes through the same connection", asyn
   ]);
 });
 
+it("requests relay thumbnails only for small media", async () => {
+  vi.stubGlobal("fetch", async () =>
+    Response.json({
+      viewer: key.pubkey,
+      relayAuthor: "relay",
+      relayUrl: "https://relay.test",
+    }),
+  );
+  const transport = await connectBrokerTransport();
+  const hash = "1".repeat(64);
+  const original = `https://relay.test/media/${hash}.png`;
+  const thumbnail = `https://relay.test/media/${hash}.thumb.jpg`;
+
+  expect(transport.media(original)).toBe(
+    `/api/relay/media?url=${encodeURIComponent(original)}`,
+  );
+  expect(transport.media(original, "small")).toBe(
+    `/api/relay/media?url=${encodeURIComponent(thumbnail)}`,
+  );
+  expect(transport.media("https://images.example/avatar.png", "small")).toBe(
+    "https://images.example/avatar.png",
+  );
+});
+
 it.each([null, 42, "", "A".repeat(64), "b".repeat(64)])(
   "rejects malformed or mismatched broker archive authority %j",
   async (archiveAuthority) => {

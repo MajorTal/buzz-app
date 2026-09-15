@@ -1,7 +1,7 @@
 import { Avatar as BaseAvatar } from "@base-ui/react/avatar";
 import { useEffect, useState } from "react";
 
-type AvatarSize = "small" | "default" | "large";
+type AvatarSize = "small" | "default" | "large" | "fill";
 type ImageStatus = "loading" | "loaded" | "failed";
 
 function AvatarArtwork({ src, fallback }: { src: string; fallback: string }) {

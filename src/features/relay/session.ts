@@ -1,6 +1,8 @@
 // FOUNDATION: One relay session owns reads, local intent, delivery and shared views.
 import { createPresence } from "../presence/presence";
 import type { PresenceActivity } from "../presence/activity";
+import { createWorkflows } from "../workflows/capability";
+import { isWorkflowOperation } from "../workflows/protocol";
 import {
   createRelayReader,
   type ReadOptions,
@@ -19,6 +21,7 @@ import {
   browserReadStateStorage,
   type ReadStateStorage,
 } from "./read-state-storage";
+import { createTyping } from "./typing";
 import { createUnread } from "./unread";
 import type { IncomingListener, IncomingMessage } from "./incoming";
 import { objectBody } from "./body";
@@ -87,6 +90,14 @@ export function createRelaySession(
     else listener();
   };
   let canAccess: (id: string) => boolean = () => true;
+  const typing = createTyping(
+    transport?.viewer ?? "",
+    (id) =>
+      !closed &&
+      canAccess(id) &&
+      channels.queries.list().channels.some((channel) => channel.id === id),
+    notify,
+  );
   const recent = new ByteLru<{ event: RelayEvent; revision: number }>(
     4096,
     8 * 1024 * 1024,
@@ -107,6 +118,11 @@ export function createRelaySession(
             ...writer,
             async sign(template, signal) {
               validateMentionEvent(template);
+              workflows.validate({
+                ...template,
+                id: "",
+                pubkey: transport.viewer,
+              });
               return writer.sign(template, signal);
             },
           },
@@ -121,7 +137,19 @@ export function createRelaySession(
             profiling,
             notifyListener: notify,
             onAccepted: (event) => confirm(event),
-            preparePublish: prepareMentionPublication,
+            needsReceipt: isWorkflowOperation,
+            onReceipt: (event, message) => workflows.receipt(event, message),
+            preparePublish: async (event, signal) => {
+              workflows.validate(event);
+              const checkMentions = await prepareMentionPublication(
+                event,
+                signal,
+              );
+              return () => {
+                workflows.validate(event);
+                checkMentions?.();
+              };
+            },
           },
         )
       : undefined;
@@ -167,6 +195,7 @@ export function createRelaySession(
     revoking++;
     try {
       accessEpoch++;
+      typing.clear();
       // Filters cannot tell us ownership of broad/ID/reference reads. Infrequent
       // authoritative access loss cancels them all, not merely explicit #h reads.
       requests.invalidate();
@@ -186,6 +215,7 @@ export function createRelaySession(
       activity.clear();
       presence.clear();
       archives.clear();
+      workflows.clear();
       for (const purge of views.values()) purge();
       commit();
       unread.purge();
@@ -249,10 +279,13 @@ export function createRelaySession(
       events.some((event) => [39000, 39002].includes(event.kind))
     )
       channels.acceptDiscovery(events);
+    // Ephemeral typing and observer telemetry never enter retained content views.
     const visible = events
-      .filter((event) => event.kind !== OBSERVER_KIND)
+      .filter((event) => event.kind !== OBSERVER_KIND && event.kind !== 20002)
       .filter(visibility(events));
     const epoch = accessEpoch;
+    typing.accept(visible);
+    if (closed || epoch !== accessEpoch) return [];
     profiling.measure(
       "events.reconcile",
       events[0]?.id ?? "empty",
@@ -328,7 +361,7 @@ export function createRelaySession(
           read: (filters, settings) => readVerified(filters, settings, false),
           viewer: transport.viewer,
           relayAuthor: transport.relayAuthor,
-          media: (url) => transport.media(url),
+          media: (url, size) => transport.media(url, size),
           revokeAccess,
           visible: (events) => events.filter(visibility(events)),
           restored: (events) => unread.accept(events),
@@ -346,6 +379,15 @@ export function createRelaySession(
   );
   canAccess = channels.canAccess;
   retainedChannelEvent = channels.retainedEvent;
+  const workflows = createWorkflows({
+    reader: transport ? verified : undefined,
+    viewer: transport?.viewer ?? "",
+    outbox: writes?.outbox,
+    local: localViews,
+    host: transport?.workflows,
+    canAccess: (channelId) => canAccess(channelId),
+    notify,
+  });
   const readScope = `${transport?.scope ?? transport?.relayAuthor ?? "offline"}:${transport?.viewer ?? ""}`;
   const reads = createReadState({
     viewer: transport?.viewer ?? "",
@@ -607,6 +649,7 @@ export function createRelaySession(
         incomingListeners.delete(listener);
       };
     },
+    typing: typing.capability,
     unread: unread.capability,
     sidebarPreferences: sidebarPreferences.queries,
     live,
@@ -669,15 +712,14 @@ export function createRelaySession(
           : verified,
         exact: options?.exact ?? false,
         admit: options?.exact ? (events) => accept(events, false) : undefined,
-        seed: recent.peek(messageId)?.event,
+        seed: recent.peek(messageId)?.event ?? retainedEvent(messageId),
         local: localViews,
         canAccess: () => !closed && canAccess(channelId),
         visible: (events) => events.filter(visibility(events)),
         notify,
       });
       threads.add(thread);
-      if (options?.exact)
-        thread.receive(recent.entries().map(([, item]) => item.event));
+      thread.receive(recent.entries().map(([, item]) => item.event));
       observations.add(thread.receive);
       const unsubscribe = localViews?.subscribe(thread.changed);
       const dispose = () => {
@@ -694,9 +736,10 @@ export function createRelaySession(
     profiles: profiles.queries,
     emoji: emoji.queries,
     agentLibrary: agentLibrary.queries,
+    workflows: workflows.capability,
     agentActivity: activity.queries,
     archives: archives.queries,
-    media: (url: string) => transport?.media(url),
+    media: (url: string, size?: "small") => transport?.media(url, size),
     /** A plugin may request writes from this same interface when the host supports them. */
     outbox: writes?.outbox,
     async read(filters: readonly ReadFilter[], settings?: ReadOptions) {
@@ -851,7 +894,21 @@ export function createRelaySession(
       liveSnapshot = { ...liveSnapshot, status: "error", error: String(error) };
     }
     publishLive();
+    warmRoster();
   };
+  /** Warm every channel's head before it is opened: starred first, then the
+   * rest by recency. The account preferences own the starred set, so warming
+   * waits for them to settle; a slow read delays warmth, never demand loading. */
+  const warmRoster = () => {
+    if (closed || !options.warm) return;
+    const prefs = sidebarPreferences.queries.snapshot();
+    if (prefs.status === "idle" || prefs.status === "loading") return;
+    channels.queries.warm?.(prefs.data?.starred ?? []);
+  };
+  const stopWarmPreferences = sidebarPreferences.queries.subscribe(warmRoster);
+  // Starred-first warming needs the account preferences without waiting for
+  // the sidebar page to mount and observe them.
+  if (options.warm) void sidebarPreferences.queries.ensure();
   let refreshedGeneration = -1;
   const catchupRunning = new Map<string, Catchup>();
   const catchupQueue = new Set<string>();
@@ -983,9 +1040,28 @@ export function createRelaySession(
         )
       )
         refreshRoster();
-      const visible = accept(events);
-      if (closed || !candidates.size || !provenance?.channelId) return;
       const epoch = accessEpoch;
+      const generation = liveGeneration;
+      const visible = accept(events);
+      // Completion subscribers can synchronously clear, revoke or retire this
+      // live delivery. Do not admit its remaining pulses into the new lifetime.
+      if (
+        !closed &&
+        epoch === accessEpoch &&
+        generation === liveGeneration &&
+        liveSnapshot.status === "connected"
+      )
+        typing.accept(
+          events.filter((event) => event.kind === 20002),
+          true,
+        );
+      if (
+        closed ||
+        epoch !== accessEpoch ||
+        !candidates.size ||
+        !provenance?.channelId
+      )
+        return;
       const delivered = new Set<string>();
       const incoming: readonly IncomingMessage[] = Object.freeze(
         visible.flatMap((event) => {
@@ -1016,6 +1092,7 @@ export function createRelaySession(
       if (closed) return;
       activity.state(snapshot);
       presence.connected(snapshot.status === "connected");
+      if (snapshot.status !== "connected") typing.clear();
       if (
         snapshot.status !== "connected" &&
         liveSnapshot.status === "connected"
@@ -1026,6 +1103,7 @@ export function createRelaySession(
         requests.invalidate();
         agentLibrary.clear();
         archives.clear();
+        workflows.interrupt();
         channels.staleHeads();
         unread.stale();
       }
@@ -1080,6 +1158,7 @@ export function createRelaySession(
       cacheClearEpoch++;
       activity.clear();
       presence.clear();
+      typing.clear();
       sidebarPreferences.clear();
       // New windows must not yield to or receive errors from retired owners.
       catchups.clear();
@@ -1092,16 +1171,19 @@ export function createRelaySession(
       emoji.clear();
       agentLibrary.clear();
       archives.clear();
+      workflows.clear();
       await channels.clearCache();
       publishLive();
     },
     dispose() {
       closed = true;
+      typing.dispose();
       lifetime.abort();
       activity.dispose();
       presence.dispose();
       sidebarPreferences.dispose();
       stopInterests();
+      stopWarmPreferences();
       traffic?.dispose();
       liveListeners.clear();
       incomingListeners.clear();
@@ -1114,6 +1196,7 @@ export function createRelaySession(
       channels.dispose();
       profiles.dispose();
       emoji.dispose();
+      workflows.dispose();
       agentLibrary.dispose();
       archives.dispose();
     },

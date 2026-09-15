@@ -89,6 +89,7 @@ export function provideRelay(
             store = createRelaySession(transport, {
               ...(presenceActivity ? { presenceActivity } : {}),
               prepared: true,
+              warm: true,
               persistence: createHeadPersistence(
                 transport.viewer,
                 transport.scope ?? transport.relayAuthor,

@@ -1,6 +1,13 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { RecoveryScreen } from "./RecoveryScreen";
-import { Blocks, Settings2, UserRound, Palette, Bell } from "lucide-react";
+import {
+  Blocks,
+  Settings2,
+  UserRound,
+  Palette,
+  Bell,
+  Wrench,
+} from "lucide-react";
 import type { PluginManager } from "../plugins/manager";
 import type { Communities } from "../features/communities/service";
 import { PluginImport } from "./PluginImport";
@@ -10,13 +17,26 @@ import type { Appearance } from "../shared/theme/service";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import type { NotificationsService } from "../features/notifications/service";
+import { DeveloperSettings } from "./DeveloperSettings";
 
-const sections = [
+type Section = { id: string; label: string; icon: typeof UserRound };
+
+const baseSections: Section[] = [
   { id: "profile", label: "Profile", icon: UserRound },
   { id: "plugins", label: "Plugins", icon: Blocks },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "notifications", label: "Notifications", icon: Bell },
-] as const;
+];
+
+// DEV alone is not enough: packaged desktop builds load a production bundle
+// from tauri://localhost, so the hostname check excludes them too.
+export const developerMode =
+  import.meta.env.DEV &&
+  /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+
+const sections: Section[] = developerMode
+  ? [...baseSections, { id: "developer", label: "Developer", icon: Wrench }]
+  : baseSections;
 
 export function Settings({
   plugins,
@@ -104,6 +124,11 @@ export function Settings({
           <div hidden={selected !== "profile"}>
             <ProfileSettings communities={communities} />
           </div>
+          {developerMode && (
+            <div hidden={selected !== "developer"}>
+              <DeveloperSettings relay={communities.relay} />
+            </div>
+          )}
           <div hidden={selected !== "plugins"}>
             <section aria-labelledby="plugin-settings-title">
               <h2

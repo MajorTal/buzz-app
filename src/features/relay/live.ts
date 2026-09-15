@@ -140,7 +140,9 @@ type Route = {
   quotaRetries: number;
   deadline?: ReturnType<typeof setTimeout>;
 };
-const CHANNEL_KINDS = [9, 40002, 40099, 40003, 5, 9005, 7, 39000, 39002, 39005];
+const CHANNEL_KINDS = [
+  9, 40002, 40099, 40003, 5, 9005, 7, 39000, 39002, 39005, 20002,
+];
 /** One authenticated socket, independently established channel routes and two explicit globals.
  * Recent replay is opportunistic: finite reads own catch-up and history bounds. */
 export function subscribeRelayTraffic(
@@ -513,6 +515,16 @@ export function subscribeRelayTraffic(
           fail(route, "Relay supplied invalid live traffic");
           return;
         }
+        // Preserve route consistency before receive() discards the subscription ID.
+        // The typing owner separately checks scope shape and channel access.
+        if (
+          incoming.kind === 20002 &&
+          (!route.channelId ||
+            !incoming.tags.some(
+              ([name, value]) => name === "h" && value === route.channelId,
+            ))
+        )
+          return;
         if (route.status === "pending") route.count++;
         if (route.id === "observer") {
           if (

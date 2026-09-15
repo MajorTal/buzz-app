@@ -138,6 +138,7 @@ export function MentionPicker({
                   name={recipient.name}
                   src={session.media(
                     profiles.get(recipient.pubkey)?.picture ?? "",
+                    "small",
                   )}
                   className="size-8 rounded-lg text-xs"
                 />

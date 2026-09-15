@@ -1,3 +1,4 @@
+import type { ComposerInputElement } from "../messages/composer-dom";
 import { createPortal } from "react-dom";
 import { useCompletionPosition } from "./useCompletionPosition";
 import {
@@ -36,7 +37,7 @@ export function ComposerCompletions({
 }: CompletionContext & {
   registry: ContributionReader<ComposerCompletion>;
   editor: CompletionEditor;
-  input: RefObject<HTMLTextAreaElement | null>;
+  input: RefObject<ComposerInputElement | null>;
   replace(
     edit: CompletionEdit,
     query: CompletionQuery,
@@ -94,7 +95,7 @@ function OwnedCompletion({
   query: CompletionQuery;
   observation: ComposerObservation;
   editor: CompletionEditor;
-  input: RefObject<HTMLTextAreaElement | null>;
+  input: RefObject<ComposerInputElement | null>;
   replace(
     edit: CompletionEdit,
     query: CompletionQuery,

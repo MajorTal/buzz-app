@@ -63,6 +63,7 @@ export const test = base.extend({
     testInfo,
   ) => {
     const relayKey = generateSecretKey();
+    const typingKeys = [generateSecretKey(), generateSecretKey()];
     const userKey = generateSecretKey();
     const viewer = getPublicKey(userKey);
     const membershipKeys = membershipActivity
@@ -742,6 +743,7 @@ export const test = base.extend({
                   relayUrl: fixtureRelayUrl,
                   communityAliases: fixtureAliases,
                   identity: () => userKey.slice(),
+                  agentLibrary: () => [],
                   ...(readState
                     ? {}
                     : {
@@ -874,6 +876,26 @@ export const test = base.extend({
         omitChannel(id) {
           expect(rosterIds).toContain(id);
           rosterIds.splice(rosterIds.indexOf(id), 1);
+        },
+        // Signed upstream-only simulations: never a browser publication or live relay.
+        activity({
+          channel = "alpha",
+          root,
+          author = 0,
+          kind = 20002,
+          age = 0,
+        } = {}) {
+          if (!relay)
+            throw new Error("Typing fixture requires production broker");
+          const event = sign(
+            kind,
+            [["h", channel], ...(root ? [["e", root, "", "reply"]] : [])],
+            kind === 20002 ? "" : "Fixture completion",
+            typingKeys[author],
+            Math.floor(Date.now() / 1000) - age,
+          );
+          relay.publish("primary", event);
+          return event;
         },
         edit(community, channel, target, content) {
           const event = sign(

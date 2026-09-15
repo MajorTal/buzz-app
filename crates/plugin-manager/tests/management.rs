@@ -278,6 +278,7 @@ fn bundled_plugins_have_independent_flags_and_all_ids_are_reserved() {
         "buzz.agents",
         "buzz.emoji",
         "buzz.mentions",
+        "buzz.links",
     ] {
         assert!(
             manager

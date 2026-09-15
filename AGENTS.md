@@ -12,6 +12,23 @@ before live use.
 Files marked `FOUNDATION` require explicit human guidance before editing and
 stricter review. Escalate needed changes rather than editing without authorization.
 
+## Worktree creation
+
+Before creating a worktree, run `git worktree list` and choose the existing
+checkout whose local development configuration should be inherited. Immediately
+after `git worktree add`, run this from the new worktree:
+
+```sh
+scripts/bootstrap-worktree.sh /absolute/path/to/source/checkout
+```
+
+Do not start development before bootstrap completes. The script copies the
+git-ignored `.env.local` without overwriting an existing target, then uses that
+worktree's Hermit proxy to run `bin/pnpm install --frozen-lockfile`. Do not copy
+other ignored paths: Keychain credentials and pnpm's package cache are
+machine-shared, while dependencies and build output are regenerated. Follow the
+per-worktree hook setup in `docs/contributing.md` before committing or pushing.
+
 ## Engineering standard
 
 Before editing, state the intended outcome and non-goals. Read the owning code,

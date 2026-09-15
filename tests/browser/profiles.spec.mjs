@@ -38,6 +38,43 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
     await avatar.focus();
     await avatar.press("Enter");
     await expect(key).toHaveText(npubs.viewer);
+    const portrait = panel.getByRole("img", { name: "Viewer avatar" });
+    await expect(portrait).toBeVisible();
+    const name = panel.getByRole("heading", { name: "Viewer", exact: true });
+    const portraitWidth = await portrait.evaluate(
+      (element) => element.getBoundingClientRect().width,
+    );
+    const contentWidth = await portrait.evaluate((element) => {
+      const region = element.closest('[aria-label="Profile details"]');
+      return (
+        region.clientWidth -
+        parseFloat(getComputedStyle(region).paddingLeft) -
+        parseFloat(getComputedStyle(region).paddingRight)
+      );
+    });
+    const maxPortraitWidth = await page.evaluate(() =>
+      Math.min(256, innerHeight * 0.35),
+    );
+    expect(portraitWidth).toBeCloseTo(
+      Math.min(contentWidth, maxPortraitWidth),
+      0,
+    );
+    expect(
+      await portrait.evaluate(
+        (element) => element.getBoundingClientRect().height,
+      ),
+    ).toBeCloseTo(portraitWidth, 0);
+    expect(
+      await name.evaluate(
+        (element, portrait) =>
+          element.getBoundingClientRect().top >=
+          portrait.getBoundingClientRect().bottom,
+        await portrait.elementHandle(),
+      ),
+    ).toBe(true);
+    expect(
+      await page.evaluate(() => window.profilesFixture.report.media),
+    ).toContainEqual(["https://images.test/avatar.png", undefined]);
     await expect(
       panel.getByText("Human profile", { exact: true }),
     ).toBeVisible();

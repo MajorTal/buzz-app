@@ -1,3 +1,4 @@
+import { TypingIndicator } from "./TypingIndicator";
 import { ArrowUp, X } from "lucide-react";
 import {
   useEffect,
@@ -36,6 +37,8 @@ import type {
 import { ComposerCompletions } from "../conversation/ComposerCompletions";
 import { useCompletionEditor } from "../conversation/useCompletionEditor";
 import { formatMediaTime, mediaTimeReply } from "./media-timecode";
+import { RichComposerInput } from "./RichComposerInput";
+import type { ComposerInputElement } from "./composer-dom";
 
 export type MessageComposerProps = {
   extensions?: ConversationExtensions | undefined;
@@ -89,7 +92,34 @@ function Composer({
   const draft = value.text;
   const valueRef = useRef(value);
   const caret = useRef<number | undefined>(undefined);
-  const saveDraft = (next: MentionDraft) => {
+  const input = useRef<ComposerInputElement>(null);
+  const restoreSelection = useRef<{ start: number; end: number } | undefined>(
+    undefined,
+  );
+  const compositionSaved = useRef(false);
+  const history = useRef<{
+    past: { draft: MentionDraft; start: number; end: number }[];
+    future: { draft: MentionDraft; start: number; end: number }[];
+  }>({ past: [], future: [] });
+  const saveDraft = (
+    next: MentionDraft,
+    before?: { start: number; end: number },
+  ) => {
+    if (
+      next.text === valueRef.current.text &&
+      JSON.stringify(next.recipients) ===
+        JSON.stringify(valueRef.current.recipients)
+    )
+      return;
+    if (!compositionSaved.current)
+      history.current.past.push({
+        draft: valueRef.current,
+        start: before?.start ?? input.current?.selectionStart ?? 0,
+        end: before?.end ?? input.current?.selectionEnd ?? 0,
+      });
+    if (completion.composing.current) compositionSaved.current = true;
+    history.current.past = history.current.past.slice(-100);
+    history.current.future = [];
     valueRef.current = next;
     updateDraft(next);
     writeView(scope, draftKey, next);
@@ -97,8 +127,6 @@ function Composer({
   const setDraft = (text: string) =>
     saveDraft(editMentionDraft(valueRef.current, text));
   const [error, setError] = useState<string>();
-  const [failedCustomEmoji, setFailedCustomEmoji] = useState<string>();
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
   const outbox = session.outbox;
   const emojiCatalog = useSyncExternalStore(
     session.emoji.subscribe,
@@ -106,83 +134,15 @@ function Composer({
     session.emoji.snapshot,
   );
   const customEmojiOnly = customEmojiOnlySpans(draft, emojiCatalog.entries);
-  const leadingCustomEmoji = customEmojiOnly.length
-    ? { spans: [], end: 0 }
-    : leadingCustomEmojiSpans(draft, emojiCatalog.entries);
-  const customEmoji = customEmojiOnly.length
-    ? customEmojiOnly
-    : leadingCustomEmoji.spans;
-  const customEmojiSources = customEmoji.map(({ emoji, start, end }) => ({
-    start,
-    end,
-    key: `${start}:${emoji.shortcode}`,
-    source: session.media(emoji.url),
-  }));
-  const showCustomEmoji =
-    !!customEmojiSources.length &&
-    customEmojiSources.every(
-      ({ source }) => !!source && source !== failedCustomEmoji,
-    );
-  const showCustomEmojiOnly = showCustomEmoji && customEmojiOnly.length > 0;
-  const showLeadingCustomEmoji =
-    showCustomEmoji &&
-    !customEmojiOnly.length &&
-    !!leadingCustomEmoji.spans.length;
-  const input = useRef<HTMLTextAreaElement>(null);
-  const customEmojiMirror = useRef<HTMLSpanElement>(null);
-  const customEmojiGroup = useRef<HTMLSpanElement>(null);
-  const [customEmojiLayout, setCustomEmojiLayout] = useState({
-    left: 0,
-    top: 0,
-    height: 48,
-  });
-  useLayoutEffect(() => {
-    if (!showCustomEmojiOnly) return;
-    const group = customEmojiGroup.current;
-    const last = group?.children[customEmojiOnly.length - 1];
-    if (!group || !last || !(last instanceof HTMLElement)) return;
-    const resize = () => {
-      const lineHeight = Number.parseFloat(
-        getComputedStyle(input.current ?? group).lineHeight,
-      );
-      const next = {
-        left: Math.min(
-          last.offsetLeft + last.offsetWidth + 2,
-          Math.max(0, group.clientWidth - 2),
-        ),
-        top: last.offsetTop,
-        height: last.offsetTop + lineHeight,
-      };
-      setCustomEmojiLayout((current) =>
-        current.left === next.left &&
-        current.top === next.top &&
-        current.height === next.height
-          ? current
-          : next,
-      );
-    };
-    resize();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(resize);
-    observer.observe(group);
-    return () => observer.disconnect();
-  }, [showCustomEmojiOnly, customEmojiOnly.length]);
-  useLayoutEffect(() => {
-    const element = input.current;
-    if (
-      showCustomEmojiOnly &&
-      element &&
-      element.selectionStart === draft.length &&
-      element.selectionEnd === draft.length
-    )
-      element.scrollTop = Math.max(
-        0,
-        customEmojiLayout.height - element.clientHeight,
-      );
-  }, [showCustomEmojiOnly, customEmojiLayout.height, draft.length]);
-  const inlineEmojiGroup = useRef<HTMLSpanElement>(null);
-  const inlinePrefixMeasure = useRef<HTMLSpanElement>(null);
-  const [inlineTextIndent, setInlineTextIndent] = useState(0);
+  const customEmojiSpans = (
+    customEmojiOnly.length
+      ? customEmojiOnly
+      : leadingCustomEmojiSpans(draft, emojiCatalog.entries).spans
+  ).filter(({ emoji }) => !!session.media(emoji.url));
+  const largeEmojiDraft = usesLargeEmojiPresentation(
+    draft,
+    emojiCatalog.entries,
+  );
   const edit = useRef<MentionEdit | undefined>(undefined);
   const completion = useCompletionEditor(
     input,
@@ -208,51 +168,36 @@ function Composer({
     if (outbox?.supports(9)) void session.emoji.ensure();
   }, [session, outbox]);
   useLayoutEffect(() => {
+    if (restoreSelection.current) {
+      const { start, end } = restoreSelection.current;
+      input.current?.focus();
+      input.current?.setSelectionRange(start, end);
+      restoreSelection.current = undefined;
+      return;
+    }
     if (caret.current === undefined) return;
     input.current?.focus();
     input.current?.setSelectionRange(caret.current, caret.current);
     caret.current = undefined;
   });
-  useLayoutEffect(() => {
-    if (!showLeadingCustomEmoji) {
-      setInlineTextIndent(0);
+  function undo(redo: boolean) {
+    if (disabled || input.current?.readOnly || completion.composing.current)
       return;
-    }
-    const emoji = inlineEmojiGroup.current;
-    const prefix = inlinePrefixMeasure.current;
-    if (
-      !emoji ||
-      !prefix ||
-      typeof emoji.getBoundingClientRect !== "function" ||
-      typeof prefix.getBoundingClientRect !== "function"
-    )
-      return;
-    const resize = () => {
-      const next =
-        emoji.getBoundingClientRect().width -
-        prefix.getBoundingClientRect().width;
-      setInlineTextIndent((current) =>
-        Math.abs(current - next) < 0.25 ? current : next,
-      );
-    };
-    resize();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(resize);
-    observer.observe(emoji);
-    observer.observe(prefix);
-    return () => observer.disconnect();
-  }, [showLeadingCustomEmoji]);
-  useLayoutEffect(() => {
-    const mirror = customEmojiMirror.current;
-    if (mirror) mirror.scrollTop = input.current?.scrollTop ?? 0;
-    if (customEmojiGroup.current)
-      customEmojiGroup.current.style.transform = `translateY(-${input.current?.scrollTop ?? 0}px)`;
-  });
-  function syncCustomEmojiScroll(element: HTMLTextAreaElement) {
-    if (customEmojiMirror.current)
-      customEmojiMirror.current.scrollTop = element.scrollTop;
-    if (customEmojiGroup.current)
-      customEmojiGroup.current.style.transform = `translateY(-${element.scrollTop}px)`;
+    const source = redo ? history.current.future : history.current.past;
+    const destination = redo ? history.current.past : history.current.future;
+    const next = source.pop();
+    if (!next) return;
+    destination.push({
+      draft: valueRef.current,
+      start: input.current?.selectionStart ?? 0,
+      end: input.current?.selectionEnd ?? 0,
+    });
+    valueRef.current = next.draft;
+    updateDraft(next.draft);
+    writeView(scope, draftKey, next.draft);
+    caret.current = undefined;
+    restoreSelection.current = { start: next.start, end: next.end };
+    completion.invalidate();
   }
   function insert(
     text: string,
@@ -330,7 +275,14 @@ function Composer({
     );
   }
   function send() {
-    if (disabled || !draft.trim() || !outbox) return;
+    if (
+      disabled ||
+      input.current?.readOnly ||
+      input.current?.disabled ||
+      !draft.trim() ||
+      !outbox
+    )
+      return;
     try {
       const content =
         threadRootId && mediaTimeSeconds !== undefined
@@ -352,6 +304,7 @@ function Composer({
       completion.invalidate();
       clearMediaTime?.();
       setDraft("");
+      history.current = { past: [], future: [] };
       input.current?.focus();
       setError(undefined);
     } catch (reason) {
@@ -361,6 +314,11 @@ function Composer({
   if (!outbox?.supports(9))
     return (
       <footer className={styles.composer}>
+        <TypingIndicator
+          session={session}
+          channelId={channelId}
+          threadRootId={threadRootId}
+        />
         This relay connection supports reading only.
       </footer>
     );
@@ -375,6 +333,13 @@ function Composer({
         send();
       }}
     >
+      {!disabled && (
+        <TypingIndicator
+          session={session}
+          channelId={channelId}
+          threadRootId={threadRootId}
+        />
+      )}
       <label className="sr-only" htmlFor={inputId}>
         {label}
       </label>
@@ -391,51 +356,39 @@ function Composer({
         />
       )}
       <div className={styles.composerInput}>
-        <textarea
+        <RichComposerInput
           ref={input}
           id={inputId}
           disabled={disabled}
           value={draft}
-          data-single-emoji={usesLargeEmojiPresentation(draft) || undefined}
-          data-custom-emoji-only={showCustomEmojiOnly || undefined}
-          data-leading-custom-emoji={showLeadingCustomEmoji || undefined}
-          style={
-            showCustomEmojiOnly
-              ? {
-                  paddingLeft: customEmojiLayout.left,
-                  paddingTop: customEmojiLayout.top,
-                  height: customEmojiLayout.height,
-                }
-              : showLeadingCustomEmoji
-                ? { textIndent: `${inlineTextIndent}px` }
-                : undefined
-          }
+          draft={value}
+          session={session}
+          scope={scope}
+          channelId={channelId}
+          extensions={extensions}
+          emoji={emojiCatalog.entries}
+          onUndo={undo}
+          data-single-emoji={largeEmojiDraft || undefined}
           maxLength={16000}
-          rows={2}
           placeholder={label}
           onFocus={() => completion.observe(true)}
-          onScroll={(event) => syncCustomEmojiScroll(event.currentTarget)}
           onBlur={() => {
-            setSelection({ start: 0, end: 0 });
             completion.invalidate();
           }}
-          onSelect={(event) => {
-            setSelection({
-              start: event.currentTarget.selectionStart,
-              end: event.currentTarget.selectionEnd,
-            });
+          onSelect={() => {
             completion.observe();
           }}
           onCompositionStart={() => {
+            compositionSaved.current = false;
             completion.composing.current = true;
             completion.invalidate();
           }}
           onCompositionEnd={() => {
+            compositionSaved.current = false;
             completion.composing.current = false;
             completion.observe(true);
           }}
           // onInput also observes same-text replacements, which onChange omits.
-          onChange={() => {}}
           onInput={(event) => {
             const range = edit.current;
             edit.current = undefined;
@@ -445,8 +398,8 @@ function Composer({
                 event.currentTarget.value,
                 range,
               ),
+              range,
             );
-            setSelection({ start: 0, end: 0 });
             completion.observe(true);
           }}
           onKeyDown={(event) => {
@@ -462,14 +415,14 @@ function Composer({
             ) {
               completion.invalidate();
               if (
-                showCustomEmoji &&
+                customEmojiSpans.length &&
                 !event.altKey &&
                 !event.ctrlKey &&
                 !event.metaKey &&
                 (event.key === "ArrowLeft" || event.key === "ArrowRight")
               ) {
                 const next = extendEmojiSelection(
-                  customEmojiSources,
+                  customEmojiSpans,
                   event.currentTarget,
                   event.key,
                 );
@@ -480,7 +433,6 @@ function Composer({
                     next.end,
                     next.direction,
                   );
-                  setSelection({ start: next.start, end: next.end });
                 }
               }
               return;
@@ -498,63 +450,6 @@ function Composer({
             }
           }}
         />
-        {showCustomEmojiOnly && (
-          <span
-            ref={customEmojiGroup}
-            className={styles.composerCustomEmojiGroup}
-            aria-hidden="true"
-          >
-            {customEmojiSources.map(({ start, end, key, source }) => (
-              <img
-                key={key}
-                className={styles.composerCustomEmoji}
-                data-selected={
-                  (selection.start < end && selection.end > start) || undefined
-                }
-                src={source}
-                alt=""
-                onError={() => setFailedCustomEmoji(source)}
-              />
-            ))}
-          </span>
-        )}
-        {showLeadingCustomEmoji && (
-          <span
-            ref={customEmojiMirror}
-            className={styles.composerCustomEmojiMirror}
-            aria-hidden="true"
-          >
-            <span
-              ref={inlineEmojiGroup}
-              className={styles.composerInlineCustomEmojiGroup}
-              data-composer-inline-emoji=""
-            >
-              {customEmojiSources.map(({ start, end, key, source }) => (
-                <img
-                  key={key}
-                  className={styles.composerCustomEmoji}
-                  data-selected={
-                    (selection.start < end && selection.end > start) ||
-                    undefined
-                  }
-                  src={source}
-                  alt=""
-                  onError={() => setFailedCustomEmoji(source)}
-                />
-              ))}
-            </span>
-            <span data-composer-inline-text="">
-              {draft.slice(leadingCustomEmoji.end)}
-            </span>
-            <span
-              ref={inlinePrefixMeasure}
-              className={styles.composerCustomEmojiPrefixMeasure}
-              data-composer-custom-emoji-prefix=""
-            >
-              {draft.slice(0, leadingCustomEmoji.end)}
-            </span>
-          </span>
-        )}
       </div>
       {threadRootId &&
         mediaTimeSeconds !== undefined &&

@@ -136,11 +136,12 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   await expect(cue(page, "below")).toHaveCount(0);
   expect(await list(page).boundingBox()).toEqual(size); // Overlay never resizes the list.
   await page.waitForTimeout(1000);
-  expect(
-    heads(app)
-      .slice(before)
-      .every(({ filter }) => ["dm-030", "dm-090"].includes(filter["#h"][0])),
-  ).toBe(true); // Only existing focused-row preparation, never a roster fanout.
+  const warmed = heads(app)
+    .slice(before)
+    .map(({ filter }) => filter["#h"][0]);
+  // Background roster warmth reads each channel once, serially. Scroll and cue
+  // interactions never add a repeated read on top of it.
+  expect(new Set(warmed).size).toBe(warmed.length);
   expect(app.report.readPublications).toEqual([]);
   expect(
     await page.evaluate(

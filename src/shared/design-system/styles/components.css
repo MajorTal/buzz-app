@@ -144,7 +144,7 @@
     background: var(--neutral-3);
   }
 
-  /* A preview is supplemental context, never a second interactive surface.
+  /* A preview is supplemental context; destination cards can also open it.
      It is portal-rendered by Base UI so a clipped parent cannot hide it. */
   .buzz-preview-card {
     z-index: 1000;
@@ -162,6 +162,13 @@
     transition:
       opacity var(--duration-state) var(--easing-state),
       transform var(--duration-state) var(--easing-state);
+  }
+
+  .buzz-preview-card[data-destination] {
+    pointer-events: auto;
+    cursor: pointer;
+    color: inherit;
+    text-decoration: none;
   }
 
   .buzz-preview-card[data-starting-style],
@@ -212,6 +219,12 @@
   .buzz-avatar[data-size="large"] {
     width: 2.5rem;
     height: 2.5rem;
+  }
+
+  .buzz-avatar[data-size="fill"] {
+    width: 100%;
+    height: 100%;
+    border-radius: inherit;
   }
 
   .buzz-avatar img {

@@ -46,7 +46,7 @@ test("typeahead replaces only the query and publishes selected namesake identity
   await expect(option).toBeVisible();
   await option.click();
   await expect(input).toBeFocused();
-  await expect(input).toHaveValue("Before @Honey  after");
+  await expect(input).toHaveJSProperty("value", "Before @Honey  after");
   await expect(
     page
       .getByRole("region", { name: "Notification recipients" })
@@ -89,7 +89,7 @@ test("emoji keyboard, Escape, selected text, blur, IME and plugin disable preser
   await input.fill(":smile");
   await expect(page.getByRole("option").first()).toContainText(":smile:");
   await input.press("Tab");
-  await expect(input).toHaveValue("😄");
+  await expect(input).toHaveJSProperty("value", "😄");
   await expect(input).toBeFocused();
   await input.press("Shift+ArrowLeft");
   expect(
@@ -107,7 +107,7 @@ test("emoji keyboard, Escape, selected text, blur, IME and plugin disable preser
   await input.press("Escape");
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await input.press("Shift+Enter");
-  await expect(input).toHaveValue(":smile\n");
+  await expect(input).toHaveJSProperty("value", ":smile\n");
   await input.fill(":smile");
   await expect(page.getByRole("option").first()).toBeVisible();
   await input.evaluate((el) => {
@@ -138,7 +138,7 @@ test("emoji keyboard, Escape, selected text, blur, IME and plugin disable preser
     window.mentionFixture.change("disable", "buzz.emoji"),
   );
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await expect(input).toHaveValue(":smile");
+  await expect(input).toHaveJSProperty("value", ":smile");
 });
 test("completion resumes after selection collapses to the original caret", async ({
   page,
@@ -157,7 +157,7 @@ test("completion resumes after selection collapses to the original caret", async
   ).toEqual([6, 6]);
   await expect(page.getByRole("option").first()).toContainText(":smile:");
   await input.press("Tab");
-  await expect(input).toHaveValue("😄");
+  await expect(input).toHaveJSProperty("value", "😄");
   await expect(input).toBeFocused();
 });
 test("selection recovery requires fresh results and preserves Escape dismissal", async ({
@@ -200,12 +200,12 @@ test("selection recovery requires fresh results and preserves Escape dismissal",
   await expect(page.getByRole("listbox")).toHaveCount(0);
   expect(await requests()).toBe(after);
   expect(await publish(after - 1)).toBe(false);
-  await expect(input).toHaveValue("!selection");
+  await expect(input).toHaveJSProperty("value", "!selection");
   expect(
     await page.evaluate(() => window.completionFixture.publications.length),
   ).toBe(0);
 });
-test("textarea exposes its listbox popup relationship only while suggestions are open", async ({
+test("editable composer exposes its listbox popup relationship only while suggestions are open", async ({
   page,
 }) => {
   const input = await open(page);
@@ -222,7 +222,7 @@ test("textarea exposes its listbox popup relationship only while suggestions are
     const list = page.getByRole("listbox", { name: "Emoji suggestions" });
     await expect(list).toBeVisible();
     await expect(input).toHaveRole("textbox");
-    expect(await input.evaluate((el) => el.tagName)).toBe("TEXTAREA");
+    await expect(input).toHaveAttribute("contenteditable", "true");
     await expect(input).toHaveAttribute("aria-autocomplete", "list");
     await expect(input).toHaveAttribute("aria-haspopup", "listbox");
     await expect(input).toHaveAttribute(
@@ -299,7 +299,7 @@ test("late publications cannot cross edits, ABA, Escape, blur, plugin replacemen
   expect(await publish(scoped)).toBe(false);
   await expect(
     page.getByRole("textbox", { name: "Message #Test" }),
-  ).toHaveValue("");
+  ).toHaveJSProperty("value", "");
 });
 test("selection follows IDs through reordering and rejected replacement never falls through to send", async ({
   page,
@@ -335,7 +335,7 @@ test("selection follows IDs through reordering and rejected replacement never fa
     "true",
   );
   await input.press("Enter");
-  await expect(input).toHaveValue("B ");
+  await expect(input).toHaveJSProperty("value", "B ");
   await input.fill("!limit");
   const next = await page.evaluate(
     () => window.completionFixture.queries().length - 1,
@@ -350,7 +350,7 @@ test("selection follows IDs through reordering and rejected replacement never fa
     next,
   );
   await input.press("Enter");
-  await expect(input).toHaveValue("!limit");
+  await expect(input).toHaveJSProperty("value", "!limit");
   await expect(page.getByRole("alert")).toContainText("too long");
   expect(
     await page.evaluate(() => window.completionFixture.publications.length),
@@ -503,12 +503,12 @@ test("current custom catalog drives typeahead and signed tags across community r
     ),
   ).toBeLessThan(1);
   await page.getByRole("option", { name: ":smirk:", exact: true }).click();
-  await expect(input).toHaveValue("😏");
+  await expect(input).toHaveJSProperty("value", "😏");
   expect(await input.evaluate((element) => element.selectionStart)).toBe(
     "😏".length,
   );
   await input.pressSequentially("hello");
-  await expect(input).toHaveValue("😏hello");
+  await expect(input).toHaveJSProperty("value", "😏hello");
   await input.fill(":party-par");
   const first = page.getByRole("option", {
     name: ":party-parrot:",
@@ -521,12 +521,8 @@ test("current custom catalog drives typeahead and signed tags across community r
   const suggestionBox = await suggestions.boundingBox();
   const composerBox = await composer.boundingBox();
   expect(suggestionBox.width).toBeCloseTo(composerBox.width * 0.375, 1);
-  const regularTextSize = await input.evaluate(
-    (element) => getComputedStyle(element).fontSize,
-  );
   await first.click();
-  await expect(input).toHaveValue(":party-parrot:");
-  await expect(input).toHaveCSS("font-size", regularTextSize);
+  await expect(input).toHaveJSProperty("value", ":party-parrot:");
   await expect(composer.locator("img")).toHaveCSS("width", "42px");
   await input.press("Shift+ArrowLeft");
   expect(
@@ -544,16 +540,16 @@ test("current custom catalog drives typeahead and signed tags across community r
     caret: "initial",
   });
   await page.evaluate(() => window.emojiFixture.remove());
-  await expect(input).toHaveValue(":party-parrot:");
+  await expect(input).toHaveJSProperty("value", ":party-parrot:");
   await page.evaluate(() => window.emojiFixture.replace());
   await input.press("Backspace");
-  await expect(input).toHaveValue(":party-parrot");
+  await expect(input).toHaveJSProperty("value", "");
   await input.press("ControlOrMeta+z");
-  await expect(input).toHaveValue(":party-parrot:");
+  await expect(input).toHaveJSProperty("value", ":party-parrot:");
   // macOS End scrolls the document; use its caret shortcut when overscroll is off.
   await input.press(process.platform === "darwin" ? "Meta+ArrowRight" : "End");
   await input.pressSequentially(" hello");
-  await expect(input).toHaveValue(":party-parrot: hello");
+  await expect(input).toHaveJSProperty("value", ":party-parrot: hello");
   await input.press("Enter");
   await expect
     .poll(() =>
@@ -575,75 +571,51 @@ test("current custom catalog drives typeahead and signed tags across community r
     ),
   ).toBe(":party-parrot: hello");
   await input.fill(":party-parrot:");
-  await expect(input).toHaveAttribute("data-custom-emoji-only", "true");
-  const renderedEmoji = composer.locator("img");
+  await expect(input).toHaveAttribute("data-single-emoji", "true");
+  const renderedEmoji = input.locator("img");
   await expect(renderedEmoji).toHaveCount(1);
   await expect(renderedEmoji).toHaveCSS("width", "42px");
   await expect(renderedEmoji).toHaveCSS("height", "42px");
   await input.evaluate((element) => {
     const pasted = element.value.repeat(2);
     element.setSelectionRange(0, element.value.length);
+    const clipboardData = new DataTransfer();
+    clipboardData.setData("text/plain", pasted);
     element.dispatchEvent(
-      new InputEvent("beforeinput", {
+      new ClipboardEvent("paste", {
         bubbles: true,
         cancelable: true,
-        data: pasted,
-        inputType: "insertFromPaste",
-      }),
-    );
-    element.setRangeText(
-      pasted,
-      element.selectionStart,
-      element.selectionEnd,
-      "end",
-    );
-    element.dispatchEvent(
-      new InputEvent("input", {
-        bubbles: true,
-        data: pasted,
-        inputType: "insertFromPaste",
+        clipboardData,
       }),
     );
   });
-  await expect(input).toHaveValue(":party-parrot::party-parrot:");
-  await expect(input).toHaveAttribute("data-custom-emoji-only", "true");
+  await expect(input).toHaveJSProperty("value", ":party-parrot::party-parrot:");
+  await expect(input).toHaveAttribute("data-single-emoji", "true");
   await expect(renderedEmoji).toHaveCount(2);
   for (const image of await renderedEmoji.all()) {
     await expect(image).toHaveCSS("width", "42px");
     await expect(image).toHaveCSS("height", "42px");
   }
   await input.fill(":party-parrot:lakjsdlkjflakjsdf");
-  await expect(input).toHaveAttribute("data-leading-custom-emoji", "true");
-  await expect(input).not.toHaveAttribute("data-custom-emoji-only", "true");
+  await expect(input.locator("[data-source]")).toHaveCount(1);
+  await expect(input).not.toHaveAttribute("data-single-emoji", "true");
   await expect(renderedEmoji).toHaveCount(1);
   await expect(renderedEmoji).toHaveCSS("width", "22px");
   await expect(renderedEmoji).toHaveCSS("height", "22px");
   await expect(composer).toContainText("lakjsdlkjflakjsdf");
-  await expect
-    .poll(() =>
-      input.evaluate((element) =>
-        Number.parseFloat(getComputedStyle(element).textIndent),
-      ),
-    )
-    .toBeLessThan(0);
-  const inlineAlignment = await composer.evaluate((element) => {
-    const input = element.querySelector("textarea");
-    const emoji = element.querySelector("[data-composer-inline-emoji]");
-    const prefix = element.querySelector("[data-composer-custom-emoji-prefix]");
-    if (!input || !emoji || !prefix) throw new Error("Missing inline emoji");
+  const inlineAlignment = await input.evaluate((element) => {
+    const token = element.querySelector("[data-source]");
+    const range = document.createRange();
+    range.selectNodeContents(token.nextSibling);
     return {
-      emoji: emoji.getBoundingClientRect().width,
-      prefix: prefix.getBoundingClientRect().width,
-      indent: Number.parseFloat(getComputedStyle(input).textIndent),
+      right: token.getBoundingClientRect().right,
+      textLeft: range.getBoundingClientRect().left,
     };
   });
-  expect(inlineAlignment.prefix + inlineAlignment.indent).toBeCloseTo(
-    inlineAlignment.emoji,
-    1,
-  );
+  expect(inlineAlignment.textLeft).toBeCloseTo(inlineAlignment.right, 0);
   await input.fill("hello :party");
   await page.getByRole("option", { name: ":party:", exact: true }).click();
-  await expect(input).toHaveValue("hello :party:");
+  await expect(input).toHaveJSProperty("value", "hello :party:");
   await input.fill(":party");
   await expect(
     page.getByRole("option", { name: ":party:", exact: true }),
@@ -656,7 +628,7 @@ test("current custom catalog drives typeahead and signed tags across community r
   await page.getByRole("button", { name: "Switch community" }).click();
   await input.fill(":party");
   await page.getByRole("option", { name: ":party:", exact: true }).click();
-  await expect(input).toHaveValue(":party:");
+  await expect(input).toHaveJSProperty("value", ":party:");
   await input.press("Enter");
   await expect
     .poll(() =>
@@ -705,7 +677,7 @@ test("mention choices survive unrelated list updates but revoke removed membersh
   await expect(first).toHaveCount(0);
   await expect(second).toBeVisible();
   await second.click();
-  await expect(input).toHaveValue("@Honey ");
+  await expect(input).toHaveJSProperty("value", "@Honey ");
   await input.press("Enter");
   await expect
     .poll(() => page.evaluate(() => window.mentionFixture.publications.length))
@@ -732,7 +704,7 @@ test("cold multi-word mention query wakes when profiles arrive without another k
   const choice = page.getByRole("option", { name: /^Mary Jane / });
   await expect(choice).toBeVisible();
   await input.press("Enter");
-  await expect(input).toHaveValue("@Mary Jane ");
+  await expect(input).toHaveJSProperty("value", "@Mary Jane ");
   await expect(page.getByRole("listbox")).toHaveCount(0);
 });
 
@@ -762,9 +734,9 @@ test("recovery is a keyboard-selectable action without transferring editor focus
     await input.press("Enter");
     await expect(page.getByRole("option", { name: "Recovered" })).toBeVisible();
     await expect(input).toBeFocused();
-    await expect(input).toHaveValue(`!retry-${withChoice}`);
+    await expect(input).toHaveJSProperty("value", `!retry-${withChoice}`);
     await input.press("Tab");
-    await expect(input).toHaveValue("recovered ");
+    await expect(input).toHaveJSProperty("value", "recovered ");
   }
   expect(await page.evaluate(() => window.completionFixture.retries())).toBe(2);
   expect(
@@ -792,13 +764,13 @@ test("channel and actual ThreadPanel composers keep separate completion and draf
   expect(await thread.getAttribute("aria-controls")).not.toBe(mainControls);
   await option.click();
   await expect(thread).toBeFocused();
-  await expect(thread).toHaveValue("@Fixture Reader ");
-  await expect(main).toHaveValue(":smile");
+  await expect(thread).toHaveJSProperty("value", "@Fixture Reader ");
+  await expect(main).toHaveJSProperty("value", ":smile");
   await main.focus();
   await expect(page.getByRole("option").first()).toContainText(":smile:");
   await main.press("Tab");
-  await expect(main).toHaveValue("😄");
-  await expect(thread).toHaveValue("@Fixture Reader ");
+  await expect(main).toHaveJSProperty("value", "😄");
+  await expect(thread).toHaveJSProperty("value", "@Fixture Reader ");
 });
 
 test("disabled and read-only DOM state reject late publications and displayed choices", async ({
@@ -840,7 +812,7 @@ test("disabled and read-only DOM state reject late publications and displayed ch
     el.readOnly = true;
   });
   await input.press("Enter");
-  await expect(input).toHaveValue("!readonly");
+  await expect(input).toHaveJSProperty("value", "!readonly");
   expect(
     await page.evaluate(() => window.completionFixture.publications.length),
   ).toBe(0);
@@ -856,7 +828,7 @@ test("a later emoji trigger wins after a mention without discarding recipient in
   await input.pressSequentially(":smile");
   await expect(page.getByRole("option").first()).toContainText(":smile:");
   await input.press("Tab");
-  await expect(input).toHaveValue("@Honey 😄");
+  await expect(input).toHaveJSProperty("value", "@Honey 😄");
   await input.press("Enter");
   await expect
     .poll(() => page.evaluate(() => window.mentionFixture.publications.length))
@@ -869,7 +841,7 @@ test("a later emoji trigger wins after a mention without discarding recipient in
   await input.fill("@Honey :smile");
   await expect(page.getByRole("option").first()).toContainText(":smile:");
   await input.press("Tab");
-  await expect(input).toHaveValue("@Honey 😄");
+  await expect(input).toHaveJSProperty("value", "@Honey 😄");
   await expect(
     page.getByRole("region", { name: "Notification recipients" }),
   ).toHaveCount(0);

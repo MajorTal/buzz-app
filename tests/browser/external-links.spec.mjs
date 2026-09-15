@@ -4,7 +4,8 @@ const github = "https://github.com/block/buzz/pull/1";
 const ordinary = "https://example.test/external-link";
 const unsupported = "https://github.com/block/buzz/blob/main/README.md";
 const button = (page, name) => page.getByRole("button", { name, exact: true });
-const link = (page, url) => page.getByRole("link", { name: url, exact: true });
+// Presentation plugins may shorten a raw URL label; the destination remains the contract.
+const link = (page, url) => page.locator(`a[href=${JSON.stringify(url)}]`);
 
 async function openMessages(page) {
   await page

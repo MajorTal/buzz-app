@@ -1,6 +1,12 @@
 import { useReading } from "./use-reading";
 import { beforeEach, expect, it, vi } from "vitest";
-import { isValidElement, type ReactElement, type ReactNode } from "react";
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+} from "react";
 import { ThreadPanel, type ThreadPanelProps } from "./ThreadPanel";
 import { MessageRow } from "./MessageRow";
 import { MessageMarkdown } from "./MessageMarkdown";
@@ -153,11 +159,17 @@ function setup(onOpenMediaReview?: ThreadPanelProps["onOpenMediaReview"]) {
       onOpenLink: () => false,
       ...(onOpenMediaReview ? { onOpenMediaReview } : {}),
     });
-    return (
-      scoped.type as (
-        props: typeof scoped.props,
-      ) => ReactElement<{ onKeyDown(event: unknown): void }>
-    )(scoped.props);
+    const children = Children.map(scoped.props.children, (child) => {
+      if (!isValidElement(child) || typeof child.type !== "function")
+        return child;
+      const Component = child.type as (
+        props: typeof child.props,
+      ) => ReactElement;
+      return Component(child.props);
+    });
+    return cloneElement(scoped, {}, children) as ReactElement<{
+      onKeyDown(event: unknown): void;
+    }>;
   }
   const effects = () => {
     for (const effect of hooks.pending.splice(0)) effect();
@@ -382,7 +394,7 @@ it("preserves a media timecode as compatible text when no player can seek", () =
   expect(JSON.stringify(tree)).toContain("⏱ 0:42 — Change the title");
 });
 
-it("the actual message reply button opens that message and retains the trigger focus target", () => {
+it("the actual message reply button opens its selected message and canonical thread root while retaining the trigger focus target", () => {
   const open = vi.fn(),
     focus = vi.fn();
   const tree = MessageRow({
@@ -400,7 +412,23 @@ it("the actual message reply button opens that message and retains the trigger f
     ) => void
   )({ currentTarget: { focus } });
   expect(focus).toHaveBeenCalledTimes(1);
-  expect(open).toHaveBeenCalledExactlyOnceWith(row.id);
+  expect(open).toHaveBeenCalledExactlyOnceWith(row.id, row.id);
+
+  const nested = MessageRow({
+    row: { ...row, id: "b".repeat(64), threadRootId: row.id },
+    profile: undefined,
+    media: () => undefined,
+    onOpenLink: () => false,
+    day: false,
+    retry: undefined,
+    onOpenThread: open,
+  });
+  (
+    button(nested, "View thread: 2 replies").props.onClick as (
+      event: unknown,
+    ) => void
+  )({ currentTarget: { focus } });
+  expect(open).toHaveBeenLastCalledWith("b".repeat(64), row.id);
 });
 
 function messagesHarness(
@@ -542,7 +570,7 @@ it("routes media in replies through the resolved root review workspace", () => {
     | undefined;
   expect(handler).toBeDefined();
   handler?.("reply", attachment, 0);
-  expect(open).toHaveBeenCalledExactlyOnceWith("resolved-root", attachment, 0);
+  expect(open).toHaveBeenCalledExactlyOnceWith("reply", attachment, 0);
 });
 
 it("uses the resolved root with the shared composer and reveals an own send even while reading above", () => {
@@ -558,6 +586,15 @@ it("uses the resolved root with the shared composer and reveals an own send even
     channelName: "General",
     threadRootId: "resolved-root",
   });
+  const rootRow = elements(h.tree()).find(
+    (element) =>
+      element.type === MessageRow &&
+      (element.props.row as ChannelMessage).id === "resolved-root",
+  );
+  expect(rootRow?.props).toMatchObject({
+    session: h.session,
+    scope: "scope",
+  });
   expect(elements(h.tree()).some((e) => e.type === "footer")).toBe(false);
   h.scroll(500);
   if (!composer) throw new Error("Missing composer");
@@ -572,7 +609,11 @@ it("uses the resolved root with the shared composer and reveals an own send even
       e.type === MessageRow &&
       (e.props.row as ChannelMessage).id === "own-reply",
   );
-  expect(reply?.props.retry).toBe(h.session.messages.retry);
+  expect(reply?.props).toMatchObject({
+    session: h.session,
+    scope: "scope",
+    retry: h.session.messages.retry,
+  });
   h.snapshot.root = undefined;
   h.render();
   expect(elements(h.tree()).some((e) => e.type === MessageComposer)).toBe(

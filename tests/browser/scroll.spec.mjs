@@ -110,11 +110,17 @@ readingTest(
       await button(page, "Switch community").click();
       await button(page, "Switch to Secondary").click();
       await composer(page, "Alpha").waitFor();
-      await expect(composer(page, "Alpha")).toHaveValue(cycle ? "B draft" : "");
+      await expect(composer(page, "Alpha")).toHaveJSProperty(
+        "value",
+        cycle ? "B draft" : "",
+      );
       await composer(page, "Alpha").fill("B draft");
       await button(page, "Switch community").click();
       await button(page, "Switch to Primary").click();
-      await expect(composer(page, "Alpha")).toHaveValue("A draft");
+      await expect(composer(page, "Alpha")).toHaveJSProperty(
+        "value",
+        "A draft",
+      );
       await settle(page);
       await expectAnchor(page, saved);
     }
@@ -141,7 +147,7 @@ readingTest(
       before: saved,
       after: reloadedAnchor,
     });
-    await expect(composer(page, "Alpha")).toHaveValue("A draft");
+    await expect(composer(page, "Alpha")).toHaveJSProperty("value", "A draft");
 
     await observeWork(page);
     const held = app.append("primary", "alpha");

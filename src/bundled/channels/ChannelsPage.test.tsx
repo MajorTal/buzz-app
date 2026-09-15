@@ -2,7 +2,7 @@ import { expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
 import type { RelayData, RelaySnapshot } from "../../features/relay/service";
 import type { Panels } from "../../features/panels/service";
-import { ChannelsPage, mediaReviewForChannel } from "./ChannelsPage";
+import { ChannelsPage, mediaReviewForDestination } from "./ChannelsPage";
 
 // This is a shallow element-boundary test, not a React render. Navigation effects
 // are exercised by the browser navigation journeys; do not execute them here.
@@ -24,10 +24,13 @@ function workspace(scope: string, generation: number) {
 }
 
 it("never carries a media review across channel navigation or resurrects it on return", () => {
-  const review = { channelId: "alpha", messageId: "root" };
-  expect(mediaReviewForChannel(review, "alpha")).toBe(review);
-  expect(mediaReviewForChannel(review, "beta")).toBeUndefined();
-  expect(mediaReviewForChannel(undefined, "alpha")).toBeUndefined();
+  const review = { channelId: "alpha", messageId: "root", entryId: "visit-a" };
+  expect(mediaReviewForDestination(review, "alpha", "visit-a")).toBe(review);
+  expect(mediaReviewForDestination(review, "beta", "visit-a")).toBeUndefined();
+  expect(mediaReviewForDestination(review, "alpha", "visit-b")).toBeUndefined();
+  expect(
+    mediaReviewForDestination(undefined, "alpha", "visit-a"),
+  ).toBeUndefined();
 });
 
 it("distinguishes ready communities with the same connection generation", () => {

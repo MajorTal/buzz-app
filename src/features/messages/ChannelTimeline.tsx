@@ -75,7 +75,7 @@ export type ChannelTimelineProps = {
   canOpenLink?: ((target: string) => boolean) | undefined;
   revealMessageId?: string | undefined;
   navigation?: PageNavigation | undefined;
-  onOpenThread?(messageId: string): void;
+  onOpenThread?(messageId: string, threadRootId: string): void;
   onOpenMediaReview?(
     messageId: string,
     attachment: Attachment,
@@ -491,10 +491,10 @@ function Timeline({
               />
             ) : (
               <MessageRow
-                key={row.id}
-                row={row}
                 session={queries}
                 scope={scope}
+                key={row.id}
+                row={row}
                 unread={queries.unread}
                 extensions={extensions}
                 profile={profiles.get(row.authorId)}

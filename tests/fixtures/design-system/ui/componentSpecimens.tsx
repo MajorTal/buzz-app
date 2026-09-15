@@ -326,6 +326,16 @@ function AvatarSpecimen() {
           />
         </Specimen>
       </SpecimenGroup>
+      <SpecimenGroup label="Fill an owning layout box">
+        <div className="size-40 overflow-hidden rounded-2xl">
+          <Avatar
+            src={avatarUrl}
+            alt="Morgan Martin"
+            fallback="Morgan"
+            size="fill"
+          />
+        </div>
+      </SpecimenGroup>
     </div>
   );
 }

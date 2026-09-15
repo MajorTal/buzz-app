@@ -2,6 +2,7 @@ import { assert, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { isValidElement, type ReactNode, type ReactElement } from "react";
 import { ComposerTools } from "../conversation/ComposerTools";
 import type { ConversationExtensions } from "../conversation/contracts";
+import { RichComposerInput } from "./RichComposerInput";
 import { MessageComposer } from "./MessageComposer";
 import {
   isEmojiOnly,
@@ -132,7 +133,9 @@ function mount(
         props: typeof scoped.props,
       ) => ReactElement<Record<string, unknown>>
     )(scoped.props);
-    const field = elements(tree).find((element) => element.type === "textarea");
+    const field = elements(tree).find(
+      (element) => element.type === RichComposerInput,
+    );
     if (field) {
       const ref = field.props.ref as { current: HTMLTextAreaElement };
       const length = (field.props.value as string).length;
@@ -145,7 +148,7 @@ function mount(
     return tree;
   };
   const input = () => {
-    const field = elements(render()).find((e) => e.type === "textarea");
+    const field = elements(render()).find((e) => e.type === RichComposerInput);
     if (!field) throw new Error("No composer input");
     return field;
   };
@@ -237,8 +240,12 @@ it("keeps the draft on synchronous rejection and clears only after the outbox ac
 it("gives the channel and thread separate input/label identities, and gates unsupported writes", () => {
   const channel = mount().render(),
     thread = mount("root").render();
-  const channelInput = elements(channel).find((e) => e.type === "textarea");
-  const threadInput = elements(thread).find((e) => e.type === "textarea");
+  const channelInput = elements(channel).find(
+    (e) => e.type === RichComposerInput,
+  );
+  const threadInput = elements(thread).find(
+    (e) => e.type === RichComposerInput,
+  );
   expect(threadInput?.props.id).not.toBe(channelInput?.props.id);
   expect(threadInput?.props.placeholder).toBe("Reply to thread");
   expect(elements(thread).find((e) => e.type === "label")?.props.htmlFor).toBe(
@@ -246,7 +253,7 @@ it("gives the channel and thread separate input/label identities, and gates unsu
   );
   expect(
     elements(mount("root", "scope", false).render()).some(
-      (e) => e.type === "textarea",
+      (e) => e.type === RichComposerInput,
     ),
   ).toBe(false);
 });
@@ -389,12 +396,12 @@ it("keeps custom emoji shortcode text readable in the draft and sends it unchang
   const insertText = tools.props.insertText as (text: string) => boolean;
   expect(insertText(":party:")).toBe(true);
   expect(h.input().props.value).toBe(":party:");
-  expect(h.input().props["data-custom-emoji-only"]).toBe(true);
+  expect(h.input().props["data-single-emoji"]).toBe(true);
   expect(insertText(":party:")).toBe(true);
   expect(h.input().props.value).toBe(":party::party:");
-  expect(
-    elements(h.render()).filter((element) => element.type === "img"),
-  ).toHaveLength(2);
+  expect(h.input().props.emoji).toEqual([
+    { shortcode: "party", url: "https://emoji.test/party.png" },
+  ]);
   h.submit();
   expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
     "channel",
@@ -408,11 +415,10 @@ it("renders a leading custom emoji inline when text follows it", () => {
     { shortcode: "bufo", url: "https://emoji.test/bufo.png" },
   ]);
   h.type(":bufo:lakjsdlkjflakjsdf");
-  expect(h.input().props["data-custom-emoji-only"]).toBeUndefined();
-  expect(h.input().props["data-leading-custom-emoji"]).toBe(true);
-  expect(
-    elements(h.render()).filter((element) => element.type === "img"),
-  ).toHaveLength(1);
+  expect(h.input().props["data-single-emoji"]).toBeUndefined();
+  expect(h.input().props.emoji).toEqual([
+    { shortcode: "bufo", url: "https://emoji.test/bufo.png" },
+  ]);
   h.submit();
   expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
     "channel",

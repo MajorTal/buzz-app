@@ -44,7 +44,7 @@ export function MediaReviewViewer(props: MediaReviewViewerProps) {
   const [threadError, setThreadError] = useState<string>();
   useEffect(() => {
     try {
-      const owned = session.thread(channelId, messageId);
+      const owned = session.thread(channelId, messageId, { exact: true });
       setThreadError(undefined);
       setView(owned);
       void owned.refresh();
@@ -102,7 +102,11 @@ function ResolvedReview({
         retry={view.refresh}
       />
     );
-  const threadRows = [snapshot.root, ...snapshot.replies];
+  const threadRows = [
+    snapshot.root,
+    snapshot.target,
+    ...snapshot.replies,
+  ].filter((row): row is NonNullable<typeof row> => !!row);
   const attachmentAvailable = threadRows.some((row) =>
     row.attachments.some((item) => item.url === props.attachment.url),
   );
@@ -118,7 +122,13 @@ function ResolvedReview({
       {...props}
       view={view}
       rootId={snapshot.root.id}
-      replies={snapshot.replies}
+      replies={
+        snapshot.target &&
+        snapshot.target.id !== snapshot.root.id &&
+        !snapshot.replies.some((row) => row.id === snapshot.target?.id)
+          ? [...snapshot.replies, snapshot.target]
+          : snapshot.replies
+      }
       limited={snapshot.limited}
       timecodesSeekable={videoUrls.size === 1}
     />
@@ -252,6 +262,7 @@ function ReviewShell({
                 replies={replies}
                 limited={limited}
                 session={session}
+                scope={scope}
                 extensions={extensions}
                 selectAttachment={selectAttachment}
                 {...(attachment.video && timecodesSeekable ? { seek } : {})}
@@ -314,12 +325,12 @@ function ImageReviewGallery({
   );
   const attachments = useMemo(() => {
     const seen = new Set<string>();
-    return [thread.root, ...thread.replies]
+    return [thread.root, thread.target, ...thread.replies]
       .flatMap((row) => row?.attachments ?? [])
       .filter(
         (item) => !item.video && !seen.has(item.url) && !!seen.add(item.url),
       );
-  }, [thread.root, thread.replies]);
+  }, [thread.root, thread.target, thread.replies]);
   return (
     <ImageReviewStage
       attachments={attachments}
@@ -334,6 +345,7 @@ function ReviewComments({
   replies,
   limited,
   session,
+  scope,
   extensions,
   seek,
   selectAttachment,
@@ -341,6 +353,7 @@ function ReviewComments({
   replies: ReturnType<ThreadView["snapshot"]>["replies"];
   limited: boolean;
   session: RelaySession;
+  scope: string;
   extensions?: ConversationExtensions | undefined;
   seek?: (seconds: number) => void;
   selectAttachment(attachment: Attachment, initialTime: number): void;
@@ -366,6 +379,8 @@ function ReviewComments({
           key={row.id}
           row={row}
           extensions={extensions}
+          session={session}
+          scope={scope}
           profile={profiles.get(row.authorId)}
           media={session.media}
           onOpenLink={() => false}

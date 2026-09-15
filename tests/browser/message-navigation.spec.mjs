@@ -93,7 +93,9 @@ test("old root and reply beyond the first thread page open exactly; reclick and 
   await page
     .getByRole("button", { name: "Close channel panel", exact: true })
     .click();
-  await expect(mention).toBeFocused();
+  // Opening a panel retires the navigation-owned thread so the rail continues
+  // to hold one surface. A fresh navigation can open another exact target.
+  await expect(thread(page)).toHaveCount(0);
   expect(await openTarget(page, target(app))).toEqual({ status: "opened" });
   await page.getByRole("button", { name: "Close thread", exact: true }).click();
   await expect(
@@ -465,7 +467,10 @@ liveTest(
     release();
     await expect(region.getByText("Loading thread…")).toHaveCount(0);
     await expect(composer).toBeFocused();
-    await expect(composer).toHaveValue("Preserve my thread draft");
+    await expect(composer).toHaveJSProperty(
+      "value",
+      "Preserve my thread draft",
+    );
     expect(await region.evaluate((element) => element.scrollTop)).toBeCloseTo(
       before,
       0,

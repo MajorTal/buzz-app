@@ -9,6 +9,7 @@
   },
   "scripts": {
     "dev": "vite",
+    "dev:desktop": "vite --strictPort",
     "build": "pnpm typecheck && vite build",
     "preview": "vite preview",
     "author:build": "node scripts/build-author.mjs",
@@ -57,7 +58,8 @@
     "react-markdown": "10.1.0",
     "remark-breaks": "4.0.0",
     "remark-gfm": "4.0.1",
-    "virtua": "0.51.0"
+    "virtua": "0.51.0",
+    "yaml": "2.8.3"
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.12",

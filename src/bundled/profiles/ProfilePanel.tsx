@@ -83,6 +83,9 @@ function ProfileDetails({
   const npub = profileTarget(pubkey)?.slice(6) ?? pubkey;
   const name = profile?.name ?? "Unknown profile";
   const activity = activityTarget(pubkey, context?.channelId);
+  const picture = profile?.picture
+    ? (session.media(profile.picture) ?? null)
+    : null;
   return (
     <section
       ref={region}
@@ -91,15 +94,17 @@ function ProfileDetails({
       tabIndex={-1}
       className={styles.root}
     >
-      <div className={styles.identity}>
-        <Avatar
-          src={
-            profile?.picture ? (session.media(profile.picture) ?? null) : null
-          }
-          alt={`${name} avatar`}
-          fallback={profile?.name ?? "?"}
-          size="large"
-        />
+      <div
+        className={`${styles.identity} ${picture ? styles.withPortrait : ""}`}
+      >
+        <div className={picture ? styles.portrait : undefined}>
+          <Avatar
+            src={picture}
+            alt={`${name} avatar`}
+            fallback={profile?.name ?? "?"}
+            size={picture ? "fill" : "large"}
+          />
+        </div>
         <h2 className="text-heading">{name}</h2>
       </div>
       {profile?.about && <p className={styles.about}>{profile.about}</p>}

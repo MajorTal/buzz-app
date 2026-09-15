@@ -39,6 +39,10 @@ const media = [
   { url: "https://fixture.test/media/one.png", video: false },
   { url: "https://fixture.test/media/two.png", video: false },
 ] as const satisfies readonly Attachment[];
+const replyAttachment = {
+  url: "https://fixture.test/media/reply.png",
+  video: false,
+} as const satisfies Attachment;
 const roots = [
   signed(viewer, {
     kind: 9,
@@ -67,11 +71,7 @@ const replies = roots.flatMap((root) =>
           tags: [
             ["h", "one"],
             ["e", root.id, "", "reply"],
-            [
-              "imeta",
-              "url https://fixture.test/media/reply.png",
-              "m image/png",
-            ],
+            ["imeta", `url ${replyAttachment.url}`, "m image/png"],
           ],
         })
       : message(
@@ -117,6 +117,17 @@ const message = "${"wide-content-".repeat(35)}";
         ),
   ),
 );
+const exactReply = replies[0];
+if (!exactReply) throw new Error("Missing exact reply fixture");
+const exactReaction = signed(viewer, {
+  kind: 7,
+  content: "👍",
+  created_at: 71,
+  tags: [
+    ["h", "one"],
+    ["e", exactReply.id],
+  ],
+});
 const agentReply = signed(agent, {
   kind: 40002,
   content: JSON.stringify({
@@ -131,12 +142,14 @@ const agentReply = signed(agent, {
     ["e", roots[0].id, "", "reply"],
   ],
 });
-const events = [...roots, ...replies, agentReply];
+const events = [...roots, ...replies, exactReaction, agentReply];
 const report = {
   pages: [] as string[],
   signings: [] as string[],
   publications: [] as RelayEvent[],
   links: [] as string[],
+  rootId: roots[0].id,
+  exactReplyId: exactReply.id,
 };
 let incoming = (_events: readonly RelayEvent[]) => {};
 const rejected = new Set<string>();
@@ -167,6 +180,14 @@ const owner = createRelaySession({
         return [profile(viewer, { name: "Fixture Reader" })];
       if (filter.ids)
         return events.filter((event) => filter.ids?.includes(event.id));
+      if (filter["#e"] && filter.kinds?.includes(7))
+        return events.filter(
+          (event) =>
+            filter.kinds?.includes(event.kind) &&
+            event.tags.some(
+              ([name, value]) => name === "e" && filter["#e"]?.includes(value),
+            ),
+        );
       if (filter.depth_limit) {
         const rootId = filter["#e"]?.[0];
         if (!rootId) throw new Error("Missing fixture thread root");
@@ -190,7 +211,7 @@ const owner = createRelaySession({
     });
   },
   writer: {
-    kinds: [9],
+    kinds: [7, 9],
     async sign(template) {
       const event = signed(viewer, template);
       report.signings.push(event.id);
@@ -248,7 +269,7 @@ Object.assign(window, {
 function Fixture() {
   const [selected, select] = useState(0),
     [scope, setScope] = useState("fixture"),
-    [review, setReview] = useState(false);
+    [review, setReview] = useState<Attachment>();
   const reviewTrigger = useRef<HTMLButtonElement>(null);
   const root = roots[selected];
   if (!root) throw new Error("Missing fixture selection");
@@ -300,9 +321,12 @@ function Fixture() {
         <button
           ref={reviewTrigger}
           type="button"
-          onClick={() => setReview(true)}
+          onClick={() => setReview(media[0])}
         >
           Review image
+        </button>
+        <button type="button" onClick={() => setReview(replyAttachment)}>
+          Review exact reply image
         </button>
       </nav>
       <div
@@ -337,16 +361,18 @@ function Fixture() {
       </div>
       {review && (
         <MediaReviewViewer
-          attachment={media[0]}
+          attachment={review}
           extensions={extensions}
           session={owner.session}
           scope={scope}
           channelId="one"
           channelName="one"
-          messageId={roots[0].id}
+          messageId={
+            review.url === replyAttachment.url ? exactReply.id : roots[0].id
+          }
           initialTime={0}
           restoreFocus={reviewTrigger}
-          close={() => setReview(false)}
+          close={() => setReview(undefined)}
         />
       )}
     </>

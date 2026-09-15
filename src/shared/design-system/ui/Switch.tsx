@@ -16,7 +16,6 @@ export function Switch({
         {...props}
         aria-label={label}
         className="buzz-switch-control"
-        nativeButton
       >
         <BaseSwitch.Thumb className="buzz-switch-thumb" />
       </BaseSwitch.Root>

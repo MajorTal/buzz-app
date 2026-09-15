@@ -475,3 +475,24 @@ Exhausted attempts, unsupported pauses, other route/connection failures and
 unfinished finite roster/head failures still show a warning and recovery action.
 This presentation policy does not increase quotas or guarantee that another
 client sharing the account cannot cause a refusal.
+
+## Receive-only typing
+
+Typing indicators show recent activity from another participant in the current
+channel or thread. They identify the signer, including agents; they do not imply
+online presence, ongoing agent execution, or a promise of an answer.
+
+The session owns this temporary state through `session.typing`. Shared conversation
+composers use the same indicator so channel and thread views agree about who is
+active and where. Names reuse already loaded profiles; displaying activity does
+not start extra reads or connections.
+
+A message clears its author's preceding activity in that conversation. Brief
+post-message suppression prevents late activity from immediately bringing the
+indicator back; otherwise silence lets it expire. Only current live activity can
+activate it, never fetched history. Losing access, disconnecting, clearing the
+cache or replacing the session clears it too, so stale activity cannot carry into
+another conversation or account.
+
+Typing stays out of message history, unread counts and persistent storage. This
+is receive-only: opening or using a composer does not publish typing activity.

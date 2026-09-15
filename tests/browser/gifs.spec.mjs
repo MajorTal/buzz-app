@@ -223,7 +223,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
     prevented: true,
     submits: 0,
   });
-  await expect(draft).toHaveValue("unfinished draft");
+  await expect(draft).toHaveJSProperty("value", "unfinished draft");
   expect(signRequests).toBe(0);
   await draft.evaluate((element) => {
     element.value = "";
@@ -234,7 +234,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
       }),
     );
   });
-  await expect(draft).toHaveValue("");
+  await expect(draft).toHaveJSProperty("value", "");
   const composer = draft.locator("xpath=ancestor::form");
   await expect(composer).toHaveCSS("border-top-color", "rgb(138, 148, 152)");
   await expect(composer).toHaveCSS("box-shadow", "none");
@@ -384,7 +384,8 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await page.screenshot({ path: testInfo.outputPath("gif-picker.png") });
 
   await page.getByRole("button", { name: "Choose Hello", exact: true }).click();
-  await expect(draft).toHaveValue(
+  await expect(draft).toHaveJSProperty(
+    "value",
     "![Hello](https://gif.fixture.invalid/1.gif)",
   );
   await expect(

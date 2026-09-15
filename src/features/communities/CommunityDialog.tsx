@@ -171,7 +171,7 @@ export function CommunityDialog({
             disabled={busy}
             onClick={close}
           >
-            <X size={20} />
+            <X size={20} aria-hidden="true" />
           </button>
         </header>
         {mode === "join" && step !== "destination" && destination && (

@@ -80,7 +80,7 @@ export function ChannelsPage({
         <PanelFrame companion={companion}>
           <div className={styles.connect}>
             <div className={styles.connectIcon}>
-              <PlugZap size={30} />
+              <PlugZap size={30} aria-hidden="true" />
             </div>
             <h1>Your channels, one conversation.</h1>
             <p>
@@ -480,7 +480,7 @@ function ChannelWorkspace({
     >
       <aside className={styles.sidebar} aria-label="Channel sidebar">
         <div className={styles.search}>
-          <Search size={17} />
+          <Search size={17} aria-hidden="true" />
           <input
             aria-label="Search channels"
             placeholder="Search"
@@ -526,7 +526,7 @@ function ChannelWorkspace({
                     onFocus={() => queries.channels.prepare?.(channel.id)}
                     onClick={() => select(channel.id)}
                   >
-                    <Icon size={17} />
+                    <Icon size={17} aria-hidden="true" />
                     <span>{channel.name}</span>
                     <UnreadBadge session={queries} channelId={channel.id} />
                   </button>
@@ -567,9 +567,9 @@ function ChannelWorkspace({
         <header className={styles.heading}>
           <div className={styles.channelTitle}>
             {current?.channelType === "dm" ? (
-              <MessageCircle size={20} />
+              <MessageCircle size={20} aria-hidden="true" />
             ) : (
-              <Hash size={20} />
+              <Hash size={20} aria-hidden="true" />
             )}
             <strong>{current?.name ?? "Channels"}</strong>
           </div>

@@ -77,7 +77,7 @@ function ObjectPanel({
     <div className={styles.root}>
       <div className={styles.identity}>
         <span className={styles.icon}>
-          <Icon size={22} />
+          <Icon size={22} aria-hidden="true" />
         </span>
         <div>
           <small>{reference.repository}</small>
@@ -92,7 +92,7 @@ function ObjectPanel({
         target="_blank"
         rel="noreferrer"
       >
-        Open on GitHub <ExternalLink size={14} />
+        Open on GitHub <ExternalLink size={14} aria-hidden="true" />
       </a>
       {result === undefined ? (
         <p role="status">Loading from GitHub…</p>

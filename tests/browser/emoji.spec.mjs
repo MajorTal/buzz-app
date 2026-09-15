@@ -366,17 +366,15 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(skinTone).toBeFocused();
     await search.focus();
     const searchIcon = page.locator(
-      '[aria-label="Emoji picker"] > svg.lucide-search',
+      '[aria-label="Emoji picker"] > svg.tabler-icon-search',
     );
     await expect(searchIcon).toHaveAttribute("viewBox", "0 0 24 24");
     await expect(searchIcon).toHaveAttribute("stroke-width", "2");
-    await expect(searchIcon.locator("path")).toHaveAttribute(
-      "d",
-      "m21 21-4.34-4.34",
-    );
-    await expect(searchIcon.locator("circle")).toHaveAttribute("r", "8");
+    await expect(searchIcon).toHaveAttribute("aria-hidden", "true");
     await expect(
-      page.locator('[aria-label="Emoji picker"] > svg.lucide-search:visible'),
+      page.locator(
+        '[aria-label="Emoji picker"] > svg.tabler-icon-search:visible',
+      ),
     ).toHaveCount(1);
     await expect(page.locator("em-emoji-picker .search .loupe")).toHaveCSS(
       "visibility",
@@ -466,7 +464,9 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       "rgb(240, 240, 240)",
     );
     await expect(
-      page.locator('[aria-label="Emoji picker"] > svg.lucide-search:visible'),
+      page.locator(
+        '[aria-label="Emoji picker"] > svg.tabler-icon-search:visible',
+      ),
     ).toHaveCount(1);
     const insert = page.getByRole("button", {
       name: ":party:",

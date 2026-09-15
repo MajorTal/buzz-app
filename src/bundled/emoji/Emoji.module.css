@@ -249,14 +249,6 @@
   width: 16px;
   height: 16px;
 }
-.gifSearch .gifClear svg circle {
-  fill: currentColor;
-  stroke: none;
-}
-.gifSearch .gifClear svg path {
-  fill: none;
-  stroke: var(--picker-search-background);
-}
 .gifSearch input::placeholder {
   color: var(--picker-search-muted);
 }

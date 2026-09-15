@@ -1,5 +1,5 @@
 import { test, expect } from "./fixture.mjs";
-import { open, settle } from "./timeline.mjs";
+import { end, open, settle } from "./timeline.mjs";
 import { finalizeEvent, generateSecretKey } from "nostr-tools";
 
 test.use({
@@ -333,36 +333,23 @@ for (const kind of ["mention", "thread reply"]) {
     await expect
       .poll(() => app.report.readPublications.length)
       .toBeGreaterThan(before);
-    try {
-      await expect
-        .poll(() =>
-          page.evaluate(
-            (id) =>
-              window.fixtureRelay
-                .snapshot()
-                .session.unread.attention("beta", id).unread,
-            incoming.id,
-          ),
-        )
-        .toBe(false);
-    } finally {
-      app.report.state.notificationReading = await page.evaluate(
-        (id) => ({
-          documentFocused: document.hasFocus(),
-          visibility: document.visibilityState,
-          activeElement: document.activeElement?.outerHTML.slice(0, 500),
-          sync: window.fixtureRelay.snapshot().session.unread.sync(),
-          row: document
-            .querySelector(`[data-message-id="${id}"]`)
-            ?.getBoundingClientRect()
-            .toJSON(),
-          timeline: document
-            .querySelector('[data-channel-timeline="beta"]')
-            ?.getBoundingClientRect()
-            .toJSON(),
-        }),
-        incoming.id,
-      );
+    await expect
+      .poll(() =>
+        page.evaluate(
+          (id) =>
+            window.fixtureRelay.snapshot().session.unread.attention("beta", id)
+              .unread,
+          incoming.id,
+        ),
+      )
+      .toBe(false);
+    if (!root) {
+      // Fractional reflow must not leave the last row clipped at maximum scroll.
+      await row.evaluate((element) => {
+        element.style.paddingBottom = "0.5px";
+      });
+      await end(page);
+      await expect(row).toBeInViewport({ ratio: 1 });
     }
   });
 }

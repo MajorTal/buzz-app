@@ -16,6 +16,8 @@
   overflow-y: auto;
   overflow-anchor: none;
   padding: 0 var(--space-panel-inset);
+  /* Keep fractional last rows reachable despite integer scroll extents. */
+  padding-bottom: 1px;
   scrollbar-width: thin;
 }
 .feed ol {

@@ -832,12 +832,16 @@ export function createUnread({
   return {
     capability,
     // Private session evidence lookup; never seeds timeline windows or grants access.
+    // Reference-only auxiliaries inherit every owning channel through the same
+    // bounded, fail-closed ancestry used for retention.
     event(id: string) {
+      if (closed) return;
       const event = events.get(id);
-      const channel = event && channelOf(event);
-      return !closed && event && channel && allowed(channel)
-        ? event
-        : undefined;
+      if (!event) return;
+      const owners = channelOwnership((targetId) => events.get(targetId))(
+        event,
+      );
+      return owners && [...owners].every(allowed) ? event : undefined;
     },
     accept,
     purge,

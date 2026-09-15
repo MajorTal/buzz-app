@@ -467,6 +467,52 @@ it("activity previews use edited and unwrapped current message content and notif
   });
 });
 
+it("repair-retained reference-only edits admit a later deletion without seeding a window", async () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "ORIGINAL", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  const edit = signed(h.alice, {
+    kind: 40003,
+    content: "EDITED",
+    tags: [["e", reply.id]],
+  });
+  h.query.mockImplementation(async (filters) =>
+    filters[0]?.kinds?.includes(9) ? [root, reply, edit] : [],
+  );
+
+  await h.session.unread.ensure();
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe("EDITED");
+  const window = h.session.channels.window("room");
+  expect(window.rows).toHaveLength(0);
+  const changes: ThreadActivitySnapshot[] = [];
+  h.session.unread.subscribeActivity("room", () =>
+    changes.push(h.session.unread.activity("room")),
+  );
+
+  const deletion = (ids: readonly string[]) =>
+    signed(h.alice, {
+      kind: 5,
+      content: "",
+      tags: ids.map((id) => ["e", id]),
+    });
+  h.emit([deletion([edit.id, "f".repeat(64)])]);
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe("EDITED");
+  expect(changes).toEqual([]);
+
+  h.emit([deletion([edit.id])]);
+
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe(
+    "ORIGINAL",
+  );
+  expect(changes.map((snapshot) => snapshot.items?.[0]?.preview)).toEqual([
+    "ORIGINAL",
+  ]);
+  expect(h.session.channels.window("room")).toBe(window);
+});
+
 it("activity subscribers restore original content when a reference-only edit is deleted", () => {
   const h = setup();
   h.grant("room");

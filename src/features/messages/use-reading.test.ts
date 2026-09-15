@@ -73,10 +73,11 @@ function setup({ supported = true, focused = true, settled = true } = {}) {
     observe: ReturnType<typeof vi.fn>;
     dispose: ReturnType<typeof vi.fn>;
   }[] = [];
+  let observe = async () => {};
   const reading = vi.fn(() => {
     const lease = {
       view: vi.fn(),
-      observe: vi.fn(async () => {}),
+      observe: vi.fn(() => observe()),
       dispose: vi.fn(),
     };
     leases.push(lease);
@@ -105,6 +106,9 @@ function setup({ supported = true, focused = true, settled = true } = {}) {
     position,
     disconnected,
     mutation: () => mutation(),
+    setObserve: (next: typeof observe) => {
+      observe = next;
+    },
     setRows: (next: typeof rows) => {
       rows = next;
     },
@@ -169,10 +173,35 @@ it("scroll and content changes restart dwell; a row seen only at the end is not 
   vi.advanceTimersByTime(1);
   expect(h.leases[2]?.observe).not.toHaveBeenCalled();
 });
+it("active content reflow cannot revoke dwell already queued for durability", async () => {
+  const h = setup();
+  let release: (() => void) | undefined;
+  h.setObserve(
+    () =>
+      new Promise<void>((resolve) => {
+        release = resolve;
+      }),
+  );
+  vi.advanceTimersByTime(750);
+  expect(h.leases[0]?.observe).toHaveBeenCalledExactlyOnceWith(["visible"]);
+
+  h.mutation();
+  expect(h.leases[0]?.dispose).not.toHaveBeenCalled();
+  h.doc.activeElement = new EventTarget();
+  h.element.dispatchEvent(
+    Object.assign(new Event("focusout"), { relatedTarget: null }),
+  );
+  expect(h.leases[0]?.dispose).toHaveBeenCalledTimes(1);
+  release?.();
+  await vi.runAllTimersAsync();
+  expect(h.leases[0]?.dispose).toHaveBeenCalledTimes(1);
+});
 it("focus leaving the reading surface cancels pending evidence", () => {
   const h = setup();
   h.doc.activeElement = new EventTarget();
-  h.element.dispatchEvent(new Event("focusout"));
+  h.element.dispatchEvent(
+    Object.assign(new Event("focusout"), { relatedTarget: null }),
+  );
   vi.advanceTimersByTime(1000);
   expect(h.leases[0]?.observe).not.toHaveBeenCalled();
 });

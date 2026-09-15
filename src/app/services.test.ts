@@ -121,8 +121,16 @@ async function openCommunities() {
 function expectHostStopped() {
   expect(signals.every((signal) => signal.aborted)).toBe(true);
   for (const stream of streams) expect(stream.close).toHaveBeenCalledTimes(1);
-  expect(document.addEventListener).toHaveBeenCalledTimes(3);
-  expect(document.removeEventListener).toHaveBeenCalledTimes(3);
+  const added = vi.mocked(document.addEventListener).mock.calls;
+  const removed = vi.mocked(document.removeEventListener).mock.calls;
+  expect(added).toHaveLength(9); // Existing host listeners + one app presence source.
+  expect(removed).toHaveLength(added.length);
+  for (const [type, listener] of added)
+    expect(
+      removed.filter(
+        ([event, callback]) => event === type && callback === listener,
+      ),
+    ).toHaveLength(1);
   expect(services.pages.snapshot()).toHaveLength(0);
 }
 

@@ -771,7 +771,9 @@ export function relayBrokerPlugin({
           let raw = "";
           for await (const part of req) {
             raw += part;
-            if (Buffer.byteLength(raw) > (presence ? 20 * 1024 : 65536))
+            if (
+              presence ? Buffer.byteLength(raw) > 20 * 1024 : raw.length > 65536
+            )
               return json(res, 413, { error: "Filter body too large" });
           }
           let filters;

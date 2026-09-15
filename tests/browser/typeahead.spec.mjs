@@ -75,7 +75,7 @@ test("open completion republishes library-only display hints without changing th
     );
     await expectAvatarShape(first, included ? "squircle" : "circle");
     await expectAvatarShape(second, "squircle");
-    await expect(input).toHaveValue("@Ho");
+    await expect(input).toHaveText("@Ho");
     await expect(input).toBeFocused();
     await expect(page.getByRole("listbox")).toBeVisible();
     expect(

@@ -5,10 +5,19 @@ import { fileURLToPath } from "node:url";
 
 // Sample actual browser paint, not just shape attributes or bounding boxes.
 async function pixels(page, locator, inset = 0) {
+  await locator.scrollIntoViewIfNeeded();
   const bounds = await locator.boundingBox();
-  const png = await locator.screenshot();
+  // Browser crops round outward to device pixels. Keep the fractional artwork
+  // origin rather than treating that rounded image as the avatar's own bounds.
+  const clip = {
+    x: Math.floor(bounds.x),
+    y: Math.floor(bounds.y),
+    width: Math.ceil(bounds.x + bounds.width) - Math.floor(bounds.x),
+    height: Math.ceil(bounds.y + bounds.height) - Math.floor(bounds.y),
+  };
+  const png = await page.screenshot({ clip, scale: "css" });
   return page.evaluate(
-    async ({ base64, inset, width }) => {
+    async ({ base64, inset, bounds, clip }) => {
       const image = new Image();
       image.src = `data:image/png;base64,${base64}`;
       await image.decode();
@@ -17,18 +26,27 @@ async function pixels(page, locator, inset = 0) {
       canvas.height = image.height;
       const context = canvas.getContext("2d");
       context.drawImage(image, 0, 0);
-      const padding = inset * (image.width / width);
       const at = (fraction) => [
         ...context.getImageData(
-          Math.floor(padding + (image.width - 2 * padding) * fraction),
-          Math.floor(padding + (image.height - 2 * padding) * fraction),
+          Math.floor(
+            bounds.x - clip.x + inset + (bounds.width - 2 * inset) * fraction,
+          ),
+          Math.floor(
+            bounds.y - clip.y + inset + (bounds.height - 2 * inset) * fraction,
+          ),
           1,
           1,
         ).data,
       ];
-      return { corner: at(0), shoulder: at(0.1), center: at(0.5) };
+      // One pixel inside the inset exposes a missing inner clip; its exact
+      // outermost corner can still be clipped by the parent's mask alone.
+      return {
+        corner: at(inset ? 0.05 : 0),
+        shoulder: at(0.1),
+        center: at(0.5),
+      };
     },
-    { base64: png.toString("base64"), inset, width: bounds.width },
+    { base64: png.toString("base64"), inset, bounds, clip },
   );
 }
 

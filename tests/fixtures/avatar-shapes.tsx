@@ -38,7 +38,9 @@ function Fixture() {
   const [opened, setOpened] = useState(false);
   const [pictures, setPictures] = useState(true);
   return (
-    <main style={{ padding: 24 }}>
+    // Match the message panel's opaque surface so clipped pixels have the same
+    // backdrop as the overlap border in either theme, not the document canvas.
+    <main style={{ padding: 24, background: "var(--surface)" }}>
       <button type="button">Before avatars</button>
       <section
         aria-label="System avatars"

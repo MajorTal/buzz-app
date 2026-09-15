@@ -333,16 +333,37 @@ for (const kind of ["mention", "thread reply"]) {
     await expect
       .poll(() => app.report.readPublications.length)
       .toBeGreaterThan(before);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          (id) =>
-            window.fixtureRelay.snapshot().session.unread.attention("beta", id)
-              .unread,
-          incoming.id,
-        ),
-      )
-      .toBe(false);
+    try {
+      await expect
+        .poll(() =>
+          page.evaluate(
+            (id) =>
+              window.fixtureRelay
+                .snapshot()
+                .session.unread.attention("beta", id).unread,
+            incoming.id,
+          ),
+        )
+        .toBe(false);
+    } finally {
+      app.report.state.notificationReading = await page.evaluate(
+        (id) => ({
+          documentFocused: document.hasFocus(),
+          visibility: document.visibilityState,
+          activeElement: document.activeElement?.outerHTML.slice(0, 500),
+          sync: window.fixtureRelay.snapshot().session.unread.sync(),
+          row: document
+            .querySelector(`[data-message-id="${id}"]`)
+            ?.getBoundingClientRect()
+            .toJSON(),
+          timeline: document
+            .querySelector('[data-channel-timeline="beta"]')
+            ?.getBoundingClientRect()
+            .toJSON(),
+        }),
+        incoming.id,
+      );
+    }
   });
 }
 

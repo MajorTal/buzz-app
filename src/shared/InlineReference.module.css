@@ -23,6 +23,11 @@
   outline-offset: 2px;
 }
 
+/* Channel hosts reset ordinary buttons to inherited text color. */
+[data-mention-kind].link {
+  color: var(--link-text);
+}
+
 .icon {
   display: inline-block;
   width: 1em;

@@ -35,6 +35,31 @@ test("editable composer renders links and mentions while preserving source and n
     await expect(preview.locator('[data-mention-kind="agent"]')).toHaveText(
       "Build Bot",
     );
+    const delivered = page.locator('[data-message-id="link-row"]');
+    const deliveredLink = delivered
+      .locator('a:has([data-link-kind="github"])')
+      .first();
+    const deliveredMentions = delivered.locator("[data-mention-kind]");
+    const inlineStyles = await Promise.all(
+      [deliveredLink, deliveredMentions.nth(0), deliveredMentions.nth(1)].map(
+        (locator) =>
+          locator.evaluate((element) => {
+            const style = getComputedStyle(element);
+            return {
+              color: style.color,
+              paddingBlock: [style.paddingTop, style.paddingBottom],
+              height: element.getBoundingClientRect().height,
+            };
+          }),
+      ),
+    );
+    for (const mentionStyle of inlineStyles.slice(1)) {
+      expect(mentionStyle.color).toBe(inlineStyles[0].color);
+      expect(mentionStyle.paddingBlock).toEqual(inlineStyles[0].paddingBlock);
+      expect(
+        Math.abs(mentionStyle.height - inlineStyles[0].height),
+      ).toBeLessThan(1);
+    }
     await expect(preview.getByRole("link")).toHaveCount(0);
     await expect(preview.getByRole("button")).toHaveCount(0);
 

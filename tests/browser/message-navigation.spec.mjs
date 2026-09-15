@@ -395,43 +395,47 @@ readingTest(
 );
 
 const readTest = test.extend({ productionBroker: true, readState: true });
-test("bottom following keeps the final row fully visible after fractional reflow", async ({
-  page,
-  app,
-}) => {
-  await open(page, app);
-  const history = page.getByRole("region", {
-    name: "Channel message history",
-    exact: true,
+test.describe("fractional row geometry", () => {
+  test.use({ historyCounts: { alpha: 12, beta: 1 }, exactMessages: false });
+  test("bottom following keeps the final row fully visible after fractional reflow", async ({
+    page,
+    app,
+  }) => {
+    await open(page, app);
+    const history = page.getByRole("region", {
+      name: "Channel message history",
+      exact: true,
+    });
+    const row = history.locator(
+      `[data-message-id="${app.histories.get("primary/alpha").at(-1).id}"]`,
+    );
+    // Text scaling and wrapping can produce fractional heights. Make the next
+    // measurement fractional explicitly, independent of platform font metrics.
+    const before = await history
+      .locator("ol")
+      .evaluate((e) => e.getBoundingClientRect().height);
+    await row.evaluate((e, height) => {
+      e.style.paddingBottom = `${Math.ceil(height) - height + 0.75}px`;
+    }, before);
+    await expect
+      .poll(() =>
+        history.locator("ol").evaluate((e) => e.getBoundingClientRect().height),
+      )
+      .toBe(Math.ceil(before) + 0.75);
+    await expect
+      .poll(() =>
+        row.evaluate((e) => {
+          const viewport = e
+            .closest("[data-channel-timeline]")
+            .getBoundingClientRect();
+          const box = e.getBoundingClientRect();
+          return box.top >= viewport.top && box.bottom <= viewport.bottom;
+        }),
+      )
+      .toBe(true);
   });
-  const row = history.locator(
-    `[data-message-id="${app.histories.get("primary/alpha").at(-1).id}"]`,
-  );
-  // Text scaling and wrapping can produce fractional heights. Make the next
-  // measurement fractional explicitly, independent of platform font metrics.
-  const before = await history
-    .locator("ol")
-    .evaluate((e) => e.getBoundingClientRect().height);
-  await row.evaluate((e, height) => {
-    e.style.paddingBottom = `${Math.ceil(height) - height + 0.75}px`;
-  }, before);
-  await expect
-    .poll(() =>
-      history.locator("ol").evaluate((e) => e.getBoundingClientRect().height),
-    )
-    .toBe(Math.ceil(before) + 0.75);
-  await expect
-    .poll(() =>
-      row.evaluate((e) => {
-        const viewport = e
-          .closest("[data-channel-timeline]")
-          .getBoundingClientRect();
-        const box = e.getBoundingClientRect();
-        return box.top >= viewport.top && box.bottom <= viewport.bottom;
-      }),
-    )
-    .toBe(true);
 });
+
 readTest(
   "exact reveal uses ordinary dwell rather than marking read at open",
   async ({ page, app }) => {

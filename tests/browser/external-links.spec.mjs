@@ -1,4 +1,5 @@
 import { test, expect } from "./fixture.mjs";
+import { settle } from "./timeline.mjs";
 
 const github = "https://github.com/block/buzz/pull/1";
 const ordinary = "https://example.test/external-link";
@@ -15,6 +16,7 @@ async function openMessages(page) {
   await page
     .getByRole("textbox", { name: "Message #Alpha", exact: true })
     .waitFor();
+  await settle(page);
 }
 
 async function popup(page, anchor) {
@@ -48,6 +50,8 @@ test("unhandled links open externally and disabling GitHub restores the fallback
   await page.goto(app.origin);
   await openMessages(page);
   app.append("primary", "alpha", `${github} ${ordinary} ${unsupported}`);
+  await expect(link(page, github)).toBeVisible();
+  await settle(page);
   await link(page, github).click();
   const panel = page.getByRole("complementary", {
     name: "GitHub",

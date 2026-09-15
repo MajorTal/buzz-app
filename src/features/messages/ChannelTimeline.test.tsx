@@ -737,35 +737,35 @@ it("keeps bottom restoration through repeated late list measurements without ano
   h.scroll();
   h.element.clientWidth = 650;
   h.resize();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   // The viewport and rows are unchanged; only Virtua's measured list reflows.
   h.measureRows();
   h.measureRows();
-  expect(h.handle.scrollTo).toHaveBeenCalledTimes(2);
-  expect(h.handle.scrollTo).toHaveBeenLastCalledWith(h.element.scrollHeight);
+  expect(h.handle.scrollToIndex).toHaveBeenCalledTimes(2);
+  expect(h.handle.scrollToIndex).toHaveBeenLastCalledWith(1, { align: "end" });
   h.unmount();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).not.toHaveBeenCalled();
+  expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
 });
 it("ignores non-height list styles and coalesces measured height changes", () => {
   const h = setup();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.scrollStyle();
-  expect(h.handle.scrollTo).not.toHaveBeenCalled();
+  expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
   h.measureRows(false);
   h.measureRows(false);
   h.flush();
-  expect(h.handle.scrollTo).toHaveBeenCalledExactlyOnceWith(
-    h.element.scrollHeight,
-  );
-  h.handle.scrollTo.mockClear();
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(1, {
+    align: "end",
+  });
+  h.handle.scrollToIndex.mockClear();
   h.scrollStyle(); // The new height has already been consumed.
-  expect(h.handle.scrollTo).not.toHaveBeenCalled();
+  expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
   h.measureRows(false);
   h.unmount();
   h.flush();
-  expect(h.handle.scrollTo).not.toHaveBeenCalled();
+  expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
 });
 it.each([false, true])(
   "a new gesture cancels late bottom reflow, including queued=%s",
@@ -775,12 +775,12 @@ it.each([false, true])(
     h.scroll();
     h.element.clientWidth = 650;
     h.resize();
-    h.handle.scrollTo.mockClear();
+    h.handle.scrollToIndex.mockClear();
     if (queued) h.measureRows(false);
     h.gesture();
     if (queued) h.flush();
     else h.measureRows();
-    expect(h.handle.scrollTo).not.toHaveBeenCalled();
+    expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
     h.unmount();
   },
 );
@@ -789,9 +789,9 @@ it("late measurements do not convert reading-anchor restoration to bottom follow
   h.scroll();
   h.element.clientWidth = 650;
   h.resize();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).not.toHaveBeenCalled();
+  expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
   h.unmount();
 });
 it("prepending retires the preceding bottom-reflow observer and its queued frame", () => {
@@ -800,29 +800,29 @@ it("prepending retires the preceding bottom-reflow observer and its queued frame
   h.scroll();
   h.element.clientWidth = 650;
   h.resize();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows(false);
   h.prepend();
   h.measureRows();
-  expect(h.handle.scrollTo).not.toHaveBeenCalled();
+  expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
   h.unmount();
 });
 
 it("initial bottom and ordinary appends follow late measured list reflow", () => {
   const h = setup();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).toHaveBeenCalledExactlyOnceWith(
-    h.element.scrollHeight,
-  );
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(1, {
+    align: "end",
+  });
   h.element.scrollTop = 3038;
   h.scroll();
   h.append();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).toHaveBeenCalledExactlyOnceWith(
-    h.element.scrollHeight,
-  );
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(2, {
+    align: "end",
+  });
   h.unmount();
 });
 
@@ -1151,11 +1151,11 @@ it("membership append retains bottom intent across intermediate scroll geometry 
   // List measurements change after the end-scroll. No reader gesture occurred.
   h.element.scrollHeight += 200;
   h.scroll(false);
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).toHaveBeenCalledExactlyOnceWith(
-    h.element.scrollHeight,
-  );
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(0, {
+    align: "end",
+  });
   h.handle.scrollToIndex.mockClear();
   h.setRows([first, membershipRow("second", 2), membershipRow("third", 3)]);
   expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(0, {
@@ -1296,11 +1296,11 @@ it("a gesture with no movement does not disable the next append's bottom follow"
     align: "end",
   });
   h.scroll(false);
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).toHaveBeenCalledExactlyOnceWith(
-    h.element.scrollHeight,
-  );
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(2, {
+    align: "end",
+  });
   h.unmount();
   expect(h.saved().bottom).toBe(true);
 });
@@ -1339,11 +1339,11 @@ it("a no-scroll click followed by a tall append follows without mistaking growth
   h.dispatchScroll();
   h.element.scrollHeight += 200;
   h.dispatchScroll();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).toHaveBeenCalledExactlyOnceWith(
-    h.element.scrollHeight,
-  );
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(0, {
+    align: "end",
+  });
   h.unmount();
   expect(h.saved().bottom).toBe(true);
 });
@@ -1390,11 +1390,11 @@ it("list shrinkage clamps the offset without revoking bottom follow", () => {
   h.dispatchScroll();
   h.element.scrollHeight += 200;
   h.dispatchScroll();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).toHaveBeenCalledExactlyOnceWith(
-    h.element.scrollHeight,
-  );
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(2, {
+    align: "end",
+  });
   h.unmount();
   expect(h.saved().bottom).toBe(true);
 });
@@ -1437,11 +1437,11 @@ it("estimated list shrinkage can leave an intermediate gap without becoming read
   h.element.scrollHeight -= 200;
   h.element.scrollTop -= 200;
   h.dispatchScroll();
-  h.handle.scrollTo.mockClear();
+  h.handle.scrollToIndex.mockClear();
   h.measureRows();
-  expect(h.handle.scrollTo).toHaveBeenCalledExactlyOnceWith(
-    h.element.scrollHeight,
-  );
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(2, {
+    align: "end",
+  });
   h.unmount();
   expect(h.saved().bottom).toBe(true);
 });

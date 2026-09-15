@@ -155,6 +155,50 @@ it("preserves absolute edge correction and RTL axis normalization", () => {
   }
 });
 
+it.each(["MacIntel", "Linux x86_64"])(
+  "rounds fractional end corrections outward on %s, including RTL",
+  (platform) => {
+    for (const horizontal of [false, true]) {
+      const c = setup({
+        platform,
+        horizontal,
+        direction: horizontal ? "rtl" : "ltr",
+        offset: 1500,
+      });
+      c.store.W(3, [[0, 100.75]]);
+      c.driver.J();
+      expect(c.calls.at(-1)).toMatchObject({
+        method: "scrollTo",
+        options: {
+          [horizontal ? "left" : "top"]: horizontal ? -1501 : 1501,
+          behavior: "instant",
+        },
+      });
+      c.driver._();
+    }
+  },
+);
+
+it("rounds imperative end targets without rounding interior reading positions", async () => {
+  const c = setup({ platform: "Linux x86_64", offset: 0 });
+  c.store.W(
+    3,
+    Array.from({ length: 20 }, (_, index) => [index, index ? 100 : 100.75]),
+  );
+  for (const [target, expected] of [
+    [900.25, 900.25],
+    [1500.75, 1501],
+  ]) {
+    await c.driver.V(() => target, false);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(c.calls.at(-1).options).toEqual({
+      top: expected,
+      behavior: "instant",
+    });
+  }
+  c.driver._();
+});
+
 it("restores exact value and priority after overlapping corrections without touching the other axis", () => {
   const c = setup();
   c.style.setProperty("overflow-y", "scroll", "important");

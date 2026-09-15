@@ -5,7 +5,7 @@ settings:
   excludeLinksFromLockfile: false
 
 patchedDependencies:
-  virtua@0.51.0: 14ff685d9bc68b34d1a7c6b0042d6000e4b07a9746088fc3842c89c4a995ca9d
+  virtua@0.51.0: 8ce61fc4aaeefa37261c28b45657b9c53c03a364ea9f64fb29e974d9c44cff6a
 
 importers:
 
@@ -79,7 +79,7 @@ importers:
         version: 4.0.1
       virtua:
         specifier: 0.51.0
-        version: 0.51.0(patch_hash=14ff685d9bc68b34d1a7c6b0042d6000e4b07a9746088fc3842c89c4a995ca9d)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        version: 0.51.0(patch_hash=8ce61fc4aaeefa37261c28b45657b9c53c03a364ea9f64fb29e974d9c44cff6a)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       yaml:
         specifier: 2.8.3
         version: 2.8.3
@@ -3472,7 +3472,7 @@ snapshots:
       '@types/unist': 3.0.3
       vfile-message: 4.0.3
 
-  virtua@0.51.0(patch_hash=14ff685d9bc68b34d1a7c6b0042d6000e4b07a9746088fc3842c89c4a995ca9d)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
+  virtua@0.51.0(patch_hash=8ce61fc4aaeefa37261c28b45657b9c53c03a364ea9f64fb29e974d9c44cff6a)(react-dom@19.2.8(react@19.2.8))(react@19.2.8):
     optionalDependencies:
       react: 19.2.8
       react-dom: 19.2.8(react@19.2.8)

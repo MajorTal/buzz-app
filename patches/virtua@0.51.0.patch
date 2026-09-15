@@ -1,4 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
+index a183cc7..a892a1c 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -7,1 +7,5 @@
@@ -7,12 +8,12 @@ diff --git a/lib/index.js b/lib/index.js
 +// WebKit can restore a stale native scroll offset after an instant correction.
 +// Interrupt only the corrected axis; observer-inferred idle is not native idle.
 +const isMacWebKit = () => typeof navigator !== "undefined" && !b() && navigator.platform === "MacIntel" && navigator.vendor === "Apple Computer, Inc.";
-@@ -249,7 +253,22 @@
-         o && o();
-     } ];
- }, E = (e, t) => {
+@@ -252 +256,19 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
 -    let n, o, r = $(), i = !1;
 +    let n, o, r = $(), i = !1, restoreOverflow;
++    // Scroll APIs can truncate fractional offsets. Reach the whole edge without
++    // quantizing interior reading positions or changing RTL normalization.
++    const edgeOffset = offset => offset >= e.O() + e.t() - e.o() ? Math.ceil(offset) : offset;
 +    const interruptMomentum = () => {
 +        // Repeated corrections in one task share the original declaration.
 +        restoreOverflow && restoreOverflow();
@@ -28,28 +29,22 @@ diff --git a/lib/index.js b/lib/index.js
 +        }, timer = p(restore);
 +        restoreOverflow = restore;
 +    };
-     const s = t ? "scrollLeft" : "scrollTop", l = t ? "left" : "top", c = t ? "overflowX" : "overflowY", [f, a] = O(e, () => r[0], (e, t) => {
-         n.scrollTo({
-             [l]: T(e, i),
-@@ -266,7 +285,8 @@
-     return {
-         D(f, u = f.parentElement) {
-             h.A(n = u), t && (i = "rtl" === getComputedStyle(u).direction), o = M(e, u, t, () => T(u[s], i), (t, n, o) => {
+@@ -255 +277 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+-            [l]: T(e, i),
++            [l]: T(edgeOffset(e), i),
+@@ -269 +291,2 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
 -                if (o) {
 +                if (isMacWebKit()) interruptMomentum();
 +                else if (o) {
-                     const e = u.style, t = e[c];
-                     e[c] = "hidden", p(() => {
-                         e[c] = t;
-@@ -283,7 +303,7 @@
-             }), r[1](!0);
-         },
-         _() {
+@@ -277 +300 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+-                    [l]: T(r, i),
++                    [l]: T(edgeOffset(r), i),
+@@ -286 +309 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
 -            h.X(), o && o.X(), r[1](!1), r = $();
 +            restoreOverflow && restoreOverflow(), h.X(), o && o.X(), r[1](!1), r = $();
-         },
-         P: (e, t) => (d.set(e, t), h.A(e), () => {
-             d.delete(e), h.B(e);
-@@ -799,2 +819,1 @@
- export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
+@@ -799,2 +822 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+-export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
 -//# sourceMappingURL=index.js.map
+\ No newline at end of file
++export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
+\ No newline at end of file

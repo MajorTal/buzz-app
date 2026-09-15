@@ -292,9 +292,8 @@ function Timeline({
           handle.current.scrollToIndex(rows.length - 1, { align: "end" });
           // Appends and width changes can measure after Virtua's end-scroll.
           // Keep bottom intent through list reflow, never through a new gesture.
-          const element = scroller.current;
-          const list = element?.querySelector("ol");
-          if (element && list) {
+          const list = scroller.current?.querySelector("ol");
+          if (list) {
             // Virtua measures children in ResizeObserver and synchronously writes
             // this parent height. Observing the parent box would create skipped
             // resize notifications; watch only Virtua's committed height instead.
@@ -305,9 +304,9 @@ function Timeline({
               cancelAnimationFrame(frame);
               frame = requestAnimationFrame(() => {
                 if (intent.current === scheduledIntent && follow.current)
-                  // WebKit truncates fractional scroll offsets. Let the browser
-                  // clamp to its actual bottom so the final row is fully visible.
-                  handle.current?.scrollTo(element.scrollHeight);
+                  handle.current?.scrollToIndex(rows.length - 1, {
+                    align: "end",
+                  });
               });
             });
             observer.observe(list, {

@@ -870,6 +870,7 @@ export function createChannelStore(
     epoch++;
     hydration = undefined;
     warmCandidates.clear();
+    warmEligible.clear();
     warmPreferred = [];
     media.dispose();
     media = createMediaPreparation();
@@ -883,6 +884,9 @@ export function createChannelStore(
    * for foreground slots and is dropped wholesale when the session resets. */
   let warmPreferred: readonly string[] = [];
   const warmCandidates = new Set<string>();
+  // Eligibility outlives head-cache retention. Consuming a candidate (including
+  // failure or yielding to demand) must not requeue it on the next preview update.
+  let warmEligible = new Set<string>();
   function nextWarmId(): string | undefined {
     for (const channelId of warmPreferred)
       if (warmCandidates.has(channelId)) return channelId;
@@ -948,9 +952,16 @@ export function createChannelStore(
       if (disposed || !transport || list.status !== "ready") return;
       const starred = new Set(preferred);
       warmPreferred = preferred;
-      for (const channel of list.channels)
-        if (!channel.archived || starred.has(channel.id))
-          warmCandidates.add(channel.id);
+      const eligible = new Set(
+        list.channels
+          .filter((channel) => !channel.archived || starred.has(channel.id))
+          .map((channel) => channel.id),
+      );
+      for (const id of warmCandidates)
+        if (!eligible.has(id)) warmCandidates.delete(id);
+      for (const id of eligible)
+        if (!warmEligible.has(id)) warmCandidates.add(id);
+      warmEligible = eligible;
       void drainWarm();
     },
     ensure(channelId: string) {
@@ -1231,6 +1242,11 @@ export function createChannelStore(
     const hadHydration = hydration !== undefined;
     epoch++;
     hydration = undefined;
+    for (const id of warmEligible)
+      if (!authorized(id)) {
+        warmEligible.delete(id);
+        warmCandidates.delete(id);
+      }
     media.dispose();
     media = createMediaPreparation();
     for (const controller of controllers) controller.abort();

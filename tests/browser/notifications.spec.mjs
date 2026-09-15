@@ -173,17 +173,18 @@ test("a fully visible incoming row stays quiet without publishing read intent", 
   page,
   app,
 }) => {
-  app.histories.get("primary/beta").push(
-    finalizeEvent(
-      {
-        kind: 9,
-        content: "Following row",
-        created_at: Math.floor(Date.now() / 1000) + 20,
-        tags: [["h", "beta"]],
-      },
-      generateSecretKey(),
-    ),
+  const following = finalizeEvent(
+    {
+      kind: 9,
+      content: "Following row",
+      created_at: Math.floor(Date.now() / 1000) + 20,
+      tags: [["h", "beta"]],
+    },
+    generateSecretKey(),
   );
+  // Keep both rows wholly inside the viewport. A long virtualized history can
+  // leave its last row fractionally clipped in WebKit, which is not "viewing".
+  app.histories.set("primary/beta", [following]);
   await ready(page, app);
   await page.evaluate(
     (viewer) =>
@@ -200,9 +201,24 @@ test("a fully visible incoming row stays quiet without publishing read intent", 
     exact: true,
   });
   await settle(page);
+  await page.bringToFront();
   await history.focus();
+  // Establish the real reading lease before publishing: mounted DOM alone does
+  // not prove that the document is focused and the timeline is ready to observe.
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (id) =>
+          window.fixtureRelay.snapshot().session.unread.attention("beta", id)
+            .viewing,
+        following.id,
+      ),
+    )
+    .toBe(true);
   const row = liveMessage(app, "Visible mention");
-  await expect(history.locator(`[data-message-id="${row.id}"]`)).toBeVisible();
+  await expect(history.locator(`[data-message-id="${row.id}"]`)).toBeInViewport(
+    { ratio: 1 },
+  );
   await observed(page, row.id);
   expect(await systemCount(page)).toBe(0);
   expect(

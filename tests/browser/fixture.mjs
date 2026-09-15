@@ -158,6 +158,8 @@ export const test = base.extend({
     }
     const hiddenChannels = new Set();
     const streams = new Map();
+    // Tall histories leave room above the older-page prefetch threshold, even
+    // with the compact message type and an extra upward resize-test gesture.
     const histories = new Map();
     const historyStarted = performance.now();
     for (const community of ["primary", "secondary"])
@@ -168,7 +170,7 @@ export const test = base.extend({
             sign(
               9,
               [["h", channel]],
-              `${community} ${channel} message ${i}\n${"Mixed height message content. ".repeat((1 + (i % 7) * 3) * (tallMessages ? 3 : 1))}`,
+              `${community} ${channel} message ${i}\n${"Mixed height message content. ".repeat((1 + (i % 7) * 3) * (tallMessages ? 4 : 1))}`,
               readState ? peerKey : userKey,
               1700000100 + i,
             ),

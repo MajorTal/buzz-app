@@ -18,7 +18,7 @@ export function PanelHeader({
       <div className="panel-header-title">
         {icon}
         {typeof title === "string" ? (
-          <h2 className="text-heading text-primary">{title}</h2>
+          <h2 className="text-label text-primary">{title}</h2>
         ) : (
           title
         )}

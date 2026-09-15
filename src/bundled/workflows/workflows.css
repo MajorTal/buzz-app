@@ -1,7 +1,7 @@
 .workflows-page {
   height: 100%;
   overflow: auto;
-  padding: 24px;
+  padding: var(--space-6);
   color: var(--text-primary);
 }
 .workflows-page h1,
@@ -13,30 +13,30 @@
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-block: 16px;
+  gap: var(--space-3);
+  margin-block: var(--space-4);
 }
 .workflow-list {
   list-style: none;
   padding: 0;
-  margin: 16px 0;
+  margin: var(--space-4) 0;
 }
 .workflow-list li {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
-  padding-block: 8px;
+  gap: var(--space-4);
+  padding-block: var(--space-2);
   border-bottom: 1px solid var(--border-primary);
 }
 .workflow-detail {
   border-top: 1px solid var(--border-primary);
-  padding-block: 16px;
+  padding-block: var(--space-4);
 }
 .workflow-editor,
 .workflow-form {
   display: grid;
-  gap: 16px;
+  gap: var(--space-4);
   min-width: 0;
 }
 .workflow-form {
@@ -46,7 +46,7 @@
 }
 .workflow-field {
   display: grid;
-  gap: 8px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .workflow-name {
@@ -57,10 +57,10 @@
   width: 100%;
   box-sizing: border-box;
   color: var(--text-primary);
-  background: var(--bg-inset);
+  background: var(--neutral-2);
   border: 1px solid var(--border-primary);
-  border-radius: 8px;
-  padding: 10px 12px;
+  border-radius: var(--radius-row);
+  padding: var(--space-2) var(--space-3);
   font: inherit;
 }
 .workflow-field textarea {
@@ -74,12 +74,12 @@
   margin: 0;
   padding: 0;
   display: grid;
-  gap: 20px;
+  gap: var(--space-5);
 }
 .workflow-step {
   display: grid;
-  gap: 12px;
-  padding-block: 16px;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
   border-bottom: 1px solid var(--border-primary);
 }
 .workflow-step p {
@@ -93,12 +93,12 @@
   white-space: pre-wrap;
   max-height: 400px;
   overflow: auto;
-  background: var(--bg-inset);
-  padding: 12px;
+  background: var(--neutral-2);
+  padding: var(--space-3);
 }
 .workflow-operations {
   border-top: 1px solid var(--border-primary);
-  padding-block: 16px;
+  padding-block: var(--space-4);
 }
 .workflow-dialog-backdrop {
   position: fixed;
@@ -110,20 +110,20 @@
   inset: 50% auto auto 50%;
   transform: translate(-50%, -50%);
   width: min(480px, calc(100vw - 32px));
-  padding: 24px;
+  padding: var(--space-6);
   box-sizing: border-box;
   background: var(--bg-float);
   color: var(--text-primary);
   border: 1px solid var(--border-primary);
-  border-radius: 16px;
+  border-radius: var(--radius-control);
 }
 html[data-keyboard-navigation] .workflow-field input:focus-visible,
 html[data-keyboard-navigation] .workflow-field textarea:focus-visible {
-  outline: 2px solid var(--purple-8);
+  outline: 2px solid var(--text-primary);
   outline-offset: 2px;
 }
 @media (max-width: 640px) {
   .workflows-page {
-    padding: 16px;
+    padding: var(--space-4);
   }
 }

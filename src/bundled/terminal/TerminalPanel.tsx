@@ -92,7 +92,7 @@ function Content({
         }
         title={
           <div className={styles.identity}>
-            <h2 className="text-heading text-primary">BuzzTerm</h2>
+            <h2 className="text-label text-primary">BuzzTerm</h2>
             <span
               className="text-body-sm text-secondary"
               title={entry?.context.channelId ?? context.channelId}

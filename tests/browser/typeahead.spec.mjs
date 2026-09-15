@@ -4,6 +4,73 @@ const open = async (page) => {
   await page.goto("/tests/fixtures/mentions.html");
   return page.getByRole("textbox", { name: "Message #General" });
 };
+
+for (const mode of ["light", "dark"]) {
+  for (const kind of ["mention", "emoji"]) {
+    test(`${mode} ${kind} keyboard selection is visible against its popup`, async ({
+      page,
+    }) => {
+      const input = await open(page);
+      await page.evaluate((mode) => {
+        document.documentElement.dataset.colorMode = mode;
+      }, mode);
+      // Keep pointer hover from supplying a second highlight during keyboard use.
+      await page.mouse.move(0, 0);
+      await input.fill(kind === "mention" ? "@Ho" : ":smile");
+      const popup = page.getByRole("region", {
+        name: kind === "mention" ? "Mention suggestions" : "Emoji suggestions",
+        exact: true,
+      });
+      const options = popup.getByRole("option");
+      await expect(options.nth(1)).toBeVisible();
+      await expect(options.first()).toHaveAttribute("aria-selected", "true");
+      await input.press("ArrowDown");
+      const selected = options.nth(1);
+      await expect(selected).toHaveAttribute("aria-selected", "true");
+      await expect(options.first()).toHaveAttribute("aria-selected", "false");
+      await expect(input).toBeFocused();
+      await expect(selected).toBeInViewport({ ratio: 1 });
+      await expect(selected).toHaveCSS(
+        "background-color",
+        mode === "dark" ? "rgb(51, 51, 51)" : "rgb(232, 232, 232)",
+      );
+      const surface = await popup.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      );
+      await expect(selected).not.toHaveCSS("background-color", surface);
+      await expect(options.first()).toHaveCSS(
+        "background-color",
+        "rgba(0, 0, 0, 0)",
+      );
+      const replacement =
+        kind === "emoji"
+          ? await selected.locator("[data-native-emoji]").textContent()
+          : "@Honey ";
+      // Namesakes sort by their generated public keys, not fixture creation order.
+      const recipient =
+        kind === "mention"
+          ? await selected.locator("small").textContent()
+          : null;
+      await input.press("Tab");
+      await expect(input).toHaveJSProperty("value", replacement);
+      await expect(input).toBeFocused();
+      await expect(popup).toHaveCount(0);
+      if (kind === "mention") {
+        await input.press("Enter");
+        await expect
+          .poll(() =>
+            page.evaluate(() =>
+              window.mentionFixture.publications[0]?.tags.filter(
+                ([tag]) => tag === "p",
+              ),
+            ),
+          )
+          .toEqual([["p", recipient]]);
+      }
+    });
+  }
+}
+
 test("typeahead replaces only the query and publishes selected namesake identity, including replies", async ({
   page,
 }) => {
@@ -404,7 +471,7 @@ test("current custom catalog drives typeahead and signed tags across community r
   await expect(selectedParty).not.toHaveAttribute("aria-selected", "true");
   await expect(hoveredParty).toHaveCSS(
     "background-color",
-    "rgb(245, 245, 246)",
+    "rgb(232, 232, 232)",
   );
   const partyList = page.getByRole("listbox", {
     name: "Emoji suggestions",

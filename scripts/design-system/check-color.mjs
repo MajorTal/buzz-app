@@ -341,6 +341,10 @@ function auditLayers() {
   // What this still catches is the mistake it was written for: a role invented
   // by symmetry, restating one step, that no design asked for.
   const NAME_IS_EARNED = new Map([
+    [
+      "--border-control",
+      "An input boundary must clear 3:1 against its surface, unlike a decorative divider.",
+    ],
     ["--text-primary", "Three text levels, enforced by name."],
     ["--text-secondary", "Three text levels, enforced by name."],
     ["--text-tertiary", "Three text levels, enforced by name."],

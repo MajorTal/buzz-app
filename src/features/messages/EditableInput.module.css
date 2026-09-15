@@ -41,16 +41,16 @@
 }
 .token img {
   display: inline-block;
-  width: calc(22px * var(--buzz-text-scale, 1));
-  height: calc(22px * var(--buzz-text-scale, 1));
+  width: var(--size-emoji-inline);
+  height: var(--size-emoji-inline);
   object-fit: contain;
   vertical-align: -0.25em;
 }
 .input[data-single-emoji] {
-  font-size: calc(42px * var(--buzz-text-scale, 1));
-  line-height: calc(48px * var(--buzz-text-scale, 1));
+  font-size: var(--size-emoji-display);
+  line-height: var(--size-emoji-line);
 }
 .input[data-single-emoji] img {
-  width: calc(42px * var(--buzz-text-scale, 1));
-  height: calc(42px * var(--buzz-text-scale, 1));
+  width: var(--size-emoji-display);
+  height: var(--size-emoji-display);
 }

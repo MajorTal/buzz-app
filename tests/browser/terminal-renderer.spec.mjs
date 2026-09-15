@@ -266,7 +266,7 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     await expect(launcher).toHaveCSS("padding-left", "0px");
     await expect(launcher).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await launcher.hover();
-    await expect(launcher).toHaveCSS("background-color", "rgb(232, 232, 232)");
+    await expect(launcher).toHaveCSS("background-color", "rgb(218, 218, 218)");
     await launcher.click();
     const drawer = page.getByRole("region", { name: "Terminal drawer" });
     await expect(drawer.locator(".xterm-rows")).toContainText(
@@ -300,7 +300,7 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     const hide = button("Hide terminal");
     // Pointer focus is quiet; keyboard navigation paints the actual control.
     await button("Enlarge text").click();
-    await expect(restart).toHaveCSS("font-size", "21px");
+    await expect(restart).toHaveCSS("font-size", "24px");
     // Keep the operation pending while its disabled color finishes animating.
     // A short fixture delay can expire between Playwright's assertion samples.
     await page.evaluate(() => window.terminalPanel.holdClose());

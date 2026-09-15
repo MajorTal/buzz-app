@@ -18,7 +18,7 @@ export function AgentsPage({ relay }: { relay: RelayData }) {
   return (
     <div className="h-full min-h-0">
       <FullPageSurface aria-label="Agents">
-        <div className="h-full min-h-0 overflow-auto p-5 text-body sm:p-8">
+        <div className="h-full min-h-0 overflow-auto p-panel-inset text-body">
           <h1 className="m-0 text-title text-primary">Agents</h1>
           {connection.status === "ready" ? (
             <MyAgents
@@ -69,7 +69,7 @@ function MyAgents({ session }: { session: RelaySession }) {
   );
   const loading = snapshot.status === "loading";
   return (
-    <div className="mx-auto mt-2 max-w-6xl space-y-6">
+    <div className="mx-auto mt-2 max-w-6xl space-y-section-gap">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="m-0 text-body text-secondary">Your agents from Buzz.</p>
         <Button
@@ -198,7 +198,7 @@ function AgentCard({
       <div className="flex min-h-36 flex-1 items-center justify-center py-5">
         <Avatar alt={name} fallback={name} src={picture ?? null} size="large" />
       </div>
-      <h3 className="m-0 truncate text-body font-semibold" title={name}>
+      <h3 className="m-0 truncate text-label" title={name}>
         {name}
       </h3>
       {identities.length ? (

@@ -62,11 +62,25 @@ isolation and one invocation to preserve both engines' evidence.
 
 Compiled frontend assets are worker-scoped, split by `developmentReact` and
 `pluginFixtures`, and removed when that worker ends. They are never reused across
-invocations. Every test still gets a fresh preview server/port, ephemeral signing
-keys, signed histories, relay state and browser context/storage. Evidence records
-the worker and its build time; worker restarts rebuild rather than reuse stale assets.
+invocations. Every built-app test still gets a fresh preview server/port, ephemeral
+signing keys, signed histories, relay state and browser context/storage. Evidence records
+the worker and its build time, plus history counts and signing time; worker
+restarts rebuild rather than reuse stale assets.
 
-Results go to ignored `test-results/browser/`: each test writes `evidence.json`
+Declare `historyCounts` with `test.use` for built-app tests that do not need large
+histories, for example `{ alpha: 1, beta: 0 }`. Counts apply per community. Keep
+pagination, anchor and measurement datasets unchanged unless their behavior is
+revalidated at the new size. The legacy large default remains for unaudited cases;
+new tests should explicitly choose their data rather than inherit it accidentally.
+
+Source-only diagnostic pages can import `test` and `expect` from
+`source-fixture.mjs` and navigate to `/tests/fixtures/example.html`. That fixture
+shares a stateless Vite server and its isolated optimizer cache per worker, with
+fresh browser contexts/storage for every test. Do not use it for custom mutable
+server middleware or a different Vite configuration. The existing `vite-server.mjs`
+helper keeps independently configured servers' caches isolated.
+
+Results go to ignored `test-results/browser/`: each built-app test writes `evidence.json`
 with runtime versions, HEAD/dirty status, request ledger, runtime errors and
 measurements. Failure screenshots and traces are retained too. The next invocation
 replaces that output; copy artifacts before a rerun if you need to compare them.

@@ -35,6 +35,7 @@ export const test = base.extend({
   dmLabels: [false, { option: true }],
   tallMessages: [false, { option: true }],
   membershipActivity: [false, { option: true }],
+  historyCounts: [{ alpha: historySize, beta: 80 }, { option: true }],
   developmentReact: [false, { option: true, scope: "worker" }],
   pluginFixtures: [false, { option: true, scope: "worker" }],
   compiledApp: [buildApp, { scope: "worker" }],
@@ -55,6 +56,7 @@ export const test = base.extend({
       dmLabels,
       tallMessages,
       membershipActivity,
+      historyCounts,
       pluginFixtures,
       developmentReact,
       compiledApp,
@@ -157,22 +159,22 @@ export const test = base.extend({
     const hiddenChannels = new Set();
     const streams = new Map();
     const histories = new Map();
+    const historyStarted = performance.now();
     for (const community of ["primary", "secondary"])
       for (const channel of channels)
         histories.set(
           `${community}/${channel}`,
-          Array.from(
-            { length: channel === "alpha" ? historySize : 80 },
-            (_, i) =>
-              sign(
-                9,
-                [["h", channel]],
-                `${community} ${channel} message ${i}\n${"Mixed height message content. ".repeat((1 + (i % 7) * 3) * (tallMessages ? 3 : 1))}`,
-                readState ? peerKey : userKey,
-                1700000100 + i,
-              ),
+          Array.from({ length: historyCounts[channel] }, (_, i) =>
+            sign(
+              9,
+              [["h", channel]],
+              `${community} ${channel} message ${i}\n${"Mixed height message content. ".repeat((1 + (i % 7) * 3) * (tallMessages ? 3 : 1))}`,
+              readState ? peerKey : userKey,
+              1700000100 + i,
+            ),
           ),
         );
+    const historyDurationMs = performance.now() - historyStarted;
     for (const community of ["primary", "secondary"])
       for (const id of dmIds) histories.set(`${community}/${id}`, []);
     const targetEvents = [];
@@ -338,6 +340,7 @@ export const test = base.extend({
           worker: testInfo.workerIndex,
           durationMs: compiledApp.durationMs,
         },
+        signedHistory: { counts: historyCounts, durationMs: historyDurationMs },
         largeSidebar,
         readState,
         sidebarUnread,

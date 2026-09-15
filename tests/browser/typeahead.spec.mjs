@@ -1,27 +1,7 @@
-import { test, expect } from "@playwright/test";
-import { createServer } from "./vite-server.mjs";
-import react from "@vitejs/plugin-react";
-import { fileURLToPath } from "node:url";
+import { test, expect } from "./source-fixture.mjs";
 
-let server;
-test.beforeAll(async () => {
-  server = await createServer({
-    root: fileURLToPath(new URL("../../", import.meta.url)),
-    configFile: false,
-    envFile: false,
-    plugins: [react()],
-    logLevel: "error",
-    server: { host: "127.0.0.1", port: 0 },
-  });
-  await server.listen();
-});
-test.afterAll(async () => {
-  await server?.close();
-});
 const open = async (page) => {
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/mentions.html`,
-  );
+  await page.goto("/tests/fixtures/mentions.html");
   return page.getByRole("textbox", { name: "Message #General" });
 };
 test("typeahead replaces only the query and publishes selected namesake identity, including replies", async ({
@@ -163,9 +143,7 @@ test("completion resumes after selection collapses to the original caret", async
 test("selection recovery requires fresh results and preserves Escape dismissal", async ({
   page,
 }) => {
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/typeahead.html`,
-  );
+  await page.goto("/tests/fixtures/typeahead.html");
   const input = page.getByRole("textbox", { name: "Message #Test" });
   const requests = () =>
     page.evaluate(() => window.completionFixture.queries().length);
@@ -249,9 +227,7 @@ test("editable composer exposes its listbox popup relationship only while sugges
 test("late publications cannot cross edits, ABA, Escape, blur, plugin replacement or destinations", async ({
   page,
 }) => {
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/typeahead.html`,
-  );
+  await page.goto("/tests/fixtures/typeahead.html");
   const input = page.getByRole("textbox", { name: "Message #Test" });
   const latest = async () => {
     await expect
@@ -304,9 +280,7 @@ test("late publications cannot cross edits, ABA, Escape, blur, plugin replacemen
 test("selection follows IDs through reordering and rejected replacement never falls through to send", async ({
   page,
 }) => {
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/typeahead.html`,
-  );
+  await page.goto("/tests/fixtures/typeahead.html");
   const input = page.getByRole("textbox", { name: "Message #Test" });
   await input.fill("!order");
   await expect
@@ -365,9 +339,7 @@ test("current custom catalog drives typeahead and signed tags across community r
       body: '<svg xmlns="http://www.w3.org/2000/svg" width="42" height="42"><circle cx="21" cy="21" r="20" fill="purple"/></svg>',
     }),
   );
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/emoji.html`,
-  );
+  await page.goto("/tests/fixtures/emoji.html");
   const input = page.getByRole("textbox", { name: "Message #general" });
   await input.fill(":very-long");
   const longOption = page.getByRole("option", {
@@ -692,9 +664,7 @@ test("mention choices survive unrelated list updates but revoke removed membersh
 test("cold multi-word mention query wakes when profiles arrive without another keystroke", async ({
   page,
 }) => {
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/mentions.html?delayed-profiles`,
-  );
+  await page.goto("/tests/fixtures/mentions.html?delayed-profiles");
   const input = page.getByRole("textbox", { name: "Message #General" });
   await input.fill("@Mary J");
   await expect(page.getByRole("option", { name: /^Mary Jane / })).toHaveCount(
@@ -711,9 +681,7 @@ test("cold multi-word mention query wakes when profiles arrive without another k
 test("recovery is a keyboard-selectable action without transferring editor focus", async ({
   page,
 }) => {
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/typeahead.html`,
-  );
+  await page.goto("/tests/fixtures/typeahead.html");
   const input = page.getByRole("textbox", { name: "Message #Test" });
   for (const withChoice of [false, true]) {
     await input.fill(`!retry-${withChoice}`);
@@ -748,9 +716,7 @@ test("channel and actual ThreadPanel composers keep separate completion and draf
   page,
 }) => {
   await page.setViewportSize({ width: 1000, height: 520 });
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/messages.html`,
-  );
+  await page.goto("/tests/fixtures/messages.html");
   const main = page.getByRole("textbox", { name: "Message #one" });
   const thread = page.getByRole("textbox", { name: "Reply to thread" });
   await expect(thread).toBeVisible();
@@ -776,9 +742,7 @@ test("channel and actual ThreadPanel composers keep separate completion and draf
 test("disabled and read-only DOM state reject late publications and displayed choices", async ({
   page,
 }) => {
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/typeahead.html`,
-  );
+  await page.goto("/tests/fixtures/typeahead.html");
   const input = page.getByRole("textbox", { name: "Message #Test" });
   await input.fill("!disabled");
   const old = await page.evaluate(
@@ -851,9 +815,7 @@ test("portal bounds hold when the focused composer moves outside the viewport", 
   page,
 }) => {
   await page.setViewportSize({ width: 800, height: 300 });
-  await page.goto(
-    `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/typeahead.html`,
-  );
+  await page.goto("/tests/fixtures/typeahead.html");
   const input = page.getByRole("textbox", { name: "Message #Test" });
   await input.fill("!geometry");
   const index = await page.evaluate(

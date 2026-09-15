@@ -34,6 +34,19 @@ test("the app runtime exposes ready bundled pages and removes them on disable", 
       assert.equal(services.conversation.tools.snapshot().length, 2),
     );
     assert.equal(services.conversation.inline.snapshot().length, 1);
+    await vi.waitFor(() =>
+      assert.equal(services.conversation.links.snapshot().length, 1),
+    );
+    assert.equal(
+      services.conversation.links.snapshot()[0].pluginId,
+      "buzz.links",
+    );
+    await services.plugins.change("disable", "buzz.links");
+    assert.equal(services.conversation.links.snapshot().length, 0);
+    await services.plugins.change("enable", "buzz.links");
+    await vi.waitFor(() =>
+      assert.equal(services.conversation.links.snapshot().length, 1),
+    );
     await services.plugins.change("disable", "buzz.emoji");
     assert.deepEqual(
       services.conversation.tools.snapshot().map((tool) => tool.pluginId),

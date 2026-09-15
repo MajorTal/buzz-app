@@ -193,8 +193,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "PreviewCard",
     purpose:
       "A portal-rendered, non-modal preview of an object's already-available context.",
-    behavior: "Base UI Preview Card",
-    variants: ["default"],
+    behavior:
+      "Base UI Preview Card; optional destination anchor supports pointer and keyboard activation",
+    variants: ["default", "destination"],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Messages",

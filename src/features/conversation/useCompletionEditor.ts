@@ -1,3 +1,4 @@
+import type { ComposerInputElement } from "../messages/composer-dom";
 import {
   useLayoutEffect,
   useCallback,
@@ -10,7 +11,7 @@ import type { ComposerObservation } from "./contracts";
 
 /** One synchronous invalidation owner; stale React closures cannot revive an edit. */
 export function useCompletionEditor(
-  input: RefObject<HTMLTextAreaElement | null>,
+  input: RefObject<ComposerInputElement | null>,
   enabled: boolean,
 ) {
   const [observation, setObservation] = useState<ComposerObservation>();
@@ -19,7 +20,7 @@ export function useCompletionEditor(
   const last = useRef<ComposerObservation | undefined>(undefined);
   const composing = useRef(false);
   const keys = useRef<
-    ((event: KeyboardEvent<HTMLTextAreaElement>) => boolean) | undefined
+    ((event: KeyboardEvent<ComposerInputElement>) => boolean) | undefined
   >(undefined);
   const invalidate = useCallback(() => {
     ++revision.current;

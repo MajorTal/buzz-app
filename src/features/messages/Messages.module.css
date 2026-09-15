@@ -129,12 +129,12 @@
   font-size: calc(42px * var(--buzz-text-scale, 1));
   line-height: calc(42px * var(--buzz-text-scale, 1));
 }
-.text a {
+.text a:not([data-link-renderer]) {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;
 }
-.text a:hover {
+.text a:not([data-link-renderer]):hover {
   text-decoration: underline;
 }
 .reactions {
@@ -233,95 +233,6 @@
   position: relative;
   width: 100%;
 }
-.composerInput:has(textarea[data-custom-emoji-only]) {
-  overflow: hidden;
-}
-.composer textarea {
-  position: relative;
-  z-index: 1;
-  display: block;
-  width: 100%;
-  resize: none;
-  min-height: 3rem;
-  max-height: 12rem;
-  border: 0;
-  padding: 0;
-  font: inherit;
-  line-height: 1.5;
-  background: transparent;
-  color: inherit;
-}
-.composer textarea[data-single-emoji] {
-  height: calc(48px * var(--buzz-text-scale, 1));
-  min-height: calc(48px * var(--buzz-text-scale, 1));
-  font-size: calc(42px * var(--buzz-text-scale, 1));
-  line-height: calc(48px * var(--buzz-text-scale, 1));
-}
-.composer textarea[data-custom-emoji-only] {
-  height: calc(48px * var(--buzz-text-scale, 1));
-  min-height: calc(48px * var(--buzz-text-scale, 1));
-  color: transparent;
-  /* Collapse hidden shortcode advances without collapsing the native caret. */
-  font-family: monospace;
-  font-size: inherit;
-  letter-spacing: -1ch;
-  line-height: calc(48px * var(--buzz-text-scale, 1));
-  caret-color: var(--text);
-}
-.composer textarea[data-leading-custom-emoji] {
-  color: transparent;
-  caret-color: var(--text);
-}
-.composerCustomEmojiGroup {
-  position: absolute;
-  top: 3px;
-  left: 0;
-  right: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: calc(6px * var(--buzz-text-scale, 1))
-    calc(2px * var(--buzz-text-scale, 1));
-  pointer-events: none;
-}
-.composerCustomEmoji {
-  flex-shrink: 0;
-  width: calc(42px * var(--buzz-text-scale, 1));
-  height: calc(42px * var(--buzz-text-scale, 1));
-  object-fit: contain;
-}
-.composerCustomEmoji[data-selected] {
-  border-radius: 2px;
-  outline: 2px solid color-mix(in srgb, var(--primary) 35%, transparent);
-  opacity: 0.65;
-}
-.composerCustomEmojiMirror {
-  position: absolute;
-  z-index: 0;
-  inset: 0;
-  overflow: auto;
-  scrollbar-width: none;
-  white-space: pre-wrap;
-  overflow-wrap: break-word;
-  color: var(--text);
-  font: inherit;
-  line-height: 1.5;
-  pointer-events: none;
-}
-.composerInlineCustomEmojiGroup {
-  display: inline-flex;
-  gap: calc(2px * var(--buzz-text-scale, 1));
-  vertical-align: middle;
-}
-.composerInlineCustomEmojiGroup .composerCustomEmoji {
-  width: calc(22px * var(--buzz-text-scale, 1));
-  height: calc(22px * var(--buzz-text-scale, 1));
-}
-.composerCustomEmojiPrefixMeasure {
-  position: absolute;
-  visibility: hidden;
-  white-space: pre;
-  font: inherit;
-}
 .composerActions {
   position: relative;
   display: flex;
@@ -356,12 +267,6 @@
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 6px 14px;
-}
-.composer textarea::placeholder {
-  color: var(--text-muted);
-}
-.composer textarea:focus-visible {
-  outline: none;
 }
 .composer:focus-within {
   border-color: var(--focus);
@@ -640,13 +545,13 @@
   vertical-align: middle;
   accent-color: var(--primary);
 }
-.text a {
+.text a:not([data-link-renderer]) {
   color: var(--link);
   text-decoration: underline;
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
 }
-.text a:hover {
+.text a:not([data-link-renderer]):hover {
   text-decoration-thickness: 2px;
 }
 .imageAlt {

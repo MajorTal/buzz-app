@@ -11,6 +11,7 @@ import type {
   ComposerTool,
   ComposerCompletion,
   InlineRenderer,
+  LinkRenderer,
   ContributionReader,
 } from "./contracts";
 
@@ -21,6 +22,8 @@ export type Conversation = {
   registerCompletion(provider: ComposerCompletion): void;
   inline: ContributionReader<InlineRenderer>;
   registerInline(renderer: InlineRenderer): void;
+  links: ContributionReader<LinkRenderer>;
+  registerLink(renderer: LinkRenderer): void;
   ui: {
     Composer: (props: Omit<MessageComposerProps, "extensions">) => ReactNode;
     Message: (props: Omit<MessageRowProps, "extensions">) => ReactNode;
@@ -31,7 +34,9 @@ declare module "@deepseek-ai/cordis" {
     conversation: Conversation;
   }
 }
-function validate(value: ComposerTool | InlineRenderer | ComposerCompletion) {
+function validate(
+  value: ComposerTool | InlineRenderer | ComposerCompletion | LinkRenderer,
+) {
   if (
     !value ||
     !/^[a-z0-9][a-z0-9._-]*$/.test(value.id) ||
@@ -50,6 +55,8 @@ export class ConversationService extends Service implements Conversation {
   readonly inline;
   private readonly toolEntries;
   private readonly inlineEntries;
+  readonly links;
+  private readonly linkEntries;
   constructor(ctx: Context) {
     super(ctx, "conversation");
     const tools = createContributions<ComposerTool>(ctx);
@@ -64,6 +71,9 @@ export class ConversationService extends Service implements Conversation {
     this.inlineEntries = inline;
     this.tools = { snapshot: tools.snapshot, subscribe: tools.subscribe };
     this.inline = { snapshot: inline.snapshot, subscribe: inline.subscribe };
+    const links = createContributions<LinkRenderer>(ctx);
+    this.linkEntries = links;
+    this.links = { snapshot: links.snapshot, subscribe: links.subscribe };
   }
   registerTool(value: ComposerTool) {
     validate(value);
@@ -80,6 +90,14 @@ export class ConversationService extends Service implements Conversation {
     if (typeof value.matches !== "function")
       throw new Error("An inline renderer needs a matcher");
     this.inlineEntries.register(this.ctx, value);
+  }
+  registerLink(value: LinkRenderer) {
+    validate(value);
+    if (typeof value.matches !== "function")
+      throw new Error("A link renderer needs a matcher");
+    if (value.className !== undefined && typeof value.className !== "string")
+      throw new Error("A link renderer class must be a string");
+    this.linkEntries.register(this.ctx, value);
   }
   readonly ui = {
     Composer: (props: Omit<MessageComposerProps, "extensions">) => (

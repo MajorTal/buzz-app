@@ -35,6 +35,16 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
   app.relay.holdProfiles(app.participants);
   app.relay.holdEose("alpha");
   app.relay.holdEose("beta");
+  // Establish a cold target deterministically: let the actual label read own
+  // the background slot before preferences release the roster warmer. Hold the
+  // host decoder, not a reader slot; demand and all production owners stay real.
+  const preferences = Promise.withResolvers();
+  let preferencesPending = false;
+  await page.route("**/sidebar-preferences", async (route) => {
+    preferencesPending = true;
+    await preferences.promise;
+    await route.fallback();
+  });
   // A visible pre-establishment head is not a warm, verified cache. A signed
   // missed message proves the catch-up reached the UI, not merely the broker.
   const establish = async (channel) => {
@@ -56,6 +66,14 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
     await establish("alpha");
     await expect.poll(() => labelReads().length).toBe(1);
     expect(labelReads()[0].filter.authors).toHaveLength(500);
+    expect(app.report.profileHolds.some((held) => held.pending)).toBe(true);
+    await expect.poll(() => preferencesPending).toBe(true);
+    const decoded = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/sidebar-preferences") && response.ok(),
+    );
+    preferences.resolve();
+    await decoded;
     // The actual label hook has >1,000 missing participants. Keep its profile
     // response held through cold opening; do not bypass that production caller.
     expect(heads(app, "beta")).toHaveLength(0);
@@ -98,7 +116,7 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
               );
               const check = () => {
                 const composer = document.querySelector(
-                  `textarea[placeholder="Message #${name}"]`,
+                  `[role="textbox"][aria-label="Message #${name}"]`,
                 );
                 const history = document.querySelector(
                   '[aria-label="Channel message history"]',
@@ -158,9 +176,11 @@ test("cold opening bypasses held DM labels; warm switching paints within 100ms w
     expect(app.report.profileHolds.some((held) => held.pending)).toBe(true);
     expect(app.report.profileHolds.some((held) => held.aborted)).toBe(false);
   } finally {
+    preferences.resolve();
     app.relay.releaseEose("alpha");
     app.relay.releaseEose("beta");
     app.relay.releaseProfiles();
+    await page.unrouteAll({ behavior: "wait" });
   }
 });
 

@@ -1,6 +1,10 @@
 import { useChannelPanels } from "./useChannelPanels";
 import type { PageNavigation } from "../../features/navigation/service";
 import type { Navigation } from "../../features/navigation/controller";
+import {
+  buzzLinkTarget,
+  isBuzzLink,
+} from "../../features/navigation/buzz-links";
 import { UnreadBadge, UnreadOptions } from "./UnreadBadge";
 import { SidebarUnread } from "./SidebarUnread";
 import type { ConversationExtensions } from "../../features/conversation/contracts";
@@ -379,6 +383,23 @@ function ChannelWorkspace({
   }, [currentId, showingThread?.navigation]);
   const openLink = useCallback(
     (url: string) => {
+      if (isBuzzLink(url)) {
+        if (!navigator || !viewer) return false;
+        const target = buzzLinkTarget(url, {
+          viewer,
+          communityOrigin: scope.slice(0, -(viewer.length + 1)),
+        });
+        if (!target) return false;
+        if (target.kind === "conversation" && target.messageId)
+          threadTrigger.current =
+            document.activeElement instanceof HTMLElement
+              ? document.activeElement
+              : null;
+        setThread(undefined);
+        open(undefined);
+        void navigator.open(target);
+        return true;
+      }
       const candidate = panels.resolve(url);
       const context = linkContext.current;
       if (context.channelId && candidate) {
@@ -397,7 +418,7 @@ function ChannelWorkspace({
       }
       return false;
     },
-    [panels, open, select],
+    [panels, open, select, navigator, viewer, scope],
   );
   const panelActive = () => {
     const connection = relay.snapshot();

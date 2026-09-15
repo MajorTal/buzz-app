@@ -23,6 +23,7 @@ export type {
   InlineContent,
   InlineRange,
   InlineRenderer,
+  LinkRenderer,
 } from "../features/conversation/contracts";
 export type { RelayData, RelaySnapshot } from "../features/relay/service";
 

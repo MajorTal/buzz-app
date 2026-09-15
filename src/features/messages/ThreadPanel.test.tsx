@@ -525,6 +525,15 @@ it("uses the resolved root with the shared composer and reveals an own send even
     channelName: "General",
     threadRootId: "resolved-root",
   });
+  const rootRow = elements(h.tree()).find(
+    (element) =>
+      element.type === MessageRow &&
+      (element.props.row as ChannelMessage).id === "resolved-root",
+  );
+  expect(rootRow?.props).toMatchObject({
+    session: h.session,
+    scope: "scope",
+  });
   expect(elements(h.tree()).some((e) => e.type === "footer")).toBe(false);
   h.scroll(500);
   if (!composer) throw new Error("Missing composer");
@@ -539,7 +548,11 @@ it("uses the resolved root with the shared composer and reveals an own send even
       e.type === MessageRow &&
       (e.props.row as ChannelMessage).id === "own-reply",
   );
-  expect(reply?.props.retry).toBe(h.session.messages.retry);
+  expect(reply?.props).toMatchObject({
+    session: h.session,
+    scope: "scope",
+    retry: h.session.messages.retry,
+  });
   h.snapshot.root = undefined;
   h.render();
   expect(elements(h.tree()).some((e) => e.type === MessageComposer)).toBe(

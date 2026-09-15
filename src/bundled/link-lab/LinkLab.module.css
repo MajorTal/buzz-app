@@ -1,0 +1,51 @@
+.page {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 48px 24px;
+  font-family: var(--font-sans);
+  color: var(--text-primary);
+}
+
+.page h1 {
+  margin: 0 0 12px;
+}
+
+.intro,
+.status {
+  color: var(--text-secondary);
+}
+
+.samples {
+  margin-block: 40px;
+  display: grid;
+  gap: 32px;
+}
+
+.samples p {
+  margin: 8px 0 0;
+  font-size: var(--text-body-lg);
+  line-height: 1.8;
+}
+
+.label {
+  font-size: var(--text-body-sm);
+  color: var(--text-secondary);
+}
+
+.services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 18px;
+  margin-top: 12px;
+}
+
+.page input {
+  width: 100%;
+  margin: 10px 0;
+  padding: 10px 12px;
+  border: 1px solid var(--border-primary);
+  border-radius: 6px;
+  background: var(--bg-panel);
+  color: inherit;
+  font: inherit;
+}

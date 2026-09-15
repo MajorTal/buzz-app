@@ -485,10 +485,10 @@ function Timeline({
               />
             ) : (
               <MessageRow
-                key={row.id}
-                row={row}
                 session={queries}
                 scope={scope}
+                key={row.id}
+                row={row}
                 unread={queries.unread}
                 extensions={extensions}
                 profile={profiles.get(row.authorId)}

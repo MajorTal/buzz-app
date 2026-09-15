@@ -64,7 +64,7 @@ test("editing selected name plus pasting same name cannot transfer notification 
       await page
         .getByRole("button", { name: `Honey ${first}`, exact: true })
         .click();
-      await expect(input).toHaveValue("@Honey ");
+      await expect(input).toHaveJSProperty("value", "@Honey ");
       // The picker restores focus/caret on the next animation frame. Let that
       // finish before establishing the selection this edit is meant to replace.
       await page.evaluate(() => new Promise(requestAnimationFrame));
@@ -74,7 +74,8 @@ test("editing selected name plus pasting same name cannot transfer notification 
         scenario,
       );
       await page.keyboard.insertText(scenario.inserted);
-      await expect(input).toHaveValue(
+      await expect(input).toHaveJSProperty(
+        "value",
         scenario.expected + (scenario.expected.endsWith("help") ? "" : " "),
       );
       await page

@@ -1,3 +1,4 @@
+import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { memo } from "react";
 import type { Profile } from "../relay/contracts";
 import { membershipDescription, type TimelineRow } from "./membership-rows";
@@ -45,23 +46,12 @@ export const MembershipRow = memo(function MembershipRow({
               : undefined;
             return (
               <span className={styles.membershipAvatar} key={id}>
-                {name.slice(0, 2).toUpperCase()}
-                {picture && (
-                  <img
-                    key={picture}
-                    src={picture}
-                    alt=""
-                    loading="lazy"
-                    onError={(event) => {
-                      event.currentTarget.hidden = true;
-                    }}
-                  />
-                )}
+                <Avatar src={picture} alt="" fallback={name} size="small" />
               </span>
             );
           })}
           {targets.length > 3 && (
-            <span className={styles.membershipAvatar}>
+            <span className={styles.membershipAvatarCount}>
               +{targets.length - 3}
             </span>
           )}

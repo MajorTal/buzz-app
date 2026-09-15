@@ -1,3 +1,5 @@
+import { Avatar } from "../../shared/design-system/ui/Avatar";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { memo, useCallback, useSyncExternalStore } from "react";
 import type { RelaySession } from "../relay/session";
 import type { UnreadCapability } from "../relay/unread";
@@ -79,7 +81,6 @@ export const MessageRow = memo(function MessageRow({
     : undefined;
   const target = profileTarget(row.authorId);
   const clickable = target && canOpenLink?.(target);
-  const AvatarTag = clickable ? "button" : "div";
   const emojiOnly = usesLargeEmojiPresentation(row.content, row.emoji);
   const canReact = !!(
     extensions &&
@@ -103,25 +104,20 @@ export const MessageRow = memo(function MessageRow({
         </div>
       )}
       <div className={styles.message}>
-        <AvatarTag
-          className={styles.avatar}
-          {...(clickable
-            ? {
-                type: "button" as const,
-                "aria-label": `View ${name} profile`,
-                onClick: (event: import("react").MouseEvent<HTMLElement>) => {
-                  event.currentTarget.focus();
-                  onOpenLink(target);
-                },
-              }
-            : {})}
-        >
-          {picture ? (
-            <img src={picture} alt="" loading="lazy" />
-          ) : (
-            name.slice(0, 2).toUpperCase()
-          )}
-        </AvatarTag>
+        {clickable ? (
+          <IconButton
+            size="large"
+            shape="round"
+            aria-label={`View ${name} profile`}
+            onClick={(event) => {
+              event.currentTarget.focus();
+              onOpenLink(target);
+            }}
+            icon={<Avatar src={picture} alt="" fallback={name} size="fill" />}
+          />
+        ) : (
+          <Avatar src={picture} alt="" fallback={name} size="large" />
+        )}
         <div className={styles.messageBody}>
           <div className={styles.byline}>
             <strong>{name}</strong>
@@ -226,23 +222,17 @@ export const MessageRow = memo(function MessageRow({
                         className={styles.threadAvatar}
                         title={name}
                       >
-                        {name.slice(0, 2).toUpperCase()}
-                        {picture && (
-                          <img
-                            key={picture}
-                            src={picture}
-                            alt=""
-                            loading="lazy"
-                            onError={(event) => {
-                              event.currentTarget.hidden = true;
-                            }}
-                          />
-                        )}
+                        <Avatar
+                          src={picture}
+                          alt=""
+                          fallback={name}
+                          size="small"
+                        />
                       </span>
                     );
                   })}
                   {row.participants.length > 3 && (
-                    <span className={styles.threadAvatar}>
+                    <span className={styles.threadAvatarCount}>
                       +{row.participants.length - 3}
                     </span>
                   )}

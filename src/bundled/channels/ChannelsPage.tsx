@@ -20,13 +20,13 @@ import {
   type ReactNode,
 } from "react";
 import {
-  Hash,
-  Search,
-  MoreHorizontal,
-  PlugZap,
-  MessageCircle,
-  Users,
-} from "lucide-react";
+  IconHash as Hash,
+  IconSearch as Search,
+  IconDots as MoreHorizontal,
+  IconPlugConnected as PlugZap,
+  IconMessageCircle as MessageCircle,
+  IconUsers as Users,
+} from "@tabler/icons-react";
 import type { RelayData } from "../../features/relay/service";
 import type { RelaySession } from "../../features/relay/session";
 import {

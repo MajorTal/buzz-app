@@ -6,7 +6,11 @@ import {
   useState,
   useSyncExternalStore,
 } from "react";
-import { Search, Smile, SmilePlus } from "lucide-react";
+import {
+  IconSearch as Search,
+  IconMoodSmile as Smile,
+  IconMoodPlus as SmilePlus,
+} from "@tabler/icons-react";
 import { Popover } from "@base-ui/react/popover";
 import type { RelaySession } from "../../features/relay/session";
 import {

@@ -1,3 +1,4 @@
+import { Button } from "../shared/design-system/ui/Button";
 import { useEffect, useState } from "react";
 import type { RelayData } from "../features/relay/service";
 
@@ -97,13 +98,13 @@ export function DeveloperSettings({ relay }: { relay: RelayData }) {
             Clears cached channels, messages, and media. Account, relay, and
             sidebar settings are kept.
           </p>
-          <button
+          <Button
             type="button"
             disabled={clearing}
             onClick={() => void clearCache()}
           >
             {clearing ? "Clearing…" : "Clear cache"}
-          </button>
+          </Button>
           {status && (
             <p role="status" className="m-0 text-body-sm text-muted">
               {status}

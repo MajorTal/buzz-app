@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { CircleX } from "lucide-react";
+import { IconCircleX as CircleX } from "@tabler/icons-react";
 import { fetchKlipyGifs, type KlipyGif } from "../../features/relay/gifs";
 import styles from "./Emoji.module.css";
 

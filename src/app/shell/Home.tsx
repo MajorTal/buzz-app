@@ -1,4 +1,7 @@
-import { ArrowUpRight, Settings2 } from "lucide-react";
+import {
+  IconArrowUpRight as ArrowUpRight,
+  IconAdjustments as Settings2,
+} from "@tabler/icons-react";
 import type { RegisteredPage } from "../../features/pages/service";
 import { orderPages, pagePresentation } from "./presentation";
 

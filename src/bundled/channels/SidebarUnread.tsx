@@ -1,4 +1,7 @@
-import { ArrowDown, ArrowUp } from "lucide-react";
+import {
+  IconArrowDown as ArrowDown,
+  IconArrowUp as ArrowUp,
+} from "@tabler/icons-react";
 import {
   useEffect,
   useRef,

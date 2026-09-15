@@ -1,7 +1,15 @@
+import { Button } from "../shared/design-system/ui/Button";
+import { Switch } from "../shared/design-system/ui/Switch";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { RecoveryScreen } from "./RecoveryScreen";
 import styles from "./Settings.module.css";
-import { Blocks, UserRound, Palette, Bell, Wrench } from "lucide-react";
+import {
+  IconBlocks as Blocks,
+  IconUser as UserRound,
+  IconPalette as Palette,
+  IconBell as Bell,
+  IconTool as Wrench,
+} from "@tabler/icons-react";
 import type { PluginManager } from "../plugins/manager";
 import type { Communities } from "../features/communities/service";
 import { PluginImport } from "./PluginImport";
@@ -91,7 +99,7 @@ export function Settings({
                   else setSelected(id);
                 }}
               >
-                <Icon aria-hidden="true" size={18} strokeWidth={1.6} />
+                <Icon aria-hidden="true" size={18} stroke={1.6} />
                 {label}
               </button>
             ))}
@@ -152,9 +160,9 @@ export function Settings({
                         settings before trying again.
                       </p>
                       <p>{error}</p>
-                      <button type="button" onClick={plugins.dismissError}>
+                      <Button type="button" onClick={plugins.dismissError}>
                         Dismiss
-                      </button>
+                      </Button>
                     </div>
                   )}
                 </div>
@@ -174,11 +182,7 @@ export function Settings({
                       >
                         <div className="flex min-w-0 flex-1 items-center gap-3">
                           <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-soft text-muted">
-                            <Blocks
-                              aria-hidden="true"
-                              size={17}
-                              strokeWidth={1.6}
-                            />
+                            <Blocks aria-hidden="true" size={17} stroke={1.6} />
                           </span>
                           <div className="min-w-0">
                             <h3 className="m-0 text-label font-medium">
@@ -192,34 +196,28 @@ export function Settings({
                           </div>
                         </div>
                         <div className="actions items-center">
-                          <button
-                            type="button"
-                            role="switch"
-                            aria-checked={plugin.enabled}
+                          <Switch
                             aria-label={`Enable ${plugin.manifest.name}`}
-                            className="group flex h-7 w-12 shrink-0 items-center rounded-full border-0 bg-toggle-track p-1 transition-colors motion-reduce:transition-none aria-checked:bg-primary"
+                            checked={plugin.enabled}
+                            readOnly={busy}
                             aria-disabled={busy}
-                            onClick={(event) => {
+                            onClick={(event) => event.currentTarget.focus()}
+                            onCheckedChange={() => {
                               if (busy) return;
-                              // Keep keyboard focus through the manager's busy transition,
-                              // including when disabling a plugin removes its open card.
-                              event.currentTarget.focus();
                               void plugins.change(
                                 plugin.enabled ? "disable" : "enable",
                                 id,
                               );
                             }}
-                          >
-                            <span className="size-5 rounded-full bg-toggle-thumb shadow-sm transition-transform motion-reduce:transition-none group-aria-checked:translate-x-5" />
-                          </button>
+                          />
                           {plugin.previous && (
-                            <button
+                            <Button
                               type="button"
                               disabled={busy}
                               onClick={() => plugins.change("rollback", id)}
                             >
                               Roll back
-                            </button>
+                            </Button>
                           )}
                           {plugin.source === "external" && (
                             <button

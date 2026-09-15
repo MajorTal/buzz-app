@@ -1,3 +1,4 @@
+import { Button } from "../shared/design-system/ui/Button";
 import { useState, useSyncExternalStore } from "react";
 import type {
   Communities,
@@ -68,14 +69,14 @@ export function ProfileSettings({ communities }: { communities: Communities }) {
               </p>
             )}
             <div className="mt-6 flex flex-wrap items-center gap-3">
-              <button
+              <Button
                 type="submit"
                 disabled={!canSaveProfile(profile)}
-                className="border-ink bg-primary text-on-primary hover:bg-primary-hover"
+                variant="primary"
               >
                 Save profile
-              </button>
-              <button
+              </Button>
+              <Button
                 type="button"
                 onClick={() => {
                   setDraft(null);
@@ -84,7 +85,7 @@ export function ProfileSettings({ communities }: { communities: Communities }) {
                 }}
               >
                 Cancel
-              </button>
+              </Button>
               <p role="status" className="m-0 text-body-sm text-muted">
                 {saved ? "Profile updated." : ""}
               </p>

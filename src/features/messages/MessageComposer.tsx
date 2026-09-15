@@ -1,5 +1,5 @@
 import { TypingIndicator } from "./TypingIndicator";
-import { ArrowUp, X } from "lucide-react";
+import { IconArrowUp as ArrowUp, IconX as X } from "@tabler/icons-react";
 import {
   useEffect,
   useId,

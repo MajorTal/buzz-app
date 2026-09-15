@@ -1,7 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { ComposerCompletionProps } from "../../features/conversation/contracts";
 import type { RelaySession } from "../../features/relay/session";
-import { Avatar } from "../../shared/Avatar";
+import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { matchesMentionQuery } from "./mention-query";
 
 // Demand bookkeeping only, not another profile cache. Missing names do not issue
@@ -79,12 +79,13 @@ export function MentionCompletion({
         detail: recipient.pubkey,
         preview: (
           <Avatar
-            name={recipient.name}
+            alt=""
+            fallback={recipient.name}
             src={session.media(
               profiles.get(recipient.pubkey)?.picture ?? "",
               "small",
             )}
-            className="size-7 rounded-lg text-caption"
+            size="small"
           />
         ),
         edit: { mention: recipient },

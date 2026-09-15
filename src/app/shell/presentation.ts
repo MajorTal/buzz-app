@@ -1,4 +1,9 @@
-import { AppWindow, House, MessagesSquare, Settings2 } from "lucide-react";
+import {
+  IconAppWindow as AppWindow,
+  IconHome as House,
+  IconMessages as MessagesSquare,
+  IconAdjustments as Settings2,
+} from "@tabler/icons-react";
 import type { RegisteredPage } from "../../features/pages/service";
 
 // Shell-owned presentation keeps plugin content independent of navigation chrome.

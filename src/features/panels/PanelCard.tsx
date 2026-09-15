@@ -1,6 +1,6 @@
 import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { X } from "lucide-react";
+import { IconX as X } from "@tabler/icons-react";
 import type { PanelProps, RegisteredPanel } from "./service";
 import { PanelView } from "./PanelView";
 import styles from "./Panels.module.css";

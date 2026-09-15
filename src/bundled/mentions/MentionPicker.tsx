@@ -1,5 +1,5 @@
-import { Avatar } from "../../shared/Avatar";
-import { AtSign } from "lucide-react";
+import { Avatar } from "../../shared/design-system/ui/Avatar";
+import { IconAt as AtSign } from "@tabler/icons-react";
 import {
   useEffect,
   useId,
@@ -135,12 +135,13 @@ export function MentionPicker({
                 }}
               >
                 <Avatar
-                  name={recipient.name}
+                  alt=""
+                  fallback={recipient.name}
                   src={session.media(
                     profiles.get(recipient.pubkey)?.picture ?? "",
                     "small",
                   )}
-                  className="size-8 rounded-lg text-caption"
+                  size="default"
                 />
                 <span className={styles.mentionLabel}>
                   <span>{recipient.name}</span>

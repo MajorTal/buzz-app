@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  ExternalLink,
-  GitPullRequest,
-  CircleDot,
-  GitCommitHorizontal,
-  FolderGit2,
-} from "lucide-react";
+  IconExternalLink as ExternalLink,
+  IconGitPullRequest as GitPullRequest,
+  IconCircleDot as CircleDot,
+  IconGitCommit as GitCommitHorizontal,
+  IconFolderCode as FolderGit2,
+} from "@tabler/icons-react";
 import type { PluginModule } from "../../plugins/api";
 import type { PanelProps } from "../../features/panels/service";
 import { parseGitHubReference, type GitHubReference } from "./references";

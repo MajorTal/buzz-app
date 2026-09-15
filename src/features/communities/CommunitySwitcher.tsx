@@ -1,5 +1,10 @@
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { ChevronDown, Globe2, Plus, X } from "lucide-react";
+import {
+  IconChevronDown as ChevronDown,
+  IconWorld as Globe2,
+  IconPlus as Plus,
+  IconX as X,
+} from "@tabler/icons-react";
 import { CommunityDialog } from "./CommunityDialog";
 import type { Communities } from "./service";
 import styles from "./Communities.module.css";

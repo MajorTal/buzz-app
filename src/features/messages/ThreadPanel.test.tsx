@@ -1,3 +1,4 @@
+import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { useReading } from "./use-reading";
@@ -672,20 +673,14 @@ it("shows bounded participant avatars on the real reply control, through the med
     onOpenThread: () => {},
   });
   const control = button(tree, "View thread: 2 replies");
-  const images = elements(control).filter((e) => e.type === "img");
-  expect(images).toHaveLength(1);
-  expect(images[0]?.props).toMatchObject({
-    src: "https://proxy/avatar",
-    alt: "",
-    loading: "lazy",
-  });
-  const image = { hidden: false };
-  const avatar = images[0];
-  if (!avatar) throw new Error("Missing avatar");
-  (avatar.props.onError as (event: unknown) => void)({
-    currentTarget: image,
-  });
-  expect(image.hidden).toBe(true);
+  const avatars = elements(control).filter((e) => e.type === Avatar);
+  expect(avatars.map((avatar) => avatar.props)).toEqual([
+    { src: "https://proxy/avatar", alt: "", fallback: "Alice", size: "small" },
+    { src: undefined, alt: "", fallback: "Brain", size: "small" },
+    { src: undefined, alt: "", fallback: "p3", size: "small" },
+  ]);
+  expect(media).toHaveBeenCalledWith("https://safe/avatar", "small");
+  expect(media).toHaveBeenCalledWith("http://unsafe", "small");
   expect(
     elements(control)
       .filter((e) => e.props.title)

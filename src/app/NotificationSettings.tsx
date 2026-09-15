@@ -1,3 +1,5 @@
+import { Switch } from "../shared/design-system/ui/Switch";
+import { Button } from "../shared/design-system/ui/Button";
 import { useSyncExternalStore } from "react";
 import type { NotificationsService } from "../features/notifications/service";
 
@@ -21,10 +23,12 @@ export function NotificationSettings({
           Choices are saved for this account on this device. System permission
           is separate.
         </p>
-        <Toggle
+        <Switch
           label="Desktop alerts"
           checked={preferences.enabled}
-          onChange={(enabled) => notifications.updatePreferences({ enabled })}
+          onCheckedChange={(enabled) =>
+            notifications.updatePreferences({ enabled })
+          }
         />
         <p role="status" className="text-body-sm text-muted">
           {state.requesting
@@ -42,27 +46,27 @@ export function NotificationSettings({
         {!state.systemManaged && (
           <div className="flex gap-2">
             {permission === "default" && (
-              <button
+              <Button
                 type="button"
                 disabled={state.requesting}
                 onClick={() => void notifications.requestPermission()}
               >
                 Allow notifications
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               type="button"
               disabled={state.requesting}
               onClick={() => void notifications.refreshPermission()}
             >
               Check permission
-            </button>
+            </Button>
           </div>
         )}
-        <Toggle
+        <Switch
           label="Notify while viewing"
           checked={preferences.notifyWhileViewing}
-          onChange={(notifyWhileViewing) =>
+          onCheckedChange={(notifyWhileViewing) =>
             notifications.updatePreferences({ notifyWhileViewing })
           }
         />
@@ -74,10 +78,12 @@ export function NotificationSettings({
           </p>
         ) : (
           <>
-            <Toggle
+            <Switch
               label="Sound"
               checked={preferences.sound}
-              onChange={(sound) => notifications.updatePreferences({ sound })}
+              onCheckedChange={(sound) =>
+                notifications.updatePreferences({ sound })
+              }
             />
             <p className="text-body-sm text-muted">
               Sound uses the system default where supported. Turning it off
@@ -88,11 +94,11 @@ export function NotificationSettings({
         <fieldset className="m-0 space-y-3 border-0 p-0">
           <legend className="mb-3 font-medium">Notify me about</legend>
           {state.categories.map(({ key, label }) => (
-            <Toggle
+            <Switch
               key={key}
               label={label}
               checked={preferences.categories[key] !== false}
-              onChange={(enabled) =>
+              onCheckedChange={(enabled) =>
                 notifications.updatePreferences({
                   categories: { ...preferences.categories, [key]: enabled },
                 })
@@ -107,18 +113,18 @@ export function NotificationSettings({
         {state.preferencesError && (
           <div role="alert" className="notice">
             <p>{state.preferencesError}</p>
-            <button
+            <Button
               type="button"
               onClick={() => notifications.updatePreferences({})}
             >
               Retry saving choices
-            </button>{" "}
-            <button
+            </Button>{" "}
+            <Button
               type="button"
               onClick={() => notifications.reloadPreferences()}
             >
               Reload saved choices
-            </button>
+            </Button>
           </div>
         )}
         {state.error && (
@@ -128,27 +134,5 @@ export function NotificationSettings({
         )}
       </div>
     </section>
-  );
-}
-function Toggle({
-  label,
-  checked,
-  onChange,
-}: {
-  label: string;
-  checked: boolean;
-  onChange(checked: boolean): void;
-}) {
-  return (
-    <label className="flex items-center justify-between gap-3">
-      <span>{label}</span>
-      <input
-        type="checkbox"
-        role="switch"
-        checked={checked}
-        aria-checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
-      />
-    </label>
   );
 }

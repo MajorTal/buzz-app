@@ -1,5 +1,9 @@
+import { Button } from "../shared/design-system/ui/Button";
 import { useEffect, useRef, useState } from "react";
-import { FolderOpen, GitBranch } from "lucide-react";
+import {
+  IconFolderOpen as FolderOpen,
+  IconGitBranch as GitBranch,
+} from "@tabler/icons-react";
 import type { PluginManager } from "../plugins/manager";
 import type { Catalog, ImportPreview } from "../plugins/types";
 
@@ -82,23 +86,21 @@ export function PluginImport({
   return (
     <div className="mb-4">
       <div className="flex flex-wrap gap-2">
-        <button
+        <Button
           type="button"
           disabled={busy || loading}
-          className="flex items-center gap-2"
           onClick={() => void load(imports.folder)}
         >
           <FolderOpen aria-hidden="true" size={17} /> Load from folder
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           disabled={busy || loading}
           aria-expanded={gitForm}
-          className="flex items-center gap-2"
           onClick={() => setGitForm(!gitForm)}
         >
           <GitBranch aria-hidden="true" size={17} /> Load from Git
-        </button>
+        </Button>
       </div>
       {gitForm && (
         <form
@@ -133,13 +135,14 @@ export function PluginImport({
             agent and known hosts. Password prompts and credential helpers are
             not used.
           </p>
-          <button
-            type="submit"
-            className="justify-self-start"
-            disabled={busy || loading || !repository.trim()}
-          >
-            Find plugins
-          </button>
+          <div className="justify-self-start">
+            <Button
+              type="submit"
+              disabled={busy || loading || !repository.trim()}
+            >
+              Find plugins
+            </Button>
+          </div>
         </form>
       )}
       <p className="mb-0 text-caption text-muted">
@@ -229,7 +232,7 @@ export function PluginImport({
           )}
           <div className="flex flex-wrap gap-2">
             {candidate && (
-              <button
+              <Button
                 type="button"
                 disabled={busy || loading}
                 onClick={async () => {
@@ -245,15 +248,15 @@ export function PluginImport({
                 }}
               >
                 {existing ? "Update plugin" : "Install plugin"}
-              </button>
+              </Button>
             )}
-            <button
+            <Button
               type="button"
               disabled={busy || loading}
               onClick={() => void dismiss()}
             >
               Close preview
-            </button>
+            </Button>
           </div>
         </section>
       )}

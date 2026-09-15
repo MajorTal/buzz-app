@@ -37,19 +37,20 @@ export function Avatar({
   fallback,
   size = "default",
 }: {
-  src?: string | null;
+  src?: string | null | undefined;
   alt: string;
   fallback: string;
   size?: AvatarSize;
 }) {
-  const initial = fallback.slice(0, 1).toUpperCase();
+  const initial = Array.from(fallback.trim())[0]?.toUpperCase() || "?";
   return (
     <BaseAvatar.Root
       data-buzz-ui=""
       className="buzz-avatar"
       data-size={size}
-      role="img"
-      aria-label={alt}
+      role={alt ? "img" : undefined}
+      aria-label={alt || undefined}
+      aria-hidden={!alt || undefined}
     >
       {src ? (
         <AvatarArtwork key={src} src={src} fallback={initial} />

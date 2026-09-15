@@ -1,5 +1,6 @@
+import { Button } from "../shared/design-system/ui/Button";
 import { useSyncExternalStore } from "react";
-import { Moon, Sun } from "lucide-react";
+import { IconMoon as Moon, IconSun as Sun } from "@tabler/icons-react";
 import type { Appearance } from "../shared/theme/service";
 
 /** Native radios provide one Tab stop and standard arrow-key selection. */
@@ -56,47 +57,47 @@ export function AppearanceSettings({ appearance }: { appearance: Appearance }) {
             Resize text without zooming the window. Saved on this device.
           </p>
           <div className="flex flex-wrap items-center gap-3">
-            <button
+            <Button
               type="button"
               aria-label="Decrease text size"
               disabled={fontScale <= 0.8}
               onClick={() => appearance.setFontScale(fontScale - 0.1)}
             >
               −
-            </button>
+            </Button>
             <output aria-label="Text size">
               {Math.round(fontScale * 100)}%
             </output>
-            <button
+            <Button
               type="button"
               aria-label="Increase text size"
               disabled={fontScale >= 2}
               onClick={() => appearance.setFontScale(fontScale + 0.1)}
             >
               +
-            </button>
-            <button type="button" onClick={() => appearance.setFontScale(1)}>
+            </Button>
+            <Button type="button" onClick={() => appearance.setFontScale(1)}>
               Reset text size
-            </button>
+            </Button>
           </div>
         </fieldset>
         {fontError && (
           <div role="alert" className="notice mb-0">
             <p>{fontError}</p>
-            <button
+            <Button
               type="button"
               onClick={() => appearance.setFontScale(fontScale)}
             >
               Retry saving text size
-            </button>
+            </Button>
           </div>
         )}
         {error && (
           <div role="alert" className="notice mb-0">
             <p>{error}</p>
-            <button type="button" onClick={() => appearance.setMode(mode)}>
+            <Button type="button" onClick={() => appearance.setMode(mode)}>
               Retry saving appearance
-            </button>
+            </Button>
           </div>
         )}
       </div>

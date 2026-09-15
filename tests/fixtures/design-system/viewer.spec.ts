@@ -35,6 +35,7 @@ test("built viewer loads every specimen and foundation without app connections",
     "Motion",
     "Base UI backing",
     "Foundation alignment",
+    "Component adoption",
     "Maintaining the system",
     "DESIGN.md",
     "AGENTS.md",
@@ -402,4 +403,65 @@ test("a stale or renamed link explains itself instead of rendering blank", async
     ).toBeVisible();
   }
   expect(failures).toEqual([]);
+});
+
+test("component adoption uses real controls with labels and focusable busy switches", async ({
+  page,
+}) => {
+  await page.goto(`${viewer}#/design/component-adoption`);
+  const after = (name: string) =>
+    page.getByRole("group", { name: `After: ${name}`, exact: true });
+  const notification = after("Notification switch");
+  const alerts = notification.getByRole("switch", { name: "Desktop alerts" });
+  await expect(alerts).toBeChecked();
+  await notification.locator("label").click();
+  await expect(alerts).not.toBeChecked();
+  await alerts.focus();
+  await page.keyboard.press("Space");
+  await expect(alerts).toBeChecked();
+  const busy = after("Plugin switch").getByRole("switch", {
+    name: "Enable busy plugin",
+  });
+  await busy.focus();
+  await expect(busy).toBeFocused();
+  await page.keyboard.press("Space");
+  await expect(busy).toBeChecked();
+  await expect(busy).toBeFocused();
+  const toggle = after("Plugin switch").getByRole("switch", {
+    name: "Enable example plugin",
+  });
+  await toggle.click();
+  await expect(toggle).not.toBeChecked();
+  await after("Action buttons")
+    .getByRole("button", { name: "Save profile" })
+    .click();
+  await expect(page.getByRole("status")).toHaveText(
+    "Action received. No app data was changed.",
+  );
+  await expect(
+    after("Action buttons").getByRole("button", { name: "Save", exact: true }),
+  ).toBeDisabled();
+  for (const mode of ["light", "dark"]) {
+    const change = page.getByRole("button", { name: `Use ${mode} mode` });
+    if (await change.count()) await change.click();
+    await expect(
+      after("Shell actions").getByRole("button", { name: "Go back" }),
+    ).toHaveCSS("width", "36px");
+    await expect(
+      after("Mention avatars").getByRole("img", { name: "Alex Lee" }),
+    ).toHaveCSS("width", "24px");
+    await expect(after("Message avatars").getByRole("button")).toHaveCSS(
+      "width",
+      "40px",
+    );
+  }
+  await page.setViewportSize({ width: 600, height: 900 });
+  await expect(
+    page.getByRole("region", { name: "Component comparison" }),
+  ).toBeVisible();
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth <= innerWidth,
+    ),
+  ).toBe(true);
 });

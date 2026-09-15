@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { House } from "lucide-react";
+import { IconHome as House } from "@tabler/icons-react";
 import { isTauri } from "@tauri-apps/api/core";
 import type { RegisteredPage } from "../../features/pages/service";
 import type { Communities } from "../../features/communities/service";
@@ -72,7 +72,7 @@ export function AppShell({
             aria-current={selected === "home" ? "page" : undefined}
             onClick={() => onSelect("home")}
           >
-            <House aria-hidden="true" size={15} strokeWidth={1.7} />
+            <House aria-hidden="true" size={15} stroke={1.7} />
             Home
           </button>
           {orderPages(pages).map((page) => {
@@ -85,7 +85,7 @@ export function AppShell({
                 aria-current={selected === page.key ? "page" : undefined}
                 onClick={() => onSelect(page.key)}
               >
-                <Icon aria-hidden="true" size={15} strokeWidth={1.7} />
+                <Icon aria-hidden="true" size={15} stroke={1.7} />
                 {label}
               </button>
             );

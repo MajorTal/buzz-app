@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { IconX as X } from "@tabler/icons-react";
 import {
   communityRequest,
   inspectProfile,

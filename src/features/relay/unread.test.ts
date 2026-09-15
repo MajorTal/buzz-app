@@ -264,8 +264,22 @@ it("promotes mentions, broadcasts and participating-thread replies without promo
   const participatingReply = message(h.alice, "room", "reply", 14, [
     ["e", root.id, "", "reply"],
   ]);
-  h.emit([mentioned, broadcast, participatingReply]);
-  expect(h.snapshot()).toMatchObject({ observedCount: 4, attentionCount: 3 });
+  const missingRootBroadcast = message(
+    h.alice,
+    "room",
+    "broadcast without retained root",
+    15,
+    [
+      ["e", "f".repeat(64), "", "reply"],
+      ["broadcast", "1"],
+    ],
+  );
+  h.emit([mentioned, broadcast, participatingReply, missingRootBroadcast]);
+  expect(h.snapshot()).toMatchObject({ observedCount: 5, attentionCount: 4 });
+  expect(h.session.unread.activity("room").items).toHaveLength(1);
+  expect(
+    h.session.unread.attention("room", missingRootBroadcast.id),
+  ).toMatchObject({ status: "unknown", unread: true });
 });
 
 it("late DM metadata updates an existing attention selector without expiring reading intent", async () => {

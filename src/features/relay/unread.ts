@@ -265,6 +265,14 @@ export function createUnread({
           ? "thread"
           : undefined;
   }
+  function priority(entry: Evidence, dm: boolean) {
+    return (
+      !!category(entry, dm) ||
+      entry.event.tags.some(
+        ([name, value]) => name === "broadcast" && value === "1",
+      )
+    );
+  }
   function attention(channelId: string, messageId: string): MessageAttention {
     const unknown = Object.freeze({
       status: "unknown",
@@ -341,7 +349,7 @@ export function createUnread({
     for (const entry of byChannel.get(target.channelId) ?? []) {
       if (!inTarget(entry.event, target) || !isUnread(entry, state)) continue;
       count++;
-      if (category(entry, dm)) attention++;
+      if (priority(entry, dm)) attention++;
     }
     const manual = reads.localUnread(key)
       ? "local-only"

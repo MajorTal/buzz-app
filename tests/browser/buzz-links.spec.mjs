@@ -16,7 +16,6 @@ test("Buzz channel and message links render, reveal verified targets, and preser
   app,
 }) => {
   const history = app.histories.get("primary/alpha");
-  app.relay.holdProfiles([history[0].pubkey]);
   await open(page, app);
   const target = history.find((row) => row.content === "Broadcast reply");
   const href = `buzz://message?channel=alpha&id=${target.id}`;
@@ -90,18 +89,6 @@ test("Buzz channel and message links render, reveal verified targets, and preser
   expect(
     await link.evaluate((element) => element.matches(":focus-visible")),
   ).toBe(true);
-  const focusedTrigger = await link.elementHandle();
-  app.relay.releaseProfiles();
-  await expect(
-    row.getByRole("button", {
-      name: "View Alice Fixture profile",
-      exact: true,
-    }),
-  ).toBeVisible();
-  expect(await focusedTrigger.evaluate((element) => element.isConnected)).toBe(
-    true,
-  );
-  await expect(link).toBeFocused();
   await expect(preview).toBeVisible();
   expect(
     app.report.brokerRequests.some(({ url }) => url.endsWith("/agent-library")),
@@ -120,6 +107,63 @@ test("Buzz channel and message links render, reveal verified targets, and preser
   ).toBeVisible();
   await expect.poll(async () => (await state(page)).status).toBe("opened");
   expect((await state(page)).entry.target.channelId).toBe("beta");
+});
+
+test("a held profile update preserves the focused message-link trigger", async ({
+  page,
+  app,
+}) => {
+  const history = app.histories.get("primary/alpha");
+  app.relay.holdProfiles([history[0].pubkey]);
+  let link;
+  let row;
+  let focusedTrigger;
+  try {
+    await open(page, app);
+    const target = history.find(
+      (message) => message.content === "Broadcast reply",
+    );
+    const message = app.append(
+      "primary",
+      "alpha",
+      `Open <buzz://message?channel=alpha&id=${target.id}>.`,
+      true,
+      false,
+    );
+    row = page.locator(
+      `[data-channel-timeline] [data-message-id="${message.id}"]`,
+    );
+    link = row.getByRole("link", { name: "Alpha", exact: true });
+    await expect(link).toBeVisible();
+    await page.keyboard.press("Tab");
+    await link.focus();
+    await expect(link).toBeFocused();
+    await expect
+      .poll(() => app.report.profileHolds.some((hold) => hold.pending))
+      .toBe(true);
+    await expect(
+      row.getByRole("button", {
+        name: `View ${message.pubkey.slice(0, 10)} profile`,
+        exact: true,
+      }),
+    ).toBeVisible();
+    focusedTrigger = await link.elementHandle();
+  } finally {
+    app.relay.releaseProfiles();
+  }
+  await expect(
+    row.getByRole("button", {
+      name: "View Alice Fixture profile",
+      exact: true,
+    }),
+  ).toBeVisible();
+  expect(await focusedTrigger.evaluate((element) => element.isConnected)).toBe(
+    true,
+  );
+  await expect(link).toBeFocused();
+  await expect(
+    page.getByLabel("Message preview", { exact: true }),
+  ).toBeVisible();
 });
 
 test("activating a panel from a linked thread retires the navigation-owned thread instead of splitting the rail", async ({

@@ -105,7 +105,9 @@ function Timeline({
     readView<ReadingPosition | null>(scope, `scroll:${channelId}`, null),
   );
   const savedPosition = useRef(initialPosition);
-  const restoredAnchor = useRef<string | undefined>(undefined);
+  const restoredReading = useRef<{ anchorId: string | undefined } | undefined>(
+    undefined,
+  );
   const rows = useMemo(() => membershipRows(window.rows), [window.rows]);
   const profiles = useRowProfiles(queries.profiles, window.rows);
   const geometry = useMemo(() => geometryFor(queries.channels), [queries]);
@@ -143,7 +145,7 @@ function Timeline({
     (element: HTMLElement) => {
       // A delayed membership event can replace a group's rendered representative.
       // Keep the restored event anchored through that change until reader input.
-      const anchor = restoredAnchor.current;
+      const anchor = restoredReading.current?.anchorId;
       const renderedAnchor = anchor
         ? rows.find(
             (row) =>
@@ -164,7 +166,9 @@ function Timeline({
           previous.offset + Math.min(0, element.scrollHeight - previous.height);
       // Cold estimates can briefly clamp a restored reader to the measured end.
       // Keep that explicit reading intent until a gesture or navigation resets it.
-      if (anchor) position.bottom = false;
+      if (restoredReading.current) position.bottom = false;
+      // Before input, cold row measurement is layout, not a change of intent.
+      else if (!userScrolled.current) position.bottom = follow.current;
       else if (previous && follow.current && !movedUp) position.bottom = true;
       savedPosition.current = position;
       follow.current = position.bottom;
@@ -186,7 +190,7 @@ function Timeline({
     if (!handle.current) return;
     intent.current++;
     follow.current = false;
-    restoredAnchor.current = undefined;
+    restoredReading.current = undefined;
     settled.current = false;
     handle.current.scrollToIndex(targetIndex, { align: "center" });
   }, [targetIndex]);
@@ -233,6 +237,13 @@ function Timeline({
     observer.observe(element);
     return () => {
       olderDemand.current = false;
+      // A scroll event can precede Virtua mounting the visible rows. Capture the
+      // settled DOM before leaving so cold restoration has a message anchor.
+      if (settled.current) {
+        const position = positionAt(element, restoredReading.current?.anchorId);
+        if (position.anchor)
+          savedPosition.current = { ...position, bottom: follow.current };
+      }
       settled.current = false;
       writeView(scope, `scroll:${channelId}`, savedPosition.current);
       observer.disconnect();
@@ -277,8 +288,10 @@ function Timeline({
                   row.membershipRows?.some((member) => member.id === anchor.id),
               )
             : -1;
+          restoredReading.current = {
+            anchorId: index >= 0 ? rows[index]?.id : undefined,
+          };
           if (anchor && index >= 0) {
-            restoredAnchor.current = rows[index]?.id;
             handle.current.scrollToIndex(index, {
               align: "start",
               offset: -anchor.y,
@@ -350,7 +363,7 @@ function Timeline({
     const frame = requestAnimationFrame(() => {
       if (!handle.current) return;
       follow.current = true;
-      restoredAnchor.current = undefined;
+      restoredReading.current = undefined;
       userScrolled.current = false;
       handle.current.scrollToIndex(index, { align: "end" });
       revealed.current = revealMessageId;
@@ -395,10 +408,11 @@ function Timeline({
       loadNearTop(scroller.current, true);
   }, [loadNearTop]);
   const gesture = () => {
-    restoredAnchor.current = undefined;
+    restoredReading.current = undefined;
     intent.current++;
-    if (scroller.current) recordPosition(scroller.current);
+    if (!userScrolled.current) measuredPosition.current = null;
     userScrolled.current = true;
+    if (scroller.current) recordPosition(scroller.current);
     // At a restored top edge, input cannot move the DOM and emits no scroll.
     if (scroller.current && scroller.current.scrollTop <= 0)
       loadNearTop(scroller.current);

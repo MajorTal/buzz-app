@@ -664,6 +664,7 @@ export function createRelaySession(
       },
       () =>
         agentLibrary.queries.snapshot().identities.map((agent) => agent.pubkey),
+      transport?.relayAuthor,
     ),
     unread: unread.capability,
     sidebarPreferences: sidebarPreferences.queries,

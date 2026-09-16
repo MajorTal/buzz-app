@@ -327,6 +327,50 @@ function Composer({
       )
     );
   }
+  const currentAdmission = () =>
+    live.current &&
+    permitted.current &&
+    session.channels.list().channels.find((item) => item.id === channelId)
+      ?.parentChannelId === parentChannelId;
+  async function prepareRecipients(recipients: readonly string[]) {
+    const channel = await session.workSessions.refreshMembership(channelId);
+    if (!currentAdmission())
+      throw new Error("The session changed. Review its channel and retry.");
+    const missing = recipients.filter((key) => !channel.members?.includes(key));
+    if (missing.length) {
+      await session.agentLibrary.refresh();
+      if (!currentAdmission())
+        throw new Error("The session changed. Review its channel and retry.");
+      await session.workSessions.addAgents(
+        channelId,
+        missing,
+        currentAdmission,
+      );
+      if (!currentAdmission())
+        throw new Error("The session changed. Review its channel and retry.");
+    }
+  }
+  async function selectAgent(key: string) {
+    if (disabled || admission.current) return;
+    if (!key) {
+      setSelectedAgent("");
+      setError(undefined);
+      return;
+    }
+    admission.current = true;
+    setAdmitting(true);
+    setError(undefined);
+    try {
+      await prepareRecipients([key]);
+      setSelectedAgent(key);
+    } catch (reason) {
+      if (live.current)
+        setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      admission.current = false;
+      if (live.current) setAdmitting(false);
+    }
+  }
   async function send() {
     if (
       disabled ||
@@ -347,30 +391,10 @@ function Composer({
         : selectedAgent
           ? [selectedAgent]
           : [];
-      const members = list.channels.find(
-        (item) => item.id === channelId,
-      )?.members;
-      if (
-        sessionConversation &&
-        recipients.some((key) => !members?.includes(key))
-      ) {
-        const currentAdmission = () =>
-          live.current &&
-          permitted.current &&
-          session.channels.list().channels.find((item) => item.id === channelId)
-            ?.parentChannelId === parentChannelId;
+      if (sessionConversation) {
         admission.current = true;
         setAdmitting(true);
-        await session.agentLibrary.refresh();
-        if (!currentAdmission())
-          throw new Error("The session changed. Review its channel and retry.");
-        await session.workSessions.addAgents(
-          channelId,
-          recipients,
-          currentAdmission,
-        );
-        if (!currentAdmission())
-          throw new Error("The session changed. Review its channel and retry.");
+        await prepareRecipients(recipients);
       }
       const id = threadRootId
         ? session.messages.reply(channelId, threadRootId, draft, recipients)
@@ -566,7 +590,7 @@ function Composer({
                 session={session}
                 channelId={channelId}
                 value={selectedAgent}
-                onChange={setSelectedAgent}
+                onChange={(key) => void selectAgent(key)}
                 disabled={editingDisabled}
               />
             ))}

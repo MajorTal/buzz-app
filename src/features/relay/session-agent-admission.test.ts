@@ -16,6 +16,7 @@ function setup() {
   let denyChild = false;
   let clock = 1700000000;
   let denied = false;
+  let foreignRoster = false;
   let afterPublish = () => {};
   const secondAgent = keypair().pubkey;
   const meta = (id: string, type: string, extra: string[][] = []) =>
@@ -51,6 +52,10 @@ function setup() {
         publish,
       },
       query: async (filters) => {
+        if (foreignRoster && filters.some((filter) => filter["#d"]))
+          return [
+            roster(agent, child, [viewer.pubkey, agent.pubkey], clock + 1),
+          ];
         const events = [
           meta(parent, "stream"),
           meta(child, "stream", [
@@ -73,6 +78,14 @@ function setup() {
     child,
     agent: agent.pubkey,
     secondAgent,
+    setMembership: (parentMembers: boolean, sessionMembers: boolean) => {
+      clock++;
+      members = [viewer.pubkey, ...(parentMembers ? [agent.pubkey] : [])];
+      childMembers = [viewer.pubkey, ...(sessionMembers ? [agent.pubkey] : [])];
+    },
+    returnForeignRoster: () => {
+      foreignRoster = true;
+    },
     afterPublish: (callback: () => void) => {
       afterPublish = callback;
     },
@@ -234,3 +247,36 @@ it.each([false, true])(
     }
   },
 );
+
+it("refreshes stale membership and preserves an existing child's independent access", async () => {
+  const test = setup();
+  try {
+    await test.ready();
+    test.setMembership(false, true);
+    await test.owner.session.workSessions.addAgents(test.child, [test.agent]);
+    expect(test.publish).not.toHaveBeenCalled();
+    expect(
+      test.owner.session.channels
+        .list()
+        .channels.find((item) => item.id === test.child)?.members,
+    ).toContain(test.agent);
+    test.setMembership(false, false);
+    await test.owner.session.workSessions.addAgents(test.child, [test.agent]);
+    expect(test.publish).toHaveBeenCalledTimes(2);
+  } finally {
+    test.owner.dispose();
+  }
+});
+it("does not accept a foreign-signed roster as fresh membership", async () => {
+  const test = setup();
+  try {
+    await test.ready();
+    test.returnForeignRoster();
+    await expect(
+      test.owner.session.workSessions.addAgents(test.child, [test.agent]),
+    ).rejects.toThrow(/refresh channel membership/);
+    expect(test.publish).not.toHaveBeenCalled();
+  } finally {
+    test.owner.dispose();
+  }
+});

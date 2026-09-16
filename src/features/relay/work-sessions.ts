@@ -14,6 +14,7 @@ export function createWorkSessions(
   receipts?: Pick<Outbox, "snapshot" | "subscribe">,
   confirmCreation?: (id: string) => Promise<boolean>,
   agentKeys?: () => readonly string[],
+  relayAuthor?: string,
 ) {
   const available = !!outbox?.supports(9007);
   function writer() {
@@ -159,17 +160,46 @@ export function createWorkSessions(
     channels.refreshList?.();
     await wait;
   }
+  async function refreshMembership(id: string) {
+    writer();
+    if (!relayAuthor) throw new Error("Channel membership is unavailable.");
+    const events = await reader.read(
+      [{ kinds: [39002], authors: [relayAuthor], "#d": [id], limit: 1 }],
+      { signal, fresh: true, priority: "foreground" },
+    );
+    const channel = channels.list().channels.find((item) => item.id === id);
+    if (
+      !events.some(
+        (event) =>
+          event.kind === 39002 &&
+          event.pubkey === relayAuthor &&
+          event.tags.some(([name, value]) => name === "d" && value === id),
+      ) ||
+      !channel?.members ||
+      channel.archived
+    )
+      throw new Error(
+        "Could not refresh channel membership. Retry to continue.",
+      );
+    return channel;
+  }
   async function addAgents(
     id: string,
     keys: readonly string[],
     active = () => true,
   ) {
     const find = () => channels.list().channels.find((item) => item.id === id);
-    const original = find();
-    const parentId = original?.parentChannelId ?? id;
-    const parent = channels
-      .list()
-      .channels.find((item) => item.id === parentId);
+    const original = await refreshMembership(id);
+    if (!active())
+      throw new DOMException("Session submission cancelled", "AbortError");
+    const unique = [...new Set(keys)].filter(
+      (key) =>
+        original.channelType !== "session" || !original.members?.includes(key),
+    );
+    if (!unique.length) return;
+    const parentId = original.parentChannelId ?? id;
+    const parent =
+      parentId === id ? original : await refreshMembership(parentId);
     if (
       !parentId ||
       !parent?.members ||
@@ -177,7 +207,6 @@ export function createWorkSessions(
       !["stream", "forum", "session"].includes(parent.channelType ?? "")
     )
       throw new Error("Refresh the parent channel before adding agents.");
-    const unique = [...new Set(keys)];
     const known = new Set(agentKeys?.() ?? []);
     if (unique.some((key) => !parent.members?.includes(key) && !known.has(key)))
       throw new Error("Choose an agent from your agent library.");
@@ -233,6 +262,7 @@ export function createWorkSessions(
   return Object.freeze({
     available,
     addAgents,
+    refreshMembership,
     create(id: string, title: string, parentId?: string) {
       writer();
       identifier(id);

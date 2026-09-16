@@ -23,6 +23,17 @@ export function NewSessionView({
   );
 }
 
+/** Keep session messages and their composer in the same column as a new draft. */
+export function SessionColumn({
+  children,
+  enabled = true,
+}: {
+  children: ReactNode;
+  enabled?: boolean;
+}) {
+  return enabled ? <div className={styles.column}>{children}</div> : children;
+}
+
 export function SessionHeading({
   channel,
   headingRef,

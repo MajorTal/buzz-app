@@ -9,6 +9,7 @@ import { ChannelSidebarRow } from "./ChannelSidebarRow";
 import { NewSessionComposer } from "../../features/sessions/NewSessionComposer";
 import {
   NewSessionView,
+  SessionColumn,
   SessionHeading,
 } from "../../features/sessions/SessionPresentation";
 import { UnreadBadge, UnreadOptions } from "./UnreadBadge";
@@ -741,51 +742,53 @@ function ChannelWorkspace({
                 </details>
               </header>
             )}
-            <LiveStatus
-              live={queries.live}
-              channelId={current?.id}
-              partialRoster={list.coverage === "partial"}
-            />
-            {current ? (
-              <ChannelBody
-                viewer={viewer}
-                extensions={extensions}
-                key={current.id}
-                queries={queries}
-                scope={scope}
-                channelId={current.id}
-                navigation={
-                  flatSession || !requestedMessage || exact?.inTimeline
-                    ? navigation
-                    : undefined
-                }
-                onOpenLink={openLink}
-                canOpenLink={canOpenLink}
-                onOpenThread={flatSession ? undefined : openThread}
-                revealMessageId={
-                  sent?.channelId === current.id ? sent.id : undefined
-                }
+            <SessionColumn enabled={flatSession}>
+              <LiveStatus
+                live={queries.live}
+                channelId={current?.id}
+                partialRoster={list.coverage === "partial"}
               />
-            ) : (
-              <div className={styles.empty}>Select a channel to read it.</div>
-            )}
-            {current && (
-              <MessageComposer
-                sessionConversation={current.channelType === "session"}
-                extensions={extensions}
-                key={`composer:${current.id}`}
-                session={queries}
-                scope={scope}
-                channelId={current.id}
-                channelName={current.name}
-                label={
-                  current.channelType === "session"
-                    ? "Message this session"
-                    : undefined
-                }
-                onSend={(id) => setSent({ channelId: current.id, id })}
-              />
-            )}
+              {current ? (
+                <ChannelBody
+                  viewer={viewer}
+                  extensions={extensions}
+                  key={current.id}
+                  queries={queries}
+                  scope={scope}
+                  channelId={current.id}
+                  navigation={
+                    flatSession || !requestedMessage || exact?.inTimeline
+                      ? navigation
+                      : undefined
+                  }
+                  onOpenLink={openLink}
+                  canOpenLink={canOpenLink}
+                  onOpenThread={flatSession ? undefined : openThread}
+                  revealMessageId={
+                    sent?.channelId === current.id ? sent.id : undefined
+                  }
+                />
+              ) : (
+                <div className={styles.empty}>Select a channel to read it.</div>
+              )}
+              {current && (
+                <MessageComposer
+                  sessionConversation={current.channelType === "session"}
+                  extensions={extensions}
+                  key={`composer:${current.id}`}
+                  session={queries}
+                  scope={scope}
+                  channelId={current.id}
+                  channelName={current.name}
+                  label={
+                    current.channelType === "session"
+                      ? "Message this session"
+                      : undefined
+                  }
+                  onSend={(id) => setSent({ channelId: current.id, id })}
+                />
+              )}
+            </SessionColumn>
             {drawer.content}
           </>
         )}

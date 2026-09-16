@@ -17,6 +17,7 @@ import { SessionActions } from "./SessionActions";
 import { NewSessionComposer } from "../../features/sessions/NewSessionComposer";
 import {
   NewSessionView,
+  SessionColumn,
   SessionHeading,
 } from "../../features/sessions/SessionPresentation";
 import styles from "../../features/sessions/Sessions.module.css";
@@ -167,44 +168,46 @@ function SessionWork({
       <SessionHeading channel={channel} parentName={parentName}>
         <SessionActions session={session} channel={channel} />
       </SessionHeading>
-      <div className={styles.timeline}>
-        {window.status === "error" && !window.rows.length ? (
-          <div className={styles.empty} role="alert">
-            <p>{window.error}</p>
-            <button
-              type="button"
-              onClick={() => session.channels.ensure(channel.id)}
-            >
-              Retry messages
-            </button>
-          </div>
-        ) : window.status !== "ready" && !window.rows.length ? (
-          <p className={styles.empty} role="status">
-            Loading messages…
-          </p>
-        ) : (
-          <ChannelTimeline
-            extensions={extensions}
-            queries={session}
-            scope={scope}
-            channelId={channel.id}
-            window={window}
-            revealMessageId={sent}
-            onOpenLink={openLink}
-          />
-        )}
-      </div>
-      <MessageComposer
-        sessionConversation
-        onSend={setSent}
-        extensions={extensions}
-        session={session}
-        scope={scope}
-        channelId={channel.id}
-        channelName={channel.name}
-        label="Message this session"
-        disabled={!!channel.archived || window.status !== "ready"}
-      />
+      <SessionColumn>
+        <div className={styles.timeline}>
+          {window.status === "error" && !window.rows.length ? (
+            <div className={styles.empty} role="alert">
+              <p>{window.error}</p>
+              <button
+                type="button"
+                onClick={() => session.channels.ensure(channel.id)}
+              >
+                Retry messages
+              </button>
+            </div>
+          ) : window.status !== "ready" && !window.rows.length ? (
+            <p className={styles.empty} role="status">
+              Loading messages…
+            </p>
+          ) : (
+            <ChannelTimeline
+              extensions={extensions}
+              queries={session}
+              scope={scope}
+              channelId={channel.id}
+              window={window}
+              revealMessageId={sent}
+              onOpenLink={openLink}
+            />
+          )}
+        </div>
+        <MessageComposer
+          sessionConversation
+          onSend={setSent}
+          extensions={extensions}
+          session={session}
+          scope={scope}
+          channelId={channel.id}
+          channelName={channel.name}
+          label="Message this session"
+          disabled={!!channel.archived || window.status !== "ready"}
+        />
+      </SessionColumn>
     </div>
   );
 }

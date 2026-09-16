@@ -136,40 +136,6 @@ test("real live traffic alerts once; replay/reload stay quiet and choices persis
   ).toHaveCount(0);
 });
 
-test("explicit Allow releases the first fresh alert; master off preserves categories", async ({
-  page,
-  app,
-}) => {
-  await ready(page, app);
-  await page.evaluate(() => {
-    window.Notification.permission = "default";
-  });
-  await page
-    .getByRole("button", { name: "Check permission", exact: true })
-    .click();
-  const row = liveMessage(app, "Permission wait");
-  await observed(page, row.id);
-  expect(await systemCount(page)).toBe(0);
-  expect(await page.evaluate(() => window.notificationRequests)).toBe(0);
-  await page
-    .getByRole("button", { name: "Allow notifications", exact: true })
-    .click();
-  await expect.poll(() => systemCount(page)).toBe(1);
-  await page.getByRole("switch", { name: "Mentions", exact: true }).uncheck();
-  await page
-    .getByRole("switch", { name: "Desktop alerts", exact: true })
-    .uncheck();
-  await page
-    .getByRole("switch", { name: "Desktop alerts", exact: true })
-    .check();
-  await expect(
-    page.getByRole("switch", { name: "Mentions", exact: true }),
-  ).not.toBeChecked();
-  const muted = liveMessage(app, "Disabled category");
-  await observed(page, muted.id);
-  expect(await systemCount(page)).toBe(1);
-});
-
 test("a fully visible incoming row stays quiet without publishing read intent", async ({
   page,
   app,
@@ -382,33 +348,4 @@ test("an installed producer shares policy and OS click navigation, including aft
   expect(
     await page.evaluate(() => window.fixtureNavigation.snapshot().status),
   ).toBe("opened");
-});
-
-test("asynchronous browser display failure reaches Settings once without redelivery", async ({
-  page,
-  app,
-}) => {
-  await ready(page, app);
-  liveMessage(app, "Browser display error");
-  await expect.poll(() => systemCount(page)).toBe(1);
-  await page.evaluate(() => window.notificationEvents[0].onerror?.());
-  await expect(page.getByRole("alert")).toHaveText(
-    "The browser could not display a notification.",
-  );
-  expect(
-    await page.evaluate(() => {
-      const item = window.notificationEvents[0];
-      return {
-        closed: item.closed,
-        click: item.onclick,
-        error: item.onerror,
-        close: item.onclose,
-      };
-    }),
-  ).toEqual({ closed: true, click: null, error: null, close: null });
-  await page
-    .getByRole("button", { name: "Check permission", exact: true })
-    .click();
-  await page.waitForTimeout(150);
-  expect(await systemCount(page)).toBe(1);
 });

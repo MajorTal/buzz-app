@@ -71,64 +71,6 @@ for (const mode of ["light", "dark"]) {
   }
 }
 
-test("typeahead replaces only the query and publishes selected namesake identity, including replies", async ({
-  page,
-}) => {
-  const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
-  const input = await open(page);
-  const keys = await page.evaluate(() => ({
-    first: window.mentionFixture.first,
-    second: window.mentionFixture.second,
-  }));
-  await input.fill("Before @Ho after");
-  await input.evaluate((el) => {
-    el.setSelectionRange(10, 10);
-    el.dispatchEvent(new Event("select", { bubbles: true }));
-  });
-  const option = page.getByRole("option", {
-    name: `Honey ${keys.second}`,
-    exact: true,
-  });
-  await expect(option).toBeVisible();
-  await option.click();
-  await expect(input).toBeFocused();
-  await expect(input).toHaveJSProperty("value", "Before @Honey  after");
-  await expect(
-    page
-      .getByRole("region", { name: "Notification recipients" })
-      .getByRole("button"),
-  ).toHaveCount(1);
-  await input.press("Enter");
-  await expect
-    .poll(() => page.evaluate(() => window.mentionFixture.publications.length))
-    .toBe(1);
-  expect(
-    await page.evaluate(() =>
-      window.mentionFixture.publications[0].tags.filter(([tag]) => tag === "p"),
-    ),
-  ).toEqual([["p", keys.second]]);
-  await page.getByRole("button", { name: "Toggle thread" }).click();
-  const reply = page.getByRole("textbox", { name: "Reply to thread" });
-  await reply.fill("@Ho");
-  await expect(
-    page.getByRole("option", { name: `Honey ${keys.first}`, exact: true }),
-  ).toBeVisible();
-  await page
-    .getByRole("option", { name: `Honey ${keys.first}`, exact: true })
-    .click();
-  await page.evaluate(() =>
-    window.mentionFixture.change("disable", "buzz.mentions"),
-  );
-  await reply.press("Enter");
-  await expect
-    .poll(() => page.evaluate(() => window.mentionFixture.publications.length))
-    .toBe(2);
-  const sent = await page.evaluate(() => window.mentionFixture.publications[1]);
-  expect(sent.tags).toContainEqual(["e", "a".repeat(64), "", "reply"]);
-  expect(sent.tags.filter(([tag]) => tag === "p")).toEqual([["p", keys.first]]);
-  expect(errors).toEqual([]);
-});
 test("emoji keyboard, Escape, selected text, blur, IME and plugin disable preserve ordinary editing", async ({
   page,
 }) => {
@@ -290,45 +232,6 @@ test("editable composer exposes its listbox popup relationship only while sugges
       await expect(input).not.toHaveAttribute(attribute);
     await expect(input).toHaveRole("textbox");
   }
-});
-test("plugin replacement, native blur and composer sessions revoke late publications", async ({
-  page,
-}) => {
-  await page.goto("/tests/fixtures/typeahead.html");
-  const input = page.getByRole("textbox", { name: "Message #Test" });
-  const latest = async () => {
-    await expect
-      .poll(() =>
-        page.evaluate(() => window.completionFixture.queries().length),
-      )
-      .toBeGreaterThan(0);
-    return page.evaluate(() => window.completionFixture.queries().length - 1);
-  };
-  const publish = (index, text = "chosen") =>
-    page.evaluate(
-      ({ index, text }) =>
-        window.completionFixture.publish(index, {
-          items: [{ id: text, label: text, edit: { text } }],
-        }),
-      { index, text },
-    );
-  await input.fill("!blur");
-  const blurred = await latest();
-  await page.getByRole("textbox", { name: "Message #Other" }).focus();
-  expect(await publish(blurred)).toBe(false);
-  await input.focus();
-  const removed = await latest();
-  await page.evaluate(() => window.completionFixture.change("disable"));
-  expect(await publish(removed)).toBe(false);
-  await page.evaluate(() => window.completionFixture.change("enable"));
-  expect(await publish(removed)).toBe(false);
-  await input.fill("!scope");
-  const scoped = await latest();
-  await page.getByRole("button", { name: "Switch session" }).click();
-  expect(await publish(scoped)).toBe(false);
-  await expect(
-    page.getByRole("textbox", { name: "Message #Test" }),
-  ).toHaveJSProperty("value", "");
 });
 test("selection follows IDs through reordering and rejected replacement never falls through to send", async ({
   page,
@@ -790,62 +693,6 @@ test("channel and actual ThreadPanel composers keep separate completion and draf
   await main.press("Tab");
   await expect(main).toHaveJSProperty("value", "😄");
   await expect(thread).toHaveJSProperty("value", "@Fixture Reader ");
-});
-
-test("native read-only state rejects a displayed choice without sending", async ({
-  page,
-}) => {
-  await page.goto("/tests/fixtures/typeahead.html");
-  const input = page.getByRole("textbox", { name: "Message #Test" });
-  await input.fill("!readonly");
-  const current = await page.evaluate(
-    () => window.completionFixture.queries().length - 1,
-  );
-  await page.evaluate(
-    (index) =>
-      window.completionFixture.publish(index, {
-        items: [{ id: "bad", label: "Bad", edit: { text: "bad" } }],
-      }),
-    current,
-  );
-  await expect(page.getByRole("option", { name: "Bad" })).toBeVisible();
-  await input.evaluate((el) => {
-    el.readOnly = true;
-  });
-  await input.press("Enter");
-  await expect(input).toHaveJSProperty("value", "!readonly");
-  expect(
-    await page.evaluate(() => window.completionFixture.publications.length),
-  ).toBe(0);
-});
-
-test("a later emoji trigger wins after a mention without discarding recipient intent", async ({
-  page,
-}) => {
-  const input = await open(page);
-  const key = await page.evaluate(() => window.mentionFixture.first);
-  await input.fill("@Ho");
-  await page.getByRole("option", { name: `Honey ${key}`, exact: true }).click();
-  await input.pressSequentially(":smile");
-  await expect(page.getByRole("option").first()).toContainText(":smile:");
-  await input.press("Tab");
-  await expect(input).toHaveJSProperty("value", "@Honey 😄");
-  await input.press("Enter");
-  await expect
-    .poll(() => page.evaluate(() => window.mentionFixture.publications.length))
-    .toBe(1);
-  expect(
-    await page.evaluate(() =>
-      window.mentionFixture.publications[0].tags.filter(([tag]) => tag === "p"),
-    ),
-  ).toEqual([["p", key]]);
-  await input.fill("@Honey :smile");
-  await expect(page.getByRole("option").first()).toContainText(":smile:");
-  await input.press("Tab");
-  await expect(input).toHaveJSProperty("value", "@Honey 😄");
-  await expect(
-    page.getByRole("region", { name: "Notification recipients" }),
-  ).toHaveCount(0);
 });
 
 test("portal bounds hold when the focused composer moves outside the viewport", async ({

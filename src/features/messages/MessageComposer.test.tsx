@@ -25,6 +25,8 @@ import type { RelaySession } from "../relay/session";
 import { emojiMatches, type CustomEmoji } from "../relay/emoji";
 import { CustomEmoji as CustomEmojiImage } from "../../bundled/emoji/CustomEmoji";
 import type { ComposerInputElement } from "./composer-dom";
+import { mentionQuery } from "../../bundled/mentions/mention-query";
+import { emojiQuery } from "../../bundled/emoji/emoji-query";
 
 const first = { pubkey: "a".repeat(64), name: "Honey" };
 const second = { pubkey: "b".repeat(64), name: "Honey" };
@@ -46,7 +48,10 @@ afterEach(() => {
   delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
 });
 
-function mount(options: Partial<MessageComposerProps> = {}) {
+function mount(
+  options: Partial<MessageComposerProps> = {},
+  providers?: readonly Contribution<ComposerCompletion>[],
+) {
   let commands: ComposerToolProps;
   const completionRequests: ComposerCompletionProps["publish"][] = [];
   function Completion({ publish }: ComposerCompletionProps) {
@@ -68,7 +73,7 @@ function mount(options: Partial<MessageComposerProps> = {}) {
         : null,
     component: Completion,
   });
-  let completions: readonly Contribution<ComposerCompletion>[] = [
+  let completions: readonly Contribution<ComposerCompletion>[] = providers ?? [
     completion("1"),
   ];
   function Tool(props: ComposerToolProps) {
@@ -236,6 +241,11 @@ it("revokes stale completion publications across editor and ownership lifecycles
   expect(h.publish(afterAba, "stale dismissal")).toBe(false);
   expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
 
+  h.fill("!blur");
+  const blurred = h.completionRequests.length - 1;
+  act(() => input.blur());
+  expect(h.publish(blurred, "stale blur")).toBe(false);
+
   h.fill("!provider");
   const oldProvider = h.completionRequests.length - 1;
   h.replaceCompletionProvider();
@@ -260,6 +270,79 @@ it("revokes stale completion publications across editor and ownership lifecycles
   h.unmount();
   expect(h.publish(fresh, "stale unmount")).toBe(false);
 });
+
+it.each([undefined, "root"])(
+  "completion preserves surrounding prose and exact recipient intent through emoji for %s",
+  async (threadRootId) => {
+    function Mentions({ publish }: ComposerCompletionProps) {
+      useLayoutEffect(() => {
+        return (
+          publish({
+            items: [first, second].map((mention) => ({
+              id: mention.pubkey,
+              label: mention.pubkey,
+              edit: { mention },
+            })),
+          }) || undefined
+        );
+      }, [publish]);
+      return null;
+    }
+    function Emoji({ publish }: ComposerCompletionProps) {
+      useLayoutEffect(() => {
+        return (
+          publish({
+            items: [{ id: "smile", label: "Smile", edit: { text: "😄" } }],
+          }) || undefined
+        );
+      }, [publish]);
+      return null;
+    }
+    const h = mount(threadRootId ? { threadRootId } : {}, [
+      {
+        id: "mentions",
+        key: "mentions",
+        pluginId: "test",
+        revision: "1",
+        title: "Mentions",
+        order: -10,
+        match: ({ text, start }) => mentionQuery(text, start),
+        component: Mentions,
+      },
+      {
+        id: "emoji",
+        key: "emoji",
+        pluginId: "test",
+        revision: "1",
+        title: "Emoji",
+        match: ({ text, start }) => emojiQuery(text, start),
+        component: Emoji,
+      },
+    ]);
+    h.fill("Before @Ho after");
+    act(() => h.input().setSelectionRange(10, 10));
+    fireEvent.select(h.input());
+    await h.user.click(screen.getByRole("option", { name: second.pubkey }));
+    expect(h.input()).toHaveValue("Before @Honey  after");
+    expect(h.input()).toHaveFocus();
+    act(() => h.input().setSelectionRange(20, 20));
+    fireEvent.select(h.input());
+    await h.user.keyboard(" :smile");
+    await h.user.keyboard("{Tab}");
+    expect(h.input()).toHaveValue("Before @Honey  after 😄");
+    h.submit();
+    const send = threadRootId ? h.messages.reply : h.messages.send;
+    expect(send.mock.calls[0]?.slice(-2)).toEqual([
+      "Before @Honey  after 😄",
+      [second.pubkey],
+    ]);
+    h.fill("@Honey :smile");
+    await h.user.keyboard("{Tab}");
+    expect(h.input()).toHaveValue("@Honey 😄");
+    h.submit();
+    expect(send.mock.calls[1]?.slice(-2)).toEqual(["@Honey 😄", []]);
+  },
+);
 
 it.each(["disabled", "readOnly"] as const)(
   "rejects late and displayed completion results when the editor becomes %s",

@@ -592,7 +592,7 @@ it("rejects overlong and over-limit tool edits without changing accepted intent"
 it.each(
   ["send", "unmount", "disabled", "denied"].flatMap((outcome) =>
     ["mention", "avatar"].flatMap((recipient) =>
-      (recipient === "mention" ? [true, false] : [true]).map((parent) => ({
+      [true, false].map((parent) => ({
         outcome,
         recipient,
         parent,
@@ -600,7 +600,7 @@ it.each(
     ),
   ),
 )(
-  "waits for parent agent admission before saved session messages: $recipient / $outcome / parent=$parent",
+  "waits for agent admission before saved session messages: $recipient / $outcome / parent=$parent",
   async ({ outcome, recipient, parent }) => {
     const view = mount();
     const list = {
@@ -647,7 +647,7 @@ it.each(
       );
       await view.user.click(
         await screen.findByRole("menuitemradio", {
-          name: "Honey — adds to channel",
+          name: parent ? "Honey — adds to channel" : "Honey",
         }),
       );
       await view.user.type(view.input(), "Hello Honey");

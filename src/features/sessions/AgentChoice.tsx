@@ -14,7 +14,6 @@ export function AgentChoice({
   disabled = false,
   allowed,
   parentName,
-  membersOnly,
   emptyLabel = "No agent selected",
   side = "top",
 }: {
@@ -24,7 +23,6 @@ export function AgentChoice({
   disabled?: boolean;
   allowed?: readonly string[] | undefined;
   parentName?: string | undefined;
-  membersOnly?: readonly string[] | undefined;
   emptyLabel?: string;
   side?: "top" | "bottom";
 }) {
@@ -37,9 +35,7 @@ export function AgentChoice({
   useEffect(() => {
     if (agents.status === "idle") void library.refresh();
   }, [library, agents.status]);
-  const identities = agents.identities.filter(
-    (agent) => !membersOnly || membersOnly.includes(agent.pubkey),
-  );
+  const identities = agents.identities;
   const selected = identities.find((agent) => agent.pubkey === value);
   function picture(avatar?: string) {
     const source = avatarSource(avatar);

@@ -85,6 +85,16 @@
   line-height: 1.6;
 }
 
+.parentChannel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.parentChannel svg {
+  flex-shrink: 0;
+}
+
 .listMessage {
   margin: var(--space-1) var(--space-3);
 }

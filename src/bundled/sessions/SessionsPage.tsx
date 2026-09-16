@@ -13,7 +13,6 @@ import { ChannelTimeline } from "../../features/messages/ChannelTimeline";
 import { MessageComposer } from "../../features/messages/MessageComposer";
 import { readView, writeView } from "../../shared/view-state";
 import { SessionsWorkspace } from "./SessionsWorkspace";
-import { SessionActions } from "./SessionActions";
 import { NewSessionComposer } from "../../features/sessions/NewSessionComposer";
 import {
   NewSessionView,
@@ -165,9 +164,7 @@ function SessionWork({
   const openLink = () => false;
   return (
     <div className={styles.work}>
-      <SessionHeading channel={channel} parentName={parentName}>
-        <SessionActions session={session} channel={channel} />
-      </SessionHeading>
+      <SessionHeading channel={channel} parentName={parentName} />
       <SessionColumn>
         <div className={styles.timeline}>
           {window.status === "error" && !window.rows.length ? (

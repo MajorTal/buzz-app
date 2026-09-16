@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { Hash } from "lucide-react";
 import { IconPlus } from "@tabler/icons-react";
 import styles from "./SessionsWorkspace.module.css";
 
@@ -40,8 +41,13 @@ export function SessionsWorkspace({
               aria-current={session.id === selected ? "page" : undefined}
               onClick={() => onSelect(session.id)}
             >
+              {session.parentName && (
+                <small className={styles.parentChannel}>
+                  <Hash size={12} aria-hidden="true" />
+                  <span>{session.parentName}</span>
+                </small>
+              )}
               <span>{session.title}</span>
-              {session.parentName && <small>{session.parentName}</small>}
             </button>
           ))}
           {listStatus ??

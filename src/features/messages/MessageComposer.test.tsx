@@ -658,7 +658,10 @@ it.each(
         }),
       );
     }
-    if (recipient === "mention") view.submit();
+    expect(addAgents).not.toHaveBeenCalled();
+    expect(session.workSessions.refreshMembership).not.toHaveBeenCalled();
+    expect(view.messages.send).not.toHaveBeenCalled();
+    view.submit();
     await waitFor(() =>
       expect(addAgents).toHaveBeenCalledWith(
         "channel",
@@ -671,13 +674,6 @@ it.each(
     if (outcome === "disabled") view.retarget({ disabled: true });
     await act(async () => release());
     if (outcome === "send") {
-      if (recipient === "avatar") {
-        expect(view.messages.send).not.toHaveBeenCalled();
-        expect(
-          screen.getByRole("button", { name: "Change agent: Honey" }),
-        ).toBeEnabled();
-        view.submit();
-      }
       await waitFor(() => expect(view.messages.send).toHaveBeenCalledOnce());
       expect(addAgents).toHaveBeenCalledOnce();
     } else expect(view.messages.send).not.toHaveBeenCalled();

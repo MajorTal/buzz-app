@@ -256,7 +256,7 @@ export function NewSessionComposer({
   return (
     <div id="new-session-prompt" ref={container}>
       <MessageComposer
-        leadingTool={
+        trailingTool={
           <AgentChoice
             session={session}
             value={pending?.agent ?? agent}

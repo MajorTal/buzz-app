@@ -56,7 +56,7 @@ export type MessageComposerProps = {
   channelName: string;
   label?: string | undefined;
   sessionConversation?: boolean | undefined;
-  leadingTool?: ReactNode;
+  trailingTool?: ReactNode;
   inviteAgents?: boolean | undefined;
   onSend?: (id: string) => void;
   threadRootId?: string;
@@ -98,7 +98,7 @@ function Composer({
   submission,
   sessionConversation,
   inviteAgents = false,
-  leadingTool,
+  trailingTool,
 }: MessageComposerProps) {
   const inputId = useId();
   const draftKey =
@@ -350,26 +350,10 @@ function Composer({
         throw new Error("The session changed. Review its channel and retry.");
     }
   }
-  async function selectAgent(key: string) {
+  function selectAgent(key: string) {
     if (disabled || admission.current) return;
-    if (!key) {
-      setSelectedAgent("");
-      setError(undefined);
-      return;
-    }
-    admission.current = true;
-    setAdmitting(true);
+    setSelectedAgent(key);
     setError(undefined);
-    try {
-      await prepareRecipients([key]);
-      setSelectedAgent(key);
-    } catch (reason) {
-      if (live.current)
-        setError(reason instanceof Error ? reason.message : String(reason));
-    } finally {
-      admission.current = false;
-      if (live.current) setAdmitting(false);
-    }
   }
   async function send() {
     if (
@@ -584,16 +568,6 @@ function Composer({
       )}
       <div className={styles.composerActions}>
         <div className={styles.composerTools}>
-          {leadingTool ??
-            (sessionConversation && (
-              <SessionAgentControl
-                session={session}
-                channelId={channelId}
-                value={selectedAgent}
-                onChange={(key) => void selectAgent(key)}
-                disabled={editingDisabled}
-              />
-            ))}
           {extensions && (
             <ComposerTools
               registry={extensions.tools}
@@ -609,9 +583,20 @@ function Composer({
             />
           )}
         </div>
-        <span className={styles.composerHint}>
-          Shift + Enter for a new line
-        </span>
+        {trailingTool ??
+          (sessionConversation ? (
+            <SessionAgentControl
+              session={session}
+              channelId={channelId}
+              value={selectedAgent}
+              onChange={selectAgent}
+              disabled={editingDisabled}
+            />
+          ) : (
+            <span className={styles.composerHint}>
+              Shift + Enter for a new line
+            </span>
+          ))}
         <button
           className={styles.sendButton}
           type="submit"

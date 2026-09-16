@@ -6,6 +6,7 @@ import {
   isBuzzLink,
 } from "../../features/navigation/buzz-links";
 import { ChannelSidebarRow } from "./ChannelSidebarRow";
+import { SessionMessageTarget } from "../../features/sessions/SessionMessageTarget";
 import { NewSessionComposer } from "../../features/sessions/NewSessionComposer";
 import {
   NewSessionView,
@@ -282,6 +283,7 @@ function ChannelWorkspace({
     )
       navigation.complete({ status: "opened" });
   }, [drafting, navigation]);
+  const flatSession = current?.channelType === "session";
   const [exactOpening, setExactOpening] = useState<{
     request: PageNavigation;
     inTimeline: boolean;
@@ -290,7 +292,7 @@ function ChannelWorkspace({
     if (
       !navigation ||
       !requestedMessage ||
-      requestedThread === requestedMessage ||
+      (!flatSession && requestedThread === requestedMessage) ||
       !currentId ||
       navigation.signal.aborted
     )
@@ -306,21 +308,31 @@ function ChannelWorkspace({
       setExactOpening({
         request: navigation,
         inTimeline:
-          requestedThread !== requestedMessage &&
+          (flatSession || requestedThread !== requestedMessage) &&
           window.status === "ready" &&
           window.freshness !== "cached" &&
           window.rows.some(
-            (row) => row.id === requestedMessage && !row.threadRootId,
+            (row) =>
+              row.id === requestedMessage && (flatSession || !row.threadRootId),
           ),
       });
     };
     const stop = queries.channels.subscribeWindow(currentId, choose);
     choose();
     return stop;
-  }, [navigation, requestedMessage, requestedThread, currentId, queries]);
-  const flatSession = current?.channelType === "session";
+  }, [
+    navigation,
+    requestedMessage,
+    requestedThread,
+    currentId,
+    queries,
+    flatSession,
+  ]);
   const exact =
-    navigation && requestedMessage && requestedThread === requestedMessage
+    !flatSession &&
+    navigation &&
+    requestedMessage &&
+    requestedThread === requestedMessage
       ? { request: navigation, inTimeline: false }
       : exactOpening?.request === navigation
         ? exactOpening
@@ -748,7 +760,28 @@ function ChannelWorkspace({
                 channelId={current?.id}
                 partialRoster={list.coverage === "partial"}
               />
-              {current ? (
+              {flatSession &&
+              current &&
+              navigation &&
+              requestedMessage &&
+              exact &&
+              !exact.inTimeline ? (
+                <SessionMessageTarget
+                  key={`${current.id}:${requestedMessage}`}
+                  session={queries}
+                  scope={scope}
+                  channelId={current.id}
+                  messageId={requestedMessage}
+                  navigation={navigation}
+                  extensions={extensions}
+                  onOpenLink={openLink}
+                  canOpenLink={canOpenLink}
+                  onLatest={() => select(current.id)}
+                  onRetry={() => {
+                    void navigator?.retry();
+                  }}
+                />
+              ) : current ? (
                 <ChannelBody
                   viewer={viewer}
                   extensions={extensions}
@@ -785,7 +818,10 @@ function ChannelWorkspace({
                       ? "Message this session"
                       : undefined
                   }
-                  onSend={(id) => setSent({ channelId: current.id, id })}
+                  onSend={(id) => {
+                    setSent({ channelId: current.id, id });
+                    if (flatSession && requestedMessage) select(current.id);
+                  }}
                 />
               )}
             </SessionColumn>

@@ -68,52 +68,66 @@ function setup(available = true) {
   } as unknown as RelaySession;
   return { session, workSessions, messages };
 }
-it("starts a child with Enter without relay Sessions support and lets mentions override the selected agent", async () => {
-  const test = setup(),
-    onStarted = vi.fn(),
-    user = userEvent.setup();
-  writeView("test", `sessions:channel:${parent.id}:new-draft`, {
-    text: "@Member agent Plan the release",
-    recipients: [
-      { pubkey: "a".repeat(64), name: "Member agent", start: 0, end: 13 },
-    ],
-  });
-  render(
-    <NewSessionComposer
-      session={test.session}
-      scope="test"
-      parent={parent}
-      onStarted={onStarted}
-    />,
-  );
-  await user.click(screen.getByRole("button", { name: "Choose an agent" }));
-  expect(
-    await screen.findByRole("menuitemradio", {
-      name: "Outside agent — adds to channel",
-    }),
-  ).toBeVisible();
-  await user.click(
-    await screen.findByRole("menuitemradio", { name: /^Outside agent/ }),
-  );
-  expect(
-    screen.getByRole("textbox", { name: "Message this session" }),
-  ).toHaveTextContent("Plan the release");
-  await user.click(screen.getByRole("textbox"));
-  await user.keyboard("{Enter}");
-  await waitFor(() => expect(onStarted).toHaveBeenCalled());
-  const id = test.workSessions.create.mock.calls[0]?.[0];
-  expect(test.workSessions.create).toHaveBeenCalledWith(
-    expect.any(String),
-    "@Member agent Plan the release",
-    parent.id,
-  );
-  expect(test.workSessions.invite).not.toHaveBeenCalled();
-  expect(test.messages.send).toHaveBeenCalledWith(
-    id,
-    "@Member agent Plan the release",
-    ["a".repeat(64)],
-  );
-});
+it.each([true, false])(
+  "admits only explicit mentions when they override the picker (child: %s)",
+  async (child) => {
+    const test = setup(),
+      onStarted = vi.fn(),
+      user = userEvent.setup();
+    writeView(
+      "test",
+      `${child ? `sessions:channel:${parent.id}` : "sessions"}:new-draft`,
+      {
+        text: "@Member agent Plan the release",
+        recipients: [
+          { pubkey: "a".repeat(64), name: "Member agent", start: 0, end: 13 },
+        ],
+      },
+    );
+    render(
+      <NewSessionComposer
+        session={test.session}
+        scope="test"
+        parent={child ? parent : undefined}
+        onStarted={onStarted}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Choose an agent" }));
+    expect(
+      await screen.findByRole("menuitemradio", {
+        name: /^Outside agent/,
+      }),
+    ).toBeVisible();
+    await user.click(
+      await screen.findByRole("menuitemradio", { name: /^Outside agent/ }),
+    );
+    expect(
+      screen.getByRole("textbox", { name: "Message this session" }),
+    ).toHaveTextContent("Plan the release");
+    await user.click(screen.getByRole("textbox"));
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(onStarted).toHaveBeenCalled());
+    const id = test.workSessions.create.mock.calls[0]?.[0];
+    expect(test.workSessions.create).toHaveBeenCalledWith(
+      expect.any(String),
+      "@Member agent Plan the release",
+      child ? parent.id : undefined,
+    );
+    expect(test.workSessions.invite).not.toHaveBeenCalled();
+    expect(test.workSessions.addAgents.mock.calls).toEqual(
+      (child ? [parent.id, id] : [id]).map((target) => [
+        target,
+        ["a".repeat(64)],
+        expect.any(Function),
+      ]),
+    );
+    expect(test.messages.send).toHaveBeenCalledWith(
+      id,
+      "@Member agent Plan the release",
+      ["a".repeat(64)],
+    );
+  },
+);
 it("keeps parent drafts separate and cannot send on an unsupported community", async () => {
   const test = setup(false),
     user = userEvent.setup();
@@ -266,7 +280,7 @@ it("loads the new session roster profiles before sending without an explicit age
   expect(test.messages.send).toHaveBeenCalledOnce();
 });
 
-it("adds selected and mentioned outsiders to the parent before creating or sending", async () => {
+it("deduplicates the effective recipient before parent admission", async () => {
   const test = setup(),
     user = userEvent.setup(),
     onStarted = vi.fn();
@@ -301,7 +315,7 @@ it("adds selected and mentioned outsiders to the parent before creating or sendi
   await waitFor(() =>
     expect(test.workSessions.addAgents).toHaveBeenCalledWith(
       parent.id,
-      ["b".repeat(64), "b".repeat(64)],
+      ["b".repeat(64)],
       expect.any(Function),
     ),
   );
@@ -351,3 +365,65 @@ it("keeps an editable draft when parent admission fails and retries admission fi
   await waitFor(() => expect(onStarted).toHaveBeenCalledOnce());
   expect(test.workSessions.addAgents).toHaveBeenCalledTimes(3);
 });
+
+it.each(
+  [true, false].flatMap((child) =>
+    [true, false].map((sent) => ({ child, sent })),
+  ),
+)(
+  "restores effective recipients without replaying an overridden invitation: child=$child, sent=$sent",
+  async ({ child, sent }) => {
+    const test = setup(),
+      onStarted = vi.fn(),
+      user = userEvent.setup();
+    const key = child ? `sessions:channel:${parent.id}` : "sessions";
+    const id = "22222222-2222-4222-8222-222222222222";
+    const draft = {
+      text: "@Member agent Continue",
+      recipients: [
+        { pubkey: "a".repeat(64), name: "Member agent", start: 0, end: 13 },
+      ],
+    };
+    writeView("test", `${key}:pending`, {
+      id,
+      text: draft.text,
+      draft,
+      agent: "b".repeat(64),
+      creationId: "c".repeat(64),
+      invitationId: "e".repeat(64),
+      ...(sent ? { messageId: "d".repeat(64) } : {}),
+    });
+    render(
+      <NewSessionComposer
+        session={test.session}
+        scope="test"
+        parent={child ? parent : undefined}
+        onStarted={onStarted}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(onStarted).toHaveBeenCalledOnce());
+    expect(test.workSessions.create).not.toHaveBeenCalled();
+    expect(test.workSessions.invite).not.toHaveBeenCalled();
+    expect(test.workSessions.delivered).not.toHaveBeenCalledWith(
+      "e".repeat(64),
+    );
+    if (sent) {
+      expect(test.workSessions.addAgents).not.toHaveBeenCalled();
+      expect(test.messages.send).not.toHaveBeenCalled();
+    } else {
+      expect(test.workSessions.addAgents.mock.calls).toEqual(
+        (child ? [parent.id, id] : [id]).map((target) => [
+          target,
+          ["a".repeat(64)],
+          expect.any(Function),
+        ]),
+      );
+      expect(test.messages.send).toHaveBeenCalledExactlyOnceWith(
+        id,
+        draft.text,
+        ["a".repeat(64)],
+      );
+    }
+  },
+);

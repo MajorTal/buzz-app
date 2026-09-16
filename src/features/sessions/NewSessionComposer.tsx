@@ -105,23 +105,22 @@ export function NewSessionComposer({
         }
       : { id: channelId, text: draft.text, draft, ...(agent ? { agent } : {}) };
 
+    const mentions = mentionDraft(current.draft).recipients.map(
+      (item) => item.pubkey,
+    );
+    const recipients = [
+      ...new Set(
+        mentions.length ? mentions : current.agent ? [current.agent] : [],
+      ),
+    ];
     save(current);
     try {
-      if (
-        parent &&
-        !current.messageId &&
-        (current.agent || mentionDraft(current.draft).recipients.length)
-      ) {
+      if (parent && !current.messageId && recipients.length) {
         await session.agentLibrary.refresh();
         if (!mounted.current) return;
         await session.workSessions.addAgents(
           parent.id,
-          [
-            ...mentionDraft(current.draft).recipients.map(
-              (item) => item.pubkey,
-            ),
-            ...(current.agent ? [current.agent] : []),
-          ],
+          recipients,
           () => mounted.current,
         );
         if (!mounted.current) return;
@@ -144,17 +143,12 @@ export function NewSessionComposer({
       if (parent && !current.messageId) {
         await session.workSessions.addAgents(
           current.id,
-          [
-            ...mentionDraft(current.draft).recipients.map(
-              (item) => item.pubkey,
-            ),
-            ...(current.agent ? [current.agent] : []),
-          ],
+          recipients,
           () => mounted.current,
         );
         if (!mounted.current) return;
       }
-      if (current.agent && !parent) {
+      if (!current.messageId && current.agent && !parent && !mentions.length) {
         if (!current.invitationId) {
           current.invitationId = session.workSessions.invite(
             current.id,
@@ -170,18 +164,15 @@ export function NewSessionComposer({
         if (!mounted.current) return;
       }
       if (!current.messageId) {
-        const mentions = mentionDraft(current.draft).recipients.map(
-          (item) => item.pubkey,
-        );
         if (!parent && mentions.length) {
           await session.workSessions.addAgents(
             current.id,
-            mentions,
+            recipients,
             () => mounted.current,
           );
           if (!mounted.current) return;
         }
-        if (!current.agent && !mentionDraft(current.draft).recipients.length) {
+        if (!recipients.length) {
           const channel = session.channels
             .list()
             .channels.find((item) => item.id === current.id);
@@ -198,11 +189,7 @@ export function NewSessionComposer({
         current.messageId = session.messages.send(
           current.id,
           current.text,
-          mentions.length
-            ? [...new Set(mentions)]
-            : current.agent
-              ? [current.agent]
-              : [],
+          recipients,
         );
         save({ ...current });
       }

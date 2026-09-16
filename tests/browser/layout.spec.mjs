@@ -642,7 +642,14 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
   await page.setViewportSize({ width: 1280, height: 832 });
   await page.goto(app.origin);
   const nav = page.getByRole("navigation", { name: "Pages", exact: true });
-  const titles = ["Home", "Messages", "Projects", "Agents", "Workflows"];
+  const titles = [
+    "Home",
+    "Messages",
+    "Projects",
+    "Agents",
+    "Sessions",
+    "Workflows",
+  ];
   await expect(nav.getByRole("button")).toHaveText(titles);
   await nav.getByRole("button", { name: "Projects", exact: true }).click();
   const surface = page.getByRole("region", { name: "Projects", exact: true });
@@ -685,6 +692,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     "Home",
     "Messages",
     "Agents",
+    "Sessions",
     "Workflows",
   ]);
   await projects.click();
@@ -699,6 +707,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     "Home",
     "Projects",
     "Agents",
+    "Sessions",
     "Workflows",
   ]);
   await channels.click();
@@ -708,6 +717,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     "Messages",
     "Projects",
     "Agents",
+    "Sessions",
     "Workflows",
     "Make it yoursSettings",
   ]);

@@ -28,6 +28,7 @@ export const test = base.extend({
   readState: [false, { option: true }],
   threadUnread: [false, { option: true }],
   exactMessages: [false, { option: true }],
+  sessionChannels: [[], { option: true }],
   sidebarUnread: [false, { option: true }],
   savedSidebar: [false, { option: true }],
   expectedPageFailure: [false, { option: true }],
@@ -49,6 +50,7 @@ export const test = base.extend({
       readState,
       threadUnread,
       exactMessages,
+      sessionChannels,
       sidebarUnread,
       savedSidebar,
       expectedPageFailure,
@@ -391,6 +393,13 @@ export const test = base.extend({
             ["d", id],
             ["name", id === "alpha" ? "Alpha" : id === "beta" ? "Beta" : id],
             ...(dmIds.includes(id) ? [["t", "dm"], ["hidden"]] : []),
+            ...(sessionChannels.includes(id)
+              ? [
+                  ["t", "stream"],
+                  ["private"],
+                  ["about", "Buzz session (buzz.sessions/v1)"],
+                ]
+              : []),
             ...(hiddenChannels.has(id) ? [["hidden"]] : []),
           ]),
         );
@@ -471,6 +480,13 @@ export const test = base.extend({
                 ([key, value]) => key === "e" && filter["#e"].includes(value),
               ),
           )
+          .filter(
+            (event) =>
+              filter.until === undefined ||
+              event.created_at < filter.until ||
+              (event.created_at === filter.until &&
+                event.id > filter.before_id),
+          )
           .toSorted(
             (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
           )
@@ -533,6 +549,13 @@ export const test = base.extend({
               ? [...threadReplies.values()].flat()
               : []),
           ])
+          .filter(
+            (event) =>
+              filter.until === undefined ||
+              event.created_at < filter.until ||
+              (event.created_at === filter.until &&
+                event.id > filter.before_id),
+          )
           .toSorted(
             (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
           )
@@ -657,10 +680,23 @@ export const test = base.extend({
           return send(response, {
             viewer,
             relayAuthor: getPublicKey(relayKey),
-            writeKinds: [9],
+            writeKinds: sessionChannels.length ? [9, 9007] : [9],
             relayUrl: JSON.parse(fixtureAliases)[community],
             live: true,
           });
+        }
+        if (sessionChannels.length && route === "sign") {
+          expect(body.kind).toBe(9);
+          return send(response, finalizeEvent(body, userKey));
+        }
+        if (sessionChannels.length && route === "publish") {
+          expect(verifyEvent(body)).toBe(true);
+          expect(body.pubkey).toBe(viewer);
+          expect(body.kind).toBe(9);
+          const channel = body.tags.find(([key]) => key === "h")?.[1];
+          expect(sessionChannels).toContain(channel);
+          histories.get(`${community}/${channel}`).push(body);
+          return send(response, { accepted: true, event_id: body.id });
         }
         if (route === "stream") {
           // Match the production broker: WebKit can buffer trailing HTTP chunks.
@@ -708,7 +744,7 @@ export const test = base.extend({
               .map((event) => [event.id, event]),
           ).values(),
         ];
-        if (filter.until !== undefined) {
+        if (filter.until !== undefined && filter["#h"]?.length) {
           pending.push({
             community,
             channel: filter["#h"][0],
@@ -958,11 +994,11 @@ export const test = base.extend({
           relay.publish("primary", event);
           return event;
         },
-        append(community, channel, content, deliver = true, own = true) {
+        append(community, channel, content, deliver = true, own = true, root) {
           const history = histories.get(`${community}/${channel}`);
           const event = sign(
             9,
-            [["h", channel]],
+            [["h", channel], ...(root ? [["e", root, "", "reply"]] : [])],
             content ?? `Live append ${history.length}`,
             own ? userKey : peerKey,
             (history.at(-1)?.created_at ?? 1700000900) + 1,

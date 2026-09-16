@@ -116,19 +116,18 @@ readingTest(
 );
 
 for (const count of [1, 3, 5, 7, 9]) {
-  test(`near-fit channel with ${count} mixed-height rows starts at bottom`, async ({
-    page,
-    app,
-  }) => {
-    app.histories.set(
-      "primary/beta",
-      app.histories.get("primary/beta").slice(0, count),
-    );
-    await open(page, app);
-    await select(page, "Beta");
-    await bottom(page, app, `cold ${count}-row Beta`);
-    await select(page, "Alpha");
-    await select(page, "Beta");
-    await bottom(page, app, `warm ${count}-row Beta`);
+  const nearFitTest = test.extend({
+    historyCounts: { alpha: 1, beta: count },
   });
+  nearFitTest(
+    `near-fit channel with ${count} mixed-height rows starts at bottom`,
+    async ({ page, app }) => {
+      await open(page, app);
+      await select(page, "Beta");
+      await bottom(page, app, `cold ${count}-row Beta`);
+      await select(page, "Alpha");
+      await select(page, "Beta");
+      await bottom(page, app, `warm ${count}-row Beta`);
+    },
+  );
 }

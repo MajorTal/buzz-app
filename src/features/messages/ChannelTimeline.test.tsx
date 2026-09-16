@@ -794,6 +794,27 @@ it("late measurements do not convert reading-anchor restoration to bottom follow
   expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
   h.unmount();
 });
+it.each([false, true])(
+  "cold extent clamping preserves restored reading until a real bottom gesture=%s",
+  (gesture) => {
+    const h = setup({
+      initial: { offset: 80851, bottom: false, anchor: { id: "last", y: 42 } },
+      mounted: [{ id: "last", y: 42 }],
+    });
+    // Cold geometry temporarily ends at the restored offset, then grows.
+    h.element.scrollHeight = h.element.scrollTop + h.element.clientHeight;
+    h.dispatchScroll();
+    h.element.scrollHeight += 650;
+    h.dispatchScroll();
+    if (gesture) {
+      h.element.scrollTop = h.element.scrollHeight - h.element.clientHeight;
+      h.scroll();
+    }
+    h.unmount();
+    expect(h.saved().bottom).toBe(gesture);
+    expect(h.saved().anchor).toEqual({ id: "last", y: 42 });
+  },
+);
 it("prepending retires the preceding bottom-reflow observer and its queued frame", () => {
   const h = setup();
   h.element.scrollTop = 3038;

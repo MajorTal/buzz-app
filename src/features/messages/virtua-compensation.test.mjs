@@ -277,17 +277,33 @@ for (const [name, config, deferred] of [
   });
 }
 
-it("defers new row registration but keeps measurement delivery synchronous", () => {
+function duringResize(c, render) {
+  const stop = c.store.H(2, () => {
+    stop();
+    render();
+  });
+  c.resize([{ target: c.viewport, contentRect: { height: 600 } }]);
+}
+
+it("defers only registrations caused by resize delivery and keeps sizes synchronous", () => {
   const c = setup({ attach: false });
-  const row = { offsetParent: c.viewport };
+  const row = {
+    offsetParent: c.viewport,
+    ownerDocument: c.viewport.ownerDocument,
+  };
   c.driver.P(row, 0); // Child registration can precede driver attachment.
-  expect(c.observed.size).toBe(0);
+  expect(c.observed.has(row)).toBe(true);
   c.driver.D({}, c.viewport);
   expect(c.observed.has(c.viewport)).toBe(true);
-  expect(c.observed.has(row)).toBe(false);
+  const sibling = {
+    offsetParent: c.viewport,
+    ownerDocument: c.viewport.ownerDocument,
+  };
+  duringResize(c, () => c.driver.P(sibling, 1));
+  expect(c.observed.has(sibling)).toBe(false);
   expect(c.frames.size).toBe(1);
   c.frame();
-  expect(c.observed.has(row)).toBe(true);
+  expect(c.observed.has(sibling)).toBe(true);
   c.resize([
     { target: c.viewport, contentRect: { height: 600 } },
     { target: row, contentRect: { height: 50 } },
@@ -300,8 +316,14 @@ it("defers new row registration but keeps measurement delivery synchronous", () 
 
 it("cancels unmounted registration and observes hidden and reassigned rows", () => {
   const c = setup();
-  const rows = Array.from({ length: 3 }, () => ({ offsetParent: c.viewport }));
-  const release = rows.map((row, index) => c.driver.P(row, index));
+  const rows = Array.from({ length: 3 }, () => ({
+    offsetParent: c.viewport,
+    ownerDocument: c.viewport.ownerDocument,
+  }));
+  let release;
+  duringResize(c, () => {
+    release = rows.map((row, index) => c.driver.P(row, index));
+  });
   release[0]();
   rows[1].offsetParent = null;
   release[2]();
@@ -321,13 +343,18 @@ it("cancels unmounted registration and observes hidden and reassigned rows", () 
 
 it("cancels registrations on disposal and accepts fresh registrations after remount", () => {
   const c = setup();
-  const row = { offsetParent: c.viewport };
-  const release = c.driver.P(row, 0);
+  const row = {
+    offsetParent: c.viewport,
+    ownerDocument: c.viewport.ownerDocument,
+  };
+  let release;
+  duringResize(c, () => {
+    release = c.driver.P(row, 0);
+  });
   c.driver._();
   expect(c.frames.size).toBe(0);
   c.frame();
   expect(c.observed.size).toBe(0);
-  c.resize([{ target: row, contentRect: { height: 50 } }]);
   expect(c.store.u(1)).toBe(100);
   release();
   c.driver.P(row, 0);
@@ -339,14 +366,36 @@ it("cancels registrations on disposal and accepts fresh registrations after remo
   c.driver._();
 });
 
-it("releases rows before attachment without creating or reviving an observer", () => {
+it("releases immediately observed rows before attachment without reviving them", () => {
   const c = setup({ attach: false });
-  const row = { offsetParent: c.viewport };
+  const row = {
+    offsetParent: c.viewport,
+    ownerDocument: c.viewport.ownerDocument,
+  };
   const release = c.driver.P(row, 0);
+  expect(c.observed.has(row)).toBe(true);
   expect(() => release()).not.toThrow();
+  expect(c.observed.has(row)).toBe(false);
   c.driver._();
   c.driver.D({}, c.viewport);
   c.frame();
   expect(c.observed.has(row)).toBe(false);
+  c.driver._();
+});
+
+it("restores ordinary registration timing if a resize subscriber throws", () => {
+  const c = setup();
+  expect(() =>
+    duringResize(c, () => {
+      throw new Error("render failed");
+    }),
+  ).toThrow("render failed");
+  const row = {
+    offsetParent: c.viewport,
+    ownerDocument: c.viewport.ownerDocument,
+  };
+  c.driver.P(row, 0);
+  expect(c.observed.has(row)).toBe(true);
+  expect(c.frames.size).toBe(0);
   c.driver._();
 });

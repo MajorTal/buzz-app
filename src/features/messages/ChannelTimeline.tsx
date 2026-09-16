@@ -162,7 +162,10 @@ function Timeline({
         element.clientHeight === previous.viewport &&
         element.scrollTop <
           previous.offset + Math.min(0, element.scrollHeight - previous.height);
-      if (previous && follow.current && !movedUp) position.bottom = true;
+      // Cold estimates can briefly clamp a restored reader to the measured end.
+      // Keep that explicit reading intent until a gesture or navigation resets it.
+      if (anchor) position.bottom = false;
+      else if (previous && follow.current && !movedUp) position.bottom = true;
       savedPosition.current = position;
       follow.current = position.bottom;
       measuredPosition.current = {

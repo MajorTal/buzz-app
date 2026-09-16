@@ -1,5 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
-index a183cc7b1669aab25467840540ce3bd1c025fb47..d37aaaa2ca664d03185b6e886e680fa20f5f5ed9 100644
+index a183cc7b1669aab25467840540ce3bd1c025fb47..483f3d281edf5640fd99abe5104ceccd82bcaec3 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -6,6 +6,10 @@ import { jsx as c } from "react/jsx-runtime";
@@ -13,12 +13,12 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d37aaaa2ca664d03185b6e886e680fa2
  var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v = e => [ ...e ].sort((e, t) => e - t), p = setTimeout, S = clearTimeout, m = "function" == typeof queueMicrotask ? queueMicrotask : e => {
      Promise.resolve().then(e);
  }, $ = () => {
-@@ -249,24 +253,53 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -249,24 +253,58 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
          o && o();
      } ];
  }, E = (e, t) => {
 -    let n, o, r = $(), i = !1;
-+    let n, o, r = $(), i = !1, restoreOverflow, observationFrame, mounted = false;
++    let n, o, r = $(), i = !1, restoreOverflow, deliveringResize = false, observationFrame, observationWindow;
 +    const interruptMomentum = () => {
 +        // Repeated corrections in one task share the original declaration.
 +        restoreOverflow && restoreOverflow();
@@ -45,29 +45,34 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d37aaaa2ca664d03185b6e886e680fa2
 -            const e = d.get(r);
 -            null != e && o.push([ e, i[u] ]);
 +    }), u = t ? "width" : "height", d = /* @__PURE__ */ new WeakMap, pendingRows = new Set;
-+    const observeRows = () => {
-+        observationFrame = void 0;
-+        for (const row of pendingRows) h.A(row);
-+        pendingRows.clear();
-+    }, scheduleObservations = () => {
-+        if (mounted && pendingRows.size && observationFrame === void 0)
-+            observationFrame = z(_(n)).requestAnimationFrame(observeRows);
-+    }, h = C(entries => {
-+        if (!mounted) return;
-+        const updates = [];
-+        for (const {target, contentRect} of entries) if (target.offsetParent) {
-+            if (target === n) e.W(4, contentRect[u]);
-+            else {
-+                const index = d.get(target);
-+                if (index != null) updates.push([index, contentRect[u]]);
++    const observeRow = row => {
++        if (!deliveringResize) return h.A(row);
++        // Newly rendered siblings must start observation after this delivery cycle.
++        pendingRows.add(row);
++        if (observationFrame === void 0) {
++            observationWindow = z(_(row));
++            observationFrame = observationWindow.requestAnimationFrame(() => {
++                observationFrame = void 0;
++                for (const target of pendingRows) h.A(target);
++                pendingRows.clear();
++            });
++        }
++    }, h = C(t => {
++        deliveringResize = true;
++        try {
++            const o = [];
++            for (const {target: r, contentRect: i} of t) if (r.offsetParent) if (r === n) e.W(4, i[u]); else {
++                const e = d.get(r);
++                null != e && o.push([ e, i[u] ]);
 +            }
++            o.length && e.W(3, o);
++        } finally {
++            deliveringResize = false;
          }
 -        o.length && e.W(3, o);
-+        updates.length && e.W(3, updates);
      });
      return {
          D(f, u = f.parentElement) {
-+            mounted = true;
              h.A(n = u), t && (i = "rtl" === getComputedStyle(u).direction), o = M(e, u, t, () => T(u[s], i), (t, n, o) => {
 -                if (o) {
 +                if (isMacWebKit()) interruptMomentum();
@@ -75,32 +80,24 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d37aaaa2ca664d03185b6e886e680fa2
                      const e = u.style, t = e[c];
                      e[c] = "hidden", p(() => {
                          e[c] = t;
-@@ -280,13 +313,19 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
-                     [l]: T(t, i),
-                     behavior: "instant"
-                 }), n && a();
--            }), r[1](!0);
-+            }), r[1](!0), scheduleObservations();
+@@ -283,10 +321,13 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+             }), r[1](!0);
          },
          _() {
 -            h.X(), o && o.X(), r[1](!1), r = $();
--        },
--        P: (e, t) => (d.set(e, t), h.A(e), () => {
--            d.delete(e), h.B(e);
-+            mounted = false;
-+            if (observationFrame !== void 0) z(_(n)).cancelAnimationFrame(observationFrame);
++            if (observationFrame !== void 0) observationWindow.cancelAnimationFrame(observationFrame);
 +            observationFrame = void 0;
 +            pendingRows.clear();
 +            restoreOverflow && restoreOverflow(), h.X(), o && o.X(), r[1](!1), r = $();
-+        },
-+        // New siblings must not start ResizeObserver delivery in the same cycle
-+        // that measured rows synchronously expand the rendered range.
-+        P: (e, t) => (d.set(e, t), pendingRows.add(e), scheduleObservations(), () => {
-+            pendingRows.delete(e), d.delete(e), n && h.B(e);
+         },
+-        P: (e, t) => (d.set(e, t), h.A(e), () => {
+-            d.delete(e), h.B(e);
++        P: (e, t) => (d.set(e, t), observeRow(e), () => {
++            pendingRows.delete(e), d.delete(e), h.B(e);
          }),
          V: f,
          J() {
-@@ -797,4 +836,3 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -797,4 +838,3 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
  });
 
  export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };

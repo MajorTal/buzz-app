@@ -15,15 +15,17 @@ test("Buzz channel and message links render, reveal verified targets, and preser
   page,
   app,
 }) => {
-  app.relay.holdProfiles([app.viewer]);
-  await open(page, app);
   const history = app.histories.get("primary/alpha");
+  app.relay.holdProfiles([history[0].pubkey]);
+  await open(page, app);
   const target = history.find((row) => row.content === "Broadcast reply");
   const href = `buzz://message?channel=alpha&id=${target.id}`;
   const message = app.append(
     "primary",
     "alpha",
     `Open <${href}> or <buzz://channel/beta>.`,
+    true,
+    false,
   );
   const row = page.locator(
     `[data-channel-timeline] [data-message-id="${message.id}"]`,
@@ -92,7 +94,7 @@ test("Buzz channel and message links render, reveal verified targets, and preser
   app.relay.releaseProfiles();
   await expect(
     row.getByRole("button", {
-      name: "View Fixture Reader profile",
+      name: "View Alice Fixture profile",
       exact: true,
     }),
   ).toBeVisible();
@@ -128,7 +130,13 @@ test("activating a panel from a linked thread retires the navigation-owned threa
   const history = app.histories.get("primary/alpha");
   const target = history.find((row) => row.content === "Broadcast reply");
   const href = `buzz://message?channel=alpha&id=${target.id}`;
-  const message = app.append("primary", "alpha", `Open <${href}>.`);
+  const message = app.append(
+    "primary",
+    "alpha",
+    `Open <${href}>.`,
+    true,
+    false,
+  );
   const row = page.locator(
     `[data-channel-timeline] [data-message-id="${message.id}"]`,
   );
@@ -147,7 +155,7 @@ test("activating a panel from a linked thread retires the navigation-owned threa
   // thread target, so it must be retired rather than share the rail slot with
   // the newly activated panel. (The fixture registers a catch-all panel.)
   await row
-    .getByRole("button", { name: "View Fixture Reader profile", exact: true })
+    .getByRole("button", { name: "View Alice Fixture profile", exact: true })
     .click();
   await expect(
     page.getByRole("complementary", { name: "Wrong panel", exact: true }),

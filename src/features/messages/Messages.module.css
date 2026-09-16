@@ -61,7 +61,7 @@
   --bubble-foreground: var(--text-primary);
   display: flex;
   gap: calc(var(--space-2) + var(--space-half));
-  padding: var(--space-6) var(--space-2) 0;
+  padding: var(--space-6) var(--space-2) var(--space-half);
 }
 .message[data-bubble-direction="outgoing"] {
   --bubble-background: var(--neutral-11);
@@ -69,7 +69,7 @@
   justify-content: flex-end;
 }
 .message.continuation {
-  padding-top: var(--space-half);
+  padding-top: 0;
 }
 .avatarSpace {
   width: 32px;
@@ -131,6 +131,15 @@
 }
 .text,
 .plainText {
+  margin: var(--space-1) 0 0;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
+  font-weight: var(--text-body-sm--font-weight);
+  overflow-wrap: anywhere;
+}
+/* Markdown also renders inline composer tokens; only message rows are bubbles. */
+.bubbleAnchor > :is(.text, .plainText) {
   align-self: stretch;
   margin: 0;
   max-width: 100%;
@@ -138,12 +147,6 @@
   padding: var(--space-2) var(--space-4);
   background: var(--bubble-background);
   color: var(--bubble-foreground);
-  font-size: var(--text-body);
-  line-height: var(--text-body--line-height);
-  letter-spacing: var(--text-body--letter-spacing);
-  font-weight: var(--text-body--font-weight);
-  white-space: normal;
-  overflow-wrap: anywhere;
 }
 .text[data-single-emoji] {
   --inline-emoji-size: var(--size-emoji-display);

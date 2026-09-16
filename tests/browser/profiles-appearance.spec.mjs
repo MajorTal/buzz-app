@@ -18,19 +18,27 @@ for (const mode of ["light", "dark"]) {
     const history = page.getByRole("region", {
       name: "Channel message history",
     });
-    const messageId = await history.evaluate((element) => {
-      const bounds = element.getBoundingClientRect();
-      const avatar = Array.from(
-        element.querySelectorAll(
-          'button[aria-label="View Alice Fixture profile"]',
-        ),
-      ).find((button) => {
-        const rect = button.getBoundingClientRect();
-        return rect.top >= bounds.top && rect.bottom <= bounds.bottom;
-      });
-      if (!avatar) throw new Error("No fully visible profile avatar");
-      return avatar.closest("[data-message-id]").dataset.messageId;
-    });
+    let messageId;
+    await expect
+      .poll(
+        async () => {
+          messageId = await history.evaluate((element) => {
+            const bounds = element.getBoundingClientRect();
+            const avatar = Array.from(
+              element.querySelectorAll(
+                'button[aria-label="View Alice Fixture profile"]',
+              ),
+            ).find((button) => {
+              const rect = button.getBoundingClientRect();
+              return rect.top >= bounds.top && rect.bottom <= bounds.bottom;
+            });
+            return avatar?.closest("[data-message-id]").dataset.messageId;
+          });
+          return messageId;
+        },
+        { message: "profile name and group-final avatar are visible" },
+      )
+      .toBeTruthy();
     const avatar = history
       .locator(`[data-message-id="${messageId}"]`)
       .getByRole("button", {

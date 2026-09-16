@@ -1,18 +1,24 @@
 diff --git a/lib/index.js b/lib/index.js
+index a183cc7b1669aab25467840540ce3bd1c025fb47..d37aaaa2ca664d03185b6e886e680fa20f5f5ed9 100644
 --- a/lib/index.js
 +++ b/lib/index.js
-@@ -7,1 +7,5 @@
+@@ -6,6 +6,10 @@ import { jsx as c } from "react/jsx-runtime";
+
  import { flushSync as f } from "react-dom";
-+
+
 +// WebKit can restore a stale native scroll offset after an instant correction.
 +// Interrupt only the corrected axis; observer-inferred idle is not native idle.
 +const isMacWebKit = () => typeof navigator !== "undefined" && !b() && navigator.platform === "MacIntel" && navigator.vendor === "Apple Computer, Inc.";
-@@ -249,7 +253,22 @@
++
+ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v = e => [ ...e ].sort((e, t) => e - t), p = setTimeout, S = clearTimeout, m = "function" == typeof queueMicrotask ? queueMicrotask : e => {
+     Promise.resolve().then(e);
+ }, $ = () => {
+@@ -249,24 +253,53 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
          o && o();
      } ];
  }, E = (e, t) => {
 -    let n, o, r = $(), i = !1;
-+    let n, o, r = $(), i = !1, restoreOverflow;
++    let n, o, r = $(), i = !1, restoreOverflow, observationFrame, mounted = false;
 +    const interruptMomentum = () => {
 +        // Repeated corrections in one task share the original declaration.
 +        restoreOverflow && restoreOverflow();
@@ -31,9 +37,37 @@ diff --git a/lib/index.js b/lib/index.js
      const s = t ? "scrollLeft" : "scrollTop", l = t ? "left" : "top", c = t ? "overflowX" : "overflowY", [f, a] = O(e, () => r[0], (e, t) => {
          n.scrollTo({
              [l]: T(e, i),
-@@ -266,7 +285,8 @@
+             behavior: t ? "smooth" : "instant"
+         });
+-    }), u = t ? "width" : "height", d = /* @__PURE__ */ new WeakMap, h = C(t => {
+-        const o = [];
+-        for (const {target: r, contentRect: i} of t) if (r.offsetParent) if (r === n) e.W(4, i[u]); else {
+-            const e = d.get(r);
+-            null != e && o.push([ e, i[u] ]);
++    }), u = t ? "width" : "height", d = /* @__PURE__ */ new WeakMap, pendingRows = new Set;
++    const observeRows = () => {
++        observationFrame = void 0;
++        for (const row of pendingRows) h.A(row);
++        pendingRows.clear();
++    }, scheduleObservations = () => {
++        if (mounted && pendingRows.size && observationFrame === void 0)
++            observationFrame = z(_(n)).requestAnimationFrame(observeRows);
++    }, h = C(entries => {
++        if (!mounted) return;
++        const updates = [];
++        for (const {target, contentRect} of entries) if (target.offsetParent) {
++            if (target === n) e.W(4, contentRect[u]);
++            else {
++                const index = d.get(target);
++                if (index != null) updates.push([index, contentRect[u]]);
++            }
+         }
+-        o.length && e.W(3, o);
++        updates.length && e.W(3, updates);
+     });
      return {
          D(f, u = f.parentElement) {
++            mounted = true;
              h.A(n = u), t && (i = "rtl" === getComputedStyle(u).direction), o = M(e, u, t, () => T(u[s], i), (t, n, o) => {
 -                if (o) {
 +                if (isMacWebKit()) interruptMomentum();
@@ -41,15 +75,34 @@ diff --git a/lib/index.js b/lib/index.js
                      const e = u.style, t = e[c];
                      e[c] = "hidden", p(() => {
                          e[c] = t;
-@@ -283,7 +303,7 @@
-             }), r[1](!0);
+@@ -280,13 +313,19 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+                     [l]: T(t, i),
+                     behavior: "instant"
+                 }), n && a();
+-            }), r[1](!0);
++            }), r[1](!0), scheduleObservations();
          },
          _() {
 -            h.X(), o && o.X(), r[1](!1), r = $();
+-        },
+-        P: (e, t) => (d.set(e, t), h.A(e), () => {
+-            d.delete(e), h.B(e);
++            mounted = false;
++            if (observationFrame !== void 0) z(_(n)).cancelAnimationFrame(observationFrame);
++            observationFrame = void 0;
++            pendingRows.clear();
 +            restoreOverflow && restoreOverflow(), h.X(), o && o.X(), r[1](!1), r = $();
-         },
-         P: (e, t) => (d.set(e, t), h.A(e), () => {
-             d.delete(e), h.B(e);
-@@ -799,2 +819,1 @@
++        },
++        // New siblings must not start ResizeObserver delivery in the same cycle
++        // that measured rows synchronously expand the rendered range.
++        P: (e, t) => (d.set(e, t), pendingRows.add(e), scheduleObservations(), () => {
++            pendingRows.delete(e), d.delete(e), n && h.B(e);
+         }),
+         V: f,
+         J() {
+@@ -797,4 +836,3 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+ });
+
  export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
+\ No newline at end of file
 -//# sourceMappingURL=index.js.map

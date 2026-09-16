@@ -27,6 +27,7 @@ function setup({
   horizontal = false,
   direction = "ltr",
   offset = 1300,
+  attach = true,
 } = {}) {
   const {
     store: createStore,
@@ -48,6 +49,10 @@ function setup({
       declarations.set(name, [value, priority]),
     removeProperty: (name) => declarations.delete(name),
   };
+  let resize;
+  const observed = new Set();
+  let frameId = 0;
+  const frames = new Map();
   const viewport = new EventTarget();
   const calls = [];
   const axis = horizontal ? "overflow-x" : "overflow-y";
@@ -60,10 +65,24 @@ function setup({
     scrollLeft: 0,
     ownerDocument: {
       defaultView: {
+        requestAnimationFrame: (callback) => {
+          frames.set(++frameId, callback);
+          return frameId;
+        },
+        cancelAnimationFrame: (id) => frames.delete(id),
         ResizeObserver: class {
-          observe() {}
-          unobserve() {}
-          disconnect() {}
+          constructor(callback) {
+            resize = callback;
+          }
+          observe(row) {
+            observed.add(row);
+          }
+          unobserve(row) {
+            observed.delete(row);
+          }
+          disconnect() {
+            observed.clear();
+          }
         },
       },
     },
@@ -83,7 +102,7 @@ function setup({
   store.W(4, 500); // measured viewport
   store.W(1, offset); // observed native scrolling
   const driver = createDriver(store, horizontal);
-  driver.D({}, viewport);
+  if (attach) driver.D({}, viewport);
   return {
     store,
     driver,
@@ -91,6 +110,14 @@ function setup({
     style,
     axis,
     calls,
+    frames,
+    observed,
+    resize: (entries) => resize(entries),
+    frame() {
+      const pending = [...frames.values()];
+      frames.clear();
+      for (const callback of pending) callback();
+    },
     prepend(length = 40) {
       store.W(5, [length, true]);
       driver.J();
@@ -249,3 +276,77 @@ for (const [name, config, deferred] of [
     c.driver._();
   });
 }
+
+it("defers new row registration but keeps measurement delivery synchronous", () => {
+  const c = setup({ attach: false });
+  const row = { offsetParent: c.viewport };
+  c.driver.P(row, 0); // Child registration can precede driver attachment.
+  expect(c.observed.size).toBe(0);
+  c.driver.D({}, c.viewport);
+  expect(c.observed.has(c.viewport)).toBe(true);
+  expect(c.observed.has(row)).toBe(false);
+  expect(c.frames.size).toBe(1);
+  c.frame();
+  expect(c.observed.has(row)).toBe(true);
+  c.resize([
+    { target: c.viewport, contentRect: { height: 600 } },
+    { target: row, contentRect: { height: 50 } },
+  ]);
+  expect(c.store.o()).toBe(600);
+  expect(c.store.u(1)).toBe(50);
+  expect(c.frames.size).toBe(0);
+  c.driver._();
+});
+
+it("cancels unmounted registration and observes hidden and reassigned rows", () => {
+  const c = setup();
+  const rows = Array.from({ length: 3 }, () => ({ offsetParent: c.viewport }));
+  const release = rows.map((row, index) => c.driver.P(row, index));
+  release[0]();
+  rows[1].offsetParent = null;
+  release[2]();
+  c.driver.P(rows[2], 3);
+  expect(c.frames.size).toBe(1);
+  c.frame();
+  expect(c.observed.has(rows[0])).toBe(false);
+  expect(c.observed.has(rows[1])).toBe(true); // It must report becoming visible later.
+  expect(c.observed.has(rows[2])).toBe(true);
+  rows[1].offsetParent = c.viewport;
+  c.resize(
+    rows.slice(1).map((target) => ({ target, contentRect: { height: 50 } })),
+  );
+  expect(c.store.u(4)).toBe(300);
+  c.driver._();
+});
+
+it("cancels registrations on disposal and accepts fresh registrations after remount", () => {
+  const c = setup();
+  const row = { offsetParent: c.viewport };
+  const release = c.driver.P(row, 0);
+  c.driver._();
+  expect(c.frames.size).toBe(0);
+  c.frame();
+  expect(c.observed.size).toBe(0);
+  c.resize([{ target: row, contentRect: { height: 50 } }]);
+  expect(c.store.u(1)).toBe(100);
+  release();
+  c.driver.P(row, 0);
+  c.driver.D({}, c.viewport);
+  c.frame();
+  expect(c.observed.has(row)).toBe(true);
+  c.resize([{ target: row, contentRect: { height: 60 } }]);
+  expect(c.store.u(1)).toBe(60);
+  c.driver._();
+});
+
+it("releases rows before attachment without creating or reviving an observer", () => {
+  const c = setup({ attach: false });
+  const row = { offsetParent: c.viewport };
+  const release = c.driver.P(row, 0);
+  expect(() => release()).not.toThrow();
+  c.driver._();
+  c.driver.D({}, c.viewport);
+  c.frame();
+  expect(c.observed.has(row)).toBe(false);
+  c.driver._();
+});

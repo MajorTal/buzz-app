@@ -1,7 +1,7 @@
 .workspace {
   display: grid;
   grid-template-columns: 248px minmax(0, 1fr);
-  gap: 10px;
+  gap: var(--space-2);
   height: 100%;
   min-height: 0;
   color: var(--text);
@@ -18,19 +18,19 @@
 .sidebar {
   display: flex;
   flex-direction: column;
-  padding: 12px;
+  padding: var(--space-3);
 }
 
 .newSession {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--space-2);
   width: 100%;
-  padding: 13px 14px;
+  padding: var(--space-3) var(--space-3);
   border-radius: var(--radius-control);
   background: var(--selected);
   color: var(--on-selected);
-  font-weight: 600;
+  font-weight: var(--type-weight-medium);
   cursor: pointer;
 }
 
@@ -39,10 +39,10 @@
 }
 
 .historyHeading {
-  margin: 24px 12px 10px;
+  margin: var(--space-6) var(--space-3) var(--space-2);
   color: var(--text-muted);
-  font-size: calc(0.75rem * var(--buzz-text-scale, 1));
-  font-weight: 500;
+  font-size: var(--text-caption);
+  font-weight: var(--type-weight-medium);
 }
 
 .history {
@@ -50,15 +50,15 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  gap: 3px;
+  gap: var(--space-chip-inset);
 }
 
 .history button {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 5px;
-  padding: 12px;
+  gap: var(--space-1);
+  padding: var(--space-3);
   border-radius: var(--radius-control);
   text-align: left;
   cursor: pointer;
@@ -81,12 +81,12 @@
 .history small,
 .listMessage {
   color: var(--text-muted);
-  font-size: calc(0.75rem * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
   line-height: 1.6;
 }
 
 .listMessage {
-  margin: 4px 12px;
+  margin: var(--space-1) var(--space-3);
 }
 
 .content {
@@ -108,7 +108,7 @@
   }
 
   .sidebar {
-    padding: 10px;
+    padding: var(--space-2);
   }
 
   .historyHeading {

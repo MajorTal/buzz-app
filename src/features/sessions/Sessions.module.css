@@ -8,23 +8,23 @@
 }
 .workHeader {
   min-height: 58px;
-  padding: 12px 16px;
+  padding: var(--space-4) var(--space-panel-inset);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
 }
 .workTitle {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .workTitle h2 {
   margin: 0;
   font-size: inherit;
-  font-weight: 600;
+  font-weight: var(--type-weight-medium);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -40,20 +40,20 @@
   min-height: 0;
 }
 .composer {
-  padding: 12px 24px;
+  padding: var(--space-3) var(--space-6);
 }
 .composer > p {
   color: var(--text-muted);
-  font-size: calc(0.75rem * var(--buzz-text-scale, 1));
-  padding: 8px 4px 0;
+  font-size: var(--text-caption);
+  padding: var(--space-2) var(--space-1) 0;
 }
 .empty {
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 14px;
-  padding: 32px;
+  gap: var(--space-3);
+  padding: var(--space-8);
   height: 100%;
   text-align: center;
 }
@@ -63,12 +63,12 @@
 }
 .empty h1,
 .empty h2 {
-  font-size: calc(1.5rem * var(--buzz-text-scale, 1));
-  font-weight: 600;
+  font-size: var(--text-heading);
+  font-weight: var(--type-weight-medium);
 }
 @media (max-width: 720px) {
   .composer {
-    padding: 8px;
+    padding: var(--space-2);
   }
 }
 .actions button {
@@ -77,13 +77,13 @@
 
 .availability {
   color: var(--text-muted);
-  font-size: 12px;
+  font-size: var(--text-caption);
   line-height: 1.6;
-  margin: 12px 16px 0;
+  margin: var(--space-3) var(--space-4) 0;
 }
 .actions select {
   max-width: 100%;
-  padding: 7px;
+  padding: var(--space-2);
   border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--text);
@@ -91,20 +91,20 @@
 .actions {
   display: flex;
   justify-content: flex-end;
-  gap: 12px;
+  gap: var(--space-3);
   padding: 0;
-  font-size: 13px;
+  font-size: var(--text-body-sm);
 }
 .actions form {
   width: 100%;
-  padding: 16px;
+  padding: var(--space-4);
   border-radius: var(--radius-control);
   background: var(--surface-input);
 }
 .actions form > div {
   display: flex;
-  gap: 16px;
-  margin-top: 14px;
+  gap: var(--space-4);
+  margin-top: var(--space-3);
 }
 .actions p {
   color: var(--text-muted);
@@ -116,7 +116,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 16px;
+  padding: var(--space-4);
   overflow-y: auto;
 }
 
@@ -128,19 +128,20 @@
 
 @media (max-width: 760px) {
   .start {
-    padding: 8px;
+    padding: var(--space-2);
   }
 }
 
 .agentTrigger {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1h);
   max-width: min(240px, 45vw);
   height: 32px;
-  padding: 3px 7px 3px 3px;
+  padding: var(--space-chip-inset) var(--space-2) var(--space-chip-inset)
+    var(--space-chip-inset);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--text-muted);
   cursor: pointer;
@@ -157,8 +158,8 @@
 .agentOption .agentAvatar {
   width: 24px;
   height: 24px;
-  border-radius: 7px;
-  font-size: 10px;
+  border-radius: var(--radius-chip);
+  font-size: var(--text-caption);
 }
 .agentPositioner {
   z-index: 50;
@@ -167,7 +168,7 @@
   position: relative;
   max-width: min(340px, var(--available-width));
   max-height: min(360px, var(--available-height));
-  font-size: 13px;
+  font-size: var(--text-body-sm);
   outline: none;
 }
 .agentOption {
@@ -178,14 +179,14 @@
 }
 .agentCheck {
   margin-left: auto;
-  padding-left: 8px;
+  padding-left: var(--space-2);
 }
 
 .agentName {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12px;
+  font-size: var(--text-caption);
 }
 .agentTrigger > svg,
 .agentTrigger .agentAvatar {

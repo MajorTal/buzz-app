@@ -160,6 +160,7 @@ function SessionWork({
   parentName?: string | undefined;
 }) {
   const window = useChannelWindow(session.channels, channel.id);
+  const [sent, setSent] = useState<string>();
   const openLink = () => false;
   return (
     <div className={styles.work}>
@@ -188,12 +189,14 @@ function SessionWork({
             scope={scope}
             channelId={channel.id}
             window={window}
+            revealMessageId={sent}
             onOpenLink={openLink}
           />
         )}
       </div>
       <MessageComposer
         sessionConversation
+        onSend={setSent}
         extensions={extensions}
         session={session}
         scope={scope}

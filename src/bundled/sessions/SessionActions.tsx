@@ -27,6 +27,23 @@ export function SessionActions({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
   const [operation, setOperation] = useState<string>();
+  const failed = !!operation && session.workSessions.failed(operation);
+  async function changeAgent() {
+    if (busy || !operation || !failed) return;
+    setBusy(true);
+    try {
+      await session.workSessions.discardFailed(operation);
+      if (!live.current) return;
+      setOperation(undefined);
+      setAgent("");
+      setError(undefined);
+    } catch (reason) {
+      if (live.current)
+        setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      if (live.current) setBusy(false);
+    }
+  }
   async function apply() {
     if (busy) return;
     setBusy(true);
@@ -91,6 +108,15 @@ export function SessionActions({
             <button type="submit" disabled={busy || !agent}>
               {busy ? "Saving…" : operation ? "Retry" : "Invite"}
             </button>
+            {failed && (
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => void changeAgent()}
+              >
+                Choose another agent
+              </button>
+            )}
             <button
               type="button"
               disabled={busy || !!operation}

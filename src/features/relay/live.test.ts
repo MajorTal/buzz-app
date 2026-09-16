@@ -113,6 +113,46 @@ it("uses independent explicit channel routes and self-p globals; equal interests
   h.owner.dispose();
   expect(vi.getTimerCount()).toBe(0);
 });
+it("publishes ephemeral presence and runs bounded authenticated queries on the live socket", async () => {
+  vi.useFakeTimers();
+  const h = setup(["room"]);
+  await h.first.auth();
+  await vi.advanceTimersByTimeAsync(750);
+
+  const presence = signed(h.key, {
+    kind: 20101,
+    content: "here",
+    created_at: 1700000000,
+    tags: [["h", "room"]],
+  });
+  const publication = h.owner.publish?.(presence);
+  expect(h.first.sent.at(-1)).toMatchObject(["EVENT", { id: presence.id }]);
+  await h.first.receive(["OK", presence.id, true, ""]);
+  await expect(publication).resolves.toBeUndefined();
+
+  const query = h.owner.query?.({
+    kinds: [48104],
+    "#h": ["room"],
+    "#d": ["session"],
+    limit: 1,
+  });
+  const request = h.first.requests().at(-1);
+  assert.exists(request);
+  const liveness = signed(h.key, {
+    kind: 48104,
+    content: "{}",
+    created_at: 1700000001,
+    tags: [
+      ["h", "room"],
+      ["d", "session"],
+    ],
+  });
+  await h.first.receive(["EVENT", request[1], liveness]);
+  await h.first.receive(["EOSE", request[1]]);
+  await expect(query).resolves.toEqual([liveness]);
+  h.owner.dispose();
+});
+
 it("isolates denial, fences removed/readded routes and late sockets, and disposes retries", async () => {
   vi.useFakeTimers();
   const h = setup();

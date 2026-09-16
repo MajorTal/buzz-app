@@ -391,16 +391,17 @@ test("live room commands construct fixed private-channel events and audio auth s
     const audioResponse = await h.post("rooms-audio-start", {
       parentRoomId: roomId,
       members: [invited],
+      candidates: [],
     });
     expect(audioResponse.status).toBe(200);
     const { audioRoomId } = await audioResponse.json();
     expect(audioRoomId).toMatch(/^[0-9a-f-]{36}$/);
     expect(h.calls.slice(5).map((call) => call.body.kind)).toEqual([
-      9007, 9000, 48100,
+      9007, 48100,
     ]);
     expect(h.calls[5].body.tags).toContainEqual(["ttl", "3600"]);
-    expect(h.calls[7].body.tags).toEqual([["h", roomId]]);
-    expect(JSON.parse(h.calls[7].body.content)).toEqual({
+    expect(h.calls[6].body.tags).toEqual([["h", roomId]]);
+    expect(JSON.parse(h.calls[6].body.content)).toEqual({
       ephemeral_channel_id: audioRoomId,
     });
     expect(h.calls.every((call) => verifyEvent(call.body))).toBe(true);
@@ -419,7 +420,14 @@ test("live room commands reject malformed names, identities, room ids and challe
       ["rooms-rename", { roomId: "not-a-room", name: "Valid" }],
       ["rooms-rename", { roomId: crypto.randomUUID(), name: "" }],
       ["rooms-delete", { roomId: "not-a-room" }],
-      ["rooms-audio-start", { parentRoomId: "not-a-room", members: [] }],
+      [
+        "rooms-audio-start",
+        { parentRoomId: "not-a-room", members: [], candidates: [] },
+      ],
+      [
+        "rooms-audio-start",
+        { parentRoomId: crypto.randomUUID(), members: [], candidates: ["bad"] },
+      ],
       ["huddle-auth", { challenge: "line\nbreak" }],
     ]) {
       const response = await h.post(route, body);

@@ -22,6 +22,7 @@ import {
 import type { RelayData } from "../../features/relay/service";
 import { useRelayConnection } from "../../features/relay/react";
 import type { ChannelSummary, Profile } from "../../features/relay/contracts";
+import { foldProfiles } from "../../features/relay/profiles";
 import { Avatar } from "../../shared/Avatar";
 import { connectLiveAudio } from "./audio";
 import type { LiveAudioSession, LiveAudioState } from "./audio";
@@ -30,6 +31,7 @@ import {
   deleteLiveRoom,
   inviteToLiveRoom,
   LIVE_ROOM_PREFIX,
+  publishLiveRoomPresence,
   renameLiveRoom,
 } from "./api";
 import styles from "./RoomsPanel.module.css";
@@ -85,6 +87,10 @@ export function RoomsPanel({ relay }: { relay: RelayData }) {
   const knownRoomsScope = useRef<string | undefined>(undefined);
   const [busy, setBusy] = useState(false);
   const [checkedIn, setCheckedIn] = useState(false);
+  const [presenceEvents, setPresenceEvents] = useState<
+    ReadonlyMap<string, { here: boolean; seenAt: number }>
+  >(() => new Map());
+  const [presenceClock, setPresenceClock] = useState(() => Date.now());
   const [audio, setAudio] = useState<LiveAudioState>();
   const audioSession = useRef<LiveAudioSession | undefined>(undefined);
   const audioJoinAbort = useRef<AbortController | undefined>(undefined);
@@ -144,6 +150,62 @@ export function RoomsPanel({ relay }: { relay: RelayData }) {
     [],
   );
   useEffect(() => {
+    const timer = window.setInterval(() => setPresenceClock(Date.now()), 5_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(() => {
+    const view = connection.session.observe([{ kinds: [20101], limit: 500 }]);
+    const sync = () => {
+      const next = new Map<string, { here: boolean; seenAt: number }>();
+      for (const event of view.snapshot().events) {
+        const channelId = event.tags.find(([name]) => name === "h")?.[1];
+        if (!channelId) continue;
+        const key = `${channelId}:${event.pubkey}`;
+        const current = next.get(key);
+        let state: unknown;
+        let seenAt = event.created_at * 1000;
+        try {
+          const content = JSON.parse(event.content) as {
+            state?: unknown;
+            sent_at?: unknown;
+          };
+          state = content.state;
+          if (
+            typeof content.sent_at === "number" &&
+            Number.isSafeInteger(content.sent_at)
+          )
+            seenAt = content.sent_at;
+        } catch {
+          state = event.content;
+        }
+        if (!current || seenAt >= current.seenAt)
+          next.set(key, { here: state === "here", seenAt });
+      }
+      setPresenceEvents(next);
+    };
+    const unsubscribe = view.subscribe(sync);
+    void view.refresh();
+    sync();
+    return () => {
+      unsubscribe();
+      view.dispose();
+    };
+  }, [connection.session]);
+  useEffect(() => {
+    if (!checkedIn || !room || connection.status !== "ready") return;
+    const heartbeat = () =>
+      void publishLiveRoomPresence(connection, room.id, true).catch(() => {});
+    const timer = window.setInterval(heartbeat, 15_000);
+    const leave = () =>
+      void publishLiveRoomPresence(connection, room.id, false).catch(() => {});
+    window.addEventListener("pagehide", leave);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("pagehide", leave);
+      leave();
+    };
+  }, [checkedIn, connection, room]);
+  useEffect(() => {
     if (audioScope.current === connection.scope) return;
     audioScope.current = connection.scope;
     audioGeneration.current++;
@@ -165,7 +227,23 @@ export function RoomsPanel({ relay }: { relay: RelayData }) {
   };
   const checkOut = () => {
     leaveAudio();
+    if (checkedIn && room)
+      void publishLiveRoomPresence(connection, room.id, false).catch(() => {});
     setCheckedIn(false);
+  };
+  const checkIn = async () => {
+    if (!room || connection.status !== "ready") return;
+    setOperationError("");
+    try {
+      await publishLiveRoomPresence(connection, room.id, true);
+      setCheckedIn(true);
+    } catch (error) {
+      setOperationError(
+        error instanceof Error
+          ? error.message
+          : "We couldn’t check you in. Try again.",
+      );
+    }
   };
   const selectRoom = (id: string) => {
     if (id !== room?.id) checkOut();
@@ -354,8 +432,13 @@ export function RoomsPanel({ relay }: { relay: RelayData }) {
 
   const connected = audio?.status === "connected";
   const peers = audio?.peers ?? [];
+  const relayHereKeys = [...(room.members ?? [])].filter((pubkey) => {
+    const presence = presenceEvents.get(`${room.id}:${pubkey}`);
+    return presence?.here === true && presenceClock - presence.seenAt < 30_000;
+  });
   const hereKeys = [
     ...(checkedIn && connection.viewer ? [connection.viewer] : []),
+    ...relayHereKeys,
     ...peers.map((peer) => peer.pubkey),
   ].filter((pubkey, index, all) => all.indexOf(pubkey) === index);
   const memberKeys = (room.members ?? []).filter(
@@ -553,7 +636,7 @@ export function RoomsPanel({ relay }: { relay: RelayData }) {
           <button
             type="button"
             className={styles.checkInButton}
-            onClick={() => setCheckedIn(true)}
+            onClick={() => void checkIn()}
           >
             Check in
           </button>
@@ -829,17 +912,11 @@ function InviteSheet({
   onClose(): void;
   onSelect(pubkey: string): void;
 }) {
-  const [query, setQuery] = useState("@");
+  const [query, setQuery] = useState("");
   const [error, setError] = useState("");
-  const list = useSyncExternalStore(
-    connection.session.channels.subscribeList,
-    connection.session.channels.list,
-    connection.session.channels.list,
-  );
-  const profiles = useSyncExternalStore(
-    connection.session.profiles.subscribe,
-    connection.session.profiles.snapshot,
-    connection.session.profiles.snapshot,
+  const [searching, setSearching] = useState(false);
+  const [results, setResults] = useState<ReadonlyMap<string, Profile>>(
+    () => new Map(),
   );
   const library = useSyncExternalStore(
     connection.session.agentLibrary.subscribe,
@@ -850,39 +927,58 @@ function InviteSheet({
     () => new Set(library.identities.map((identity) => identity.pubkey)),
     [library],
   );
-  const humanKeys = useMemo(
-    () =>
-      [
-        ...new Set(list.channels.flatMap((channel) => channel.members ?? [])),
-      ].filter(
-        (pubkey) => pubkey !== connection.viewer && !agentKeys.has(pubkey),
-      ),
-    [agentKeys, connection.viewer, list.channels],
-  );
   useEffect(() => {
-    connection.session.channels.ensureList();
     void connection.session.agentLibrary.refresh();
   }, [connection.session]);
+  const needle = query.replace(/^@/, "").trim();
   useEffect(() => {
-    if (humanKeys.length)
-      void connection.session.profiles.ensure(humanKeys, "background");
-  }, [connection.session, humanKeys]);
-  const needle = query.startsWith("@")
-    ? query.slice(1).trim().toLowerCase()
-    : "";
-  const suggestions = query.startsWith("@")
-    ? humanKeys
-        .map((pubkey) => ({
-          pubkey,
-          name: profiles.get(pubkey)?.name ?? pubkey.slice(0, 12),
-        }))
-        .filter(
-          ({ pubkey, name }) =>
-            !invited.includes(pubkey) &&
-            `${name} ${pubkey}`.toLowerCase().includes(needle),
+    if (!needle || query.startsWith("npub")) {
+      setResults(new Map());
+      setSearching(false);
+      return;
+    }
+    const controller = new AbortController();
+    const timer = window.setTimeout(() => {
+      setSearching(true);
+      void connection.session
+        .read(
+          [
+            {
+              kinds: [0],
+              search: needle,
+              search_mode: "prefix",
+              limit: 50,
+            },
+          ],
+          { signal: controller.signal, priority: "foreground" },
         )
-        .slice(0, 20)
-    : [];
+        .then((events) => {
+          if (!controller.signal.aborted) setResults(foldProfiles(events));
+        })
+        .catch((reason) => {
+          if (!controller.signal.aborted)
+            setError(
+              reason instanceof Error
+                ? reason.message
+                : "We couldn’t search for members. Try again.",
+            );
+        })
+        .finally(() => {
+          if (!controller.signal.aborted) setSearching(false);
+        });
+    }, 250);
+    return () => {
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [connection.session, needle, query]);
+  const suggestions = [...results].flatMap(([pubkey, profile]) =>
+    pubkey !== connection.viewer &&
+    !invited.includes(pubkey) &&
+    !agentKeys.has(pubkey)
+      ? [{ pubkey, name: profile.name }]
+      : [],
+  );
   const submitNpub = () => {
     setError("");
     try {
@@ -921,7 +1017,7 @@ function InviteSheet({
             autoComplete="off"
             spellCheck={false}
             value={query}
-            placeholder="@member or npub1…"
+            placeholder="Search by name or paste npub…"
             onChange={(event) => {
               setQuery(event.target.value);
               setError("");
@@ -933,34 +1029,36 @@ function InviteSheet({
             {error}
           </p>
         )}
-        {query.startsWith("@") && (
+        {needle && !query.startsWith("npub") && (
           <div
             className={styles.identityChoices}
             role="listbox"
             aria-label="Teammate suggestions"
           >
-            {suggestions.map((recipient) => (
-              <button
-                type="button"
-                role="option"
-                aria-selected="false"
-                className={styles.identityChoice}
-                disabled={busy}
-                key={recipient.pubkey}
-                onClick={() => onSelect(recipient.pubkey)}
-              >
-                <Avatar
-                  name={recipient.name}
-                  className="size-8 rounded-lg text-xs"
-                />
-                <span className={styles.identityChoiceLabel}>
-                  <strong>{recipient.name}</strong>
-                  <code>{nip19.npubEncode(recipient.pubkey)}</code>
-                </span>
-              </button>
-            ))}
-            {list.status === "ready" && !suggestions.length && (
-              <p>No matching teammates found.</p>
+            {!searching &&
+              suggestions.map((recipient) => (
+                <button
+                  type="button"
+                  role="option"
+                  aria-selected="false"
+                  className={styles.identityChoice}
+                  disabled={busy}
+                  key={recipient.pubkey}
+                  onClick={() => onSelect(recipient.pubkey)}
+                >
+                  <Avatar
+                    name={recipient.name}
+                    className="size-8 rounded-lg text-xs"
+                  />
+                  <span className={styles.identityChoiceLabel}>
+                    <strong>{recipient.name}</strong>
+                    <code>{nip19.npubEncode(recipient.pubkey)}</code>
+                  </span>
+                </button>
+              ))}
+            {searching && <p>Searching…</p>}
+            {!searching && !suggestions.length && (
+              <p>No matching members found.</p>
             )}
           </div>
         )}

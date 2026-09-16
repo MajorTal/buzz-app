@@ -46,6 +46,12 @@ export type LiveCallbacks = {
 };
 export type LiveSubscription = {
   update(channels: readonly string[]): void;
+  /** Publish a signed ephemeral event over the authenticated live socket. */
+  publish?(event: VerifiedEvent): Promise<void>;
+  /** Run a bounded authenticated query that needs relay WebSocket semantics. */
+  query?(
+    filter: Readonly<Record<string, unknown>>,
+  ): Promise<readonly VerifiedEvent[]>;
   /** Host demand only: reorder existing pending routes, never grant new interests. */
   prioritize?(channels: readonly string[]): void;
   retry(): void;
@@ -78,7 +84,10 @@ type Route = {
   quotaRetries: number;
   deadline?: ReturnType<typeof setTimeout>;
 };
-const CHANNEL_KINDS = [9, 40002, 40003, 5, 9005, 7, 39000, 39002, 39005];
+const CHANNEL_KINDS = [
+  9, 40002, 40003, 5, 9005, 7, 20101, 39000, 39002, 39005, 48100, 48101, 48102,
+  48103,
+];
 /** One authenticated socket, independently established channel routes and two explicit globals.
  * Recent replay is opportunistic: finite reads own catch-up and history bounds. */
 export function subscribeRelayTraffic(
@@ -104,6 +113,23 @@ export function subscribeRelayTraffic(
   let priority: string[] = [];
   const routes = new Map<string, Route>();
   const wires = new Map<string, Route>();
+  const publications = new Map<
+    string,
+    {
+      resolve(): void;
+      reject(error: Error): void;
+      deadline: ReturnType<typeof setTimeout>;
+    }
+  >();
+  const queries = new Map<
+    string,
+    {
+      events: VerifiedEvent[];
+      resolve(events: readonly VerifiedEvent[]): void;
+      reject(error: Error): void;
+      deadline: ReturnType<typeof setTimeout>;
+    }
+  >();
   const notify = () => {
     if (closed) return;
     callbacks.state(
@@ -297,6 +323,16 @@ export function subscribeRelayTraffic(
   function clearSocket() {
     generation++;
     authenticated = false;
+    for (const publication of publications.values()) {
+      clearTimeout(publication.deadline);
+      publication.reject(new Error("Live connection interrupted"));
+    }
+    publications.clear();
+    for (const query of queries.values()) {
+      clearTimeout(query.deadline);
+      query.reject(new Error("Live connection interrupted"));
+    }
+    queries.clear();
     clearTimeout(dispatchTimer);
     clearTimeout(deadline);
     for (const route of routes.values()) clearTimeout(route.deadline);
@@ -404,6 +440,53 @@ export function subscribeRelayTraffic(
         notify();
         return;
       }
+      if (data[0] === "OK" && typeof data[1] === "string") {
+        const publication = publications.get(data[1]);
+        if (publication) {
+          publications.delete(data[1]);
+          clearTimeout(publication.deadline);
+          if (data[2] === true) publication.resolve();
+          else
+            publication.reject(
+              new Error(
+                typeof data[3] === "string"
+                  ? data[3]
+                  : "Relay rejected Live room presence",
+              ),
+            );
+          return;
+        }
+      }
+      if (authenticated && typeof data[1] === "string") {
+        const query = queries.get(data[1]);
+        if (query) {
+          if (data[0] === "EVENT") {
+            try {
+              query.events.push(eventDto(data[2]));
+            } catch {
+              queries.delete(data[1]);
+              clearTimeout(query.deadline);
+              query.reject(new Error("Relay supplied invalid query traffic"));
+            }
+          } else if (data[0] === "EOSE") {
+            queries.delete(data[1]);
+            clearTimeout(query.deadline);
+            send(["CLOSE", data[1]]);
+            query.resolve(Object.freeze(query.events));
+          } else if (data[0] === "CLOSED") {
+            queries.delete(data[1]);
+            clearTimeout(query.deadline);
+            query.reject(
+              new Error(
+                typeof data[2] === "string"
+                  ? data[2]
+                  : "Relay closed Live room query",
+              ),
+            );
+          }
+          return;
+        }
+      }
       const route =
         typeof data[1] === "string" ? wires.get(data[1]) : undefined;
       if (!authenticated || !route) return;
@@ -440,6 +523,36 @@ export function subscribeRelayTraffic(
   }
   connect();
   return {
+    publish(event) {
+      if (closed || !authenticated || socket?.readyState !== 1)
+        return Promise.reject(new Error("Live connection is not ready"));
+      if (event.pubkey !== viewer || publications.has(event.id))
+        return Promise.reject(new Error("Invalid Live room publication"));
+      return new Promise<void>((resolve, reject) => {
+        const deadline = setTimeout(() => {
+          publications.delete(event.id);
+          reject(new Error("Live room presence confirmation timed out"));
+        }, 10000);
+        publications.set(event.id, { resolve, reject, deadline });
+        send(["EVENT", event]);
+      });
+    },
+    query(filter) {
+      if (closed || !authenticated || socket?.readyState !== 1)
+        return Promise.reject(new Error("Live connection is not ready"));
+      if (!filter || typeof filter !== "object")
+        return Promise.reject(new Error("Invalid Live room query"));
+      const id = `query-${++serial}`;
+      return new Promise<readonly VerifiedEvent[]>((resolve, reject) => {
+        const deadline = setTimeout(() => {
+          queries.delete(id);
+          send(["CLOSE", id]);
+          reject(new Error("Live room query timed out"));
+        }, 10000);
+        queries.set(id, { events: [], resolve, reject, deadline });
+        send(["REQ", id, filter]);
+      });
+    },
     prioritize(input) {
       liveChannels(input); // Same bounded ID validation, but preserve demand order.
       priority = [...new Set(input)].slice(0, 64);

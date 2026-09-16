@@ -192,6 +192,16 @@ export function subscribeBrokerTraffic(
   }
   start();
   return {
+    publish() {
+      return Promise.reject(
+        new Error("Live publication is unavailable through this transport"),
+      );
+    },
+    query() {
+      return Promise.reject(
+        new Error("Live query is unavailable through this transport"),
+      );
+    },
     prioritize(input) {
       liveChannels(input);
       const next = [...new Set(input)].slice(0, 64);

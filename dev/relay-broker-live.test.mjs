@@ -31,6 +31,10 @@ async function harness(
           const [kind, id, filter] = JSON.parse(text);
           if (kind === "AUTH")
             queueMicrotask(() => this.receive(["OK", id.id, true]));
+          if (kind === "EVENT") {
+            queueMicrotask(() => this.receive(["OK", id.id, true, ""]));
+            return;
+          }
           if (kind !== "REQ") return;
           requests.push({ at: performance.now(), filter, socket });
           const refused = requests.length === refuseAt;
@@ -79,6 +83,13 @@ async function harness(
       });
       return { response, abort: () => controller.abort() };
     },
+    command(route, body) {
+      return fetch(`${base}/api/relay/${route}`, {
+        method: "POST",
+        headers: { Origin: base, "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    },
     async close() {
       for (const controller of controllers) controller.abort();
       server.closeAllConnections();
@@ -121,6 +132,29 @@ test("POST replacement and a second stream share cooldown and paced starts; resp
     second.abort();
     replacement.abort();
     await until(() => h.sockets.every((s) => s.readyState === 3));
+  } finally {
+    await h.close();
+  }
+});
+
+test("room presence is signed and published through the authenticated live socket", async () => {
+  const h = await harness();
+  try {
+    const stream = await h.post(["00000000-0000-4000-8000-000000000001"]);
+    await until(() => h.requests.length >= 3);
+    const response = await h.command("rooms-presence", {
+      roomId: "00000000-0000-4000-8000-000000000001",
+      here: true,
+    });
+    expect(response.status).toBe(200);
+    const body = await response.json();
+    expect(body.accepted).toBe(true);
+    expect(body.event).toMatchObject({
+      kind: 20101,
+      content: expect.stringContaining('"state":"here"'),
+      tags: [["h", "00000000-0000-4000-8000-000000000001"]],
+    });
+    stream.abort();
   } finally {
     await h.close();
   }

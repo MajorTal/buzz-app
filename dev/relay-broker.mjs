@@ -112,6 +112,17 @@ function liveRoomCommand(route, value, viewer) {
       throw new Error("Invalid Live room delete request");
     return { roomId: value.roomId };
   }
+  if (route === "/api/relay/rooms-presence") {
+    if (
+      typeof value.roomId !== "string" ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+        value.roomId,
+      ) ||
+      typeof value.here !== "boolean"
+    )
+      throw new Error("Invalid Live room presence request");
+    return { roomId: value.roomId, here: value.here };
+  }
   if (route === "/api/relay/rooms-audio-start") {
     if (
       typeof value.parentRoomId !== "string" ||
@@ -120,6 +131,15 @@ function liveRoomCommand(route, value, viewer) {
       ) ||
       !Array.isArray(value.members) ||
       value.members.length > 20 ||
+      !Array.isArray(value.candidates) ||
+      value.candidates.length > 20 ||
+      value.candidates.some(
+        (roomId) =>
+          typeof roomId !== "string" ||
+          !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+            roomId,
+          ),
+      ) ||
       value.members.some(
         (pubkey) => typeof pubkey !== "string" || !HEX_PUBKEY.test(pubkey),
       )
@@ -130,6 +150,7 @@ function liveRoomCommand(route, value, viewer) {
       members: [...new Set(value.members)].filter(
         (pubkey) => pubkey !== viewer,
       ),
+      candidates: [...new Set(value.candidates)],
     };
   }
   if (route === "/api/relay/rooms-invite") {
@@ -467,7 +488,11 @@ export function relayBrokerPlugin({
           throw new Error("Live room publication returned an invalid receipt");
         }
         if (receipt.event_id !== event.id || receipt.accepted !== true)
-          throw new Error("Live room publication was not confirmed");
+          throw new Error(
+            typeof receipt.message === "string"
+              ? receipt.message
+              : "Live room publication was not confirmed",
+          );
         return event;
       };
       server.httpServer?.once("close", () => {
@@ -650,6 +675,7 @@ export function relayBrokerPlugin({
               "/api/relay/rooms-invite",
               "/api/relay/rooms-rename",
               "/api/relay/rooms-delete",
+              "/api/relay/rooms-presence",
               "/api/relay/rooms-audio-start",
             ].includes(route) &&
             req.method === "POST"
@@ -777,39 +803,173 @@ export function relayBrokerPlugin({
                 );
                 return json(res, 200, { deleted: true });
               }
-              if (route === "/api/relay/rooms-audio-start") {
-                const audioRoomId = randomUUID();
-                await publishLiveRoomEvent(
-                  relay,
-                  {
-                    kind: 9007,
-                    content: "",
-                    tags: [
-                      ["h", audioRoomId],
-                      ["name", `live-audio-${audioRoomId.slice(0, 8)}`],
-                      ["visibility", "private"],
-                      ["channel_type", "stream"],
-                      ["ttl", "3600"],
-                      ["about", "buzz.live-room.audio.v1"],
-                    ],
-                  },
-                  signal,
-                  "Starting room audio",
+              if (route === "/api/relay/rooms-presence") {
+                const owner = [...streams.values()].find(
+                  (stream) => stream.relay === relay,
                 );
-                for (const pubkey of command.members)
+                if (!owner)
+                  return json(res, 409, {
+                    error: "Live connection is not ready. Try again.",
+                  });
+                const event = finalizeEvent(
+                  {
+                    kind: 20101,
+                    created_at: Math.floor(Date.now() / 1000),
+                    content: JSON.stringify({
+                      state: command.here ? "here" : "away",
+                      sent_at: Date.now(),
+                    }),
+                    tags: [["h", command.roomId]],
+                  },
+                  key,
+                );
+                await owner.traffic.publish(event);
+                return json(res, 200, { accepted: true, event });
+              }
+              if (route === "/api/relay/rooms-audio-start") {
+                const owner = [...streams.values()].find(
+                  (stream) => stream.relay === relay,
+                );
+                if (!owner) {
+                  // The stream normally establishes during session startup. A
+                  // fixture or interrupted stream can still create a room; its
+                  // persisted link lets later callers discover it.
+                } else {
+                  // Give concurrent starters a stable per-identity ordering. The
+                  // earlier caller publishes the link before the later caller
+                  // checks, so separate machines converge on one backing room.
+                  await new Promise((resolve, reject) => {
+                    const wait =
+                      100 + (Number.parseInt(viewer.slice(0, 8), 16) % 500);
+                    const timer = setTimeout(resolve, wait);
+                    signal.addEventListener(
+                      "abort",
+                      () => {
+                        clearTimeout(timer);
+                        reject(signal.reason);
+                      },
+                      { once: true },
+                    );
+                  });
+                  const lifecycle = await owner.traffic.query({
+                    kinds: [48100, 48103],
+                    "#h": [command.parentRoomId],
+                    limit: 100,
+                  });
+                  const ended = new Set(
+                    lifecycle
+                      .filter((event) => event.kind === 48103)
+                      .flatMap((event) => {
+                        try {
+                          const value = JSON.parse(event.content);
+                          return typeof value.ephemeral_channel_id === "string"
+                            ? [value.ephemeral_channel_id]
+                            : [];
+                        } catch {
+                          return [];
+                        }
+                      }),
+                  );
+                  const starts = lifecycle
+                    .filter((event) => event.kind === 48100)
+                    .flatMap((event) => {
+                      try {
+                        const value = JSON.parse(event.content);
+                        return typeof value.ephemeral_channel_id === "string"
+                          ? [
+                              {
+                                id: value.ephemeral_channel_id,
+                                createdAt: event.created_at,
+                              },
+                            ]
+                          : [];
+                      } catch {
+                        return [];
+                      }
+                    })
+                    .filter(({ id }) => !ended.has(id))
+                    .sort((a, b) => b.createdAt - a.createdAt);
+                  const fresh = starts.find(
+                    ({ createdAt }) =>
+                      Math.floor(Date.now() / 1000) - createdAt < 30,
+                  );
+                  if (fresh)
+                    return json(res, 200, {
+                      audioRoomId: fresh.id,
+                      reused: true,
+                    });
+                  if (starts.length) {
+                    const live = await owner.traffic.query({
+                      kinds: [48104],
+                      "#h": [command.parentRoomId],
+                      "#d": starts.map(({ id }) => id).slice(0, 20),
+                      limit: Math.min(starts.length, 20),
+                    });
+                    const audioRoomId = live[0]?.tags.find(
+                      ([name]) => name === "d",
+                    )?.[1];
+                    if (audioRoomId)
+                      return json(res, 200, { audioRoomId, reused: true });
+                  }
+                }
+                const slot = Math.floor(Date.now() / 60_000);
+                const bytes = Buffer.from(
+                  createHash("sha256")
+                    .update(`${command.parentRoomId}:${slot}`)
+                    .digest()
+                    .subarray(0, 16),
+                );
+                bytes[6] = (bytes[6] & 0x0f) | 0x40;
+                bytes[8] = (bytes[8] & 0x3f) | 0x80;
+                const hex = bytes.toString("hex");
+                const audioRoomId = `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+                try {
                   await publishLiveRoomEvent(
                     relay,
                     {
-                      kind: 9000,
+                      kind: 9007,
                       content: "",
                       tags: [
                         ["h", audioRoomId],
-                        ["p", pubkey],
+                        ["name", `live-audio-${audioRoomId.slice(0, 8)}`],
+                        ["visibility", "private"],
+                        ["channel_type", "stream"],
+                        ["ttl", "3600"],
+                        ["about", "buzz.live-room.audio.v1"],
                       ],
                     },
                     signal,
-                    "Preparing room audio access",
+                    "Starting room audio",
                   );
+                } catch (error) {
+                  if (!String(error).includes("duplicate")) throw error;
+                  if (!owner) throw error;
+                  for (let attempt = 0; attempt < 10; attempt++) {
+                    await new Promise((resolve) => setTimeout(resolve, 200));
+                    const links = await owner.traffic.query({
+                      kinds: [48100],
+                      "#h": [command.parentRoomId],
+                      limit: 20,
+                    });
+                    if (
+                      links.some((event) => {
+                        try {
+                          return (
+                            JSON.parse(event.content).ephemeral_channel_id ===
+                            audioRoomId
+                          );
+                        } catch {
+                          return false;
+                        }
+                      })
+                    )
+                      return json(res, 200, {
+                        audioRoomId,
+                        reused: true,
+                      });
+                  }
+                  throw new Error("Concurrent audio session did not finish");
+                }
                 await publishLiveRoomEvent(
                   relay,
                   {
@@ -822,7 +982,7 @@ export function relayBrokerPlugin({
                   signal,
                   "Linking room audio",
                 );
-                return json(res, 200, { audioRoomId });
+                return json(res, 200, { audioRoomId, reused: false });
               }
               await publishLiveRoomEvent(
                 relay,

@@ -76,15 +76,28 @@ export function deleteLiveRoom(connection: RelaySnapshot, roomId: string) {
   return post<{ deleted: true }>(connection, "rooms-delete", { roomId });
 }
 
+export function publishLiveRoomPresence(
+  connection: RelaySnapshot,
+  roomId: string,
+  here: boolean,
+) {
+  return post<{ accepted: true; event: RelayEvent }>(
+    connection,
+    "rooms-presence",
+    { roomId, here },
+  );
+}
+
 export function startLiveRoomAudio(
   connection: RelaySnapshot,
   parentRoomId: string,
   members: readonly string[],
 ) {
-  return post<{ audioRoomId: string }>(connection, "rooms-audio-start", {
-    parentRoomId,
-    members,
-  });
+  return post<{ audioRoomId: string; reused: boolean }>(
+    connection,
+    "rooms-audio-start",
+    { parentRoomId, members, candidates: [] },
+  );
 }
 
 export function signHuddleChallenge(

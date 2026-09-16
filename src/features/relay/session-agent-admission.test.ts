@@ -10,13 +10,15 @@ function setup() {
     relay = keypair(),
     agent = keypair();
   const parent = "11111111-1111-4111-8111-111111111111",
-    child = "22222222-2222-4222-8222-222222222222";
+    child = "22222222-2222-4222-8222-222222222222",
+    standalone = "33333333-3333-4333-8333-333333333333";
   let members = [viewer.pubkey];
   let childMembers = [viewer.pubkey];
   let denyChild = false;
   let clock = 1700000000;
   let denied = false;
   let foreignRoster = false;
+  let libraryFailure = false;
   let afterPublish = () => {};
   const secondAgent = keypair().pubkey;
   const meta = (id: string, type: string, extra: string[][] = []) =>
@@ -39,13 +41,16 @@ function setup() {
       viewer: viewer.pubkey,
       relayAuthor: relay.pubkey,
       media: () => undefined,
-      readAgentLibrary: async () => ({
-        definitions: [],
-        identities: [
-          { pubkey: agent.pubkey, name: "Outside agent" },
-          { pubkey: secondAgent, name: "Second agent" },
-        ],
-      }),
+      readAgentLibrary: async () => {
+        if (libraryFailure) throw new Error("Fixture library unavailable");
+        return {
+          definitions: [],
+          identities: [
+            { pubkey: agent.pubkey, name: "Outside agent" },
+            { pubkey: secondAgent, name: "Second agent" },
+          ],
+        };
+      },
       writer: {
         kinds: [9, 9000, 9007],
         sign: async (template) => signed(viewer, template),
@@ -62,8 +67,13 @@ function setup() {
             ["private"],
             ["about", `Buzz session (buzz.sessions/v1)\nparent:${parent}`],
           ]),
+          meta(standalone, "stream", [
+            ["private"],
+            ["about", "Buzz session (buzz.sessions/v1)"],
+          ]),
           roster(relay, parent, members, clock),
           roster(relay, child, childMembers, clock),
+          roster(relay, standalone, [viewer.pubkey], clock),
         ];
         return events.filter((event) =>
           filters.some((filter) => matchesEvent(event, filter)),
@@ -76,6 +86,7 @@ function setup() {
     owner,
     parent,
     child,
+    standalone,
     agent: agent.pubkey,
     secondAgent,
     setMembership: (parentMembers: boolean, sessionMembers: boolean) => {
@@ -85,6 +96,9 @@ function setup() {
     },
     returnForeignRoster: () => {
       foreignRoster = true;
+    },
+    failLibraryRefresh: () => {
+      libraryFailure = true;
     },
     afterPublish: (callback: () => void) => {
       afterPublish = callback;
@@ -173,6 +187,59 @@ it("rejects nonmember identities outside the agent library before adding anyone"
       ]),
     ).rejects.toThrow(/agent library/);
     expect(test.publish).not.toHaveBeenCalled();
+  } finally {
+    test.owner.dispose();
+  }
+});
+
+it("rejects a stale cached identity after the current library refresh fails", async () => {
+  const test = setup();
+  try {
+    await test.ready();
+    test.failLibraryRefresh();
+    await test.owner.session.agentLibrary.refresh();
+    const library = test.owner.session.agentLibrary.snapshot();
+    expect(library.status).toBe("error");
+    expect(library.identities.map((identity) => identity.pubkey)).toContain(
+      test.agent,
+    );
+    await expect(
+      test.owner.session.workSessions.addAgents(test.parent, [test.agent]),
+    ).rejects.toThrow(/agent library/);
+    expect(test.publish).not.toHaveBeenCalled();
+  } finally {
+    test.owner.dispose();
+  }
+});
+
+it("rejects a stale cached identity from a standalone session picker", async () => {
+  const test = setup();
+  try {
+    await test.ready();
+    test.failLibraryRefresh();
+    await test.owner.session.agentLibrary.refresh();
+    expect(() =>
+      test.owner.session.workSessions.invite(test.standalone, test.agent),
+    ).toThrow(/agent library/);
+    expect(test.publish).not.toHaveBeenCalled();
+  } finally {
+    test.owner.dispose();
+  }
+});
+
+it("allows a freshly verified parent member when the local library is unavailable", async () => {
+  const test = setup();
+  try {
+    await test.ready();
+    test.setMembership(true, false);
+    test.failLibraryRefresh();
+    await test.owner.session.agentLibrary.refresh();
+    await test.owner.session.workSessions.addAgents(test.child, [test.agent]);
+    expect(test.publish).toHaveBeenCalledOnce();
+    expect(test.publish.mock.calls[0]?.[0].tags).toContainEqual([
+      "h",
+      test.child,
+    ]);
   } finally {
     test.owner.dispose();
   }

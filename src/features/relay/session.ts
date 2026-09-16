@@ -662,8 +662,12 @@ export function createRelaySession(
             event.pubkey === transport.viewer,
         );
       },
-      () =>
-        agentLibrary.queries.snapshot().identities.map((agent) => agent.pubkey),
+      () => {
+        const library = agentLibrary.queries.snapshot();
+        return library.status === "ready"
+          ? library.identities.map((agent) => agent.pubkey)
+          : [];
+      },
       transport?.relayAuthor,
     ),
     unread: unread.capability,

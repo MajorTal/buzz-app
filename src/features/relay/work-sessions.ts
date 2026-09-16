@@ -294,6 +294,8 @@ export function createWorkSessions(
         );
       if (!/^[0-9a-f]{64}$/.test(pubkey))
         throw new Error("Choose a valid participant.");
+      if (!new Set(agentKeys?.() ?? []).has(pubkey))
+        throw new Error("Choose an agent from your agent library.");
       return writer().send({
         kind: 9000,
         content: "",

@@ -235,3 +235,72 @@ test("disabling the plugin fences late callbacks and further starts", async () =
   expect(f.open).toHaveBeenCalledTimes(1);
   expect(f.call.snapshot().permission).toBeUndefined();
 });
+
+test("audio analyzers follow the active call and ignores retired callbacks", async () => {
+  const f = fixture();
+  await f.call.start();
+  const old = f.callbacks();
+  const analyser = {} as AnalyserNode;
+  const output = {} as AnalyserNode;
+  old.analyzers(analyser, output);
+  expect(f.call.snapshot().inputAnalyser).toBe(analyser);
+  expect(f.call.snapshot().outputAnalyser).toBe(output);
+  await f.call.end();
+  expect(f.call.snapshot().inputAnalyser).toBeNull();
+  expect(f.call.snapshot().outputAnalyser).toBeNull();
+  await f.call.start();
+  old.analyzers(analyser, output);
+  expect(f.call.snapshot().inputAnalyser).toBeNull();
+  expect(f.call.snapshot().outputAnalyser).toBeNull();
+  f.callbacks().analyzers(analyser, output);
+  f.callbacks().ended();
+  expect(f.call.snapshot().inputAnalyser).toBeNull();
+  expect(f.call.snapshot().outputAnalyser).toBeNull();
+});
+
+test("community replacement clears both audio analyzers immediately", async () => {
+  const f = fixture();
+  await f.call.start();
+  f.callbacks().analyzers({} as AnalyserNode, {} as AnalyserNode);
+  f.community("two");
+  expect(f.call.snapshot().inputAnalyser).toBeNull();
+  expect(f.call.snapshot().outputAnalyser).toBeNull();
+});
+
+test("transcript visibility defaults off and can change without restarting the call", async () => {
+  const f = fixture();
+  expect(f.call.snapshot().showTranscript).toBe(false);
+  await f.call.start();
+  f.callbacks().transcript("Kept while hidden.");
+  f.call.setShowTranscript(true);
+  expect(f.call.snapshot().showTranscript).toBe(true);
+  const messages = f.call.snapshot().messages;
+  f.call.setShowTranscript(false);
+  expect(f.call.snapshot().messages).toBe(messages);
+  f.call.setShowTranscript(true);
+  expect(f.open).toHaveBeenCalledTimes(1);
+  expect(f.voice.stop).not.toHaveBeenCalled();
+  await f.call.end();
+  await f.call.start();
+  expect(f.call.snapshot().showTranscript).toBe(true);
+  expect(f.call.snapshot().messages).toEqual([]);
+});
+
+test("transcript timestamps stay at first receipt as message chunks arrive", async () => {
+  const now = vi.spyOn(Date, "now");
+  try {
+    const f = fixture();
+    await f.call.start();
+    now.mockReturnValue(1000);
+    f.callbacks().transcript("First ");
+    now.mockReturnValue(5000);
+    f.callbacks().transcript("reply.");
+    f.callbacks().userTranscript("Next question.", "user-1");
+    expect(f.call.snapshot().messages).toMatchObject([
+      { text: "First reply.", createdAt: 1 },
+      { text: "Next question.", createdAt: 5 },
+    ]);
+  } finally {
+    now.mockRestore();
+  }
+});

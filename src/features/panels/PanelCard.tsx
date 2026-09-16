@@ -1,4 +1,7 @@
-import { X } from "lucide-react";
+import { useState } from "react";
+import { PanelHeaderActionsContext } from "./PanelHeaderActions";
+import { IconX } from "@tabler/icons-react";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import type { PanelProps, RegisteredPanel } from "./service";
 import { PanelView } from "./PanelView";
 import styles from "./Panels.module.css";
@@ -12,6 +15,7 @@ export function PanelCard({
   panel: RegisteredPanel;
   closeLabel?: string;
 }) {
+  const [actions, setActions] = useState<HTMLDivElement | null>(null);
   return (
     <aside
       className={styles.card}
@@ -25,16 +29,19 @@ export function PanelCard({
     >
       <header className={styles.heading}>
         <strong>{panel.title}</strong>
-        <button
-          type="button"
-          aria-label={closeLabel ?? `Close ${panel.title} panel`}
-          onClick={props.close}
-        >
-          <X size={18} aria-hidden="true" />
-        </button>
+        <div className={styles.actions}>
+          <div ref={setActions} className={styles.actions} />
+          <IconButton
+            icon={<IconX size={18} />}
+            aria-label={closeLabel ?? `Close ${panel.title} panel`}
+            onClick={props.close}
+          />
+        </div>
       </header>
       <div className={styles.content}>
-        <PanelView panel={panel} {...props} />
+        <PanelHeaderActionsContext value={actions}>
+          <PanelView panel={panel} {...props} />
+        </PanelHeaderActionsContext>
       </div>
     </aside>
   );

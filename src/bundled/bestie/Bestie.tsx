@@ -1,13 +1,19 @@
-import { useLayoutEffect, useSyncExternalStore } from "react";
+import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
-  IconHeadphones,
   IconMicrophone,
   IconMicrophoneOff,
+  IconPhone,
   IconPhoneOff,
 } from "@tabler/icons-react";
+import { Transcript } from "./Transcript";
+import { PanelHeaderActions } from "../../features/panels/PanelHeaderActions";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Button } from "../../shared/design-system/ui/Button";
 import type { BestieCall } from "./call";
+import { CallSettings } from "./CallSettings";
+import { VoiceWave } from "./VoiceWave";
+import { SpeakingAvatar } from "./SpeakingAvatar";
+import styles from "./Bestie.module.css";
 
 export function Bestie({
   call,
@@ -22,137 +28,62 @@ export function Bestie({
     call.snapshot,
   );
   useLayoutEffect(() => call.attach(), [call]);
+  const [instantControls, setInstantControls] = useState(false);
+  const controls = useRef<HTMLElement>(null);
+  const restoreFocus = useRef(false);
   const permission = state.permission;
   const connected = state.phase === "listening" || state.phase === "speaking";
   const busy =
     connected || state.phase === "connecting" || state.phase === "stopping";
+  useLayoutEffect(() => {
+    if (!restoreFocus.current) return;
+    restoreFocus.current = false;
+    controls.current
+      ?.querySelector<HTMLButtonElement>(
+        busy
+          ? '[aria-label="End Bestie conversation"]'
+          : '[aria-label="Start Bestie voice conversation"]',
+      )
+      ?.focus();
+  }, [busy]);
+  const status = !available
+    ? "Voice isn’t available in this app."
+    : !state.community
+      ? "Choose a community to call Bestie."
+      : state.message === "Conversation ended." ||
+          state.message.startsWith("Listening through ")
+        ? ""
+        : state.message;
   return (
     <section
-      className="flex min-h-full flex-col gap-4 p-4"
+      data-buzz-ui=""
+      className={`${styles.panel} text-body`}
       aria-label="Bestie conversation"
     >
-      <div className="flex items-center gap-3">
-        <img src="/bestie.png" alt="" className="size-12 object-contain" />
-        <div className="min-w-0 flex-1">
-          <h2 className="font-semibold">Your Bestie</h2>
-          <p className="truncate text-xs text-muted">
-            {state.community
-              ? new URL(state.community).host
-              : "Choose a community"}
+      <PanelHeaderActions>
+        <CallSettings call={call} state={state} busy={busy} />
+      </PanelHeaderActions>
+      <div className={styles.body} data-transcript={state.showTranscript}>
+        <div className={styles.identity}>
+          <SpeakingAvatar analyser={state.outputAnalyser} />
+          <p role="status" className={`${styles.status} text-body-sm`}>
+            {status}
           </p>
         </div>
-        <IconButton
-          icon={
-            busy ? <IconPhoneOff size={20} /> : <IconHeadphones size={20} />
-          }
-          variant={busy ? "tint" : "solid"}
-          shape="round"
-          aria-label={
-            busy ? "End Bestie conversation" : "Start Bestie voice conversation"
-          }
-          disabled={
-            !available || !state.community || state.phase === "stopping"
-          }
-          onClick={() => {
-            if (busy) void call.end();
-            else void call.start();
-          }}
-        />
-      </div>
-      {!available ? (
-        <p className="text-sm text-muted">
-          Voice is available in the live development app when
-          BUZZ_REALTIME_ENDPOINT is configured.
-        </p>
-      ) : (
-        <>
-          <p role="status" className="text-sm text-muted">
-            {state.message}
-          </p>
-          <div className="flex items-center justify-between gap-2">
-            <label className="flex items-center gap-2 text-xs text-muted">
-              Thinking
-              <select
-                aria-label="Bestie thinking level"
-                value={state.thinking}
-                disabled={busy}
-                onChange={(e) => call.setThinking(e.target.value)}
-                className="rounded border border-subtle bg-surface px-2 py-1 text-fg"
-              >
-                <option value="none">Off</option>
-                <option value="minimal">Minimal</option>
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
-            </label>
-            {connected && (
-              <IconButton
-                icon={
-                  state.muted ? (
-                    <IconMicrophoneOff size={18} />
-                  ) : (
-                    <IconMicrophone size={18} />
-                  )
-                }
-                aria-label={
-                  state.muted
-                    ? "Unmute Bestie microphone"
-                    : "Mute Bestie microphone"
-                }
-                aria-pressed={state.muted}
-                onClick={call.mute}
-              />
-            )}
-          </div>
-          <label className="flex items-center justify-between gap-2 text-xs text-muted">
-            Tool approval
-            <select
-              aria-label="Bestie tool approval mode"
-              value={state.approval}
-              disabled={busy}
-              onChange={(e) => call.setApproval(e.target.value)}
-              className="rounded border border-subtle bg-surface px-2 py-1 text-fg"
-            >
-              <option value="auto">Automatically approve</option>
-              <option value="ask">Ask each time</option>
-            </select>
-          </label>
-          <p className="text-xs text-muted">
-            Bestie uses its own identity in this community. Closing this panel
-            ends the call.
-          </p>
-        </>
-      )}
-      <div
-        className="flex flex-col gap-3"
-        role="log"
-        aria-label="Bestie transcript"
-        aria-live="polite"
-      >
-        {state.messages.map((message) => (
-          <div key={message.id} className="rounded-lg border border-subtle p-3">
-            <p className="mb-1 text-xs font-medium text-muted">
-              {message.role === "user" ? "You" : "Bestie"}
-            </p>
-            <p className="whitespace-pre-wrap break-words text-sm">
-              {message.text}
-            </p>
-          </div>
-        ))}
+        {state.showTranscript && <Transcript messages={state.messages} />}
       </div>
       {permission && (
         <section
-          className="rounded-lg border border-subtle p-3"
+          className={styles.permission}
           aria-label="Bestie tool approval"
         >
-          <h3 className="text-sm font-semibold">
+          <h3 className="text-body font-medium">
             {permission.title || "Approve tool call?"}
           </h3>
-          <pre className="my-2 max-h-40 overflow-auto whitespace-pre-wrap break-all text-xs">
+          <pre>
             {JSON.stringify(permission.rawInput ?? permission, null, 2)}
           </pre>
-          <div className="flex gap-2">
+          <div className={styles.decisions}>
             <Button
               onClick={() => {
                 void call.decide(false, permission.request);
@@ -171,6 +102,73 @@ export function Bestie({
           </div>
         </section>
       )}
+      <footer
+        ref={controls}
+        className={styles.controls}
+        data-active={busy}
+        data-instant={instantControls}
+        onPointerDownCapture={() => setInstantControls(false)}
+        onKeyDownCapture={() => setInstantControls(true)}
+      >
+        <div className={styles.callControls} inert={!busy} aria-hidden={!busy}>
+          <span className={styles.muteControl}>
+            <IconButton
+              icon={
+                state.muted ? (
+                  <IconMicrophoneOff size={20} />
+                ) : (
+                  <IconMicrophone size={20} />
+                )
+              }
+              variant="quiet"
+              size="default"
+              shape="control"
+              disabled={!connected}
+              aria-label={
+                state.muted
+                  ? "Unmute Bestie microphone"
+                  : "Mute Bestie microphone"
+              }
+              aria-pressed={state.muted}
+              onClick={call.mute}
+            />
+          </span>
+          <VoiceWave
+            analyser={state.inputAnalyser}
+            muted={state.muted || !connected}
+          />
+          <span className={styles.hangup}>
+            <IconButton
+              icon={<IconPhoneOff size={20} />}
+              variant="quiet"
+              size="default"
+              shape="control"
+              aria-label="End Bestie conversation"
+              disabled={state.phase === "stopping"}
+              onClick={(event) => {
+                restoreFocus.current = event.detail === 0;
+                setInstantControls(event.detail === 0);
+                void call.end();
+              }}
+            />
+          </span>
+        </div>
+        <div className={styles.callStart} inert={busy} aria-hidden={busy}>
+          <Button
+            variant="quiet"
+            aria-label="Start Bestie voice conversation"
+            disabled={!available || !state.community}
+            onClick={(event) => {
+              restoreFocus.current = event.detail === 0;
+              setInstantControls(event.detail === 0);
+              void call.start();
+            }}
+          >
+            <IconPhone size={18} aria-hidden="true" />
+            Call
+          </Button>
+        </div>
+      </footer>
     </section>
   );
 }

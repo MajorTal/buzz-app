@@ -7,7 +7,12 @@ import type {
   openVoice,
 } from "./media/voice.mjs";
 
-type Message = { id: string; role: "user" | "assistant"; text: string };
+type Message = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
+  createdAt: number;
+};
 type Phase =
   | "idle"
   | "connecting"
@@ -20,6 +25,9 @@ export type CallSnapshot = Readonly<{
   message: string;
   community: string | undefined;
   muted: boolean;
+  showTranscript: boolean;
+  inputAnalyser: AnalyserNode | null;
+  outputAnalyser: AnalyserNode | null;
   permission: (PermissionTool & { request: number }) | undefined;
   thinking: string;
   approval: "auto" | "ask";
@@ -68,6 +76,9 @@ export function createBestieCall(
     message: "Start a voice conversation with Bestie.",
     community: connection(relay.snapshot())?.relay,
     muted: false,
+    showTranscript: false,
+    inputAnalyser: null,
+    outputAnalyser: null,
     thinking: "none",
     approval: "auto",
     permission: undefined,
@@ -97,11 +108,14 @@ export function createBestieCall(
     !disposed &&
     active?.id === id &&
     same(active.scope, connection(relay.snapshot()));
-  const add = (message: Message) => {
+  const add = (message: Omit<Message, "createdAt">) => {
     const messages = [...state.messages];
     const index = messages.findIndex((m) => m.id === message.id);
-    if (index < 0) messages.push(message);
-    else messages[index] = message;
+    const createdAt =
+      messages[index]?.createdAt ?? Math.floor(Date.now() / 1000);
+    const row = { ...message, createdAt };
+    if (index < 0) messages.push(row);
+    else messages[index] = row;
     publish({
       messages: messages
         .slice(-40)
@@ -119,6 +133,8 @@ export function createBestieCall(
     publish({
       phase: "stopping",
       muted: false,
+      inputAnalyser: null,
+      outputAnalyser: null,
       permission: undefined,
       message,
     });
@@ -161,6 +177,9 @@ export function createBestieCall(
         });
       };
     },
+    setShowTranscript(showTranscript: boolean) {
+      publish({ showTranscript });
+    },
     setThinking(thinking: string) {
       if (
         !active &&
@@ -194,6 +213,8 @@ export function createBestieCall(
         permission: undefined,
         messages: [],
         muted: false,
+        inputAnalyser: null,
+        outputAnalyser: null,
         firstSoundMs: undefined,
       });
       let assistant = 0,
@@ -202,7 +223,10 @@ export function createBestieCall(
         finished = false;
       const ui: VoiceUI = {
         evidence() {},
-        analyzers() {},
+        analyzers(input, output) {
+          if (current(call.id))
+            publish({ inputAnalyser: input, outputAnalyser: output });
+        },
         status(message) {
           if (current(call.id)) publish({ message });
         },
@@ -235,6 +259,8 @@ export function createBestieCall(
           publish({
             phase: state.phase === "error" ? "error" : "idle",
             muted: false,
+            inputAnalyser: null,
+            outputAnalyser: null,
             permission: undefined,
           });
         },

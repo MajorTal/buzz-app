@@ -27,14 +27,6 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.heading button {
-  display: inline-flex;
-  flex-shrink: 0;
-  border: 0;
-  background: var(--surface-control);
-  color: inherit;
-  padding: 7px 9px;
-}
 .content {
   display: flex;
   flex: 1;
@@ -86,4 +78,10 @@
   .dock {
     width: 100%;
   }
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }

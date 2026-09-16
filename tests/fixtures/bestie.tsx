@@ -3,6 +3,7 @@ import { Context } from "@deepseek-ai/cordis";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
 import { apply } from "../../src/bundled/bestie";
+import { PanelCard } from "../../src/features/panels/PanelCard";
 import type { Panel } from "../../src/features/panels/service";
 import type {
   RelayData,
@@ -53,7 +54,12 @@ ctx.provide("panels", {
 });
 apply(ctx);
 if (!panel) throw new Error("Bestie contribution missing");
-const Content = panel.component;
+const contribution = {
+  ...panel,
+  key: "buzz.bestie:companion",
+  pluginId: "buzz.bestie",
+  revision: "fixture",
+};
 
 function Fixture() {
   const [visible, setVisible] = useState(true);
@@ -74,15 +80,23 @@ function Fixture() {
           {visible ? "Hide" : "Show"} Bestie
         </button>
       </nav>
-      <div className="max-w-md">
+      <div className="h-[700px] max-w-md">
         {visible &&
           (relocated ? (
-            <aside key="sidebar">
-              <Content target="" close={() => setVisible(false)} />
+            <aside key="sidebar" className="grid h-full">
+              <PanelCard
+                panel={contribution}
+                target=""
+                close={() => setVisible(false)}
+              />
             </aside>
           ) : (
-            <div key="dock">
-              <Content target="" close={() => setVisible(false)} />
+            <div key="dock" className="grid h-full">
+              <PanelCard
+                panel={contribution}
+                target=""
+                close={() => setVisible(false)}
+              />
             </div>
           ))}
       </div>

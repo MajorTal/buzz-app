@@ -1,8 +1,20 @@
 # Bestie realtime voice
 
 Open Bestie from its companion launcher anywhere the app offers the panel, then
-click the headphones button. Speak naturally and interrupt a reply by speaking.
-The panel shows transcripts, microphone mute, thinking level and tool approval.
+click Call at the bottom of the panel. Speak naturally and interrupt a reply by speaking.
+The ellipsis menu beside Close contains thinking level and tool approval settings.
+During a call, the bottom controls show mute, live microphone activity and hang-up;
+Bestie gently nods and tilts in response to its audio playback, changing its lean
+after speech pauses and settling when quiet. The microphone
+waveform uses monochrome bars and a mirrored layer at 20% opacity. Call controls
+fade into a stable footer when starting, with immediate keyboard transitions. Reduced motion keeps
+both indicators still while their opacity responds to audio. Transcripts are hidden
+by default. Toggle **Show transcript** in the ellipsis menu at any time to reveal
+or hide the current conversation using the Messages app’s message rows. When shown,
+the space above the call controls splits evenly between Bestie and a separate
+transcript scroll area. Messages soften into a subtle blur and fade at its top edge. Hiding
+the transcript does not erase it or restart the call. The choice lasts while
+Bestie is enabled in this app session. Tool approval requests remain visible.
 Closing the panel, changing community/account, disabling Bestie or disconnecting
 the relay ends the call. Immediate panel relocation retains the same call.
 

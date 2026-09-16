@@ -1,0 +1,255 @@
+.panel {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+  color: var(--text-primary);
+}
+.body {
+  display: grid;
+  flex: 1;
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  overflow: hidden;
+  padding: 0 24px;
+}
+.body[data-transcript="true"] {
+  grid-template-rows: repeat(2, minmax(0, 1fr));
+}
+.identity {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  min-height: 0;
+  padding: 24px 0 16px;
+}
+.avatar {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 176px;
+  height: 176px;
+  flex-shrink: 1;
+  min-height: 0;
+}
+.avatar img {
+  position: absolute;
+  inset: 0;
+  margin: auto;
+  max-width: 100%;
+  width: 160px;
+  height: 160px;
+  max-height: 100%;
+  object-fit: contain;
+  transform-origin: 50% 75%;
+}
+.status {
+  margin: 0;
+  text-align: center;
+  color: var(--text-secondary);
+}
+.transcriptViewport {
+  position: relative;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+.transcript {
+  height: 100%;
+  min-width: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-width: thin;
+  padding-top: 32px;
+  scroll-padding-top: 32px;
+  mask-image: linear-gradient(to bottom, transparent, black 32px);
+}
+.transcriptViewport::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 32px;
+  pointer-events: none;
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  mask-image: linear-gradient(to bottom, black, transparent);
+}
+
+.permission {
+  flex-shrink: 1;
+  min-height: 0;
+  max-height: 40%;
+  overflow: auto;
+  margin: 12px 24px 0;
+  padding: 16px;
+  border-radius: var(--radius-control);
+  background: var(--neutral-2);
+}
+.permission pre {
+  max-height: 160px;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  margin-block: 12px;
+}
+.decisions {
+  display: flex;
+  gap: 8px;
+}
+.controls {
+  --call-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  display: grid;
+  flex-shrink: 0;
+  align-items: center;
+  padding: 16px 24px 24px;
+}
+.callStart,
+.callControls {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition:
+    opacity var(--duration-state) var(--call-ease-out),
+    transform var(--duration-settle) var(--call-ease-out),
+    visibility 0s;
+}
+.callControls {
+  gap: 20px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(8px) scale(0.97);
+  transition-delay: 0s, 0s, var(--duration-state);
+}
+.callStart {
+  opacity: 1;
+  transform: translateY(0) scale(1);
+}
+.controls[data-active="true"] .callStart {
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px) scale(0.96);
+  transition-delay: 0s, 0s, var(--duration-state);
+}
+.controls[data-active="true"] .callControls {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0) scale(1);
+  transition-delay: 0s;
+}
+.muteControl,
+.hangup {
+  display: flex;
+  flex-shrink: 0;
+}
+.controls button:active:not([data-disabled]) {
+  transform: scale(0.97);
+}
+.hangup button {
+  background: var(--red-9);
+  color: var(--text-on-accent);
+}
+.hangup button:hover:not([data-disabled]) {
+  background: var(--red-10);
+}
+.wave {
+  position: relative;
+  height: 48px;
+  min-width: 0;
+  flex: 1;
+  color: var(--text-secondary);
+}
+.waveFront,
+.waveTrail {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+}
+.waveTrail {
+  opacity: 0.2;
+  transform: scaleX(-1);
+}
+.wave span {
+  display: block;
+  flex: 0 0 2px;
+  height: 40px;
+  background: currentColor;
+  border-radius: var(--radius-pill);
+  clip-path: inset(19px 0 round 1px);
+}
+.controls .wave {
+  opacity: 0;
+  transition: opacity var(--duration-state) var(--call-ease-out);
+}
+.controls[data-active="true"] .wave {
+  opacity: 1;
+  transition-delay: 40ms;
+}
+.controls[data-instant="true"] .callStart,
+.controls[data-instant="true"] .callControls,
+.controls[data-instant="true"] .wave {
+  transition: none;
+}
+.menuPositioner {
+  z-index: 1000;
+}
+.menu {
+  min-width: 220px;
+  max-height: var(--available-height);
+  overflow: auto;
+  padding: 6px;
+  border-radius: var(--radius-control);
+  border: 1px solid var(--border-primary);
+  background: var(--bg-float);
+  color: var(--text-primary);
+  box-shadow: var(--shadow-sm);
+}
+.menuLabel {
+  padding: 8px 10px 4px;
+  color: var(--text-secondary);
+}
+.menuItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 10px;
+  border-radius: var(--radius-row);
+  cursor: default;
+}
+.menuItem[data-highlighted] {
+  outline: none;
+  background: var(--neutral-4);
+}
+.menuItem[data-disabled] {
+  color: var(--text-disabled);
+}
+.separator {
+  height: 1px;
+  background: var(--border-primary);
+  margin: 6px;
+}
+.menuHint {
+  color: var(--text-secondary);
+  padding: 8px 10px;
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .callStart,
+  .callControls,
+  .controls[data-active="true"] .callStart,
+  .controls[data-active="true"] .callControls {
+    transform: none;
+  }
+  .controls button:active:not([data-disabled]) {
+    transform: none;
+  }
+}

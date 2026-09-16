@@ -34,6 +34,60 @@ const heads = (app) =>
     ({ filter }) => filter.kinds?.includes(9) && filter["#h"]?.length === 1,
   );
 
+test("channel establishment preserves an in-flight unread batch and its sidebar badges", async ({
+  page,
+  app,
+}) => {
+  const alphaHeads = () =>
+    app.report.queries.filter(
+      ({ community, filter }) =>
+        community === "primary" &&
+        filter["#h"]?.[0] === "alpha" &&
+        filter.top_level === true &&
+        filter.until === undefined,
+    );
+  const evidence = () =>
+    app.report.queries.filter(
+      ({ community, filter }) =>
+        community === "primary" &&
+        filter.kinds?.includes(9) &&
+        filter.top_level === undefined &&
+        filter.depth_limit === undefined &&
+        filter.until === undefined,
+    );
+  app.relay.holdEose("alpha");
+  app.relay.holdUnread();
+  try {
+    await open(page, app);
+    await expect.poll(() => app.report.unreadHolds.length).toBe(1);
+    expect(evidence()[0].filter["#h"]).toContain("alpha");
+    expect(evidence()[0].filter["#h"]).toContain("dm-090");
+    expect(alphaHeads()).toHaveLength(1);
+    await expect(row(page, "dm-090").getByRole("img")).toHaveCount(0);
+
+    // Establish only after unread is in flight; observe the real finite catch-up
+    // before releasing evidence. No sleep or scheduler luck creates the overlap.
+    app.relay.releaseEose("alpha");
+    await expect.poll(() => alphaHeads().length).toBe(2);
+    expect(app.report.unreadHolds).toEqual([{ pending: true, aborted: false }]);
+    app.relay.releaseUnread();
+    await expect(row(page, "dm-030").getByRole("img")).toHaveCount(1);
+    await expect(row(page, "dm-090").getByRole("img")).toHaveCount(1);
+    await expect(cue(page, "below")).toBeVisible();
+    await expect.poll(() => evidence().length).toBe(2); // 130 IDs, not retries.
+    expect(evidence().map(({ filter }) => filter["#h"].length)).toEqual([
+      128, 2,
+    ]);
+    expect(app.report.unreadHolds).toEqual([
+      { pending: false, aborted: false },
+    ]);
+    expect(app.report.readPublications).toEqual([]);
+  } finally {
+    app.relay.releaseEose("alpha");
+    app.relay.releaseUnread();
+  }
+});
+
 test("edge pills follow scroll and reveal the nearest unread without selection or reads; focus retains existing preparation", async ({
   page,
   app,

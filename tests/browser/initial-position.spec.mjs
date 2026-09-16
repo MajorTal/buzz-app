@@ -1,7 +1,12 @@
 import { test, expect } from "./fixture.mjs";
 import { open, settle, anchor, expectAnchor } from "./timeline.mjs";
 
-test.use({ productionBroker: true, developmentReact: true });
+test.use({
+  productionBroker: true,
+  developmentReact: true,
+});
+const sized = test.extend({ historyCounts: { alpha: 20, beta: 20 } });
+const short = test.extend({ historyCounts: { alpha: 20, beta: 1 } });
 const history = (page) =>
   page.getByRole("region", { name: "Channel message history" });
 async function bottom(page, app, label) {
@@ -35,49 +40,52 @@ async function select(page, name) {
   ).toBeVisible();
 }
 
-test("cold and warm sidebar entries start at bottom without scrolling", async ({
-  page,
-  app,
-}) => {
-  await open(page, app);
-  await bottom(page, app, "cold Alpha");
-  await select(page, "Beta");
-  await bottom(page, app, "cold Beta");
-  await select(page, "Alpha");
-  await bottom(page, app, "warm Alpha");
-  await page.getByRole("button", { name: "Home", exact: true }).first().click();
-  await page.reload();
-  await page
-    .getByRole("button", { name: "Messages", exact: true })
-    .first()
-    .click();
-  await bottom(page, app, "persisted bottom Alpha");
-  await select(page, "Beta");
-  await bottom(page, app, "persisted bottom Beta");
-});
+sized(
+  "cold and warm sidebar entries start at bottom without scrolling",
+  async ({ page, app }) => {
+    await open(page, app);
+    await bottom(page, app, "cold Alpha");
+    await select(page, "Beta");
+    await bottom(page, app, "cold Beta");
+    await select(page, "Alpha");
+    await bottom(page, app, "warm Alpha");
+    await page
+      .getByRole("button", { name: "Home", exact: true })
+      .first()
+      .click();
+    await page.reload();
+    await page
+      .getByRole("button", { name: "Messages", exact: true })
+      .first()
+      .click();
+    await bottom(page, app, "persisted bottom Alpha");
+    await select(page, "Beta");
+    await bottom(page, app, "persisted bottom Beta");
+  },
+);
 
-test("short channel with tall messages opens at the actual bottom", async ({
-  page,
-  app,
-}) => {
-  app.histories.set(
-    "primary/beta",
-    app.histories.get("primary/beta").slice(0, 1),
-  );
-  app.append("primary", "beta", "Tall message\n".repeat(70), false);
-  app.append("primary", "beta", "Last message\n".repeat(25), false);
-  await open(page, app);
-  await bottom(page, app, "cold Alpha control");
-  await select(page, "Beta");
-  await bottom(page, app, "cold tall Beta");
-  await select(page, "Alpha");
-  await select(page, "Beta");
-  await bottom(page, app, "warm tall Beta");
-});
+short(
+  "short channel with tall messages opens at the actual bottom",
+  async ({ page, app }) => {
+    expect(app.histories.get("primary/beta")).toHaveLength(1);
+    app.append("primary", "beta", "Tall message\n".repeat(70), false);
+    app.append("primary", "beta", "Last message\n".repeat(25), false);
+    await open(page, app);
+    await bottom(page, app, "cold Alpha control");
+    await select(page, "Beta");
+    await bottom(page, app, "cold tall Beta");
+    await select(page, "Alpha");
+    await select(page, "Beta");
+    await bottom(page, app, "warm tall Beta");
+  },
+);
 
 // This case tests reading restoration, not cancellation of held older pages.
 // Taller rows keep its gesture outside prefetch; paging has separate journeys.
-const readingTest = test.extend({ tallMessages: true });
+const readingTest = test.extend({
+  tallMessages: true,
+  historyCounts: { alpha: 20, beta: 1 },
+});
 readingTest(
   "deliberate reading anchor survives a session reload",
   async ({ page, app }) => {
@@ -116,19 +124,19 @@ readingTest(
 );
 
 for (const count of [1, 3, 5, 7, 9]) {
-  test(`near-fit channel with ${count} mixed-height rows starts at bottom`, async ({
-    page,
-    app,
-  }) => {
-    app.histories.set(
-      "primary/beta",
-      app.histories.get("primary/beta").slice(0, count),
-    );
-    await open(page, app);
-    await select(page, "Beta");
-    await bottom(page, app, `cold ${count}-row Beta`);
-    await select(page, "Alpha");
-    await select(page, "Beta");
-    await bottom(page, app, `warm ${count}-row Beta`);
+  const nearFitTest = test.extend({
+    historyCounts: { alpha: 1, beta: count },
   });
+  nearFitTest(
+    `near-fit channel with ${count} mixed-height rows starts at bottom`,
+    async ({ page, app }) => {
+      await open(page, app);
+      expect(app.histories.get("primary/beta")).toHaveLength(count);
+      await select(page, "Beta");
+      await bottom(page, app, `cold ${count}-row Beta`);
+      await select(page, "Alpha");
+      await select(page, "Beta");
+      await bottom(page, app, `warm ${count}-row Beta`);
+    },
+  );
 }

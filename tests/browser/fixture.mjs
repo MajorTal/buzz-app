@@ -35,7 +35,7 @@ export const test = base.extend({
   dmLabels: [false, { option: true }],
   tallMessages: [false, { option: true }],
   membershipActivity: [false, { option: true }],
-  historyCounts: [{ alpha: historySize, beta: 80 }, { option: true }],
+  historyCounts: [{ alpha: 1, beta: 1 }, { option: true }],
   developmentReact: [false, { option: true, scope: "worker" }],
   pluginFixtures: [false, { option: true, scope: "worker" }],
   compiledApp: [buildApp, { scope: "worker" }],

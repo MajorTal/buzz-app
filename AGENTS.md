@@ -83,7 +83,8 @@ Do not infer layout, native editing or cross-window correctness from a DOM emula
 When moving coverage, map removed assertions to replacements and demonstrate that
 the replacement catches the regression before deleting the browser case.
 
-Generate only the fixture data the test needs. Share immutable builds and stateless
+Make minimal fixture data the default and opt into larger datasets only for an
+explicit scale, pagination or geometry contract. Share immutable builds and stateless
 servers, never mutable test state, identities or browser contexts. Preserve large
 datasets and isolated runners when scale or performance is the behavior under test.
 Record browser cases added/removed, their browser-only justification, replacement

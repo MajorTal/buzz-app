@@ -8,7 +8,7 @@ import { keypair, message } from "../../src/features/relay/testing";
 import "../../src/shared/styles/globals.css";
 const viewer = keypair(),
   relay = keypair();
-const events = Array.from({ length: 100 }, (_, i) =>
+const events = Array.from({ length: 60 }, (_, i) =>
   message(
     viewer,
     "images",

@@ -4,7 +4,7 @@ import { open, end, settle } from "./timeline.mjs";
 test.use({
   pluginFixtures: true,
   exactMessages: true,
-  historyCounts: { alpha: 120, beta: 0 },
+  historyCounts: { alpha: 103, beta: 0 },
 });
 const thread = (page) =>
   page.getByRole("region", { name: "Thread messages", exact: true });

@@ -76,7 +76,7 @@ test("delayed and failed images preserve bottom and reading anchors across remou
     // Routing deliberately disables HTTP cache: each remount can load late.
     await new Promise((resolve) => setTimeout(resolve, 150));
     await route.fulfill(
-      url.endsWith("/96.svg")
+      url.endsWith("/56.svg")
         ? { status: 404, body: "missing" }
         : {
             contentType: "image/svg+xml",
@@ -123,6 +123,9 @@ test("delayed and failed images preserve bottom and reading anchors across remou
     await settle(page);
     expect(await gap()).toBeLessThan(4);
     expect(await feed.evaluate((el) => el.scrollHeight)).toBe(before);
+    const failedImage = feed.locator('img[src="https://image.test/56.svg"]');
+    await expect(failedImage).toHaveCSS("visibility", "hidden");
+    await expect(failedImage.locator("..").locator("canvas")).toBeVisible();
     // Reading above bottom survives decode; this must not be a force-bottom fix.
     held = true;
     pending.clear();

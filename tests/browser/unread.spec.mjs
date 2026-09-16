@@ -1,7 +1,11 @@
 import { test, expect } from "./fixture.mjs";
 import { open, settle } from "./timeline.mjs";
 
-test.use({ productionBroker: true, readState: true });
+test.use({
+  productionBroker: true,
+  readState: true,
+  historyCounts: { alpha: 640, beta: 20 },
+});
 const history = (page) =>
   page.getByRole("region", { name: "Channel message history" });
 const alpha = (page) => page.getByRole("button", { name: /^Alpha/ });

@@ -1,7 +1,10 @@
 import { test, expect } from "./fixture.mjs";
 import { open, settle } from "./timeline.mjs";
 
-test.use({ productionBroker: true });
+test.use({
+  productionBroker: true,
+  historyCounts: { alpha: 640, beta: 20 },
+});
 const history = (page) =>
   page.getByRole("region", { name: "Channel message history" });
 

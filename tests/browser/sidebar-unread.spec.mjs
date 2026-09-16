@@ -6,6 +6,7 @@ test.use({
   readState: true,
   largeSidebar: true,
   sidebarUnread: true,
+  historyCounts: { alpha: 20, beta: 20 },
 });
 const sidebar = (page) =>
   page.getByRole("complementary", { name: "Channel sidebar", exact: true });

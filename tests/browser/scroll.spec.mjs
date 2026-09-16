@@ -11,6 +11,7 @@ import {
   edge,
 } from "./timeline.mjs";
 
+test.use({ historyCounts: { alpha: 640, beta: 80 } });
 // Keep non-paging reading gestures outside the unchanged near-top read zone,
 // even with a 20-row head. The cursor journey below keeps ordinary-height rows.
 const readingTest = test.extend({ tallMessages: true });

@@ -1,6 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { test, expect } from "./fixture.mjs";
 
+test.use({ historyCounts: { alpha: 0, beta: 0 } });
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 async function openPlugins(page, origin) {
   await page.goto(origin);

@@ -6,6 +6,7 @@ test.use({
   savedSidebar: true,
   largeSidebar: true,
   developmentReact: true,
+  historyCounts: { alpha: 1, beta: 1 },
 });
 test("Home → Messages keeps saved groups and scroll on every visible frame without re-decoding", async ({
   page,

@@ -1,6 +1,7 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 const button = (page, name) => page.getByRole("button", { name, exact: true });
+test.use({ historyCounts: { alpha: 1, beta: 0 } });
 test("web hides the unusable terminal and does not consume its shortcut, including re-enable", async ({
   page,
   app,

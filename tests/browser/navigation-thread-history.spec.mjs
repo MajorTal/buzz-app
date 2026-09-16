@@ -1,7 +1,12 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
-test.use({ productionBroker: true, readState: true, threadUnread: true });
+test.use({
+  productionBroker: true,
+  readState: true,
+  threadUnread: true,
+  historyCounts: { alpha: 20, beta: 20 },
+});
 
 test("Back restores each thread visit before the previous channel", async ({
   page,

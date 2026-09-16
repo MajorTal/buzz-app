@@ -2,7 +2,10 @@ import { test, expect } from "./fixture.mjs";
 import { open, upper, anchor, expectAnchor } from "./timeline.mjs";
 
 // Reading setup must not accidentally exercise older-page loading.
-test.use({ tallMessages: true });
+test.use({
+  tallMessages: true,
+  historyCounts: { alpha: 640, beta: 1 },
+});
 const history = (page) =>
   page.getByRole("region", { name: "Channel message history" });
 

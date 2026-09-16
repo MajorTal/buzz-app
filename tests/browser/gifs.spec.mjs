@@ -1,5 +1,6 @@
 import { test, expect } from "./fixture.mjs";
 
+test.use({ historyCounts: { alpha: 1, beta: 0 } });
 test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   page,
   app,

@@ -1,7 +1,11 @@
 import { test, expect } from "./fixture.mjs";
 import { anchor, expectAnchor, settle } from "./timeline.mjs";
 
-test.use({ membershipActivity: true, productionBroker: true });
+test.use({
+  membershipActivity: true,
+  productionBroker: true,
+  historyCounts: { alpha: 640, beta: 1 },
+});
 
 // Do not let the shared fixture's legacy WebKit exception mask timeline reflow
 // errors. These journeys must preserve the reader without observer-loop errors.

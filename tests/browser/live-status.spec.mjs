@@ -1,5 +1,8 @@
 import { test, expect } from "./fixture.mjs";
-test.use({ productionBroker: true });
+test.use({
+  productionBroker: true,
+  historyCounts: { alpha: 1, beta: 1 },
+});
 test("clean pending setup stays in diagnostics and never flashes a warning during channel switches", async ({
   page,
   app,

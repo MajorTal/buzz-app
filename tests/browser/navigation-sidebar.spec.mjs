@@ -1,7 +1,10 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 const button = (page, name) => page.getByRole("button", { name, exact: true });
-test.use({ largeSidebar: true });
+test.use({
+  largeSidebar: true,
+  historyCounts: { alpha: 1, beta: 1 },
+});
 
 test("channel navigation preserves sidebar search, DOM, group state and scroll", async ({
   page,

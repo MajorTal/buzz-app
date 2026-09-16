@@ -1,7 +1,11 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools";
-test.use({ productionBroker: true, developmentReact: true });
+test.use({
+  productionBroker: true,
+  developmentReact: true,
+  historyCounts: { alpha: 1, beta: 1 },
+});
 
 test("activity launcher consumes real encrypted telemetry, escapes raw text, selects agents, and releases on disable", async ({
   page,

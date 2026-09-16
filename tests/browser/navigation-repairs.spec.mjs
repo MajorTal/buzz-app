@@ -1,6 +1,7 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
+test.use({ historyCounts: { alpha: 1, beta: 1 } });
 // Regressions independently reproduced by Pinky against the first wiring handoff.
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 const entry = (page) =>

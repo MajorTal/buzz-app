@@ -6,6 +6,7 @@ test.use({
   readState: true,
   threadUnread: true,
   pluginFixtures: true,
+  historyCounts: { alpha: 640, beta: 1 },
 });
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 const state = (page) =>

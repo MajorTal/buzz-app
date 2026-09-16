@@ -2,6 +2,7 @@ import { test, expect } from "./fixture.mjs";
 import { settle, upper, expectAnchor } from "./timeline.mjs";
 
 // Resize tests must not enter the fixture’s deliberately held paging path.
+test.use({ historyCounts: { alpha: 640, beta: 80 } });
 const readingTest = test.extend({ tallMessages: true });
 async function expectNonPaging(page, app) {
   expect(

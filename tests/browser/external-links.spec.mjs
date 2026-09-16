@@ -1,5 +1,6 @@
 import { test, expect } from "./fixture.mjs";
 
+test.use({ historyCounts: { alpha: 1, beta: 0 } });
 const github = "https://github.com/block/buzz/pull/1";
 const ordinary = "https://example.test/external-link";
 const unsupported = "https://github.com/block/buzz/blob/main/README.md";

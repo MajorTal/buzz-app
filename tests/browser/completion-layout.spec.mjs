@@ -1,5 +1,6 @@
 import { test, expect } from "./fixture.mjs";
 
+test.use({ historyCounts: { alpha: 1, beta: 0 } });
 test("completion menu stays reachable in the production channel layout", async ({
   page,
   app,

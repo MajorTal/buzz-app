@@ -1,6 +1,7 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
+test.use({ historyCounts: { alpha: 640, beta: 1 } });
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 const entry = (page) =>
   page.evaluate(() => history.state.buzzNavigationV1.entry);

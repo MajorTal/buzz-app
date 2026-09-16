@@ -2,7 +2,11 @@ import { readFile } from "node:fs/promises";
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
-test.use({ productionBroker: true, largeSidebar: true });
+test.use({
+  productionBroker: true,
+  largeSidebar: true,
+  historyCounts: { alpha: 20, beta: 20 },
+});
 const heads = (app, channel) =>
   app.report.queries.filter(
     ({ filter }) =>

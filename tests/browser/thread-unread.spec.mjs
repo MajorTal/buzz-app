@@ -1,7 +1,12 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
-test.use({ productionBroker: true, readState: true, threadUnread: true });
+test.use({
+  productionBroker: true,
+  readState: true,
+  threadUnread: true,
+  historyCounts: { alpha: 20, beta: 1 },
+});
 test("thread buttons show observed unread independently, clear only after reading, and expose hover/focus affordance", async ({
   page,
   app,

@@ -1,7 +1,12 @@
 import { test, expect } from "./fixture.mjs";
 import { open, end } from "./timeline.mjs";
 
-test.use({ productionBroker: true, readState: true, threadUnread: true });
+test.use({
+  productionBroker: true,
+  readState: true,
+  threadUnread: true,
+  historyCounts: { alpha: 20, beta: 1 },
+});
 test("Messages receives scoped typing through authenticated live traffic and expires it without publishing", async ({
   page,
   app,

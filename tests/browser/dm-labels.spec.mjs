@@ -1,7 +1,11 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
-test.use({ productionBroker: true, dmLabels: true });
+test.use({
+  productionBroker: true,
+  dmLabels: true,
+  historyCounts: { alpha: 1, beta: 1 },
+});
 
 for (const cold of [false, true]) {
   test(`DM names recover after ${cold ? "hidden channel deletion aborts a cold fetch" : "channel deletion purges loaded profiles"}`, async ({

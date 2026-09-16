@@ -39,7 +39,7 @@ test("four independent browser jobs retain isolated measurements and native setu
   const preparation = browser.indexOf(
     "run: cargo build --locked -p buzzodz-plugins --example fixture-bridge",
   );
-  const journey = browser.indexOf("run: pnpm test:browser:ci");
+  const journey = browser.indexOf("-- pnpm test:browser:ci");
   assert.ok(
     preparation >= 0 && journey > preparation,
     "native fixture must build before the browser journeys",
@@ -57,9 +57,10 @@ test("four independent browser jobs retain isolated measurements and native setu
   assert.ok(functional, "functional step must exist");
   assert.doesNotMatch(functional, /^ {8}(if|continue-on-error):/m);
   assert.doesNotMatch(functional, /(?:\s|^)--list(?:[=\s]|$)/);
+  assert.match(functional, /--reporter=list,json/);
   assert.match(
     job("measurements"),
-    /run: pnpm test:browser:ci --project '\*-measurements' --workers=1$/m,
+    /-- pnpm test:browser:ci --project '\*-measurements' --workers=1 --reporter=list,json$/m,
   );
   assert.equal(config.workers, 2);
   assert.equal(config.retries, 0);
@@ -77,7 +78,9 @@ test("four independent browser jobs retain isolated measurements and native setu
 });
 
 test("workflow shards discover every functional test/project exactly once", (t) => {
-  const command = browser.match(/^ {8}run: (pnpm test:browser:ci .+)$/m)?.[1];
+  const command = browser.match(
+    /^ {8}run: .+ -- (pnpm test:browser:ci .+)$/m,
+  )?.[1];
   assert.ok(command, "functional invocation must exist");
   const discover = (args) => {
     const report = JSON.parse(

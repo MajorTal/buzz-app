@@ -34,7 +34,7 @@ export function PluginImport({
 
   if (!imports)
     return (
-      <p className="mb-4 text-sm text-muted">
+      <p className="mb-4 text-body-sm text-muted">
         Open the desktop app to load plugins from a folder or Git repository.
       </p>
     );
@@ -109,7 +109,7 @@ export function PluginImport({
               void load(() => imports.git(repository, reference));
           }}
         >
-          <label className="grid gap-1 text-sm">
+          <label className="grid gap-1 text-body-sm">
             Git or GitHub repository
             <input
               required
@@ -119,7 +119,7 @@ export function PluginImport({
               onChange={(event) => setRepository(event.target.value)}
             />
           </label>
-          <label className="grid gap-1 text-sm">
+          <label className="grid gap-1 text-body-sm">
             Branch or tag (optional)
             <input
               value={reference}
@@ -128,7 +128,7 @@ export function PluginImport({
               onChange={(event) => setReference(event.target.value)}
             />
           </label>
-          <p className="m-0 text-xs text-muted">
+          <p className="m-0 text-caption text-muted">
             HTTPS or SSH; GitHub owner/repository also works. SSH uses your
             agent and known hosts. Password prompts and credential helpers are
             not used.
@@ -142,7 +142,7 @@ export function PluginImport({
           </button>
         </form>
       )}
-      <p className="mb-0 text-xs text-muted">
+      <p className="mb-0 text-caption text-muted">
         Choose built plugins with manifest.json and plugin.js. Buzz does not
         build source projects or run install scripts. Only load code you trust:
         plugins are not sandboxed.
@@ -163,10 +163,10 @@ export function PluginImport({
           aria-label="Plugin import preview"
           className="mt-4 grid gap-3 rounded-2xl border border-line bg-surface p-4"
         >
-          <div className="min-w-0 text-sm">
+          <div className="min-w-0 text-body-sm">
             <p className="m-0 break-all font-medium">{preview.source}</p>
             {preview.commit && (
-              <p className="m-0 break-all text-xs text-muted">
+              <p className="m-0 break-all text-caption text-muted">
                 Commit: {preview.commit}
               </p>
             )}
@@ -178,7 +178,7 @@ export function PluginImport({
             </p>
           ) : (
             <fieldset className="m-0 grid min-w-0 gap-2 border-0 p-0">
-              <legend className="mb-2 text-sm font-medium">
+              <legend className="mb-2 text-label-sm">
                 Choose a plugin folder
               </legend>
               {preview.candidates.map((item) => (
@@ -198,7 +198,7 @@ export function PluginImport({
                       setNotice(null);
                     }}
                   />
-                  <span className="min-w-0 text-sm">
+                  <span className="min-w-0 text-body-sm">
                     <span className="block font-medium">
                       {item.manifest.name}
                     </span>
@@ -211,7 +211,7 @@ export function PluginImport({
             </fieldset>
           )}
           {preview.warnings.length > 0 && (
-            <details className="text-sm text-muted">
+            <details className="text-body-sm text-muted">
               <summary>Folders skipped ({preview.warnings.length})</summary>
               <ul className="break-words">
                 {preview.warnings.map((warning) => (
@@ -221,7 +221,7 @@ export function PluginImport({
             </details>
           )}
           {candidate && (
-            <p className="m-0 text-sm">
+            <p className="m-0 text-body-sm">
               {existing
                 ? `This replaces ${existing.manifest.name} (${existing.manifest.id}). ${existing.enabled ? "It stays enabled and may run immediately unless this launch is in safe mode." : "It stays disabled."} Roll back remains available.`
                 : "This plugin will be installed disabled. Enable it in the list when you’re ready."}

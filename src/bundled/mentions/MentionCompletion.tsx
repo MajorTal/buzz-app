@@ -80,8 +80,11 @@ export function MentionCompletion({
         preview: (
           <Avatar
             name={recipient.name}
-            src={session.media(profiles.get(recipient.pubkey)?.picture ?? "")}
-            className="size-7 rounded-lg text-xs"
+            src={session.media(
+              profiles.get(recipient.pubkey)?.picture ?? "",
+              "small",
+            )}
+            className="size-7 rounded-lg text-caption"
           />
         ),
         edit: { mention: recipient },

@@ -13,12 +13,19 @@ async function expectMode(page, mode) {
   await expect(page.locator("html")).toHaveCSS("color-scheme", mode);
   await expect(page.locator("html")).toHaveCSS(
     "background-color",
-    mode === "dark" ? "rgb(17, 24, 29)" : "rgb(231, 240, 239)",
+    mode === "dark" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
   );
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    mode === "dark" ? "#11181d" : "#e7f0ef",
+    mode === "dark" ? /^#(?:000|000000)$/ : /^#(?:fff|ffffff)$/,
   );
+  await expect(page.locator(".shell-background")).toHaveCSS(
+    "background-image",
+    /linear-gradient/,
+  );
+  await expect(
+    page.getByRole("navigation", { name: "Pages", exact: true }),
+  ).toHaveCSS("backdrop-filter", /blur\(/);
 }
 
 test("Appearance changes and restores both modes, native keyboard controls, dialogs and narrow layout", async ({
@@ -41,10 +48,10 @@ test("Appearance changes and restores both modes, native keyboard controls, dial
       .locator(".shell-tab")
       .first()
       .evaluate((el) => getComputedStyle(el).color),
-  ).toBe("rgb(230, 237, 240)");
+  ).toBe("rgb(255, 255, 255)");
   await expect(button(page, "Appearance")).toHaveCSS(
     "background-color",
-    "rgb(27, 37, 43)",
+    "rgb(16, 16, 16)",
   );
   expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(
     "dark",
@@ -74,7 +81,7 @@ test("Appearance changes and restores both modes, native keyboard controls, dial
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveCSS(
       "background-color",
-      mode === "dark" ? "rgb(27, 37, 43)" : "rgb(255, 255, 255)",
+      mode === "dark" ? "rgb(26, 26, 26)" : "rgb(255, 255, 255)",
     );
     await page.keyboard.press("Escape");
   }
@@ -138,7 +145,7 @@ test("storage denial is visible and retryable; another window updates a live con
     );
     await expect(emojiSearch).toHaveValue("grinning");
     expect(await emojiNode.evaluate((el) => el.isConnected)).toBe(true);
-    await expect(composer).toHaveValue("Unsent appearance draft");
+    await expect(composer).toHaveJSProperty("value", "Unsent appearance draft");
     expect(await node.evaluate((el) => el.isConnected)).toBe(true);
     await expectAnchor(page, before);
     // The second window legitimately creates its own session; a mode change must not add a third.
@@ -188,7 +195,7 @@ test("saved dark document paints before the application module is allowed to exe
     await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
     await expect(page.locator("html")).toHaveCSS(
       "background-color",
-      "rgb(17, 24, 29)",
+      "rgb(0, 0, 0)",
     );
     expect(await page.locator("#root").innerHTML()).toBe("");
     // Observe the painted document for two frames with the entire React bundle still withheld.
@@ -200,7 +207,7 @@ test("saved dark document paints before the application module is allowed to exe
     );
     await expect(page.locator("html")).toHaveCSS(
       "background-color",
-      "rgb(17, 24, 29)",
+      "rgb(0, 0, 0)",
     );
     // Pre-paint coverage must never start (then tear down) a relay session.
     expect(relayRequests).toEqual([]);
@@ -255,15 +262,15 @@ test("compiled host preserves compatibility utility meanings", async ({
     await page.getByRole("radio", { name: mode, exact: true }).check();
     await expect(page.locator("#primary-text")).toHaveCSS(
       "color",
-      mode === "Light" ? "rgb(10, 10, 10)" : "rgb(245, 245, 245)",
+      mode === "Light" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
     );
     await expect(page.locator("#primary-border")).toHaveCSS(
       "border-top-color",
-      mode === "Light" ? "rgb(232, 232, 232)" : "rgb(51, 51, 51)",
+      mode === "Light" ? "rgb(232, 232, 232)" : "rgb(35, 35, 35)",
     );
     await expect(page.locator("#old-primary")).toHaveCSS(
       "background-color",
-      mode === "Light" ? "rgb(49, 63, 67)" : "rgb(214, 227, 235)",
+      mode === "Light" ? "rgb(25, 25, 25)" : "rgb(199, 199, 199)",
     );
     await expect(page.locator("#old-primary")).toHaveCSS(
       "border-radius",
@@ -274,9 +281,9 @@ test("compiled host preserves compatibility utility meanings", async ({
         "font-family",
         /ui-monospace/,
       );
-      await expect(page.locator(`#${id}`)).not.toHaveCSS(
+      await expect(page.locator(`#${id}`)).toHaveCSS(
         "font-family",
-        /JetBrains/,
+        /JetBrains Mono/,
       );
     }
     await expect(page.locator("#new-mono")).toHaveCSS(
@@ -284,4 +291,41 @@ test("compiled host preserves compatibility utility meanings", async ({
       /JetBrains Mono/,
     );
   }
+});
+
+test("shared type and spacing reach Home and the real message timeline", async ({
+  page,
+  app,
+}) => {
+  await page.goto(app.origin);
+  await button(page, "Home").click();
+  await expect(
+    page.getByRole("heading", { name: "Make yourself at home." }),
+  ).toHaveCSS("font-size", "56px");
+  await expect(
+    page.getByRole("heading", { name: "Make yourself at home." }),
+  ).toHaveCSS("line-height", "56px");
+  await open(page, app);
+  const history = page.getByRole("region", { name: "Channel message history" });
+  const message = history.locator("[data-message-id] p").first();
+  await expect(message).toHaveCSS("font-size", "14px");
+  // WebKit exposes the fractional product of the shared 14px × 1.42857 role.
+  await expect
+    .poll(async () =>
+      message.evaluate((element) =>
+        Number.parseFloat(getComputedStyle(element).lineHeight),
+      ),
+    )
+    .toBeCloseTo(20, 3);
+  await expect(history).toHaveCSS("padding-left", "24px");
+  const sidebar = page.getByRole("complementary", { name: "Channel sidebar" });
+  await expect(
+    sidebar.getByRole("button", { name: "Alpha", exact: true }),
+  ).toHaveCSS("font-size", "14px");
+  await expect(sidebar.locator("..")).toHaveCSS("column-gap", "4px");
+  const back = button(page, "Go back").locator("svg");
+  await expect(button(page, "Find a page").locator("svg")).toHaveCSS(
+    "width",
+    await back.evaluate((element) => getComputedStyle(element).width),
+  );
 });

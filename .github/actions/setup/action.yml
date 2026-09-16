@@ -28,12 +28,17 @@ runs:
     - name: Install locked dependencies
       shell: bash
       run: pnpm install --frozen-lockfile
+    - name: Resolve installed Playwright version
+      if: inputs.browsers == 'true'
+      id: playwright
+      shell: bash
+      run: node -p "'version=' + require('@playwright/test/package.json').version" >> "$GITHUB_OUTPUT"
     - name: Cache Playwright engines
       if: inputs.browsers == 'true'
       uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
       with:
         path: ~/.cache/ms-playwright
-        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('pnpm-lock.yaml') }}
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright.outputs.version }}-chromium-webkit
     - name: Install pinned browser engines and libraries
       if: inputs.browsers == 'true'
       shell: bash

@@ -4,7 +4,7 @@
   "version": "0.0.0",
   "identifier": "dev.local.buzz.foundation",
   "build": {
-    "beforeDevCommand": "pnpm dev",
+    "beforeDevCommand": "pnpm dev:desktop",
     "devUrl": "http://localhost:1430",
     "beforeBuildCommand": "pnpm build",
     "frontendDist": "../dist"

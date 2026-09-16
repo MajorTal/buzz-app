@@ -1,0 +1,56 @@
+.input {
+  width: 100%;
+  min-height: 3rem;
+  max-height: 12rem;
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  line-height: 1.5;
+  cursor: text;
+  outline: none;
+}
+.input[data-empty]::before {
+  content: attr(data-placeholder);
+  color: var(--text-muted);
+  pointer-events: none;
+  position: absolute;
+}
+.token {
+  display: inline;
+}
+.input::selection,
+.input ::selection {
+  background-color: Highlight;
+  color: HighlightText;
+}
+.input:focus .token[data-editor-selected] {
+  background-color: Highlight;
+  color: HighlightText;
+}
+.input:focus .token[data-editor-selected] * {
+  background-color: transparent;
+  color: inherit;
+}
+.input .token :is(div, p) {
+  display: inline;
+  margin: 0;
+  min-height: 0;
+  font: inherit;
+  line-height: inherit;
+}
+.token img {
+  display: inline-block;
+  width: var(--size-emoji-inline);
+  height: var(--size-emoji-inline);
+  object-fit: contain;
+  vertical-align: -0.25em;
+}
+.input[data-single-emoji] {
+  font-size: var(--size-emoji-display);
+  line-height: var(--size-emoji-line);
+}
+.input[data-single-emoji] img {
+  width: var(--size-emoji-display);
+  height: var(--size-emoji-display);
+}

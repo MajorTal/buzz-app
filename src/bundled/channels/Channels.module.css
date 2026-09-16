@@ -1,9 +1,13 @@
+@reference "../../shared/styles/globals.css";
+
 /* Separate bento surfaces; the shell owns the gradient and outer gutter. */
 .root {
   height: 100%;
   min-height: 0;
   color: var(--text);
-  font-size: calc(14px * var(--buzz-text-scale, 1));
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
 }
 .root button:not(:where([data-buzz-ui], [data-buzz-ui] *)) {
   color: inherit;
@@ -11,7 +15,7 @@
 .board {
   display: grid;
   grid-template-columns: 216px minmax(0, 1fr);
-  gap: 16px;
+  gap: var(--space-1);
   height: 100%;
   position: relative;
   overflow: hidden;
@@ -32,15 +36,15 @@
   box-shadow: var(--elevation-card);
 }
 .sidebar {
-  padding: 10px;
+  padding: var(--space-2);
 }
 .search {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 7px 8px;
-  margin-bottom: 16px;
-  border-radius: 14px;
+  gap: var(--space-2);
+  padding: var(--space-1h) var(--space-2);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius-control);
   background: var(--surface-input);
   color: var(--text-muted);
 }
@@ -67,7 +71,7 @@
 .channelListContent {
   display: flex;
   flex-direction: column;
-  gap: 1px;
+  gap: var(--space-half);
 }
 .sidebar .unreadEdge {
   position: absolute;
@@ -75,17 +79,18 @@
   transform: translateX(-50%);
   display: flex;
   align-items: center;
-  gap: 5px;
+  gap: var(--space-1);
   width: max-content;
   max-width: calc(100% - 8px);
-  padding: 6px 10px;
+  padding: var(--space-1h) var(--space-2);
   border: 1px solid transparent;
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   background: var(--primary);
   color: var(--on-primary);
   box-shadow: var(--elevation-card);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
-  line-height: 1.3;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
   cursor: pointer;
 }
 .unreadEdge svg {
@@ -108,13 +113,15 @@
   flex-shrink: 0;
 }
 .channelSection + .channelSection {
-  margin-top: 12px;
+  margin-top: var(--space-3);
 }
 .channelSection > summary {
-  padding: 6px 8px;
+  padding: var(--space-1h) var(--space-2);
   color: var(--text-muted);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
-  font-weight: 600;
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
+  font-weight: var(--type-weight-medium);
   cursor: pointer;
 }
 .channelList button {
@@ -122,13 +129,15 @@
   display: flex;
   align-items: center;
   text-align: left;
-  gap: 9px;
+  gap: var(--space-2);
   border: 0;
   background: none;
-  padding: 5px 8px;
+  padding: var(--space-1) var(--space-2);
   min-height: 30px;
-  line-height: calc(20px * var(--buzz-text-scale, 1));
-  border-radius: 10px;
+  font-size: var(--text-label-sm);
+  line-height: var(--text-label-sm--line-height);
+  letter-spacing: var(--text-label-sm--letter-spacing);
+  border-radius: var(--radius-row);
   flex-shrink: 0;
 }
 .channelList button svg {
@@ -141,17 +150,19 @@
 .channelList button[aria-current="page"] {
   background: var(--surface-accent);
   color: var(--text);
-  font-weight: 550;
+  font-weight: var(--type-weight-medium);
 }
 .preferenceNotice {
-  padding: 8px;
+  padding: var(--space-2);
   color: var(--text-muted);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
   border-top: 1px solid var(--border);
 }
 .preferenceNotice button {
   display: block;
-  margin-top: 5px;
+  margin-top: var(--space-1);
   border: 0;
   background: none;
   text-decoration: underline;
@@ -159,21 +170,23 @@
 }
 .heading {
   min-height: 58px;
-  padding: 12px 16px;
+  padding: var(--space-4) var(--space-panel-inset);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--space-2);
   flex-shrink: 0;
 }
 .heading button:not(:where([data-buzz-ui], [data-buzz-ui] *)) {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--space-1h);
   border: 0;
   background: var(--surface-control);
-  padding: 7px 9px;
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  padding: var(--space-1h) var(--space-2);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .heading
   button[aria-pressed="true"]:not(:where([data-buzz-ui], [data-buzz-ui] *)) {
@@ -183,7 +196,7 @@
 .channelTitle {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: var(--space-2);
   min-width: 0;
 }
 .channelTitle strong {
@@ -192,17 +205,18 @@
   white-space: nowrap;
 }
 .empty {
-  padding: 30px 18px;
+  padding: var(--space-8) var(--space-4);
   color: var(--text-muted);
-  font-size: calc(13px * var(--buzz-text-scale, 1));
-  line-height: 1.6;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
 }
 .panelStack {
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-auto-rows: minmax(0, 1fr);
-  gap: 12px;
+  gap: var(--space-1);
 }
 .companion {
   display: grid;
@@ -212,34 +226,38 @@
 }
 .connect {
   height: 100%;
-  background: color-mix(in srgb, var(--surface) 79%, transparent);
+  @apply glass-secondary;
   border-radius: var(--radius-card);
   display: flex;
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  padding: 32px;
+  padding: var(--space-section-gap);
   text-align: center;
 }
 .connectIcon {
-  padding: 20px;
-  border-radius: 22px;
+  padding: var(--space-5);
+  border-radius: var(--radius-panel);
   color: var(--link);
   background: var(--surface-control);
-  margin-bottom: 16px;
+  margin-bottom: var(--space-4);
 }
 .connect h1 {
-  font-size: calc(28px * var(--buzz-text-scale, 1));
+  font-size: var(--text-title);
+  line-height: var(--text-title--line-height);
+  letter-spacing: var(--text-title--letter-spacing);
 }
 .connect p {
   max-width: 550px;
   color: var(--text-muted);
 }
 .connect button {
-  margin: 15px 0;
+  margin: var(--space-4) 0;
 }
 .note {
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 @media (max-width: 1000px) {
   .board,
@@ -258,10 +276,9 @@
   .board,
   .withPanel {
     grid-template-columns: 124px minmax(0, 1fr);
-    gap: 8px;
   }
   .sidebar {
-    padding: 10px 5px;
+    padding: var(--space-2) var(--space-1);
   }
   .sidebar,
   .conversation {
@@ -271,13 +288,17 @@
     width: 100%;
   }
   .heading {
-    padding: 12px;
+    padding: var(--space-3);
   }
   .channelList button {
-    font-size: calc(12px * var(--buzz-text-scale, 1));
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    letter-spacing: var(--text-caption--letter-spacing);
   }
   .roster {
-    font-size: calc(10px * var(--buzz-text-scale, 1));
+    font-size: var(--text-caption);
+    line-height: var(--text-caption--line-height);
+    letter-spacing: var(--text-caption--letter-spacing);
   }
 }
 .channelList button span {
@@ -294,7 +315,7 @@
   place-items: center;
   width: 30px;
   height: 30px;
-  border-radius: 8px;
+  border-radius: var(--radius-row);
   cursor: pointer;
   list-style: none;
   color: var(--text-muted);
@@ -313,25 +334,29 @@
   width: min(300px, 70vw);
   max-height: 60vh;
   overflow: auto;
-  padding: 14px;
+  padding: var(--space-3);
   border: 1px solid var(--border);
-  border-radius: 14px;
+  border-radius: var(--radius-control);
   background: var(--surface);
   box-shadow: var(--elevation-popover);
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .diagnosticsMenu summary {
   cursor: pointer;
-  padding: 4px 0;
+  padding: var(--space-1) 0;
 }
 .liveStatus {
   display: flex;
   flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
-  padding: 8px 16px;
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
   background: var(--warning-surface);
   color: var(--warning);
   border-bottom: 1px solid var(--border);
@@ -340,10 +365,12 @@
 .unreadBadge {
   margin-inline-start: auto;
   min-width: 1.25rem;
-  border-radius: 1rem;
-  padding: 0 0.35rem;
-  font-size: 0.75rem;
-  font-weight: 650;
+  border-radius: var(--radius-control);
+  padding: 0 var(--space-1h);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
+  font-weight: var(--type-weight-medium);
   background: var(--surface-hover);
   text-align: center;
 }
@@ -355,7 +382,7 @@
 .channelLaunchers {
   display: flex;
   margin-left: auto;
-  gap: 6px;
+  gap: var(--space-1h);
 }
 .channelDrawer {
   height: 42%;

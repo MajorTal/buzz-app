@@ -1,6 +1,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { RecoveryScreen } from "./RecoveryScreen";
-import { Blocks, Settings2, UserRound, Palette, Bell } from "lucide-react";
+import styles from "./Settings.module.css";
+import { Blocks, UserRound, Palette, Bell, Wrench } from "lucide-react";
 import type { PluginManager } from "../plugins/manager";
 import type { Communities } from "../features/communities/service";
 import { PluginImport } from "./PluginImport";
@@ -10,13 +11,26 @@ import type { Appearance } from "../shared/theme/service";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import type { NotificationsService } from "../features/notifications/service";
+import { DeveloperSettings } from "./DeveloperSettings";
 
-const sections = [
+type Section = { id: string; label: string; icon: typeof UserRound };
+
+const baseSections: Section[] = [
   { id: "profile", label: "Profile", icon: UserRound },
   { id: "plugins", label: "Plugins", icon: Blocks },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "notifications", label: "Notifications", icon: Bell },
-] as const;
+];
+
+// DEV alone is not enough: packaged desktop builds load a production bundle
+// from tauri://localhost, so the hostname check excludes them too.
+export const developerMode =
+  import.meta.env.DEV &&
+  /^(localhost|127\.0\.0\.1)$/.test(window.location.hostname);
+
+const sections: Section[] = developerMode
+  ? [...baseSections, { id: "developer", label: "Developer", icon: Wrench }]
+  : baseSections;
 
 export function Settings({
   plugins,
@@ -58,43 +72,32 @@ export function Settings({
   const catalog = ready?.catalog;
   const externalPluginsPaused = ready?.externalPluginsPaused;
   return (
-    <section aria-labelledby="settings-title" className="@container">
-      <div className="mb-5 flex items-center gap-4">
-        <span className="flex size-12 items-center justify-center rounded-2xl border border-shell-edge bg-surface/70 shadow-sm">
-          <Settings2 aria-hidden="true" size={23} strokeWidth={1.6} />
-        </span>
-        <div>
-          <h1
-            id="settings-title"
-            className="m-0 text-3xl font-medium tracking-tight"
-          >
+    <section aria-labelledby="settings-title" className={styles.root}>
+      <div className={styles.layout}>
+        <aside className={styles.sidebar}>
+          <h1 id="settings-title" className="m-0 px-3 py-4 text-label">
             Settings
           </h1>
-        </div>
-      </div>
-      <div className="grid gap-6 @min-[36rem]:grid-cols-[10rem_minmax(0,1fr)]">
-        <nav
-          aria-label="Settings sections"
-          className="flex flex-wrap gap-1 self-start rounded-2xl border border-shell-edge/80 bg-surface/60 p-2 @min-[36rem]:flex-col"
-        >
-          {sections.map(({ id, label, icon: Icon }) => (
-            <button
-              type="button"
-              key={id}
-              aria-current={selected === id ? "page" : undefined}
-              className="flex flex-1 items-center gap-3 border-0 bg-transparent px-3 py-2.5 text-left text-muted hover:bg-surface/70 aria-[current=page]:bg-surface aria-[current=page]:text-ink aria-[current=page]:shadow-sm"
-              onClick={(event) => {
-                event.currentTarget.focus();
-                if (onSection) onSection(id);
-                else setSelected(id);
-              }}
-            >
-              <Icon aria-hidden="true" size={18} strokeWidth={1.6} />
-              {label}
-            </button>
-          ))}
-        </nav>
-        <div className="min-w-0">
+          <nav aria-label="Settings sections" className={styles.navigation}>
+            {sections.map(({ id, label, icon: Icon }) => (
+              <button
+                type="button"
+                key={id}
+                aria-current={selected === id ? "page" : undefined}
+                className={styles.navigationRow}
+                onClick={(event) => {
+                  event.currentTarget.focus();
+                  if (onSection) onSection(id);
+                  else setSelected(id);
+                }}
+              >
+                <Icon aria-hidden="true" size={18} strokeWidth={1.6} />
+                {label}
+              </button>
+            ))}
+          </nav>
+        </aside>
+        <div className={styles.detail}>
           <div hidden={selected !== "notifications"}>
             <NotificationSettings notifications={notifications} />
           </div>
@@ -104,12 +107,14 @@ export function Settings({
           <div hidden={selected !== "profile"}>
             <ProfileSettings communities={communities} />
           </div>
+          {developerMode && (
+            <div hidden={selected !== "developer"}>
+              <DeveloperSettings relay={communities.relay} />
+            </div>
+          )}
           <div hidden={selected !== "plugins"}>
             <section aria-labelledby="plugin-settings-title">
-              <h2
-                id="plugin-settings-title"
-                className="mt-0 mb-3 text-lg font-medium"
-              >
+              <h2 id="plugin-settings-title" className="mt-0 mb-6 text-label">
                 Plugins
               </h2>
               {catalog ? (
@@ -122,8 +127,8 @@ export function Settings({
                   work.
                 </p>
               )}
-              <div className="overflow-hidden rounded-3xl border border-shell-edge/80 bg-surface shadow-surface">
-                <div className="px-6 sm:px-8">
+              <div className="overflow-hidden">
+                <div>
                   {externalPluginsPaused && (
                     <p role="status" className="notice">
                       External plugins are paused for this launch. Your saved
@@ -176,7 +181,7 @@ export function Settings({
                             />
                           </span>
                           <div className="min-w-0">
-                            <h3 className="m-0 text-[length:calc(15px*var(--buzz-text-scale,1))] font-medium">
+                            <h3 className="m-0 text-label font-medium">
                               {plugin.manifest.name}
                             </h3>
                             {failure && (

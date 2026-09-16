@@ -1,0 +1,54 @@
+.link {
+  --link-text: var(--blue-11);
+  --link-hover: var(--blue-4);
+  --link-focus: var(--blue-8);
+  padding: var(--space-half);
+  /* Keep hover padding outside the surrounding text's normal spacing. */
+  margin-inline: calc(-1 * var(--space-half));
+  border-radius: calc(var(--radius-chip) * 2 / 3);
+  color: var(--link-text);
+  background: transparent;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.link:hover {
+  background: var(--link-hover);
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--link-focus);
+  outline-offset: 2px;
+}
+
+/* Channel hosts reset ordinary buttons to inherited text color. */
+[data-mention-kind].link {
+  color: var(--link-text);
+}
+
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  margin-right: calc(var(--space-half) * 1.5);
+  vertical-align: -0.125em;
+}
+
+.lead {
+  white-space: nowrap;
+}
+
+[data-link-kind="channel"] .icon,
+[data-mention-kind="person"] > .icon {
+  margin-right: 0;
+}
+
+button.link {
+  border: 0;
+  font: inherit;
+  /* Inline anchors paint around the font box, without the prose line leading. */
+  line-height: normal;
+  cursor: pointer;
+}

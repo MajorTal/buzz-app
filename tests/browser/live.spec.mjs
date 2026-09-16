@@ -97,7 +97,7 @@ test("production WS → broker → mounted UI delivers messages and retries a pa
   await expectAnchor(page, reading);
   await expect(
     page.getByRole("textbox", { name: "Message #Alpha", exact: true }),
-  ).toHaveValue("Keep my draft");
+  ).toHaveJSProperty("value", "Keep my draft");
   await end(page);
   await expect(
     history(page).locator(`[data-message-id="${missed.id}"]`),

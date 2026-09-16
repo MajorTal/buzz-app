@@ -18,12 +18,17 @@ import bestieManifest from "./bestie/manifest.json";
 import * as bestie from "./bestie";
 import projectsManifest from "./projects/manifest.json";
 import * as projects from "./projects";
+import workflowsManifest from "./workflows/manifest.json";
+import * as workflows from "./workflows";
 import type { BundledPlugin } from "../plugins/manager";
+import linksManifest from "./links/manifest.json";
+import * as links from "./links";
 
 export const bundledPlugins: readonly BundledPlugin[] = [
   { manifest: { ...activityManifest, apiVersion: 1 }, module: activity },
   { manifest: { ...terminalManifest, apiVersion: 1 }, module: terminal },
   { manifest: { ...profilesManifest, apiVersion: 1 }, module: profiles },
+  { manifest: { ...linksManifest, apiVersion: 1 }, module: links },
   { manifest: { ...mentionsManifest, apiVersion: 1 }, module: mentions },
   { manifest: { ...emojiManifest, apiVersion: 1 }, module: emoji },
   { manifest: { ...channelsManifest, apiVersion: 1 }, module: channels },
@@ -31,4 +36,5 @@ export const bundledPlugins: readonly BundledPlugin[] = [
   { manifest: { ...bestieManifest, apiVersion: 1 }, module: bestie },
   { manifest: { ...projectsManifest, apiVersion: 1 }, module: projects },
   { manifest: { ...agentsManifest, apiVersion: 1 }, module: agents },
+  { manifest: { ...workflowsManifest, apiVersion: 1 }, module: workflows },
 ];

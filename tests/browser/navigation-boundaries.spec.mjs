@@ -1,6 +1,6 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
-test.use({ pluginFixtures: true });
+test.use({ pluginFixtures: true, historyCounts: { alpha: 1, beta: 0 } });
 
 // Regressions from the independent review, exercised through production composition.
 test("cold destination waits for its enabled provider to activate", async ({
@@ -103,7 +103,7 @@ test("Alt arrows preserve composer editing while deliberate history shortcuts st
   for (const arrow of ["ArrowLeft", "ArrowRight"]) {
     await page.keyboard.press(`Alt+${arrow}`);
     await expect(composer).toBeFocused();
-    await expect(composer).toHaveValue("one two three");
+    await expect(composer).toHaveJSProperty("value", "one two three");
     expect(
       await page.evaluate(() => window.fixtureNavigation.snapshot().entry.id),
     ).toBe(visit);
@@ -114,5 +114,5 @@ test("Alt arrows preserve composer editing while deliberate history shortcuts st
   await page.keyboard.press(`${apple ? "Meta" : "Control"}+[`);
   await expect(composer).toHaveCount(0);
   await page.keyboard.press(`${apple ? "Meta" : "Control"}+]`);
-  await expect(composer).toHaveValue("one two three");
+  await expect(composer).toHaveJSProperty("value", "one two three");
 });

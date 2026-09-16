@@ -44,7 +44,8 @@ The pinned pnpm Hermit package supports Apple Silicon macOS but marks Intel macO
 on an unsupported platform; resolve that tooling gap first. Other platforms still
 need their own validation.
 
-- `just web`: install locked dependencies and start Vite.
+- `just web`: install locked dependencies and start Vite on port 1430 or the
+  next available port, allowing parallel browser development across worktrees.
 - `just desktop`: install locked dependencies and start Tauri, which starts Vite.
 - `just fullstack`: reserved, exits unsuccessfully with an explanation. It will
   eventually start local Docker services including the Buzz relay backend.
@@ -65,11 +66,27 @@ isolated test buses, never use the desktop session bus or display real banners. 
 Installs run on every invocation to account for branch and lockfile changes.
 pnpm reuses its shared package cache; no node_modules directory needs to be copied
 into a new worktree. Native dependencies are fetched by Cargo as needed. Initial
-downloads and native compilation can take time. Web and desktop dev use the same
-port; run them separately or open the browser at the desktop dev server URL.
+downloads and native compilation can take time. Desktop dev requires port 1430
+for its fixed native development URL. Browser dev prints its selected URL and can
+use a later port when 1430 is occupied.
 Both run the development broker with your identity when the public
 `BUZZ_DEV_VIEWER` pin is configured in `.env.local`, and start without live
 identity otherwise; see [the setup and Keychain requirements](../README.md#relay-channels).
+
+After creating a worktree, bootstrap it from the checkout whose local development
+configuration it should inherit:
+
+```sh
+scripts/bootstrap-worktree.sh /absolute/path/to/source/checkout
+```
+
+The idempotent script copies the source checkout's git-ignored `.env.local`
+without overwriting an existing target, then uses the new worktree's Hermit proxy
+to run `bin/pnpm install --frozen-lockfile`. It rejects checkouts from another
+repository. Keychain credentials and pnpm's package cache remain machine-shared;
+do not copy private keys, `node_modules`, build output, `.npmrc`, or other ignored
+files. Install hooks separately as described below so existing custom hooks are
+never silently replaced.
 
 ## Interactive product iteration
 
@@ -235,6 +252,58 @@ rewrite just to move. `vitest.config.ts` discovers tests under `src/` and `dev/`
 then Playwright. Updating a test's location must also update discovery, imports,
 fixture URLs and root-path calculations; moving a file must not silently drop it
 from the gate.
+
+### Choosing a test layer
+
+Choose the cheapest layer that can observe the failure, not the tool used by the
+last test in the feature. Regression coverage is about behavior, not test counts
+or a coverage percentage. These rules apply to human and AI contributions alike.
+
+| Contract | Default layer |
+| --- | --- |
+| Parsing, policy, state machines, protocol handling, service coordination | Vitest in Node; use real collaborating services where the boundary matters |
+| Component state, effects, subscriptions, forms, semantic DOM and stale async results | React Testing Library in Vitest with jsdom |
+| Layout, virtualization, scrolling, native editing/focus interactions, real browser storage coordination | Playwright in both engines |
+| App composition across routing, plugins, transport and persistence | Representative Playwright journeys, with permutations in lower layers |
+
+Run JS tests with `bin/pnpm exec vitest run`, optionally followed by a test path.
+For mounted component tests, add `// @vitest-environment jsdom` at the top of the
+colocated test and import `@testing-library/jest-dom/vitest` for DOM assertions.
+Use real React (including StrictMode), role/label queries and `userEvent` for
+interactions. Use `fireEvent` for deliberately low-level events or bulk input
+whose keystrokes are not the contract. Unmount with RTL `cleanup` in `afterEach`;
+clear owned storage and restore spies. Fake external services, not React hooks.
+Keep snapshots stable until a service actually changes, and assert cleanup and
+late-result rejection through real mounting, rerendering and unmounting.
+See the [composer tests](../src/features/messages/MessageComposer.test.tsx).
+
+jsdom is the default DOM emulator, not a second browser gate. Its
+[standards-oriented implementation](https://github.com/jsdom/jsdom#readme) and
+compatibility with Testing Library favor behavioral fidelity over emulator-only
+speed claims. [Vitest supports Happy DOM too](https://vitest.dev/guide/environment),
+but introducing another emulator requires a demonstrated benefit on our actual
+component tests without per-environment workarounds. Neither proves rendering,
+native IME behavior or browser performance. Keep layout shims local and explicit;
+do not treat synthetic dimensions as acceptance evidence.
+
+Before accepting test changes, reviewers should verify:
+
+- Each added browser case identifies a browser-specific behavior or integration
+  boundary that a lower layer cannot establish. Keep failure/recovery coverage,
+  but avoid repeating the same state matrix through full app startup.
+- A moved assertion has a named replacement and evidence that a plausible defect
+  makes it fail. Similar test titles do not establish equivalent coverage.
+- Fixture data matches the test's needs. Share stateless servers/compiled assets,
+  not browser contexts or mutable state; keep scale tests representative.
+- Timing claims distinguish setup, execution, runner/engine and the checked
+  snapshot. Report added/removed cases and deferred checks. Do not impose a
+  flaky wall-clock threshold on ordinary correctness tests.
+
+Follow `AGENTS.md` to record those decisions in the PR description and enforce
+them during agent review. Request a lower-layer test when the browser justification
+is missing, rather than accept unbounded journey growth. Existing broad fixtures and hook-mocked tests are
+migration work, not patterns for new tests; convert them by owner without
+bundling unrelated product changes.
 
 ### Manual browser fixtures
 

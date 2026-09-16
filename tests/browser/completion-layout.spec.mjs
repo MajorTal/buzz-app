@@ -38,7 +38,7 @@ test("completion menu stays reachable in the production channel layout", async (
     });
     await option.click();
     await expect(input).toBeFocused();
-    await expect(input).not.toHaveValue(":sm");
+    await expect(input).not.toHaveJSProperty("value", ":sm");
   }
 });
 
@@ -70,10 +70,10 @@ test("host shortcuts coexist with an open completion menu and preserve its draft
       ),
     )
     .toBe("1.1");
-  await expect(input).toHaveValue(":smile");
+  await expect(input).toHaveJSProperty("value", ":smile");
   await expect(input).toBeFocused();
   await input.press("Tab");
-  await expect(input).toHaveValue("😄");
+  await expect(input).toHaveJSProperty("value", "😄");
   await input.fill(":smile");
   await expect(page.getByRole("option").first()).toBeVisible();
   await input.press(`${modifier}+,`);
@@ -82,7 +82,7 @@ test("host shortcuts coexist with an open completion menu and preserve its draft
   ).toBeVisible();
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await messages.click();
-  await expect(input).toHaveValue(":smile");
+  await expect(input).toHaveJSProperty("value", ":smile");
   // Draft persistence restores text, not selection: a remounted textarea may
   // focus at offset zero. Move to the query before expecting its suggestions.
   await input.press(modifier === "Meta" ? "Meta+ArrowRight" : "End");
@@ -93,5 +93,5 @@ test("host shortcuts coexist with an open completion menu and preserve its draft
   await expect(page.getByRole("option").first()).toContainText(":smile:");
   await input.press("Escape");
   await expect(page.getByRole("listbox")).toHaveCount(0);
-  await expect(input).toHaveValue(":smile");
+  await expect(input).toHaveJSProperty("value", ":smile");
 });

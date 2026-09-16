@@ -22,7 +22,9 @@ builds still require the [Tauri prerequisites](https://v2.tauri.app/start/prereq
 See [contributing](docs/contributing.md) for exact pins, registry settings,
 and the pinned pnpm package's Intel Mac limitation.
 
-Run **one** of `just web` or `just desktop` at a time; both use port 1430.
+Browser servers prefer port 1430 and automatically use the next open port, so
+`just web` can run from multiple worktrees. `just desktop` requires port 1430
+because its native window uses that fixed development URL.
 Without live opt-in they run the shell without relay identity access.
 `just iterate` applies formatting and runs fast checks plus the frontend build.
 `just scan` adds tests and native checks. [PR CI](.github/workflows/ci.yml) runs
@@ -53,12 +55,15 @@ in the non-live shell/fixture state.
    are public configuration, not secrets. With both relay settings unset, there is
    no default relay or alias map; Personal space and communities saved by canonical
    URL remain usable. Configuration does not automatically join a community.
-3. Start **one** development target:
+3. Start a development target:
    ```sh
    just web
    # Or, instead of web:
    just desktop
    ```
+
+   Open the Local URL printed by `just web`; parallel worktrees may use a port
+   above 1430. Stop the process using 1430 before starting `just desktop`.
 
 The broker reads the existing Keychain credential only after validating the
 public pin, refuses mismatches and never falls back to another credential. If it

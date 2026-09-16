@@ -1,0 +1,105 @@
+@layer components {
+  .alignment-options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    max-width: 24rem;
+    border: 0;
+    padding: 0;
+  }
+
+  .alignment-options legend {
+    margin-bottom: var(--space-3);
+  }
+
+  .alignment-comparison {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: var(--space-6);
+  }
+
+  .alignment-specimen,
+  .alignment-group {
+    display: flex;
+    min-width: 0;
+    flex-direction: column;
+    gap: var(--space-row-gap);
+  }
+
+  .alignment-project {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-section-gap);
+    padding: var(--space-panel-inset);
+  }
+
+  /* A viewer-only relationship under evaluation, not a shared density mode. */
+  .alignment-project[data-spacing="proposed"] {
+    gap: calc(var(--space-section-gap) * 2);
+  }
+
+  .alignment-tasks {
+    list-style: none;
+    padding: 0;
+    margin: 0;
+  }
+
+  .alignment-tasks li {
+    display: flex;
+    align-items: baseline;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    gap: var(--space-row-gap);
+    padding-block: var(--space-row-gap);
+    border-bottom: 1px solid var(--border-primary);
+  }
+
+  .alignment-status {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+
+  .alignment-status svg {
+    flex-shrink: 0;
+  }
+
+  .alignment-table-wrap {
+    overflow-x: auto;
+  }
+
+  .alignment-table {
+    width: 100%;
+    border-collapse: collapse;
+    text-align: left;
+  }
+
+  .alignment-table :is(th, td) {
+    min-width: 8rem;
+    padding: var(--space-3);
+    vertical-align: top;
+    border-bottom: 1px solid var(--border-primary);
+    overflow-wrap: anywhere;
+  }
+
+  .alignment-table th {
+    font-weight: 600;
+    color: var(--text-primary);
+  }
+
+  .alignment-table td {
+    color: var(--text-secondary);
+  }
+
+  html[data-keyboard-navigation] .alignment-table-wrap:focus-visible {
+    outline: 2px solid var(--purple-8);
+    outline-offset: 2px;
+  }
+
+  @media (max-width: 70rem) {
+    .alignment-comparison {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

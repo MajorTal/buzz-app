@@ -1,6 +1,8 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
+test.use({ readState: true });
+
 for (const mode of ["light", "dark"]) {
   test(`Profiles uses shared styles and host keyboard focus in ${mode} mode`, async ({
     page,
@@ -20,7 +22,7 @@ for (const mode of ["light", "dark"]) {
       const bounds = element.getBoundingClientRect();
       const avatar = Array.from(
         element.querySelectorAll(
-          'button[aria-label="View Fixture Reader profile"]',
+          'button[aria-label="View Alice Fixture profile"]',
         ),
       ).find((button) => {
         const rect = button.getBoundingClientRect();
@@ -32,7 +34,7 @@ for (const mode of ["light", "dark"]) {
     const avatar = history
       .locator(`[data-message-id="${messageId}"]`)
       .getByRole("button", {
-        name: "View Fixture Reader profile",
+        name: "View Alice Fixture profile",
         exact: true,
       });
     await expect(avatar).toBeInViewport({ ratio: 1 });
@@ -47,16 +49,16 @@ for (const mode of ["light", "dark"]) {
     await expect(region).toHaveAttribute("data-buzz-ui", "");
     await expect(region).toHaveCSS(
       "background-color",
-      mode === "light" ? "rgb(255, 255, 255)" : "rgb(28, 28, 28)",
+      mode === "light" ? "rgb(255, 255, 255)" : "rgb(26, 26, 26)",
     );
     await expect(region).toHaveCSS(
       "color",
-      mode === "light" ? "rgb(10, 10, 10)" : "rgb(245, 245, 245)",
+      mode === "light" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
     );
-    await expect(region).toHaveCSS("font-size", "14px");
+    await expect(region).toHaveCSS("font-size", "16px");
     await expect(
-      panel.getByRole("heading", { name: "Fixture Reader", exact: true }),
-    ).toHaveCSS("font-size", "16px");
+      panel.getByRole("heading", { name: "Alice Fixture", exact: true }),
+    ).toHaveCSS("font-size", "24px");
     await expect(key).toHaveCSS("font-size", "13px");
     await expect(key).toHaveCSS("font-family", /JetBrains Mono/);
     await expect(copy).toHaveCSS("height", "30px");
@@ -64,7 +66,7 @@ for (const mode of ["light", "dark"]) {
     await copy.hover();
     await expect(copy).toHaveCSS(
       "background-color",
-      mode === "light" ? "rgb(232, 232, 232)" : "rgb(35, 35, 35)",
+      mode === "light" ? "rgb(218, 218, 218)" : "rgb(35, 35, 35)",
     );
     await page.keyboard.press(
       browserName === "webkit" && process.platform === "darwin"
@@ -79,7 +81,7 @@ for (const mode of ["light", "dark"]) {
     // The host preference scales type once, not control geometry.
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+=`);
-    await expect(region).toHaveCSS("font-size", "15.4px");
+    await expect(region).toHaveCSS("font-size", "17.6px");
     await expect(key).toHaveCSS("font-size", "14.3px");
     await expect(copy).toHaveCSS("height", "30px");
     await page.keyboard.press(`${modifier}+0`);

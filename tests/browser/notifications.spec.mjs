@@ -255,6 +255,12 @@ for (const kind of ["mention", "thread reply"]) {
     page,
     app,
   }) => {
+    // Only this geometry scenario needs an overflowing Beta history.
+    if (kind === "mention") {
+      for (let i = 0; i < 20; i++) {
+        app.append("primary", "beta", `Earlier message ${i}`, false, false);
+      }
+    }
     // Model a real prior contribution in relay history, not a client-side
     // participation/readiness override. The incoming reply itself has no p tag.
     const root =
@@ -346,10 +352,17 @@ for (const kind of ["mention", "thread reply"]) {
     if (!root) {
       // Fractional reflow must not leave the last row clipped at maximum scroll.
       await row.evaluate((element) => {
-        element.style.paddingBottom = "0.5px";
+        element.style.paddingBottom = "0.125px";
       });
       for (const width of [1440, 640]) {
         await page.setViewportSize({ width, height: 950 });
+        await expect
+          .poll(() =>
+            surface.evaluate(
+              (element) => element.scrollHeight > element.clientHeight,
+            ),
+          )
+          .toBe(true);
         await end(page);
         await expect(row).toBeInViewport({ ratio: 1 });
       }

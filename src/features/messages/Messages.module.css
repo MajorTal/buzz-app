@@ -16,6 +16,8 @@
   overflow-y: auto;
   overflow-anchor: none;
   padding: 0 var(--space-panel-inset);
+  /* Keep fractional last rows reachable despite integer scroll extents. */
+  padding-bottom: var(--space-half);
   scrollbar-width: thin;
 }
 .feed ol {
@@ -217,7 +219,7 @@
 }
 @media (max-width: 650px) {
   .feed {
-    padding: 0 var(--space-3);
+    padding-inline: var(--space-3);
   }
   .composer {
     margin: var(--space-2) var(--space-3) var(--space-3);

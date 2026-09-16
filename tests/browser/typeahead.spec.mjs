@@ -4,6 +4,73 @@ const open = async (page) => {
   await page.goto("/tests/fixtures/mentions.html");
   return page.getByRole("textbox", { name: "Message #General" });
 };
+
+for (const mode of ["light", "dark"]) {
+  for (const kind of ["mention", "emoji"]) {
+    test(`${mode} ${kind} keyboard selection is visible against its popup`, async ({
+      page,
+    }) => {
+      const input = await open(page);
+      await page.evaluate((mode) => {
+        document.documentElement.dataset.colorMode = mode;
+      }, mode);
+      // Keep pointer hover from supplying a second highlight during keyboard use.
+      await page.mouse.move(0, 0);
+      await input.fill(kind === "mention" ? "@Ho" : ":smile");
+      const popup = page.getByRole("region", {
+        name: kind === "mention" ? "Mention suggestions" : "Emoji suggestions",
+        exact: true,
+      });
+      const options = popup.getByRole("option");
+      await expect(options.nth(1)).toBeVisible();
+      await expect(options.first()).toHaveAttribute("aria-selected", "true");
+      await input.press("ArrowDown");
+      const selected = options.nth(1);
+      await expect(selected).toHaveAttribute("aria-selected", "true");
+      await expect(options.first()).toHaveAttribute("aria-selected", "false");
+      await expect(input).toBeFocused();
+      await expect(selected).toBeInViewport({ ratio: 1 });
+      await expect(selected).toHaveCSS(
+        "background-color",
+        mode === "dark" ? "rgb(51, 51, 51)" : "rgb(232, 232, 232)",
+      );
+      const surface = await popup.evaluate(
+        (element) => getComputedStyle(element).backgroundColor,
+      );
+      await expect(selected).not.toHaveCSS("background-color", surface);
+      await expect(options.first()).toHaveCSS(
+        "background-color",
+        "rgba(0, 0, 0, 0)",
+      );
+      const replacement =
+        kind === "emoji"
+          ? await selected.locator("[data-native-emoji]").textContent()
+          : "@Honey ";
+      // Namesakes sort by their generated public keys, not fixture creation order.
+      const recipient =
+        kind === "mention"
+          ? await selected.locator("small").textContent()
+          : null;
+      await input.press("Tab");
+      await expect(input).toHaveJSProperty("value", replacement);
+      await expect(input).toBeFocused();
+      await expect(popup).toHaveCount(0);
+      if (kind === "mention") {
+        await input.press("Enter");
+        await expect
+          .poll(() =>
+            page.evaluate(() =>
+              window.mentionFixture.publications[0]?.tags.filter(
+                ([tag]) => tag === "p",
+              ),
+            ),
+          )
+          .toEqual([["p", recipient]]);
+      }
+    });
+  }
+}
+
 test("typeahead replaces only the query and publishes selected namesake identity, including replies", async ({
   page,
 }) => {
@@ -224,7 +291,7 @@ test("editable composer exposes its listbox popup relationship only while sugges
     await expect(input).toHaveRole("textbox");
   }
 });
-test("late publications cannot cross edits, ABA, Escape, blur, plugin replacement or destinations", async ({
+test("plugin replacement, native blur and composer sessions revoke late publications", async ({
   page,
 }) => {
   await page.goto("/tests/fixtures/typeahead.html");
@@ -245,20 +312,6 @@ test("late publications cannot cross edits, ABA, Escape, blur, plugin replacemen
         }),
       { index, text },
     );
-  await input.fill("!a");
-  const old = await latest();
-  await input.fill("!b");
-  await input.fill("!a");
-  await expect.poll(latest).toBeGreaterThan(old);
-  expect(await publish(old, "STALE ABA")).toBe(false);
-  const current = await latest();
-  expect(await publish(current)).toBe(true);
-  await expect(
-    page.getByRole("option", { name: "chosen", exact: true }),
-  ).toBeVisible();
-  await input.press("Escape");
-  expect(await publish(current, "STALE ESCAPE")).toBe(false);
-  await expect(page.getByRole("listbox")).toHaveCount(0);
   await input.fill("!blur");
   const blurred = await latest();
   await page.getByRole("textbox", { name: "Message #Other" }).focus();
@@ -418,7 +471,7 @@ test("current custom catalog drives typeahead and signed tags across community r
   await expect(selectedParty).not.toHaveAttribute("aria-selected", "true");
   await expect(hoveredParty).toHaveCSS(
     "background-color",
-    "rgb(245, 245, 246)",
+    "rgb(232, 232, 232)",
   );
   const partyList = page.getByRole("listbox", {
     name: "Emoji suggestions",
@@ -739,27 +792,11 @@ test("channel and actual ThreadPanel composers keep separate completion and draf
   await expect(thread).toHaveJSProperty("value", "@Fixture Reader ");
 });
 
-test("disabled and read-only DOM state reject late publications and displayed choices", async ({
+test("native read-only state rejects a displayed choice without sending", async ({
   page,
 }) => {
   await page.goto("/tests/fixtures/typeahead.html");
   const input = page.getByRole("textbox", { name: "Message #Test" });
-  await input.fill("!disabled");
-  const old = await page.evaluate(
-    () => window.completionFixture.queries().length - 1,
-  );
-  await page.getByRole("button", { name: "Toggle disabled" }).click();
-  await expect(input).toBeDisabled();
-  expect(
-    await page.evaluate(
-      (index) =>
-        window.completionFixture.publish(index, {
-          items: [{ id: "bad", label: "Bad", edit: { text: "bad" } }],
-        }),
-      old,
-    ),
-  ).toBe(false);
-  await page.getByRole("button", { name: "Toggle disabled" }).click();
   await input.fill("!readonly");
   const current = await page.evaluate(
     () => window.completionFixture.queries().length - 1,

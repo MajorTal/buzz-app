@@ -13,14 +13,11 @@ export function NotificationSettings({
   const { preferences, permission } = state;
   return (
     <section aria-labelledby="notification-settings-title">
-      <h2
-        id="notification-settings-title"
-        className="mt-0 mb-3 text-lg font-medium"
-      >
+      <h2 id="notification-settings-title" className="mt-0 mb-6 text-label">
         Notifications
       </h2>
-      <div className="ui-card space-y-5 p-5 sm:p-6">
-        <p className="text-sm text-muted">
+      <div className="space-y-5">
+        <p className="text-body-sm text-muted">
           Choices are saved for this account on this device. System permission
           is separate.
         </p>
@@ -29,7 +26,7 @@ export function NotificationSettings({
           checked={preferences.enabled}
           onChange={(enabled) => notifications.updatePreferences({ enabled })}
         />
-        <p role="status" className="text-sm text-muted">
+        <p role="status" className="text-body-sm text-muted">
           {state.requesting
             ? "Waiting for system permission…"
             : permission === "granted"
@@ -70,7 +67,7 @@ export function NotificationSettings({
           }
         />
         {state.systemManaged ? (
-          <p className="text-sm text-muted">
+          <p className="text-body-sm text-muted">
             Manage sound and permission in system notification settings. Desktop
             clicks bring Buzz forward and open the message or thread while Buzz
             is running.
@@ -82,7 +79,7 @@ export function NotificationSettings({
               checked={preferences.sound}
               onChange={(sound) => notifications.updatePreferences({ sound })}
             />
-            <p className="text-sm text-muted">
+            <p className="text-body-sm text-muted">
               Sound uses the system default where supported. Turning it off
               keeps alerts enabled.
             </p>
@@ -103,7 +100,7 @@ export function NotificationSettings({
             />
           ))}
         </fieldset>
-        <p className="text-sm text-muted">
+        <p className="text-body-sm text-muted">
           Message alerts cover the selected community while Buzz is running.
           Reading history and reconnecting stay quiet.
         </p>

@@ -138,22 +138,23 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   });
   const before = await box(conversation);
   near(sidebar.x, 16);
-  near(before.x - sidebar.x - sidebar.width, 16);
+  near(before.x - sidebar.x - sidebar.width, 4);
   near(before.y, 56);
   near(before.height, 760);
   const background = await page
     .locator(".shell-background")
     .evaluate((el) => getComputedStyle(el).backgroundImage);
   expect(background).toContain("radial-gradient");
-  expect(background).toContain("/shell-gradient.png");
-  expect(
-    await page.evaluate(async () => {
-      const image = new Image();
-      image.src = "/shell-gradient.png";
-      await image.decode();
-      return [image.naturalWidth, image.naturalHeight];
-    }),
-  ).toEqual([564, 1002]);
+  // The full-bleed backdrop is now the shared gradient rather than a bitmap.
+  const gradient = await page.locator(".shell-background").evaluate((el) => {
+    const probe = document.createElement("span");
+    probe.style.backgroundImage = "var(--bg-app)";
+    el.append(probe);
+    const value = getComputedStyle(probe).backgroundImage;
+    probe.remove();
+    return value;
+  });
+  expect(background).toBe(gradient);
   const composer = page.getByRole("textbox", {
     name: "Message #Alpha",
     exact: true,
@@ -165,7 +166,7 @@ test("bento surfaces, centered tabs, real link panel and compact community navig
   const dock = await box(panel(page));
   near(dock.y, main.y);
   near(dock.height, main.height);
-  near(dock.x - main.x - main.width, 16);
+  near(dock.x - main.x - main.width, 4);
   near(dock.x + dock.width, 1264);
   await expect(composer).toHaveJSProperty("value", "Layout draft");
   await expect(composer).toBeInViewport();
@@ -456,7 +457,7 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
     main = await box(conversation);
   near(top.height, bottom.height);
   near(top.y, main.y);
-  near(bottom.y - top.y - top.height, 12);
+  near(bottom.y - top.y - top.height, 4);
   near(bottom.y + bottom.height, main.y + main.height);
   near(top.x, bottom.x);
   await page.screenshot({ path: testInfo.outputPath("bestie-two-panels.png") });
@@ -523,7 +524,10 @@ test("Bestie owns the launcher and the reusable companion card across pages and 
 
   // Plugin catalogs can outgrow the viewport. Closing restores the launcher,
   // not a Settings row: reach the toggle with real input, not scrollIntoView.
-  const settingsPage = page.getByRole("main").locator(".overflow-y-auto");
+  // Narrow Settings scrolls navigation and details together inside the container.
+  const settingsPage = page
+    .getByRole("region", { name: "Settings", exact: true })
+    .locator(":scope > div");
   await expect(enabled).not.toBeInViewport();
   const viewport = await box(settingsPage);
   await page.mouse.move(
@@ -578,7 +582,7 @@ readingTest(
         page.getByRole("complementary", { name: "Bestie", exact: true }),
       );
       near(top.height, bottom.height);
-      near(bottom.y - top.y - top.height, 12);
+      near(bottom.y - top.y - top.height, 4);
       await expect(button(page, "Close channel panel")).toBeInViewport();
       await expect(button(page, "Close Bestie panel")).toBeInViewport();
     }

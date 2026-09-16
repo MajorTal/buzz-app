@@ -134,10 +134,10 @@ test("workflow editor preserves YAML, resolves exact saves, retains conflicts an
   await button("Toggle appearance").click();
   await expect(page.locator("html")).toHaveAttribute("data-color-mode", "dark");
   // Wait for the shared control transition before checking its final paint.
-  await expect(button("Close editor")).toHaveCSS("color", "rgb(245, 245, 245)");
+  await expect(button("Close editor")).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(button("Close editor")).toHaveCSS(
     "background-color",
-    "rgb(22, 22, 22)",
+    "rgb(16, 16, 16)",
   );
   await yaml.focus();
   await page.keyboard.press("ArrowLeft");

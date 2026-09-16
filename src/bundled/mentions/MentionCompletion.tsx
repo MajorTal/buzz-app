@@ -84,7 +84,7 @@ export function MentionCompletion({
               profiles.get(recipient.pubkey)?.picture ?? "",
               "small",
             )}
-            className="size-7 rounded-lg text-xs"
+            className="size-7 rounded-lg text-caption"
           />
         ),
         edit: { mention: recipient },

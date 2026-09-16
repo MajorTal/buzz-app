@@ -1,3 +1,5 @@
+import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { useReading } from "./use-reading";
 import { beforeEach, expect, it, vi } from "vitest";
 import {
@@ -96,12 +98,18 @@ beforeEach(() =>
 function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
   if (Array.isArray(node)) return node.flatMap(elements);
   if (!isValidElement<Record<string, unknown>>(node)) return [];
-  return [node, ...elements(node.props.children as ReactNode)];
+  return [
+    node,
+    ...elements(node.props.children as ReactNode),
+    ...(node.type === PanelHeader
+      ? elements(node.props.actions as ReactNode)
+      : []),
+  ];
 }
 function button(tree: ReactNode, label: string) {
   const found = elements(tree).find(
     (e) =>
-      e.type === "button" &&
+      (e.type === "button" || e.type === IconButton) &&
       (e.props.children === label || e.props["aria-label"] === label),
   );
   expect(found, label).toBeDefined();
@@ -231,7 +239,9 @@ it("loads history automatically with error-only retry and no routine history con
   h.render();
   h.effects();
   const panel = h.render();
-  const child = elements(panel).find((e) => typeof e.type === "function");
+  const child = elements(panel).find(
+    (e) => typeof e.type === "function" && e.props.view === h.view,
+  );
   if (!child) throw new Error("Missing thread messages");
   const renderMessages = child.type as (
     props: Record<string, unknown>,
@@ -437,7 +447,9 @@ function messagesHarness(
   const h = setup(onOpenMediaReview);
   h.render();
   h.effects();
-  const child = elements(h.render()).find((e) => typeof e.type === "function");
+  const child = elements(h.render()).find(
+    (e) => typeof e.type === "function" && e.props.view === h.view,
+  );
   if (!child) throw new Error("Missing thread messages");
   const props = child.props;
   const component = child.type as (

@@ -1,0 +1,68 @@
+@reference "../shared/styles/globals.css";
+
+.root {
+  height: 100%;
+  min-height: 0;
+  container-type: inline-size;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--elevation-card);
+}
+.layout {
+  display: grid;
+  grid-template-columns: var(--size-navigator) minmax(0, 1fr);
+  height: 100%;
+  min-height: 0;
+}
+.sidebar,
+.detail {
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+.sidebar {
+  border-right: 1px solid var(--border);
+  padding: var(--space-2);
+}
+.navigation {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.navigationRow {
+  border-radius: var(--radius-row);
+  @apply flex items-center gap-3 border-0 bg-transparent px-3 py-2 text-left text-label-sm text-muted hover:bg-neutral-3 aria-[current=page]:bg-neutral-2 aria-[current=page]:text-ink;
+}
+.navigationRow svg {
+  flex-shrink: 0;
+}
+.detail {
+  padding: var(--space-6);
+  container-type: inline-size;
+}
+
+@container (max-width: 36rem) {
+  .layout {
+    /* Let wrapped navigation scroll away instead of shrinking the details
+       to nothing in a short window or at large text sizes. */
+    display: block;
+    overflow-y: auto;
+  }
+  .sidebar,
+  .detail {
+    overflow-y: visible;
+  }
+  .sidebar {
+    border-right: 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .navigation {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .detail {
+    padding: var(--space-4);
+  }
+}

@@ -6,41 +6,45 @@
   width: min(380px, 75vw);
   max-height: 360px;
   overflow: auto;
-  padding: 12px;
+  padding: var(--space-3);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
+  border-radius: var(--radius-row);
   box-shadow: var(--elevation-popover);
 }
 .mentionPopover label {
   display: grid;
-  gap: 6px;
+  gap: var(--space-1h);
 }
 .mentionPopover p {
-  font-size: calc(12px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
 }
 .mentionChoices {
   display: grid;
-  gap: 4px;
+  gap: var(--space-1);
 }
 .mentionPopover button {
   width: auto;
   height: auto;
-  border-radius: 6px;
+  border-radius: var(--radius-chip);
 }
 .mentionChoices button {
   display: flex;
   align-items: center;
   justify-content: flex-start;
   text-align: left;
-  padding: 8px;
-  gap: 10px;
+  padding: var(--space-2);
+  gap: var(--space-2);
   background: transparent;
   border: 0;
   width: 100%;
 }
 .mentionChoices code {
-  font-size: calc(10px * var(--buzz-text-scale, 1));
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  letter-spacing: var(--text-caption--letter-spacing);
   overflow-wrap: anywhere;
 }
 .mentionChoices button:hover {
@@ -49,11 +53,13 @@
 .mentionLabel {
   display: grid;
   min-width: 0;
-  gap: 2px;
+  gap: var(--space-half);
 }
 .mentionLabel > span {
-  font-size: calc(13px * var(--buzz-text-scale, 1));
-  font-weight: 500;
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  letter-spacing: var(--text-body-sm--letter-spacing);
+  font-weight: var(--type-weight-medium);
 }
 .mentionLabel code {
   display: block;
@@ -68,8 +74,8 @@
 }
 .mentionPopover input {
   border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 9px;
+  border-radius: var(--radius-row);
+  padding: var(--space-1h) var(--space-2);
 }
 
 .pickerControls {

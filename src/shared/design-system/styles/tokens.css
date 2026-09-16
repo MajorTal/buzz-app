@@ -1,3 +1,5 @@
+/* BlockUI neutral values (canonical text and ratified surface ladder), adapted
+   to the existing Buzz ramp. Chromatic ramps and glass remain Buzz-specific. */
 /*
  * Buzz colour tokens.
  *
@@ -289,17 +291,17 @@
      is a deliberately cool near-neutral, not a warm tint; use it directly
      rather than preserve an exploratory #f9f9f9 stop or recreate it with
      alpha. */
-  --neutral-2: #f5f5f6; /* quiet compact controls, callouts, and grouping */
-  --neutral-3: #f0f0f0; /* available for a future, genuinely recessed region; bg-panel in dark */
-  --neutral-4: #e8e8e8; /* border-primary in light mode            */
-  --neutral-5: #e0e0e0; /* unused in light; float + selected, dark */
-  --neutral-6: #d9d9d9; /* border-primary in dark mode             */
-  --neutral-7: #cecece; /* no readers                              */
-  --neutral-8: #bbbbbb; /* text-disabled                           */
-  --neutral-9: #8d8d8d; /* text-tertiary                           */
-  --neutral-10: #646464; /* text-secondary                         */
-  --neutral-11: #262626; /* inverse fill, paired with neutral-1    */
-  --neutral-12: #0a0a0a; /* text-primary                           */
+  --neutral-2: #f0f0f0; /* quiet compact controls, callouts, and grouping */
+  --neutral-3: #e8e8e8; /* available for a future, genuinely recessed region; bg-panel in dark */
+  --neutral-4: #dadada; /* border-primary in light mode            */
+  --neutral-5: #cccccc; /* unused in light; float + selected, dark */
+  --neutral-6: #b3b3b3; /* border-primary in dark mode             */
+  --neutral-7: #959595; /* no readers                              */
+  --neutral-8: #808080; /* text-disabled                           */
+  --neutral-9: #666666; /* text-tertiary                           */
+  --neutral-10: #525252; /* text-secondary                         */
+  --neutral-11: #191919; /* inverse fill, paired with neutral-1    */
+  --neutral-12: #000000; /* text-primary                           */
 
   /* --- Glass. A translucency ramp of fills. ---------------- */
   --glass-1: #ffffff5c; /* barely there   */
@@ -343,12 +345,16 @@
      The scale is intentionally short: 4/8/12/16/20/24 covers the repeated
      panel gap, row inset, header inset, and workspace gutter without turning
      every measured distance into a token.                                    */
+  --space-half: 0.125rem;
+  --space-1h: 0.375rem;
   --space-1: 0.25rem;
   --space-2: 0.5rem;
   --space-3: 0.75rem;
   --space-4: 1rem;
   --space-5: 1.25rem;
   --space-6: 1.5rem;
+  --space-8: 2rem;
+  --space-16: 4rem;
 
   /* --- Corner. Four shapes, each with a distinct job. ------- */
   --corner-row: 0.625rem;
@@ -373,24 +379,24 @@
      are deliberately tighter at the bottom. A documented divergence, not drift:
      if these ever want to be palette steps, the palette's gray ramp is what
      should change. */
-  --neutral-1: #0f0f0f;
-  --neutral-2: #161616;
-  --neutral-3: #1c1c1c;
+  --neutral-1: #000000;
+  --neutral-2: #101010;
+  --neutral-3: #1a1a1a;
   --neutral-4: #232323;
-  --neutral-5: #2a2a2a;
-  --neutral-6: #333333;
-  --neutral-7: #424242;
-  --neutral-8: #5a5a5a;
+  --neutral-5: #333333;
+  --neutral-6: #404040;
+  --neutral-7: #595959;
+  --neutral-8: #737373;
   /* Steps 9 and 10 are lighter than a linear ramp would put them, because in
      dark mode they carry text and APCA is polarity-asymmetric: light-on-dark
      needs more separation than the WCAG ratio implies. At #6e6e6e and #8f8f8f
      they measured Lc 23–26 and Lc 38–41 against the Lc 60 body-text target
      while passing WCAG AA — legal, and visibly murky. Sized against the
      lightest dark surface (bg-float #2a2a2a), which is the binding case. */
-  --neutral-9: #a6a6a6;
-  --neutral-10: #c1c1c1;
-  --neutral-11: #e5e5e5;
-  --neutral-12: #f5f5f5;
+  --neutral-9: #808080;
+  --neutral-10: #a4a4a4;
+  --neutral-11: #c7c7c7;
+  --neutral-12: #ffffff;
 
   /* Every coloured family is absent here on purpose. A family points at a
      palette step, and `.dark` already redefines the whole palette — so
@@ -491,6 +497,12 @@
   --bg-app: var(--gradient-1);
   --bg-panel: var(--neutral-1); /* dark: neutral-3 */
   --bg-float: var(--neutral-1); /* dark: neutral-5 */
+  --bg-scrim: #00000060;
+  --border-control: var(--neutral-8);
+  /* Emoji artwork scales with text without becoming a readable type role. */
+  --size-emoji-display: calc(var(--type-rem) * 2.625);
+  --size-emoji-line: calc(var(--type-rem) * 3);
+  --size-emoji-inline: calc(var(--type-rem) * 1.375);
 
   /* `bg-hover` was here and is gone. It was neutral-4 in both modes, so
      `bg-neutral-4` says it exactly. Its five call sites now do.
@@ -515,13 +527,13 @@
      control is unavailable, and WCAG exempts inactive controls for the same
      reason. Raising it to Lc 60 would make disabled read as enabled. Never put
      information here that a person needs. */
-  --text-disabled: var(--neutral-8);
+  --text-disabled: var(--neutral-7);
 
   /* One border, not three. `primary` names the sole deliberate weight,
      and neutral-4 keeps it at the threshold of perception over both the
      panel and the atmospheric backdrop. A second weight arrives only with
      a design that proves a different boundary needs one. */
-  --border-primary: var(--neutral-4);
+  --border-primary: var(--neutral-3);
 
   /* --- Identity: deliberately absent. ----------------------
      There were six accent roles and every one held the same purple
@@ -601,10 +613,11 @@
   /* --- Geometry. Repeated relationships from Messages. ----- */
   --space-workspace-inset: var(--space-4);
   --space-panel-gap: var(--space-2);
-  --space-panel-inset: var(--space-5);
-  --space-control-inset: var(--space-3);
+  --space-panel-inset: var(--space-6);
+  --space-control-inset: var(--space-4);
   --space-row-gap: var(--space-2);
-  --space-section-gap: var(--space-4);
+  --space-section-gap: var(--space-8);
+  --space-page-section-gap: var(--space-16);
   /* An inline chip sits in a line of text, so its inset and gap are tighter
      than a control's and are its own repeated relationship. Both are below the
      4px spacing floor because a chip hugs its label — the design draws 3px of
@@ -678,22 +691,18 @@
 .dark {
   --bg-panel: var(--neutral-3);
   --bg-float: var(--neutral-5);
+  --bg-scrim: #000000a6;
+  --border-control: var(--neutral-8);
   --bg-chrome-selected: var(--neutral-5);
 
-  /* Two steps lighter than light mode's neutral-4, because a hairline needs more
-     separation on a dark surface than the same step number provides. Measured
-     against every surface a border sits on: neutral-4 is 1.08:1 on a panel and
-     1.09:1 on the floating composer — drawn, and effectively invisible.
-     neutral-6 is 1.35 and 1.14.
+  /* BlockUI's darker secondary/tertiary grays fall below Buzz's APCA targets
+     on raised panels. Keep the BlockUI ramp, selecting its lighter steps for
+     readable text: secondary >= 60, metadata >= 45 on every opaque surface. */
+  --text-secondary: var(--neutral-11);
+  --text-tertiary: var(--neutral-10);
 
-     Not neutral-5, which is one step and would have been the obvious answer:
-     `bg-float` and `bg-chrome-selected` are both neutral-5 in dark, so a border
-     on a floating surface would measure 1.00:1 — the same colour as the thing it
-     is meant to bound.
-
-     **This asymmetry is the reason the role exists.** Light and dark do not have
-     to reach for the same step, and no `border-neutral-4` class could say this. */
-  --border-primary: var(--neutral-6);
+  /* BlockUI subtle border: E8E8E8 in light, 232323 in dark. */
+  --border-primary: var(--neutral-4);
 
   --rim-lit: #ffffff2e;
   --rim-shade: #ffffff0f;
@@ -841,6 +850,7 @@
   --color-orange-12: var(--orange-12);
 
   --color-app: var(--bg-app);
+  --color-inset: var(--neutral-2);
   --color-panel: var(--bg-panel);
   --color-float: var(--bg-float);
 

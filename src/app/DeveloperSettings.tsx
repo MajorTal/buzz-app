@@ -55,21 +55,18 @@ export function DeveloperSettings({ relay }: { relay: RelayData }) {
 
   return (
     <section aria-labelledby="developer-settings-title">
-      <h2
-        id="developer-settings-title"
-        className="mt-0 mb-3 text-lg font-medium"
-      >
+      <h2 id="developer-settings-title" className="mt-0 mb-6 text-label">
         Developer
       </h2>
       <div className="ui-card space-y-5 p-5 sm:p-6">
-        <p className="text-sm text-muted">
+        <p className="text-body-sm text-muted">
           Diagnostics for local development. This tab only appears when the app
           is served from localhost in a development build.
         </p>
         <div className="space-y-2">
-          <h3 className="m-0 text-sm font-medium">Relay broker stats</h3>
+          <h3 className="m-0 text-label-sm">Relay broker stats</h3>
           {stats ? (
-            <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-1 text-sm sm:grid-cols-4">
+            <dl className="m-0 grid grid-cols-2 gap-x-6 gap-y-1 text-body-sm sm:grid-cols-4">
               <div>
                 <dt className="text-muted">Queries</dt>
                 <dd className="m-0 tabular-nums">{stats.queries}</dd>
@@ -88,15 +85,15 @@ export function DeveloperSettings({ relay }: { relay: RelayData }) {
               </div>
             </dl>
           ) : (
-            <p role="status" className="m-0 text-sm text-muted">
+            <p role="status" className="m-0 text-body-sm text-muted">
               Broker stats are unavailable. They exist only when the dev relay
               broker is running on this origin.
             </p>
           )}
         </div>
         <div className="space-y-2">
-          <h3 className="m-0 text-sm font-medium">Caches</h3>
-          <p className="m-0 text-sm text-muted">
+          <h3 className="m-0 text-label-sm">Caches</h3>
+          <p className="m-0 text-body-sm text-muted">
             Clears cached channels, messages, and media. Account, relay, and
             sidebar settings are kept.
           </p>
@@ -108,7 +105,7 @@ export function DeveloperSettings({ relay }: { relay: RelayData }) {
             {clearing ? "Clearing…" : "Clear cache"}
           </button>
           {status && (
-            <p role="status" className="m-0 text-sm text-muted">
+            <p role="status" className="m-0 text-body-sm text-muted">
               {status}
             </p>
           )}

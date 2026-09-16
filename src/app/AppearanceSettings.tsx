@@ -10,21 +10,18 @@ export function AppearanceSettings({ appearance }: { appearance: Appearance }) {
   );
   return (
     <section aria-labelledby="appearance-settings-title">
-      <h2
-        id="appearance-settings-title"
-        className="mt-0 mb-3 text-lg font-medium"
-      >
+      <h2 id="appearance-settings-title" className="mt-0 mb-6 text-label">
         Appearance
       </h2>
-      <div className="ui-card p-5 sm:p-6">
+      <div>
         <fieldset
           className="m-0 min-w-0 border-0 p-0"
           aria-describedby="appearance-description"
         >
-          <legend className="mb-2 text-base font-medium">Color mode</legend>
+          <legend className="mb-2 text-label">Color mode</legend>
           <p
             id="appearance-description"
-            className="mt-0 mb-5 text-sm text-muted"
+            className="mt-0 mb-5 text-body-sm text-muted"
           >
             Choose how Buzz looks on this device. Your choice is saved
             automatically.
@@ -54,8 +51,8 @@ export function AppearanceSettings({ appearance }: { appearance: Appearance }) {
           </div>
         </fieldset>
         <fieldset className="mt-6 min-w-0 border-0 p-0">
-          <legend className="mb-2 text-base font-medium">Text size</legend>
-          <p className="mt-0 mb-3 text-sm text-muted">
+          <legend className="mb-2 text-label">Text size</legend>
+          <p className="mt-0 mb-3 text-body-sm text-muted">
             Resize text without zooming the window. Saved on this device.
           </p>
           <div className="flex flex-wrap items-center gap-3">

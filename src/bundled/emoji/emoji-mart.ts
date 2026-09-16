@@ -170,27 +170,38 @@ export function mountEmojiMart({
   const root = picker.shadowRoot;
   const navigationStyle = host.ownerDocument.createElement("style");
   navigationStyle.textContent = `
-    #root[data-theme="light"] {
-      --buzz-category-fill: #f0f0f0;
-      --buzz-category-icon: #8d8d8d;
-      --buzz-category-icon-selected: #0a0a0a;
-      --buzz-category-label: #646464;
-      --buzz-scrollbar-thumb: #e8e8e8;
+    :host {
+      --font-family: var(--font-sans);
+      --font-size: var(--text-body-sm);
     }
-    #root[data-theme="dark"] {
-      --buzz-category-fill: #1c1c1c;
-      --buzz-category-icon: #a6a6a6;
-      --buzz-category-icon-selected: #f5f5f5;
-      --buzz-category-label: #c1c1c1;
-      --buzz-scrollbar-thumb: #424242;
+    #root, input, button {
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+      font-size: var(--text-body-sm);
+      line-height: var(--text-body-sm--line-height);
     }
     #root {
-      --padding: 8px;
+      --color-a: var(--text-primary);
+      --color-b: var(--text-secondary);
+      --color-c: var(--text-tertiary);
+      --em-color-border: var(--border-primary);
+      --em-color-border-over: var(--neutral-3);
+      --buzz-category-fill: var(--neutral-3);
+      --buzz-category-icon: var(--text-secondary);
+      --buzz-category-icon-selected: var(--text-primary);
+      --buzz-category-label: var(--text-secondary);
+      --buzz-scrollbar-thumb: var(--neutral-7);
+      background: var(--bg-panel);
+      color: var(--text-primary);
+      font-family: var(--font-sans);
+    }
+    #root {
+      --padding: var(--space-2);
       position: relative;
       width: 100% !important;
     }
     .scroll {
-      padding-inline: 12px;
+      padding-inline: var(--space-3);
       scrollbar-width: none;
     }
     .scroll::-webkit-scrollbar {
@@ -210,32 +221,33 @@ export function mountEmojiMart({
       left: 0;
       width: 8px;
       min-height: 32px;
-      border-radius: 9999rem;
+      border-radius: var(--radius-pill);
       background: var(--buzz-scrollbar-thumb);
     }
     .scroll > div {
       width: 100% !important;
     }
     .category .sticky {
+      background: var(--bg-panel);
       color: var(--buzz-category-label);
-      font-size: calc(.75rem * var(--buzz-text-scale, 1));
-      font-weight: 400;
+      font-size: var(--text-caption);
+      font-weight: var(--type-weight-normal);
       letter-spacing: 0;
-      line-height: 1.5;
+      line-height: var(--text-caption--line-height);
     }
     .search input[type="search"] {
       width: calc(100% - 4px);
       height: 28px;
-      padding: 0 32px;
-      margin-inline: 2px;
+      padding: 0 var(--space-8);
+      margin-inline: var(--space-half);
       border: 0;
       border-radius: var(--picker-search-radius);
       background: var(--picker-search-background);
       box-shadow: 0 0 0 1px var(--picker-search-background);
       color: var(--picker-search-foreground);
       font-family: var(--font-legacy-sans);
-      font-size: calc(14px * var(--buzz-text-scale, 1));
-      line-height: normal;
+      font-size: var(--text-body-sm);
+      line-height: var(--text-body-sm--line-height);
       transition:
         opacity 100ms ease,
         background 100ms ease,
@@ -277,7 +289,7 @@ export function mountEmojiMart({
       height: var(--picker-search-top-space, 4px);
     }
     .spacer + .flex.flex-middle {
-      padding-bottom: 4px;
+      padding-bottom: var(--space-1);
     }
     .spacer + .flex.flex-middle > .flex.flex-auto.flex-center.flex-middle {
       width: 0 !important;
@@ -327,7 +339,7 @@ export function mountEmojiMart({
       z-index: -1;
       width: 28px;
       height: 28px;
-      border-radius: 9999rem;
+      border-radius: var(--radius-pill);
       background: transparent;
       content: "";
       pointer-events: none;
@@ -358,12 +370,29 @@ export function mountEmojiMart({
       display: none;
     }
     #root > .menu {
+      background: var(--bg-float);
+      border-color: var(--border-primary);
+      border-radius: var(--radius-row);
+      padding: var(--space-1);
+      box-shadow: var(--shadow-sm);
+      backdrop-filter: none;
       top: auto !important;
       right: 8px !important;
       bottom: 42px !important;
       left: auto !important;
       z-index: 100 !important;
       transform-origin: 100% 100%;
+    }
+    .menu .option {
+      border-radius: var(--radius-chip);
+      padding: var(--space-1) var(--space-1h);
+    }
+    .menu .option:hover {
+      background: var(--neutral-3);
+      color: var(--text-primary);
+    }
+    .menu input[type="radio"]:checked + .option {
+      box-shadow: 0 0 0 2px var(--text-primary);
     }
     @media (prefers-reduced-motion: reduce) {
       #nav button::before {

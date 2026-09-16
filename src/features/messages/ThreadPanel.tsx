@@ -1,4 +1,6 @@
 // biome-ignore-all lint/a11y/noNoninteractiveTabindex: The thread region supports keyboard scrolling and Escape.
+import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import {
   useCallback,
   useEffect,
@@ -74,17 +76,19 @@ function ThreadHeader({ close }: Pick<ThreadPanelProps, "close">) {
     closeButton.current?.focus();
   }, []);
   return (
-    <header className={styles.heading}>
-      <strong>Thread</strong>
-      <button
-        ref={closeButton}
-        type="button"
-        aria-label="Close thread"
-        onClick={close}
-      >
-        <X size={18} aria-hidden="true" />
-      </button>
-    </header>
+    <PanelHeader
+      variant="compact"
+      title="Thread"
+      actions={
+        <IconButton
+          ref={closeButton}
+          size="toolbar"
+          aria-label="Close thread"
+          onClick={close}
+          icon={<X size={18} aria-hidden="true" />}
+        />
+      }
+    />
   );
 }
 function OwnedThreadPanel({

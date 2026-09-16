@@ -2,10 +2,10 @@
   --link-text: var(--blue-11);
   --link-hover: var(--blue-4);
   --link-focus: var(--blue-8);
-  padding: 2px;
+  padding: var(--space-half);
   /* Keep hover padding outside the surrounding text's normal spacing. */
-  margin-inline: -2px;
-  border-radius: 4px;
+  margin-inline: calc(-1 * var(--space-half));
+  border-radius: calc(var(--radius-chip) * 2 / 3);
   color: var(--link-text);
   background: transparent;
   text-decoration: none;
@@ -32,7 +32,7 @@
   display: inline-block;
   width: 1em;
   height: 1em;
-  margin-right: 3px;
+  margin-right: calc(var(--space-half) * 1.5);
   vertical-align: -0.125em;
 }
 

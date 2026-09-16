@@ -4,6 +4,79 @@ test.use({ historyCounts: { alpha: 1, beta: 0 } });
 
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 
+test("short narrow Settings keeps full plugin rows usable at 200% text size", async ({
+  page,
+  app,
+}, testInfo) => {
+  await page.setViewportSize({ width: 480, height: 400 });
+  await page.addInitScript(() =>
+    localStorage.setItem("buzz-font-scale.v1", "2"),
+  );
+  await page.goto(app.origin);
+  await button(page, "Your profile").click();
+  await button(page, "Settings").click();
+  await button(page, "Plugins").click();
+  const frame = page.getByRole("region", { name: "Settings", exact: true });
+  const content = page.getByRole("region", { name: "Plugins", exact: true });
+  const row = content.getByRole("article").filter({
+    has: page.getByRole("heading", { name: "Channels", exact: true }),
+  });
+  const toggle = row.getByRole("switch", {
+    name: "Enable Channels",
+    exact: true,
+  });
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await page.evaluate(() => document.fonts.ready);
+  await expect(page.locator("html")).toHaveCSS("--buzz-text-scale", "2");
+  const bounds = await frame.boundingBox();
+  const scroller = frame.locator(":scope > div");
+  await page.mouse.move(
+    bounds.x + bounds.width / 2,
+    bounds.y + bounds.height / 2,
+  );
+  // Real wheel input must reveal a complete row inside the clipped solid frame.
+  // Merely finding a control in the DOM, or scrolling it into a thin strip, fails.
+  for (let gesture = 0; gesture < 12; gesture++) {
+    const target = await row.boundingBox();
+    if (
+      target.y >= bounds.y &&
+      target.y + target.height <= bounds.y + bounds.height
+    )
+      break;
+    const before = await scroller.evaluate((element) => element.scrollTop);
+    await page.mouse.wheel(
+      0,
+      bounds.height * (target.y < bounds.y ? -0.4 : 0.4),
+    );
+    await expect
+      .poll(() => scroller.evaluate((element) => element.scrollTop))
+      .not.toBe(before);
+  }
+  await expect(row).toBeInViewport({ ratio: 1 });
+  await expect(toggle).toBeInViewport({ ratio: 1 });
+  await page.screenshot({
+    path: testInfo.outputPath("settings-short-200-percent.png"),
+  });
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-checked", "false");
+  await expect(toggle).toBeFocused();
+  await expect(toggle).toHaveAttribute("aria-disabled", "false");
+  await toggle.press("Space");
+  await expect(toggle).toHaveAttribute("aria-checked", "true");
+  await expect(toggle).toBeInViewport({ ratio: 1 });
+  // The navigation remains reachable after reading and operating the details.
+  await page.mouse.wheel(
+    0,
+    -(await scroller.evaluate((element) => element.scrollHeight)),
+  );
+  await expect
+    .poll(() => scroller.evaluate((element) => element.scrollTop))
+    .toBe(0);
+  await expect(button(page, "Profile")).toBeInViewport({ ratio: 1 });
+  await button(page, "Profile").click();
+  await expect(button(page, "Profile")).toHaveAttribute("aria-current", "page");
+});
+
 test("avatar Settings access dismisses cleanly and exposes Profile and Plugins", async ({
   page,
   app,
@@ -100,13 +173,24 @@ test("avatar Settings access dismisses cleanly and exposes Profile and Plugins",
     await expect(
       page.getByRole("switch", { name: "Enable Channels" }),
     ).toBeVisible();
+    const settingsRegion = page.getByRole("region", {
+      name: "Settings",
+      exact: true,
+    });
+    await expect(settingsRegion).toHaveCSS(
+      "background-color",
+      "rgb(255, 255, 255)",
+    );
+    await expect(settingsRegion).toHaveCSS("border-radius", "24px");
+    const frame = await settingsRegion.boundingBox();
+    expect(frame.height).toBeGreaterThan(700);
     const navigation = await sections.boundingBox();
     const content = await pluginContent.boundingBox();
     expect(navigation).not.toBeNull();
     expect(content).not.toBeNull();
     if (width === 1280) {
       expect(navigation.x + navigation.width).toBeLessThan(content.x);
-      expect(Math.abs(navigation.y - content.y)).toBeLessThan(2);
+      expect(content.y - frame.y).toBe(25);
     } else {
       expect(navigation.y + navigation.height).toBeLessThan(content.y);
       expect(

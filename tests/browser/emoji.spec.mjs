@@ -333,7 +333,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
           (button) => getComputedStyle(button, "::before").backgroundColor,
         ),
       )
-      .toBe("rgb(240, 240, 240)");
+      .toBe("rgb(232, 232, 232)");
     await skinTone.click();
     await expect(skinTone).toHaveAttribute("aria-selected", "");
     const toneMenu = page.locator("em-emoji-picker #root > .menu");
@@ -387,12 +387,12 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(search).toHaveCSS("margin-right", "2px");
     await expect(search).toHaveCSS("border-top-width", "0px");
     await expect(search).toHaveCSS("border-radius", "14px");
-    await expect(search).toHaveCSS("background-color", "rgb(245, 245, 246)");
-    await expect(search).toHaveCSS("color", "rgb(10, 10, 10)");
+    await expect(search).toHaveCSS("background-color", "rgb(240, 240, 240)");
+    await expect(search).toHaveCSS("color", "rgb(0, 0, 0)");
     await expect(search).toHaveCSS("outline-style", "none");
     await expect(search).toHaveCSS(
       "box-shadow",
-      "rgb(206, 206, 206) 0px 0px 0px 2px",
+      "rgb(0, 0, 0) 0px 0px 0px 2px",
     );
     const surface = page.locator("em-emoji-picker #root");
     const region = page.getByRole("region", { name: "Emoji picker" });
@@ -455,15 +455,15 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(emojiClear.locator("svg")).toHaveClass(/lucide-circle-x/);
     await expect(emojiClear.locator("svg")).toHaveCSS("width", "16px");
     await expect(emojiClear.locator("svg")).toHaveCSS("height", "16px");
-    await expect(emojiClear).toHaveCSS("color", "rgb(141, 141, 141)");
+    await expect(emojiClear).toHaveCSS("color", "rgb(82, 82, 82)");
     await expect(emojiClear.locator("circle")).toHaveCSS(
       "fill",
-      "rgb(141, 141, 141)",
+      "rgb(82, 82, 82)",
     );
     await expect(emojiClear.locator("circle")).toHaveCSS("stroke", "none");
     await expect(emojiClear.locator("path").first()).toHaveCSS(
       "stroke",
-      "rgb(245, 245, 246)",
+      "rgb(240, 240, 240)",
     );
     await expect(
       page.locator('[aria-label="Emoji picker"] > svg.lucide-search:visible'),
@@ -487,16 +487,16 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       await expect(surface).toHaveAttribute("data-theme", mode);
       await expect(search).toHaveCSS(
         "background-color",
-        mode === "dark" ? "rgb(22, 22, 22)" : "rgb(245, 245, 246)",
+        mode === "dark" ? "rgb(16, 16, 16)" : "rgb(240, 240, 240)",
       );
       await expect(search).toHaveCSS(
         "box-shadow",
         mode === "dark"
-          ? "rgb(66, 66, 66) 0px 0px 0px 2px"
-          : "rgb(206, 206, 206) 0px 0px 0px 2px",
+          ? "rgb(255, 255, 255) 0px 0px 0px 2px"
+          : "rgb(0, 0, 0) 0px 0px 0px 2px",
       );
-      await expect(search).toHaveCSS("font-family", /^Inter, /);
-      await expect(search).not.toHaveCSS("font-family", /Inter Variable/);
+      await expect(search).toHaveCSS("font-family", /Inter Variable/);
+
       await expect(search).toHaveValue("party");
       await expect(search).toBeFocused();
       expect(await searchNode.evaluate((node) => node.isConnected)).toBe(true);
@@ -507,7 +507,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     });
     await expect(page.locator("em-emoji-picker #root")).toHaveCSS(
       "width",
-      "236px",
+      "240px",
     );
     await expect(search).toHaveValue("party");
     await expect(page.locator("em-emoji-picker nav")).toHaveCount(0);
@@ -600,7 +600,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(scrollbar).toHaveCSS("opacity", "0.6");
     await expect(scrollbarThumb).toHaveCSS(
       "background-color",
-      "rgb(232, 232, 232)",
+      "rgb(149, 149, 149)",
     );
     for (const [index, result] of searchRowPositions.entries())
       expect(result.x).toBeCloseTo(firstRow[index].x, 1);
@@ -669,7 +669,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     const indicator = navigation.locator(".bar");
     await expect(indicator).toHaveCSS("display", "none");
     const selectedCategory = navigation.locator("button[aria-selected]");
-    await expect(selectedCategory).toHaveCSS("color", "rgb(10, 10, 10)");
+    await expect(selectedCategory).toHaveCSS("color", "rgb(0, 0, 0)");
     const selectedBackground = () =>
       selectedCategory.evaluate((element) => {
         const style = getComputedStyle(element, "::before");
@@ -686,7 +686,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
         };
       });
     expect(await selectedBackground()).toMatchObject({
-      background: "rgb(240, 240, 240)",
+      background: "rgb(232, 232, 232)",
       duration: "0.12s",
       height: "28px",
       width: "28px",
@@ -715,14 +715,14 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     ).toEqual(categoryPositions);
     await expect
       .poll(() => selectedBackground().then(({ background }) => background))
-      .toBe("rgb(240, 240, 240)");
+      .toBe("rgb(232, 232, 232)");
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect((await selectedBackground()).duration).toBe("0s");
     await page.emulateMedia({ reducedMotion: "no-preference" });
     const categoryHeading = page
       .locator("em-emoji-picker .category .sticky")
       .first();
-    await expect(categoryHeading).toHaveCSS("color", "rgb(100, 100, 100)");
+    await expect(categoryHeading).toHaveCSS("color", "rgb(82, 82, 82)");
     await expect(categoryHeading).toHaveCSS("font-size", "12px");
     await expect(categoryHeading).toHaveCSS("font-weight", "400");
     await expect(page.getByText("Pick an emoji", { exact: true })).toHaveCount(

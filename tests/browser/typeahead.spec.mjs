@@ -731,13 +731,22 @@ test("recovery is a keyboard-selectable action without transferring editor focus
     const index = await page.evaluate(
       () => window.completionFixture.queries().length - 1,
     );
-    await page.evaluate(
-      ({ index, withChoice }) =>
-        window.completionFixture.fail(index, withChoice),
-      { index, withChoice },
-    );
-    if (withChoice) await input.press("ArrowUp");
+    expect(
+      await page.evaluate(
+        ({ index, withChoice }) =>
+          window.completionFixture.fail(index, withChoice),
+        { index, withChoice },
+      ),
+    ).toBe(true);
     const retry = page.getByRole("option", { name: "Retry suggestions" });
+    // Publication schedules a render; keyboard navigation needs mounted options.
+    await expect(retry).toBeVisible();
+    if (withChoice) {
+      await expect(
+        page.getByRole("option", { name: "Choice", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      await input.press("ArrowUp");
+    }
     await expect(retry).toHaveAttribute("aria-selected", "true");
     await input.press("Enter");
     await expect(page.getByRole("option", { name: "Recovered" })).toBeVisible();

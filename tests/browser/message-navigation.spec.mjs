@@ -1,7 +1,11 @@
 import { test, expect } from "./fixture.mjs";
 import { open, end, settle } from "./timeline.mjs";
 
-test.use({ pluginFixtures: true, exactMessages: true });
+test.use({
+  pluginFixtures: true,
+  exactMessages: true,
+  historyCounts: { alpha: 120, beta: 0 },
+});
 const thread = (page) =>
   page.getByRole("region", { name: "Thread messages", exact: true });
 const target = (app, id = app.exact.target.id) => ({
@@ -29,6 +33,16 @@ test("old root and reply beyond the first thread page open exactly; reclick and 
   const initialHeadQueries = app.report.queries.filter(
     (q) => q.filter.top_level,
   ).length;
+  const head = app.report.queries.find(
+    ({ community, filter }) =>
+      community === "primary" &&
+      filter.top_level &&
+      filter["#h"].includes("alpha"),
+  );
+  expect(
+    app.histories.get("primary/alpha").at(-head.filter.limit).created_at,
+    "the exact reply predates the initial channel window",
+  ).toBeGreaterThan(app.exact.target.created_at);
   // This navigation fixture deliberately registers a catch-all panel first.
   // Disable it before exercising the actual Profiles provider.
   await page.getByRole("button", { name: "Your profile", exact: true }).click();
@@ -75,6 +89,10 @@ test("old root and reply beyond the first thread page open exactly; reclick and 
     initialHeadQueries,
   );
   expect(app.report.queries.some((q) => q.filter.depth_limit)).toBe(true);
+  expect(
+    app.report.queries.some((q) => q.filter.thread_cursor !== undefined),
+    "the exact reply requires a second thread page",
+  ).toBe(true);
   expect(app.report.queries.filter((q) => q.filter.until)).toHaveLength(0);
   // Use an unedited reply to exercise exact mention/profile identity plumbing.
   expect(

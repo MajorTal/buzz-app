@@ -26,6 +26,11 @@ test("Messages receives scoped typing through authenticated live traffic and exp
   await expect(indicator).toHaveCount(0);
   app.activity(); // same-second late pulse cannot resurrect completion
   await expect(indicator).toHaveCount(0);
+  // Typing completion precedes the appended messages' virtual-list layout.
+  await expect(
+    page.getByText("Fixture completion", { exact: true }),
+  ).toHaveCount(2);
+  await end(page);
   const root = app.histories
     .get("primary/alpha")
     .find((e) => e.content === "Thread root 0");

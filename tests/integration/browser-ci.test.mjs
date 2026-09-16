@@ -79,11 +79,15 @@ test("four independent browser jobs retain isolated measurements and native setu
   );
   assert.equal(projects["chromium-measurements"].workers, 1);
   assert.equal(projects["webkit-measurements"].workers, 1);
+  assert.ok(!projects["chromium-measurements"].fullyParallel);
+  assert.ok(!projects["webkit-measurements"].fullyParallel);
   assert.deepEqual(projects["webkit-measurements"].dependencies, [
     "chromium-measurements",
   ]);
-  for (const engine of ["chromium", "webkit"])
+  for (const engine of ["chromium", "webkit"]) {
     assert.deepEqual(projects[engine].dependencies, ["webkit-measurements"]);
+    assert.equal(projects[engine].fullyParallel, true);
+  }
 });
 
 test("workflow shards discover every functional test/project exactly once", (t) => {

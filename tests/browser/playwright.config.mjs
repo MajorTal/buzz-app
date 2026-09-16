@@ -43,6 +43,7 @@ export default defineConfig({
       use: { browserName },
       testIgnore: measurementFiles,
       dependencies: ["webkit-measurements"],
+      fullyParallel: true,
     })),
   ],
 });

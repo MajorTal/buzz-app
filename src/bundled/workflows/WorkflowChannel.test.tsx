@@ -158,29 +158,32 @@ it("keeps optimistic dismissal modal and ownership locked until settlement", asy
     const dialog = screen.getByRole("alertdialog", {
       name: "Dismiss this notice?",
     });
-    await user.click(
-      within(dialog).getByRole("button", {
-        name: "Dismiss notice and continue",
-      }),
-    );
-    expect(fixture.capability.operations.snapshot()).toHaveLength(0);
-    expect(dialog).toBeVisible();
-    expect(
-      within(dialog).getByRole("button", { name: "Dismissing…" }),
-    ).toBeDisabled();
-    expect(
-      within(dialog).getByRole("button", { name: "Keep editing" }),
-    ).toBeDisabled();
-    await user.keyboard("{Escape}");
-    expect(dialog).toBeVisible();
-    expect(
-      screen.queryByRole("button", { name: "Close editor" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: "New workflow" }),
-    ).not.toBeInTheDocument();
-    expect(fixture.calls.save).toBe(1);
-    await act(async () => fixture.releaseDismiss());
+    try {
+      await user.click(
+        within(dialog).getByRole("button", {
+          name: "Dismiss notice and continue",
+        }),
+      );
+      expect(fixture.capability.operations.snapshot()).toHaveLength(0);
+      expect(dialog).toBeVisible();
+      expect(
+        within(dialog).getByRole("button", { name: "Dismissing…" }),
+      ).toBeDisabled();
+      expect(
+        within(dialog).getByRole("button", { name: "Keep editing" }),
+      ).toBeDisabled();
+      await user.keyboard("{Escape}");
+      expect(dialog).toBeVisible();
+      expect(
+        screen.queryByRole("button", { name: "Close editor" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "New workflow" }),
+      ).not.toBeInTheDocument();
+      expect(fixture.calls.save).toBe(1);
+    } finally {
+      await act(async () => fixture.releaseDismiss());
+    }
     if (failure) {
       expect(await within(dialog).findByRole("alert")).toHaveTextContent(
         failure,
@@ -241,14 +244,14 @@ it("retains invalid timeout boundaries in both modes and saves exact valid YAML"
     await user.click(screen.getByRole("tab", { name: "YAML" }));
     const yaml = screen.getByRole("textbox", { name: "Workflow YAML" });
     expect(
-      parseYaml(
-        yaml.getAttribute("value") ?? (yaml as HTMLTextAreaElement).value,
-      ).steps[0].timeout_secs,
+      parseYaml((yaml as HTMLTextAreaElement).value).steps[0].timeout_secs,
     ).toBe(input);
     expect(button("Save workflow")).toBeDisabled();
     await user.click(screen.getByRole("tab", { name: "Form" }));
     await user.click(screen.getByText("Step options", { exact: true }));
-    expect(timeout).toHaveValue(input);
+    expect(
+      screen.getByRole("textbox", { name: "Step timeout (optional)" }),
+    ).toHaveValue(input);
   }
   await user.click(button("Close editor"));
   expect(
@@ -261,11 +264,14 @@ it("retains invalid timeout boundaries in both modes and saves exact valid YAML"
   expect(timeout).toHaveValue("9007199254740992");
   await user.clear(timeout);
   await user.type(timeout, "5m");
+  expect(button("Save workflow")).toBeEnabled();
   await user.click(button("Save workflow"));
+  expect(fixture.calls.save).toBe(1);
   expect(parseYaml(fixture.input()?.yaml ?? "").steps[0].timeout_secs).toBe(
     300,
   );
   act(() => fixture.finish("succeeded"));
+  expect(button("Save workflow")).toBeEnabled();
   if (!timeout.isConnected)
     await user.click(screen.getByText("Step options", { exact: true }));
   const currentTimeout = screen.getByRole("textbox", {
@@ -274,6 +280,7 @@ it("retains invalid timeout boundaries in both modes and saves exact valid YAML"
   await user.clear(currentTimeout);
   await user.type(currentTimeout, " ");
   await user.click(button("Save workflow"));
+  expect(fixture.calls.save).toBe(2);
   expect(parseYaml(fixture.input()?.yaml ?? "").steps[0]).not.toHaveProperty(
     "timeout_secs",
   );

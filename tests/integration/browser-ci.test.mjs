@@ -1,7 +1,16 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import {
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import test from "node:test";
+import { parse } from "yaml";
 import config from "../browser/playwright.config.mjs";
 import { run } from "../browser/run-command.mjs";
 
@@ -182,4 +191,62 @@ test("required gate executes its real shell and rejects every unsuccessful lane"
 test("Hermit cache keys distinguish jobs that provision different tools", () => {
   const setup = read(".github/actions/setup/action.yml");
   assert.match(setup, /key: hermit-.*\$\{\{ github\.job \}\}/);
+});
+
+test("browser cache follows the installed Playwright version, not unrelated dependency edits", (t) => {
+  const { steps } = parse(read(".github/actions/setup/action.yml")).runs;
+  const version = steps.find((step) => step.id === "playwright");
+  const cache = steps.find((step) => step.name === "Cache Playwright engines");
+  const install = steps.find(
+    (step) => step.name === "Install pinned browser engines and libraries",
+  );
+  assert.ok(version, "resolve the installed version after the frozen install");
+  assert.ok(
+    steps.findIndex((step) => step.run === "pnpm install --frozen-lockfile") <
+      steps.indexOf(version),
+  );
+  assert.ok(steps.indexOf(version) < steps.indexOf(cache));
+  assert.ok(steps.indexOf(cache) < steps.indexOf(install));
+  for (const step of [version, cache, install])
+    assert.equal(step.if, "inputs.browsers == 'true'");
+  assert.equal(
+    install.run,
+    "pnpm exec playwright install --with-deps chromium webkit",
+  );
+  assert.equal(
+    cache.with.key,
+    `playwright-\${{ runner.os }}-\${{ runner.arch }}-\${{ steps.playwright.outputs.version }}-chromium-webkit`,
+  );
+  assert.equal(cache.with["restore-keys"], undefined);
+
+  const cwd = mkdtempSync(join(tmpdir(), "buzz-playwright-version-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  const manifest = join(cwd, "node_modules/@playwright/test/package.json");
+  const output = join(cwd, "output");
+  mkdirSync(dirname(manifest), { recursive: true });
+  const resolve = () => {
+    writeFileSync(output, "");
+    return spawnSync("bash", ["-e", "-c", version.run], {
+      cwd,
+      env: { ...process.env, GITHUB_OUTPUT: output },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+  };
+  for (const installed of ["1.60.0", "1.61.0"]) {
+    writeFileSync(manifest, JSON.stringify({ version: installed }));
+    for (const unrelated of ["before", "after"]) {
+      writeFileSync(join(cwd, "pnpm-lock.yaml"), unrelated);
+      const result = resolve();
+      assert.equal(result.status, 0, result.stderr);
+      assert.equal(readFileSync(output, "utf8"), `version=${installed}\n`);
+    }
+  }
+  rmSync(manifest);
+  assert.notEqual(
+    resolve().status,
+    0,
+    "missing installation must fail, not cache an empty version",
+  );
+  assert.equal(readFileSync(output, "utf8"), "");
 });

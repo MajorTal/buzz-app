@@ -7,6 +7,7 @@ test.use({
   readState: true,
   threadUnread: true,
   pluginFixtures: true,
+  historyCounts: { alpha: 20, beta: 1 },
 });
 
 // Only the browser's OS boundary is replaced. The built host, session,
@@ -256,12 +257,6 @@ for (const kind of ["mention", "thread reply"]) {
   }) => {
     // Model a real prior contribution in relay history, not a client-side
     // participation/readiness override. The incoming reply itself has no p tag.
-    // Keep this prior contribution inside the existing 500-event unread
-    // evidence window; the default 640-row Alpha fixture would crowd it out.
-    app.histories.set(
-      "primary/alpha",
-      app.histories.get("primary/alpha").slice(-200),
-    );
     const root =
       kind === "thread reply"
         ? app.append("primary", "beta", "My prior thread", false)

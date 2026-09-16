@@ -7,7 +7,21 @@ test("Back restores each thread visit before the previous channel", async ({
   page,
   app,
 }) => {
-  await open(page, app);
+  const beta = page
+    .getByRole("navigation", { name: "Subscribed channels" })
+    .locator('button[data-channel-id="beta"]');
+  app.relay.holdUnread();
+  try {
+    await open(page, app);
+    await expect.poll(() => app.report.unreadHolds.length).toBe(1);
+    await expect(beta).toHaveAccessibleName("Beta");
+  } finally {
+    app.relay.releaseUnread();
+  }
+  // Unread evidence changes the accessible name independently of navigation.
+  await expect(beta.getByRole("img")).toHaveAccessibleName(
+    "20 observed unread messages. Not an exact total.",
+  );
   const roots = app.histories
     .get("primary/alpha")
     .filter((row) => row.content.startsWith("Thread root"));
@@ -36,7 +50,7 @@ test("Back restores each thread visit before the previous channel", async ({
   );
   await expect(panel.getByText("Thread root 1", { exact: true })).toBeVisible();
   expect(await openThread.evaluate((node) => node.isConnected)).toBe(true);
-  await page.getByRole("button", { name: "Beta", exact: true }).click();
+  await beta.click();
   await expect(
     page.getByRole("textbox", { name: "Message #Beta", exact: true }),
   ).toBeVisible();

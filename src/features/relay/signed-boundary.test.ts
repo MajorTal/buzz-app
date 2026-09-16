@@ -2,7 +2,7 @@
 
 import { assert, afterEach, expect, it, vi } from "vitest";
 import { connectSignedTransport } from "./transport";
-import { ApiCapacity } from "./http-admission";
+import { ApiCapacity, ApiPaused } from "./http-admission";
 import { PublishRejected } from "./outbox";
 import { signed, keypair } from "./testing";
 function required<T>(value: T | undefined): T {
@@ -115,19 +115,17 @@ it("a signer already waiting cannot bypass a newly learned shared cooldown", asy
     "relay",
   );
   const one = t.query([{ kinds: [0], limit: 1 }]).catch((e) => e);
+  // Real crypto digest completion may reorder requests. Establish which signer
+  // owns each gate before releasing the first request into the shared cooldown.
+  await vi.waitFor(() => expect(pending).toHaveLength(1));
   const two = t.query([{ kinds: [0], limit: 2 }]).catch((e) => e);
-  await vi.advanceTimersByTimeAsync(600);
   await vi.waitFor(() => expect(pending).toHaveLength(2));
   required(pending[0])();
-  await tick();
-  await vi.advanceTimersByTimeAsync(1);
   await one;
   required(pending[1])();
-  await tick();
-  await vi.advanceTimersByTimeAsync(1);
-  expect(starts).toHaveLength(1);
+  expect(await two).toBeInstanceOf(ApiPaused);
   await vi.advanceTimersByTimeAsync(3500);
-  await two;
+  expect(starts).toHaveLength(1);
 });
 
 function deferredSigner() {

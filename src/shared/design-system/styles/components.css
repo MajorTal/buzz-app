@@ -108,9 +108,15 @@
     padding: 0;
   }
 
+  /* Keep pointer-origin keyboard traversal rooted at the button in WebKit. */
+  .buzz-button[data-icon-variant] .buzz-button-label {
+    pointer-events: none;
+  }
+
   .buzz-button[data-icon-size="compact"] {
     width: var(--size-row);
     height: var(--size-row);
+    min-height: var(--size-row);
     border-radius: var(--radius-row);
   }
 

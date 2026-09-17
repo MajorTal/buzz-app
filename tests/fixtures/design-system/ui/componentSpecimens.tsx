@@ -947,11 +947,13 @@ export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
   ),
   "radio-group": () => (
     <SpecimenFrame>
-      <RadioGroup aria-label="Notifications" defaultValue="all">
-        <Radio value="all" label="All updates" variant="card" />
-        <Radio value="mentions" label="Mentions only" variant="card" />
-        <Radio value="none" label="Unavailable" disabled />
-      </RadioGroup>
+      <Field label="Notifications">
+        <RadioGroup defaultValue="all">
+          <Radio value="all" label="All updates" variant="card" />
+          <Radio value="mentions" label="Mentions only" variant="card" />
+          <Radio value="none" label="Unavailable" disabled />
+        </RadioGroup>
+      </Field>
     </SpecimenFrame>
   ),
   checkbox: () => (

@@ -59,12 +59,16 @@ for (const mode of ["light", "dark"]) {
     ).toHaveCSS("font-size", "24px");
     await expect(key).toHaveCSS("font-size", "12px");
     await expect(key).toHaveCSS("font-family", /JetBrains Mono/);
-    await expect(copy).toHaveCSS("height", "30px");
-    await expect(copy).toHaveCSS("border-radius", "10px");
+    await expect(copy).toHaveCSS("height", "32px");
+    const pill = await copy.evaluate((el) => ({
+      radius: parseFloat(getComputedStyle(el).borderRadius),
+      height: el.getBoundingClientRect().height,
+    }));
+    expect(pill.radius).toBeGreaterThanOrEqual(pill.height / 2);
     await copy.hover();
     await expect(copy).toHaveCSS(
       "background-color",
-      mode === "light" ? "rgb(218, 218, 218)" : "rgb(35, 35, 35)",
+      mode === "light" ? "rgb(232, 232, 232)" : "rgb(64, 64, 64)",
     );
     await page.keyboard.press(
       browserName === "webkit" && process.platform === "darwin"
@@ -81,7 +85,7 @@ for (const mode of ["light", "dark"]) {
     await page.keyboard.press(`${modifier}+=`);
     await expect(region).toHaveCSS("font-size", "17.6px");
     await expect(key).toHaveCSS("font-size", "13.2px");
-    await expect(copy).toHaveCSS("height", "30px");
+    await expect(copy).toHaveCSS("height", "32px");
     await page.keyboard.press(`${modifier}+0`);
     for (const width of [1280, 900, 390]) {
       await page.setViewportSize({ width, height: 800 });

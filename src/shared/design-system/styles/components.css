@@ -1,71 +1,109 @@
 @layer components {
   .buzz-button {
-    display: inline-flex;
+    position: relative;
+    display: inline-grid;
+    place-items: center;
     min-width: 0;
-    height: var(--size-control);
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-row-gap);
-    border: 0;
-    border-radius: var(--radius-control);
-    padding: 0 var(--space-control-inset);
+    min-height: var(--size-control);
+    border: 1px solid transparent;
+    border-radius: var(--radius-pill);
+    padding: var(--space-1h) var(--space-control-inset);
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-standard);
     font-family: inherit;
     @apply text-label;
     cursor: pointer;
     transition:
-      color var(--duration-state) var(--easing-state),
       background-color var(--duration-state) var(--easing-state),
-      opacity var(--duration-fast) var(--easing-state),
-      box-shadow var(--duration-state) var(--easing-state);
+      color var(--duration-state) var(--easing-state);
   }
-
-  .buzz-button[data-size="compact"] {
+  .buzz-button-label {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: var(--space-row-gap);
+    overflow-wrap: anywhere;
+  }
+  .buzz-button[data-size="sm"] {
     @apply text-label-sm;
-    height: var(--size-row);
-    border-radius: var(--radius-row);
-    padding-inline: var(--space-control-inset);
+    min-height: var(--size-control-sm);
+    padding-block: var(--space-1);
   }
-
-  .buzz-button[data-variant="primary"] {
-    background: var(--neutral-11);
-    color: var(--neutral-1);
+  .buzz-button[data-size="lg"] {
+    min-height: var(--size-control-lg);
   }
-
-  /* The accent's own hover step, not a fade. `opacity: 0.9` lightened the label
-     along with the fill and composited an unnamed colour nothing could measure —
-     the move check-color.mjs rejects everywhere else. */
-  .buzz-button[data-variant="primary"]:hover:not([data-disabled]) {
-    background: var(--neutral-12);
+  .buzz-button[data-variant="prominent"] {
+    background: var(--affordance-prominent);
+    color: var(--text-inverse);
   }
-
-  .buzz-button[data-variant="quiet"] {
-    background: var(--neutral-2);
-    color: var(--text-primary);
+  .buzz-button[data-variant="prominent"]:hover:not([data-disabled]) {
+    background: var(--affordance-prominent-hover);
   }
-
-  /* Scoped with `:not([data-icon-variant])` because IconButton passes
-     `variant="ghost"` down to Button and carries its real appearance in
-     `data-icon-variant`. Both selectors match, and this one is more specific
-     (two pseudo-classes), so an unscoped neutral hover repainted a solid accent
-     IconButton light grey while its text stayed white — Lc 13, invisible. An
-     icon button's hover belongs to its icon variant; see below. */
-  .buzz-button[data-variant="quiet"]:hover:not([data-disabled]),
-  .buzz-button[data-variant="ghost"]:not(
-    [data-icon-variant],
-    [data-navigation-item]
-  ):hover:not([data-disabled]) {
-    background: var(--neutral-4);
+  .buzz-button[data-variant="prominent"]:active:not([data-disabled]) {
+    background: var(--affordance-prominent-pressed);
   }
-
-  .buzz-button[data-disabled] {
-    color: var(--text-disabled);
+  .buzz-button[data-variant="subtle"] {
+    background: var(--affordance-subtle);
+  }
+  .buzz-button[data-variant="outline"] {
+    border-color: var(--border-prominent);
+  }
+  .buzz-button:is(
+    [data-variant="subtle"],
+    [data-variant="outline"],
+    [data-variant="ghost"]
+  ):not([data-icon-variant]):hover:not([data-disabled]) {
+    background: var(--affordance-subtle-hover);
+  }
+  .buzz-button:is(
+    [data-variant="subtle"],
+    [data-variant="outline"],
+    [data-variant="ghost"]
+  ):not([data-icon-variant]):active:not([data-disabled]) {
+    background: var(--affordance-subtle-pressed);
+  }
+  .buzz-button[data-variant="destructive"] {
+    background: var(--affordance-danger);
+    color: var(--text-danger);
+  }
+  .buzz-button[data-variant="destructive"]:hover:not([data-disabled]) {
+    background: var(--affordance-danger-hover);
+  }
+  .buzz-button[data-variant="destructive"]:active:not([data-disabled]) {
+    background: var(--affordance-danger-pressed);
+  }
+  .buzz-button[data-disabled]:not([data-loading]) {
+    color: var(--text-unavailable);
+    background: var(--affordance-disabled);
     cursor: not-allowed;
+  }
+  .buzz-button[data-loading] {
+    cursor: progress;
+  }
+  .buzz-button[data-loading] .buzz-button-label {
+    opacity: 0;
+  }
+  .buzz-button-spinner {
+    position: absolute;
+    animation: buzz-button-spin 1s linear infinite;
+  }
+  @keyframes buzz-button-spin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .buzz-button-spinner {
+      animation: none;
+    }
   }
 
   .buzz-button[data-icon-variant] {
+    min-height: 0;
     width: var(--size-control);
+    height: var(--size-control);
+    border-radius: var(--radius-control);
     flex: 0 0 auto;
     padding: 0;
   }
@@ -85,8 +123,8 @@
   }
 
   .buzz-button[data-icon-size="large"] {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: var(--size-control-lg);
+    height: var(--size-control-lg);
     border-radius: var(--radius-pill);
   }
 
@@ -97,32 +135,32 @@
   /* Every icon variant states its own hover. The one that did not —
      `solid` — fell through to the neutral ghost hover and lost its accent. */
   .buzz-button[data-icon-variant="quiet"] {
-    background: var(--neutral-2);
+    background: var(--affordance-subtle);
   }
 
   .buzz-button[data-icon-variant="quiet"]:hover:not([data-disabled]),
   .buzz-button[data-icon-variant="ghost"]:hover:not([data-disabled]) {
-    background: var(--neutral-4);
+    background: var(--affordance-subtle-hover);
   }
 
   .buzz-button[data-icon-variant="solid"] {
-    background: var(--neutral-11);
-    color: var(--neutral-1);
+    background: var(--affordance-prominent-hover);
+    color: var(--text-inverse);
   }
 
   .buzz-button[data-icon-variant="solid"]:hover:not([data-disabled]) {
-    background: var(--neutral-12);
+    background: var(--affordance-prominent);
   }
 
   /* A gentle acknowledgement/submit action on a quiet surface. This cannot be
      the primary fill: its job is available without pulling focus from writing. */
   .buzz-button[data-icon-variant="tint"] {
-    background: var(--purple-3);
-    color: var(--purple-12);
+    background: var(--affordance-accent);
+    color: var(--text-accent);
   }
 
   .buzz-button[data-icon-variant="tint"]:hover:not([data-disabled]) {
-    background: var(--purple-4);
+    background: var(--affordance-accent-hover);
   }
 
   /* Chrome sits on the backdrop and is clickable, so it takes the interactive
@@ -132,18 +170,31 @@
     @apply glass-primary-interactive;
   }
 
+  .buzz-button:is(
+    [data-icon-variant="quiet"],
+    [data-icon-variant="ghost"]
+  ):active:not([data-disabled]) {
+    background: var(--affordance-subtle-pressed);
+  }
+  .buzz-button[data-icon-variant="solid"]:active:not([data-disabled]) {
+    background: var(--affordance-prominent-pressed);
+  }
+  .buzz-button[data-icon-variant="tint"]:active:not([data-disabled]) {
+    background: var(--affordance-accent-hover);
+  }
+
   /* Disabled owns the foreground across icon variants, independently of source
      order. Accent fills also yield to neutral so unavailability cannot look
      like an available send/stop action. Shape never changes state semantics. */
   .buzz-button[data-icon-variant][data-disabled] {
-    color: var(--text-disabled);
+    color: var(--text-unavailable);
   }
 
   .buzz-button:is(
     [data-icon-variant="tint"],
     [data-icon-variant="solid"]
   )[data-disabled] {
-    background: var(--neutral-3);
+    background: var(--affordance-selected);
   }
 
   /* A preview is supplemental context; destination cards can also open it.
@@ -154,10 +205,10 @@
     width: max-content;
     max-width: min(18rem, 75vw);
     gap: var(--space-1);
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--border-standard);
     border-radius: var(--radius-control);
     padding: var(--space-2) var(--space-3);
-    background: var(--bg-float);
+    background: var(--surface-popover);
     box-shadow: var(--shadow-sm);
     pointer-events: none;
     transform-origin: var(--transform-origin);
@@ -187,16 +238,16 @@
 
   .buzz-preview-card-example {
     border: 0;
-    border-bottom: 1px solid var(--purple-8);
+    border-bottom: 1px solid var(--border-accent);
     padding: 0;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-standard);
     font: inherit;
     cursor: pointer;
   }
 
   html[data-keyboard-navigation] .buzz-preview-card-example:focus-visible {
-    outline: 2px solid var(--text-primary);
+    outline: 2px solid var(--text-standard);
     outline-offset: 2px;
   }
 
@@ -209,8 +260,8 @@
     place-items: center;
     overflow: hidden;
     border-radius: var(--radius-pill);
-    background: var(--neutral-2);
-    color: var(--text-secondary);
+    background: var(--affordance-subtle);
+    color: var(--text-subtle);
   }
 
   .buzz-avatar[data-size="small"] {
@@ -219,8 +270,8 @@
   }
 
   .buzz-avatar[data-size="large"] {
-    width: 2.5rem;
-    height: 2.5rem;
+    width: var(--size-control-lg);
+    height: var(--size-control-lg);
   }
 
   .buzz-avatar[data-size="fill"] {
@@ -271,9 +322,9 @@
     min-width: 0;
     min-height: 0;
     overflow: hidden;
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--border-standard);
     border-radius: var(--radius-panel);
-    background: var(--bg-panel);
+    background: var(--surface-panel);
     box-shadow: var(--shadow-xs);
   }
 
@@ -371,7 +422,7 @@
     height: 2rem;
     border-radius: var(--radius-pill);
     padding: 0 var(--space-4);
-    color: var(--text-secondary);
+    color: var(--text-subtle);
   }
 
   /* A hover *inside* a glass surface, which is not itself a material: no blur,
@@ -392,11 +443,11 @@
      state is irrelevant, not defending a rule from another rule. */
   .buzz-tabs[data-variant="chrome"] .buzz-tabs-tab:hover:not([data-selected]) {
     background: var(--bg-glass-primary-hover);
-    color: var(--text-primary);
+    color: var(--text-standard);
   }
 
   .buzz-tabs[data-variant="chrome"] .buzz-tabs-tab[data-selected] {
-    color: var(--text-primary);
+    color: var(--text-standard);
   }
 
   .buzz-tabs[data-variant="chrome"] .buzz-tabs-indicator {
@@ -433,16 +484,16 @@
   .buzz-tabs[data-variant="panel"] .buzz-tabs-tab {
     height: 2.25rem;
     padding: 0;
-    color: var(--text-tertiary);
+    color: var(--text-metadata);
   }
 
   /* Excluded for the same reason as the chrome variant above. */
   .buzz-tabs[data-variant="panel"] .buzz-tabs-tab:hover:not([data-selected]) {
-    color: var(--text-primary);
+    color: var(--text-standard);
   }
 
   .buzz-tabs[data-variant="panel"] .buzz-tabs-tab[data-selected] {
-    color: var(--text-primary);
+    color: var(--text-standard);
   }
 
   /* Sits on the container's bottom edge and spans the tab exactly. `height` is
@@ -452,7 +503,7 @@
     bottom: 0;
     height: 2px;
     border-radius: var(--radius-pill);
-    background: var(--text-primary);
+    background: var(--text-standard);
   }
 
   .panel-header {
@@ -475,7 +526,7 @@
     bottom: 0;
     left: var(--space-panel-inset);
     height: 1px;
-    background: var(--border-primary);
+    background: var(--border-standard);
     content: "";
     pointer-events: none;
   }
@@ -525,7 +576,7 @@
   .conversation-header-icon {
     display: flex;
     flex: 0 0 auto;
-    color: var(--text-secondary);
+    color: var(--text-subtle);
   }
 
   .conversation-header-title-block {
@@ -546,7 +597,7 @@
 
   .conversation-header-metadata {
     flex: 0 0 auto;
-    color: var(--text-secondary);
+    color: var(--text-subtle);
   }
 
   .conversation-header-context {
@@ -560,9 +611,10 @@
     align-items: center;
     gap: var(--space-row-gap);
     border-radius: var(--radius-control);
+    border: 1px solid var(--border-prominent);
     padding: 0 var(--space-control-inset);
-    background: var(--neutral-2);
-    color: var(--text-tertiary);
+    background: var(--surface-panel);
+    color: var(--text-metadata);
   }
 
   .search-field[data-variant="navigator"] {
@@ -575,17 +627,17 @@
     border: 0;
     outline: 0;
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-standard);
     font: inherit;
   }
 
   html[data-keyboard-navigation] .search-field input:focus-visible {
-    outline: 2px solid var(--text-primary);
+    outline: 2px solid var(--text-standard);
     outline-offset: 2px;
   }
 
   .search-field input::placeholder {
-    color: var(--text-tertiary);
+    color: var(--text-metadata);
   }
 
   .search-field input::-webkit-search-cancel-button {
@@ -645,7 +697,7 @@
     border-radius: var(--radius-row);
     padding: 0 var(--space-control-inset);
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-standard);
     font: inherit;
     text-align: left;
     cursor: pointer;
@@ -658,13 +710,13 @@
      stronger statement. Keeping them separate prevents a selected destination
      from becoming indistinguishable the moment a pointer passes over it. */
   .navigation-item:hover:not([data-selected]) {
-    background: var(--neutral-2);
-    color: var(--text-primary);
+    background: var(--affordance-subtle);
+    color: var(--text-standard);
   }
 
   .navigation-item[data-selected] {
-    background: var(--neutral-3);
-    color: var(--text-primary);
+    background: var(--affordance-selected);
+    color: var(--text-standard);
   }
 
   .navigation-item[data-inset] {
@@ -681,13 +733,13 @@
 
   .navigation-item-trailing {
     flex: 0 0 auto;
-    color: var(--text-tertiary);
+    color: var(--text-metadata);
   }
 
   html[data-keyboard-navigation] .buzz-button:focus-visible,
   html[data-keyboard-navigation] .navigation-item:focus-visible,
   html[data-keyboard-navigation] .buzz-tabs-tab:focus-visible {
-    outline: 2px solid var(--text-primary);
+    outline: 2px solid var(--text-standard);
     outline-offset: 2px;
   }
 
@@ -706,7 +758,7 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
-    color: var(--text-secondary);
+    color: var(--text-subtle);
   }
   .buzz-select-popup {
     min-width: var(--anchor-width);
@@ -714,10 +766,10 @@
     max-height: var(--available-height);
     overflow-y: auto;
     padding: var(--space-1);
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--border-standard);
     border-radius: var(--radius-control);
-    background: var(--bg-float);
-    color: var(--text-primary);
+    background: var(--surface-popover);
+    color: var(--text-standard);
     box-shadow: var(--shadow-sm);
     z-index: 1000;
   }
@@ -734,11 +786,11 @@
     cursor: default;
   }
   .buzz-select-option[data-highlighted] {
-    background: var(--neutral-4);
+    background: var(--affordance-subtle-hover);
     outline: none;
   }
   .buzz-select-option[data-selected] {
-    color: var(--text-primary);
+    color: var(--text-standard);
   }
 }
 
@@ -760,15 +812,15 @@
     border-radius: var(--radius-row);
     padding: var(--space-2);
     background: transparent;
-    color: var(--text-primary);
+    color: var(--text-standard);
     text-align: start;
     cursor: pointer;
   }
   .buzz-accordion:not([data-variant="activity"]) .buzz-accordion-trigger:hover {
-    background: var(--neutral-3);
+    background: var(--affordance-selected);
   }
   .buzz-accordion-trigger:focus-visible {
-    outline: 2px solid var(--text-primary);
+    outline: 2px solid var(--text-standard);
     outline-offset: 2px;
   }
   .buzz-accordion-trigger[aria-expanded="true"] > svg {
@@ -793,7 +845,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-3);
-    color: var(--text-primary);
+    color: var(--text-standard);
     cursor: pointer;
   }
   .buzz-switch-control {
@@ -802,24 +854,24 @@
     height: 1.25rem;
     align-items: center;
     padding: 0.125rem;
-    border: 1px solid var(--border-primary);
+    border: 1px solid var(--border-standard);
     border-radius: var(--radius-pill);
-    background: var(--neutral-4);
+    background: var(--affordance-subtle-hover);
     cursor: pointer;
     transition:
       background-color var(--duration-state) var(--easing-state),
       border-color var(--duration-state) var(--easing-state);
   }
   .buzz-switch-control[data-checked] {
-    border-color: var(--purple-8);
-    background: var(--purple-8);
+    border-color: var(--affordance-prominent);
+    background: var(--affordance-prominent);
   }
   .buzz-switch-thumb {
     display: block;
     width: 0.875rem;
     height: 0.875rem;
     border-radius: var(--radius-pill);
-    background: var(--bg-panel);
+    background: var(--text-inverse);
     box-shadow: var(--shadow-xs);
     transform: translateX(0);
     transition: transform var(--duration-settle) var(--easing-settle);
@@ -829,18 +881,18 @@
   }
   .buzz-switch-control[data-disabled] {
     cursor: not-allowed;
-    background: var(--neutral-3);
+    background: var(--affordance-selected);
   }
   .buzz-switch-control[data-disabled] .buzz-switch-thumb {
-    background: var(--neutral-5);
+    background: var(--affordance-subtle-pressed);
     box-shadow: none;
   }
   .buzz-switch:has(.buzz-switch-control[data-disabled]) {
-    color: var(--text-disabled);
+    color: var(--text-unavailable);
     cursor: not-allowed;
   }
   html[data-keyboard-navigation] .buzz-switch-control:focus-visible {
-    outline: 2px solid var(--text-primary);
+    outline: 2px solid var(--text-standard);
     outline-offset: 2px;
   }
 }
@@ -852,7 +904,7 @@
   .buzz-accordion[data-variant="activity"] .buzz-accordion-trigger {
     justify-content: flex-start;
     padding: var(--space-2) 0;
-    color: var(--text-secondary);
+    color: var(--text-subtle);
     overflow-wrap: anywhere;
   }
   .buzz-accordion[data-variant="activity"] .buzz-accordion-trigger > svg {
@@ -895,20 +947,20 @@
   .buzz-tabs[data-variant="workspace"] .buzz-tabs-tab {
     padding: var(--space-1) var(--space-3);
     border-radius: var(--radius-pill);
-    color: var(--text-secondary);
+    color: var(--text-subtle);
     background: transparent;
   }
   .buzz-tabs[data-variant="workspace"]
     .buzz-tabs-tab:hover:not([data-preview]) {
-    background: var(--neutral-3);
-    color: var(--text-primary);
+    background: var(--affordance-selected);
+    color: var(--text-standard);
   }
   .buzz-tabs[data-variant="workspace"] .buzz-tabs-tab[data-selected] {
-    color: var(--text-primary);
+    color: var(--text-standard);
   }
   .buzz-tabs[data-variant="workspace"] .buzz-tabs-tab[data-preview] {
-    background: var(--purple-3);
-    color: var(--text-primary);
+    background: var(--affordance-accent);
+    color: var(--text-standard);
   }
   .buzz-tabs[data-variant="workspace"] .buzz-tabs-indicator {
     display: none;
@@ -924,7 +976,7 @@
     z-index: -1;
     border-radius: inherit;
     pointer-events: none;
-    background: var(--purple-3);
+    background: var(--affordance-accent);
     animation: workspace-tab-arrival calc(var(--duration-settle) * 3) ease-out
       both;
   }

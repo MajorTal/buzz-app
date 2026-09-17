@@ -22,6 +22,7 @@
 @import "./typography.css";
 @import "./typography-base.css";
 @import "./components.css";
+@import "./forms.css";
 @import "./chips.css";
 @import "./bento.css";
 @source "../";

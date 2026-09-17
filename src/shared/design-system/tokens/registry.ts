@@ -1092,8 +1092,8 @@ export const RADII = [
   {
     token: "radius-control",
     variable: "--radius-control",
-    value: "12px",
-    use: "Inputs, buttons, tabs, and header actions.",
+    value: "8px",
+    use: "Inputs and compact icon controls. Text buttons use radius-pill.",
   },
   {
     token: "radius-panel",

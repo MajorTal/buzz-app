@@ -1,3 +1,11 @@
+import { Field } from "../../../../src/shared/design-system/ui/Field";
+import { Input } from "../../../../src/shared/design-system/ui/Input";
+import { Textarea } from "../../../../src/shared/design-system/ui/Textarea";
+import {
+  Radio,
+  RadioGroup,
+} from "../../../../src/shared/design-system/ui/RadioGroup";
+import { Checkbox } from "../../../../src/shared/design-system/ui/Checkbox";
 import avatarUrl from "../assets/avatar.png";
 import { PanelSwapPlaygrounds } from "./PanelSwapPlaygrounds";
 import { FlexWorkspace } from "../../../../src/shared/design-system/ui/FlexWorkspace";
@@ -100,47 +108,40 @@ function Specimen({
 
 function ButtonSpecimen() {
   return (
-    <div className="component-specimen-stack">
-      <SpecimenGroup label="Variants">
-        <div className="component-specimen-row">
-          <Specimen prop='variant="primary"'>
-            <Button variant="primary">Save</Button>
-          </Specimen>
-          <Specimen prop='variant="quiet"'>
-            <Button variant="quiet">Save</Button>
-          </Specimen>
-          <Specimen prop='variant="ghost"'>
-            <Button variant="ghost">Save</Button>
-          </Specimen>
+    <>
+      <SpecimenGroup label="Emphasis">
+        <div className="flex flex-wrap items-center gap-3">
+          {(
+            ["prominent", "subtle", "ghost", "destructive", "outline"] as const
+          ).map((variant) => (
+            <Button key={variant} variant={variant}>
+              {variant}
+            </Button>
+          ))}
         </div>
       </SpecimenGroup>
       <SpecimenGroup label="Sizes">
-        <div className="component-specimen-row">
-          <Specimen prop='size="compact"'>
-            <Button variant="quiet" size="compact">
-              Save
+        <div className="flex flex-wrap items-center gap-3">
+          {(["sm", "md", "lg"] as const).map((size) => (
+            <Button key={size} size={size} variant="prominent">
+              Save · {size}
             </Button>
-          </Specimen>
-          <Specimen prop='size="default"'>
-            <Button variant="quiet">Save</Button>
-          </Specimen>
+          ))}
         </div>
       </SpecimenGroup>
       <SpecimenGroup label="States">
-        <div className="component-specimen-row">
-          <Specimen>
-            <Button variant="primary">Save</Button>
-          </Specimen>
-          <Specimen prop="disabled">
-            <Button variant="quiet" disabled>
-              Save
-            </Button>
-          </Specimen>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button loading variant="prominent">
+            Save changes
+          </Button>
+          <Button disabled>Unavailable</Button>
+          <Button>Allow notifications for this workspace</Button>
         </div>
       </SpecimenGroup>
-    </div>
+    </>
   );
 }
+
 function IconButtonSpecimen() {
   const icons = {
     add: <IconPlus size={16} stroke={1.7} aria-hidden="true" />,
@@ -876,6 +877,50 @@ function SelectSpecimen() {
 }
 
 export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
+  field: () => (
+    <SpecimenFrame>
+      <Field
+        label="Workspace name"
+        description="Choose a name your team will recognize."
+        error="Enter a name."
+      >
+        <Input required />
+      </Field>
+    </SpecimenFrame>
+  ),
+  input: () => (
+    <SpecimenFrame>
+      <Field label="Workspace name">
+        <Input placeholder="Project notes" />
+      </Field>
+      <Field label="Unavailable">
+        <Input disabled value="Example" />
+      </Field>
+    </SpecimenFrame>
+  ),
+  textarea: () => (
+    <SpecimenFrame>
+      <Field label="Description" description="A short summary.">
+        <Textarea rows={3} />
+      </Field>
+    </SpecimenFrame>
+  ),
+  "radio-group": () => (
+    <SpecimenFrame>
+      <RadioGroup aria-label="Notifications" defaultValue="all">
+        <Radio value="all" label="All updates" variant="card" />
+        <Radio value="mentions" label="Mentions only" variant="card" />
+        <Radio value="none" label="Unavailable" disabled />
+      </RadioGroup>
+    </SpecimenFrame>
+  ),
+  checkbox: () => (
+    <SpecimenFrame>
+      <Checkbox label="Include a summary" />
+      <Checkbox label="Some selected" indeterminate />
+      <Checkbox label="Unavailable" disabled />
+    </SpecimenFrame>
+  ),
   "swap-workspace": PanelSwapPlaygrounds,
   "flex-workspace": FlexWorkspace,
   workspace: BentoSpecimen,

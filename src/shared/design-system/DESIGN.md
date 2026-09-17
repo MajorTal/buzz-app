@@ -75,6 +75,19 @@ Buzz is a place where people build together and bring their agents into the room
 - **A redundant fill on glass is not free — it compounds.** Two identical translucent layers are not one layer: `glass-2` over `glass-2` composites to **0.77 alpha**, a value no token holds. Four panels each set the same fill as the container they exactly covered, so panels meant to be the most translucent surface in the system read as nearly solid. Before giving a region a glass fill, check whether its parent already is glass; if the region covers it, it needs no fill of its own.
 - **A component that can sit on either the gradient or a panel says so, with a variant.** `Tabs` takes `chrome` (a glass pill for the app backdrop) or `panel` (an underline for a plain surface); `IconButton` has the same axis as its `chrome` variant. The failure that earned it: the chrome container is `glass-2`, which over a white panel composites to pure white, and its selected pill is `neutral-1` — also pure white. Container and selection became one colour with only a shadow between them, and no guard could see it because the component had no way to state which background it expected. **The fix was never to retint `--bg-chrome-selected`** — that moves the collision rather than removing it. **One component with a variant, not two components:** behaviour, keyboard model, accessibility, props, and the Base UI parts underneath are identical, so a sibling component would duplicate all of it to change how selection is drawn, and the two would drift exactly as the four hand-assembled chrome surfaces did. When adding a component that could appear in both places, give it the axis and put both on its specimen page — the chrome-only specimen is why this defect survived until it appeared on a real screen.
 
+## Controls
+
+Button uses prominent, subtle, ghost, destructive and outline emphasis. Its
+32 / 40 / 52px sizes are sm / md / lg at the default scale; labels may wrap and
+increase height at larger text settings. Text buttons use pill corners. Fields
+use the shared control corner. Legacy Button names map to these variants during
+migration; do not add new primary/quiet or compact/default call sites.
+
+Field groups label, input, help and error using Base UI. Input and Textarea
+carry the shared field appearance. RadioGroup is for one choice, Checkbox for an
+independent choice and Switch for an immediate on/off setting. Use the native
+form semantics exposed by those Base UI primitives rather than duplicating them.
+
 ## State
 
 - **Design default, hover, pressed, focus, selected, disabled and loading states where they apply.** Pressed changes fill without moving the control. Loading keeps the label footprint and prevents repeated activation; CSS alone cannot enforce it.
@@ -153,181 +166,22 @@ documented above define this system, including the 12px xsmall role.
 
 ## Colour structure
 
-Two public layers, plus components: screens normally write a palette step, and use a role only for a decision a step cannot express.
+The semantic grammar at the top of this guide is the current contract.
+Palette steps supply values; shared roles name their purpose; components own
+recipes and states; app screens compose those components. Equal values do not
+make two purposes interchangeable. A border and a label may happen to share a
+step today and still need separate roles.
 
-| Layer | Example | What it is |
-|---|---|---|
-| **0 palette** | `--purple-9`, `--neutral-4` | Every hue, twelve steps, authored per mode. The only place a literal lives. **Public: a screen writes `bg-purple-9`.** |
-| **1 roles** | `--bg-panel` | The fifteen cases a step cannot express. Public too. |
-| **2 components** | `bg-panel`, `bg-neutral-4` | Tailwind utilities, from either layer. |
+Text and border roles register as `--text-color-*` and `--border-color-*`.
+Surface and affordance roles register as `--color-surface-*` and
+`--color-affordance-*`. Keep these namespaces distinct: a utility such as
+`text-danger` must never resolve to the destructive action's background.
 
-**Screens are built from the ramps.** This reverses the rule this file used to
-state, and the reversal turns on one fact: **every palette step is authored per
-mode.** `neutral-4` is `#e8e8e8` in light and `#232323` in dark, so a component
-naming the step behaves correctly in both. That is what makes a raw step safe
-here and unsafe in stock Tailwind, where `neutral-200` is a single literal —
-naming it there really does break dark mode, and a semantic layer really is the
-only fix.
-
-Once a step is mode-aware, **a role whose light and dark values are the same step
-is a name in front of a number**, and a name in front of a number hides the
-decision instead of recording it. `bg-accent` was `purple-9`; `text-error` was
-`red-12`. Nineteen roles were exactly that and are gone.
-
-### When a name is earned
-
-Three cases, and `pnpm design:check` enforces the first two by rejecting any new
-role that fails them:
-
-1. **Light and dark take different steps.** `bg-panel` is `neutral-1` in light and
-   `neutral-3` in dark. No single class can say that, so the name is load-bearing.
-   The four structural surfaces are all of this kind.
-2. **The name enforces a rule a ramp cannot state.** There are deliberately three
-   levels of text and one border weight. `text-neutral-11` looks reasonable and is
-   how a fourth level appears without anyone deciding, so `text-secondary` stays
-   even though its step is identical in both modes.
-3. **Morgan sees a repeated pattern and asks for one.** A tinted callout that
-   turns up on four screens earns a name — for the *pattern*, not the colour. This
-   is the only route by which the role layer grows, and it is deliberately manual.
-
-`neutral` is a hue like any other — the same twelve steps, the same naming. There
-is no separate grey ramp and no `palette-` prefix: a step is `--neutral-4`, the
-way Tailwind names a colour.
-
-**Tailwind's default palette is deleted** with `--color-*: initial`, so
-`text-gray-500` does not exist. It is a build error, not a style choice.
-
-**There used to be a families layer** — `--accent-fill`, `--danger-tint`, thirty
-steps in five families, sitting between the palette and the roles. It was
-deleted. Every one of its thirty steps had exactly *one* reader, so it renamed a
-colour rather than abstracting one, and answering "what colour is this button"
-meant reading three lines in two places
-(`bg-accent` → `accent-fill` → `palette-purple-9`). The naming survives where it
-was always clearest — in the role names, which say *what the colour is for*
-(`bg-accent-tint` is a background) rather than restating a job (`accent fill`
-does not tell you where to put it).
-
-**The role layer was then cut from 54 names to 15, by the same test.** A census
-counted every reader of every role — both `var(--x)` in a stylesheet and the
-Tailwind class each role registers as, with the /design pages counted separately
-from product code, since a page displaying a swatch proves only that the token
-exists. Eighteen roles had no reader anywhere and six were read only by the docs
-that documented them; the rest went once palette steps became reachable as
-classes and the "same step in both modes" test above disqualified them.
-
-**The argument that lost is worth recording, because it is a good one.** A role is
-a slot whose hue can change, so `bg-accent-tint` survives a retint where
-`purple-3` does not. It lost to a fact: the accent hue *did* change, to Tailwind
-purple, and it was five values in the ramp rather than a rename. The ramp is the
-slot. A role in front of it only adds a hop.
-
-The palette stays because it is where **light and dark are reconciled**. A hue's
-dark steps are not its light steps dimmed — purple's step 12 is near-black in
-light and near-white in dark; step 3 is a lilac wash in light and a deep plum in
-dark. Only step 9 is identical. Two hand-authored ramps under one name is what
-lets a role be a single line and still behave in both modes, and what keeps
-`.dark` to a restatement of values rather than the 50 hand-picked colours it used
-to hold — which is where an accent tint and a categorical purple drifted into two
-different purples in dark.
-
-To retint, change the ramp. The accent moved to Tailwind purple in five values,
-which is the demonstration that **the ramp is the slot** — no rename, nothing
-above it needed to know.
-
-### Which step, for what
-
-Twelve steps mean the same twelve jobs in every hue, so this is the map from a job
-to a step. It used to generate roles; now it tells you which class to write:
-
-| step | job | example |
-|---|---|---|
-| 3 | a tinted surface | `bg-purple-3` |
-| 4 | that tint, hovered | `bg-purple-4` |
-| 8 | border, focus ring | `border-purple-8` |
-| 9 | solid fill | `bg-purple-9` |
-| 10 | that fill, hovered | `bg-purple-10` |
-| 12 | coloured text on a neutral surface | `text-purple-12` |
-
-Adding a hue is mechanical — generate twelve steps, and the map above already
-answers which one is the button. `cyan` and `orange` are authored and unused, so
-that half is proven.
-
-**Being mechanical is exactly why it must not run ahead of the product.** This map
-is how four status identities came to exist: twenty roles from one line of a
-lookup table, nineteen of which nothing ever read. It tells you which step to take
-*once a design needs the colour*. It is not a licence to pre-generate a set.
-
-**It is a good default, not a guarantee — measure the pair you actually use.**
-Step 10 crosses over, darker than step 9 in light and lighter in dark, so a hover
-reads as a press in light mode and a lift in dark with no special-casing. But
-green's and blue's step 10 lift *too* far in dark mode and drop white text below
-the APCA target. Likewise step 12 is the safe text step and step 11 is the
-tempting one: red-11 is more obviously red and fails the Lc 60 body target on a
-dark panel (59.7) and the dark composer (57.5), which is why error text is
-`text-red-12`. A step used for text goes into `TEXT_ROLES` in
-`scripts/design-system/check-contrast.mjs` so the guard measures what screens actually write.
-
-Palette values are Radix Colors (MIT), transcribed rather than depended on —
-Radix is not on Block's Tech Radar, so this is a values-only copy with no
-package. Its twelve-step contract is the one this system already described in
-comments, step for step. Two deliberate divergences, both documented in
-`tokens.css`: `text-*` roles take step 12 rather than the 11 Radix names
-"low-contrast text" (Radix sizes 11 for WCAG 4.5:1; every hue's step 11 measured
-Lc 55–61 against this system's Lc 60 target), and the **neutral ramp** is
-hand-authored in both modes because it was sized against the real panel stack
-rather than taken from an even ramp.
-
-### Naming grammar
-
-```
-<property>-<role>[-<modifier>][-<material>][-<state>]
-```
-
-Fixed order, so there is one correct spelling: `--bg-glass-primary-hover` is
-legal, `--bg-glass-hover-primary` is not. One modifier, one material, one state per name.
-This governs the fifteen roles; a ramp class is `<property>-<hue>-<step>` and has
-no grammar to get wrong, which is part of its appeal.
-
-Every word a token may be built from is listed in `VOCABULARY` in the registry.
-No page renders it yet. Combining them freely is routine. Introducing a new
-word is allowed but is the thing the audit reports on its own line — use an
-existing word if one fits.
-
-### Text and borders register in their own namespaces
-
-**`--color-x` is not one utility. It is all of them.** One such line defines
-`bg-x`, `text-x`, `border-x`, `ring-x` and the rest, every one pointing at the
-same value. So the moment two roles differ only by *which prefix uses them*, that
-namespace picks one and silently drops the other.
-
-This has now shipped twice, and both times the symptom looked like a design
-mistake rather than a registration one.
-
-**Borders, first.** Text and borders shared the emphasis names while holding
-different values — text at the dark end of the neutral ramp, borders at the light
-end. Registered under `--color-*`, `border-primary` resolved to the *text* colour
-and every hairline drew at near-black. It is why the first design system site had
-black dividers while the tokens said `#d4d4d4`. Fixed with `--border-color-*`.
-
-**Text colour, second, and worse.** `--color-danger: var(--bg-danger)` also
-defined `text-danger`, so error text rendered in red-9 — the saturated *fill* —
-instead of red-12. On a dark panel that measured **APCA Lc 34 against a target of
-60**, on real error messages, for months. And `check-contrast` passed the entire
-time, because it measured `--text-danger`: a token that was declared, documented,
-audited, and which no class could reach.
-
-So the rule, and it is a rule rather than a caution:
-
-> A text role registers as `--text-color-*`. A border role registers as
-> `--border-color-*`. Only backgrounds use the shared `--color-*`.
-
-`src/shared/design-system/tokens/registry.test.ts` binds this to the file — a text or border
-role registered under `--color-*` fails there now, rather than after shipping.
-
-**The general lesson is about the guards, not the namespaces.** A guard that
-measures a token nothing resolves to is worse than no guard: it reports the
-system is fine and is not wrong about the token, only about whether anything uses
-it. When adding a check, verify it measures the value the *browser* computes.
+A color role always has a light and dark value. Paired text is measured against
+all of its actual fills, including hover and pressed states. Status is conveyed
+with text or an icon too. Keep glass as a complete material rather than using its
+fill alone. Palette swatches in the viewer may inspect raw steps; product
+components use semantic roles.
 
 ## Colour discipline
 

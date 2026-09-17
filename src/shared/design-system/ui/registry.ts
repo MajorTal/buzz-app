@@ -15,6 +15,17 @@ export type BaseUiPart = {
 };
 
 export const BASE_UI_PARTS = {
+  radio: { name: "Radio", docs: "radio", module: "@base-ui/react/radio" },
+  radioGroup: {
+    name: "Radio Group",
+    docs: "radio-group",
+    module: "@base-ui/react/radio-group",
+  },
+  checkbox: {
+    name: "Checkbox",
+    docs: "checkbox",
+    module: "@base-ui/react/checkbox",
+  },
   avatar: { name: "Avatar", docs: "avatar", module: "@base-ui/react/avatar" },
   button: { name: "Button", docs: "button", module: "@base-ui/react/button" },
   field: { name: "Field", docs: "field", module: "@base-ui/react/field" },
@@ -78,6 +89,71 @@ export type ComponentDefinition = {
 };
 
 export const COMPONENTS: readonly ComponentDefinition[] = [
+  {
+    slug: "checkbox",
+    name: "Checkbox",
+    purpose: "Choose an independent option.",
+    behavior: "Base UI owns form and keyboard semantics",
+    variants: ["default", "disabled", "invalid"],
+    status: "proposed",
+    collection: "components",
+    source: "shared/design-system/ui/Checkbox.tsx",
+    baseUi: [BASE_UI_PARTS.checkbox],
+    composes: [],
+  },
+
+  {
+    slug: "radio-group",
+    name: "RadioGroup",
+    purpose: "Choose one option, including labelled settings cards.",
+    behavior: "Base UI owns form and keyboard semantics",
+    variants: ["default", "disabled", "invalid"],
+    status: "proposed",
+    collection: "components",
+    source: "shared/design-system/ui/RadioGroup.tsx",
+    baseUi: [BASE_UI_PARTS.radioGroup, BASE_UI_PARTS.radio],
+    composes: [],
+  },
+
+  {
+    slug: "textarea",
+    name: "Textarea",
+    purpose: "A multiline field with shared label and validation behavior.",
+    behavior: "Base UI owns form and keyboard semantics",
+    variants: ["default", "disabled", "invalid"],
+    status: "proposed",
+    collection: "components",
+    source: "shared/design-system/ui/Textarea.tsx",
+    baseUi: [BASE_UI_PARTS.field],
+    composes: [],
+  },
+
+  {
+    slug: "input",
+    name: "Input",
+    purpose: "A single-line text field.",
+    behavior: "Base UI owns form and keyboard semantics",
+    variants: ["default", "disabled", "invalid"],
+    status: "proposed",
+    collection: "components",
+    source: "shared/design-system/ui/Input.tsx",
+    baseUi: [BASE_UI_PARTS.input],
+    composes: [],
+  },
+
+  {
+    slug: "field",
+    name: "Field",
+    purpose: "Label, description and error for a form control.",
+    behavior: "Base UI owns form and keyboard semantics",
+    variants: ["default", "disabled", "invalid"],
+    status: "proposed",
+    collection: "components",
+    source: "shared/design-system/ui/Field.tsx",
+    baseUi: [BASE_UI_PARTS.field],
+    composes: [],
+  },
+
   {
     slug: "swap-workspace",
     name: "Panel Swap",
@@ -143,9 +219,18 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
   {
     slug: "button",
     name: "Button",
-    purpose: "A labeled action with primary, quiet, or unfilled emphasis.",
+    purpose:
+      "A labelled action with shared emphasis, loading and destructive states.",
     behavior: "Base UI Button",
-    variants: ["primary", "quiet", "ghost", "size: default | compact"],
+    variants: [
+      "prominent",
+      "subtle",
+      "ghost",
+      "destructive",
+      "outline",
+      "size: sm | md | lg",
+      "loading",
+    ],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Messages",
@@ -165,7 +250,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
       "tint",
       "chrome",
       "shape: control | round",
-      "compact: 16px artwork, 30px target, Tabler stroke 2",
+      "compact: 16px artwork, 32px target, Tabler stroke 2",
       "toolbar: 16px artwork, 32px target, Tabler stroke 2",
     ],
     status: "proposed",

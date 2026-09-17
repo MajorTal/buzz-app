@@ -709,7 +709,7 @@ test("Projects stays centered and page navigation survives plugin re-enable orde
     "Projects",
     "Agents",
     "Workflows",
-    "Make it yoursSettings",
+    "Make it yours · Settings",
   ]);
   await button(page, "Find a page").click();
   const search = page.getByRole("dialog", { name: "Find a page", exact: true });

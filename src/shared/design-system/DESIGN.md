@@ -1,5 +1,27 @@
 # DESIGN.md
 
+## Direction
+
+Buzz adopts Block UI's visual language and semantic color grammar. Base UI
+remains the behavior layer; Buzz owns styles, composition and product semantics.
+Use Inter and JetBrains Mono, public dependencies and generic examples. Do not
+copy private packages, proprietary fonts, internal product data or private source.
+
+## Semantic colors
+
+Use `color / purpose / emphasis / state`: surface, text, border and affordance.
+An affordance is a control or action color. CSS spells these `--surface-panel`,
+`--text-standard`, `--border-prominent` and `--affordance-subtle-hover`.
+Tailwind utilities include `bg-surface-panel`, `text-standard`,
+`border-prominent` and `bg-affordance-subtle-hover`. Text and border registrations
+stay in separate namespaces so they cannot accidentally share a value.
+
+Components choose roles, not palette steps. The palette is an implementation
+detail, even when a role uses the same step in both themes. Add a role only for
+an actual use, document it in the registry and measure its intended pairings.
+Legacy utilities and host aliases remain while their callers migrate. Do not
+add new uses. Whole materials such as glass still travel as one shared recipe.
+
 ## Foundations
 
 The interface uses shared color, type, spacing and shape roles. Primary actions
@@ -40,7 +62,7 @@ Buzz is a place where people build together and bring their agents into the room
 
 - **Panels sit on the backdrop; the backdrop is a gradient.** Everything else is a panel in a different place. The navigation column is not a special kind of surface.
 - **A region is separated by a soft fill, not by an outline.** Reach for `bg-inset` before reaching for a border. A bordered box announces its own edges; a filled one lets the content sit in a place. Grouping is the common case, so the quiet treatment is the default one.
-- **A border is for a genuine boundary, and there is one weight: `border-primary`.** It is `neutral-4` in light and `neutral-6` in dark. A hairline needs more separation on a dark surface than the same step number supplies: `neutral-4` measured 1.08:1 on a dark panel and 1.09:1 on the floating composer — drawn, and effectively invisible. `neutral-5` looked like the obvious one-step move but is `bg-float` in dark, so a border there would be 1.00:1: the same colour as the surface it is meant to bound. `neutral-6` clears the actual surfaces at 1.35–1.43 on panel/inset and 1.14 on float. **That mode difference is the reason this is a role rather than `border-neutral-4`.** A second weight arrives only with the design that proves a different boundary needs it. Text and borders still hold different values — text at the dark end of the neutral ramp, borders at the light end — so if a divider looks like text, it is pointed at the wrong role.
+- **Use border-standard for quiet separators, border-prominent for controls and border-focus for keyboard focus.** Error and warning boundaries have their own roles. Measure real surfaces in both themes.
 - **No page-wide gradient behind documentation or dense reading.** The gradient is the product's backdrop for chrome and panels. Behind a column of prose it fights the text and makes contrast position-dependent — such surfaces sit on `bg-panel`.
 - **Shadows stay at the threshold of perception.** If a shadow is obvious, it is too strong. The two elevation values are the whole vocabulary.
 - **Elevation is carried by shadow in light mode and by lightness in dark mode.** On a near-black background there is nothing darker for a shadow to cast, so a floating surface becomes a step lighter instead. Never reach for a stronger shadow to make something float in dark mode.
@@ -55,7 +77,7 @@ Buzz is a place where people build together and bring their agents into the room
 
 ## State
 
-- **The interface has three states, plus disabled where it matters: default, hover, selected.** There is no pressed state: pressed is too fleeting to read and makes an interface feel jumpy.
+- **Design default, hover, pressed, focus, selected, disabled and loading states where they apply.** Pressed changes fill without moving the control. Loading keeps the label footprint and prevents repeated activation; CSS alone cannot enforce it.
 - **Hover means one step more contrast, in whichever direction that surface needs.** A light row darkens, a dark chip lightens. Direction lives in the value.
 - **Selected is a persistent statement, not a stronger hover.** It should be legible without a cursor present.
 - **A selected item in a toggle group is not interactive.** Clicking it does nothing, so it gets no hover.
@@ -66,7 +88,7 @@ Buzz is a place where people build together and bring their agents into the room
 
 - **Three levels of text: normal, lesser, really lesser.** If a fourth seems necessary, the thing wants a different size, weight, or position instead of a fourth colour.
 - **Two text colours do most of the work.** Treat the third level as genuinely for metadata.
-- **Borders use the same three levels, and they mean the same thing.** Learn the ramp once.
+- **Borders describe their job:** a quiet edge, a control boundary or focus.
 - **Weight and size carry hierarchy before colour does.** Reaching for a louder colour to fix hierarchy usually means the size relationship is wrong.
 
 ## Type
@@ -101,9 +123,8 @@ Values scale with the host text-size preference.
 - Preserve text preferences and browser zoom. Author values in scaled rem and
   keep layout geometry independent of text scaling.
 
-Typography provenance: the ramp and role settings derive from the pinned
-[Block UI typography specification](https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json).
-The values documented above define this system, including the 12px xsmall role.
+Typography follows the adopted Block UI scale, using public fonts. The values
+documented above define this system, including the 12px xsmall role.
 
 ## Both modes
 
@@ -399,18 +420,11 @@ it is the rule a generated theme is measured against.
 
 ## Growing the system
 
-Need something the system doesn't have? **Add it, mark it `proposed`, keep working.** There is no gate and no separate mechanism for one-offs — the moment the legal path is slower than writing a raw value, the system starts being bypassed.
-
-1. Search the component list, then the role list, by intent — not by colour.
-2. If the decision is one ramp step in both modes, write that step directly. `bg-purple-3`, `text-red-12`, `border-purple-8`: the steps are public and mode-aware.
-3. A state of an existing role — add the `-hover`, `-selected`, or `-disabled` sibling with both values, only if that state cannot be one step in both modes.
-4. A material variant — add a named utility that carries its inseparable parts together. Glass is the example: its fill is deliberately not reachable alone, because fill without blur, rim, and lift is not glass.
-5. A new role using existing words — only where one step cannot express both modes, or where the name enforces a rule. Add the name, both values, a one-sentence description, and an owner.
-6. A new hue — generate its ramp. Never write a raw literal in a component; the palette is where literals live.
-7. A new vocabulary word — allowed, but it is the thing the audit reports on its own line, so use an existing word if one fits.
-8. **If none fit, stop and ask.** The answer is a proposed decision, not a raw value or an undocumented local exception.
-
-Every addition lands in `src/shared/design-system/tokens/registry.ts` in the same change that needed it. Promotion from `proposed` to `core` is a metadata change, not a rename.
+1. Use an existing component before assembling its appearance yourself.
+2. Choose a semantic role by purpose. Add a state sibling when the actual control needs it.
+3. Keep each new role paired in both modes, document it in the token registry, and check contrast.
+4. Fix shared decisions in their owner. Do not cancel shared styles from a feature stylesheet.
+5. Keep layout, media geometry, editor semantics and data behavior with their product owner.
 
 ## Components
 
@@ -426,12 +440,6 @@ Every addition lands in `src/shared/design-system/tokens/registry.ts` in the sam
 - **Use an existing component before creating one, and an existing role before adding one.**
 - **A new visual treatment that repeats belongs in the system, not in the feature.**
 - **If a shared role fails in a real context, repair the role — never work around it locally.** A documentation specimen frame needed a border but `border-primary` was neutral-4 in both modes, which measured 1.08:1 on the dark page. The wrong response was the one we made first: name `neutral-6` directly and call documentation furniture a special case. The right response was to ask whether the one shared boundary role was wrong, measure it on every surface it reaches, and make it `neutral-4` light / `neutral-6` dark. The frame then returned to `border-primary`, and every product divider improved with it. **A local exception is evidence the shared decision is incomplete, not a licence to bypass it.**
-- **When choosing a colour, surface, or boundary, use this order.**
-  1. **Is there already a component for the thing?** Use it. Its variants are the decisions already made. Do not assemble its fill, border, shadow, or states yourself.
-  2. **If the component has no variant for its background, add a variant rather than a sibling component.** `Tabs` is `chrome` (glass pill on the gradient) or `panel` (underline on a plain surface): same behaviour, different appearance. A second component would duplicate its keyboard and accessibility contract just to change styling.
-  3. **If building a surface directly, choose its job before its colour.** Backdrop → `bg-app`; opaque region on it → `bg-panel`; region pushed in → `bg-inset`; thing floating above → `bg-float`; something the backdrop should show through → `glass-primary` or `glass-secondary`. Do not use a border to do the work of an inset fill.
-  4. **If drawing a boundary, use `border-primary`.** It is the one shared hairline, already authored for both modes. If it does not read in the actual context, measure that context and fix this role — do not name a neutral step at the call site.
-  5. **If choosing an accent or status colour, choose a ramp step and measure it.** `bg-purple-9`, `bg-purple-3`, `text-red-12`, `border-purple-8`: every step responds to mode. Do not invent a semantic name for one choice; a repeated *pattern* earns a name when Morgan says it does.
-  6. **If the choice cannot be expressed by one step in both modes, make a proposed role with both values and a one-sentence job.** If the name only restates one step, it has not earned a role. If it is a whole treatment — glass is the example — make a utility that carries every inseparable part together.
-  7. **If none of this feels clearly right, stop and ask.** Choosing a raw literal or a local exception is never the escape hatch. The system is deliberately allowed to grow; uncertainty is evidence of a missing decision, not a prompt to hide one.
+- **Choose the job first.** Page → surface-base; card → surface-panel; popup → surface-popover; recessed region → surface-inset. Controls use affordance roles; labels use text roles; edges use border roles.
+- **A role is useful because it names a purpose.** It does not need different palette steps in each theme to earn its name.
 - **If a screen looks right but breaks these rules, the rules are probably wrong — say so.** This document is meant to be argued with, not worked around.

@@ -1,5 +1,5 @@
 /* Block UI size ramp and resolved role settings, rendered in Inter and JetBrains Mono.
-   Source: https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json
+   Uses the adopted type scale with open-source Inter and JetBrains Mono.
    The upstream spec is provisional. Values use rem to preserve host text scaling. */
 :root {
   --font-system-mono:

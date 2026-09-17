@@ -32,66 +32,33 @@ Native window decorations and pre-WebView launch color are **not** controlled by
 CSS attribute. An attended packaged-app check is still needed before claiming native
 chrome/relaunch parity; no broad Tauri capability or CSP expansion was added here.
 
-## Tokens are the shared contract
+## Tokens and shared controls
 
-`src/shared/styles/tokens.css` is the only built-in color palette. Both modes define
-every paint role. `globals.css` exposes the roles through Tailwind 4, base elements,
-and small shared component classes. CSS modules and Tailwind use the same values.
+`src/shared/design-system/styles/tokens.css` owns the public palette and semantic
+roles. `src/shared/styles/tokens.css` is a compatibility bridge for older callers,
+not a second palette. The app imports one Tailwind reset and keeps its existing
+appearance service, storage and startup ownership.
 
-| Roles | Use |
-| --- | --- |
-| `--workspace`, `--shell-image`, `--shell-dot` | App canvas and decorative shell art |
-| `--surface`, `--surface-elevated` | Card and dialog/popover surfaces |
-| `--surface-accent`, `--surface-control`, `--surface-input`, `--surface-hover` | Subtle, control, input and hover fills |
-| `--text`, `--text-muted` | Primary and secondary text; do not lower text opacity to simulate muted text |
-| `--border`, `--border-input`, `--focus` | Decorative separators, visible input boundaries, keyboard focus |
-| `--primary` / `--on-primary`, `--action` / `--on-action` | Primary controls and the lavender composer action |
-| `--selected` / `--on-selected` | Selected controls; also expose selection semantically |
-| `--link`, `--danger`, `--warning`, `--success` | Meaningful foregrounds; pair status fills intentionally and include readable copy |
-| `--overlay`, `--elevation-*` | Backdrops and card/popover/dialog/dock shadows |
-| `--radius-card`, `--radius-card-compact`, `--radius-control` | Shared curvature; Tailwind `rounded-3xl` / `rounded-xl` map to card/control |
+| Group | Examples | Purpose |
+| --- | --- | --- |
+| Surface | `--surface-base`, `--surface-panel`, `--surface-popover` | Page, card, popup |
+| Text | `--text-standard`, `--text-subtle`, `--text-inverse`, `--text-danger` | Meaning and emphasis |
+| Border | `--border-standard`, `--border-prominent`, `--border-focus` | Edges and keyboard focus |
+| Affordance | `--affordance-prominent`, `--affordance-subtle`, `--affordance-danger` | Controls and actions |
 
-Existing `ink`, `muted`, `line`, `soft`, `shell` utilities remain compatible. New
-`surface`, `elevated`, `primary`, `on-primary`, `input-line`, `focus`, `overlay` and
-status utilities avoid literal palette colors. **Legacy `--accent` is a foreground**;
-do not reinterpret it as shadcn's accent background. If adding shadcn components,
-map their paired roles explicitly. No shadcn/Radix dependency was needed for this
-slice: native radios, buttons, fields and the existing dialogs supply the behavior.
+Shared components consume these roles; features consume shared components.
+Base UI owns focus, keyboard interaction, selection, portals and dismissal.
+Buzz owns visual styles and product behavior. Build missing shared components
+from Base UI rather than copying private components or wrapping another library.
 
-Typography uses the shared Inter/system sans stack with Tailwind's existing type
-scale: `text-sm` controls, `text-base` body/labels, `text-lg` section headings and
-`text-3xl` page headings. Existing conversation type sizes remain unchanged at 100%. Spacing
-uses Tailwind's 4px rhythm; preserve established responsive card gutters. Avoid
-creating new scales for the same values. Motion is optional and respects reduced
-motion; theme changes must not fade through the old mode's foreground/background.
-Existing shell/panel layering stays local to its owner; native modal dialogs use
-the browser top layer, not ever-increasing global z-index values.
+Use complete type roles with Inter and JetBrains Mono. Do not import proprietary
+fonts, private packages or internal business examples. Default, hover, pressed,
+focus, selected, disabled and loading states are shared component decisions.
+Loading must prevent repeated actions while preserving the label footprint.
 
-## Shared UI rules
-
-- `.ui-card` is the shared surface recipe; `.ui-choice` is a labeled native-radio
-  selection with hover, selected and focus-within states. The existing `.notice`,
-  `.error`, `.danger`, `.actions` and shell classes use the same palette.
-- Defaults/hover/focus/disabled come from base rules. Domain-specific components own
-  pressed/busy/error behavior. Disabled controls must not act; busy guards are not
-  replaced by CSS. A selected style must agree with ARIA (`aria-current="page"`
-  requires `aria-[current=page]:`, not Tailwind's boolean `aria-current:` variant).
-- Shared React components should be extracted for actual repeated behavior, not
-  empty wrappers around every native element. Do not migrate all dialogs merely to
-  add a component-library badge. Use an accessible headless primitive when the next
-  complex interaction warrants one, and test keyboard/focus behavior in context.
-- Do not invert images. Media/brand art retains its colors. All host-owned surfaces,
-  including loading/recovery, must inherit the mode. CSS variables inherit into
-  portals and shadow hosts; third-party Shadow DOM/canvas widgets may additionally
-  require an explicit mode adapter. Theme mode changes must not reset widget input.
-- `/tests/fixtures/design-system.html` now hosts the design system this app is
-  moving to, with its own components, tokens and documentation. It uses no relay
-  or identity services. The earlier offline diagnostic at that URL — one
-  Appearance section, some native controls, profile fields and a conversation
-  row — was replaced by it. The rules above still govern the styling that ships
-  today; verify those in the running app and its browser journeys. Surfaces move
-  onto the new system incrementally, and its documentation is the reference for
-  anything already on it.
+The standalone design viewer imports the real shared controls without app startup,
+identity or relay services. Check the actual app as well as specimens, in both
+themes and at narrow, intermediate and wide widths with enlarged text.
 
 ## Future theme contributions (design boundary, not implemented API)
 

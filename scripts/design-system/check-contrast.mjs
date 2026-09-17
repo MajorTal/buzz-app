@@ -48,7 +48,7 @@ const EXCEPTIONS = new Map([
 ]);
 
 /** Roles measured at the meta target rather than the body target. */
-const META_ROLES = new Set(["--text-tertiary"]);
+const META_ROLES = new Set(["--text-tertiary", "--text-metadata"]);
 
 /**
  * Neutral surfaces any text may sit on.
@@ -57,7 +57,15 @@ const META_ROLES = new Set(["--text-tertiary"]);
  * its step here. It still belongs in this list: a row under the cursor is a
  * surface text sits on, whatever it is called.
  */
-const SURFACES = ["--bg-panel", "--bg-float", "--neutral-2", "--neutral-4"];
+const SURFACES = [
+  "--surface-base",
+  "--surface-panel",
+  "--surface-popover",
+  "--surface-inset",
+  "--affordance-subtle",
+  "--affordance-selected",
+  "--neutral-4",
+];
 
 /**
  * Text that must be readable on every neutral surface.
@@ -74,6 +82,13 @@ const SURFACES = ["--bg-panel", "--bg-float", "--neutral-2", "--neutral-4"];
  * does — and it is the step that fails, at 59.7 on a dark panel.
  */
 const TEXT_ROLES = [
+  "--text-standard",
+  "--text-subtle",
+  "--text-metadata",
+  "--text-danger",
+  "--text-warning",
+  "--text-success",
+  "--text-accent",
   "--text-primary",
   "--text-secondary",
   "--text-tertiary",
@@ -94,6 +109,18 @@ const TEXT_ROLES = [
  * every fill it can actually sit on, and hover is one of them.
  */
 const PAIRS = [
+  ...["subtle", "subtle-hover", "subtle-pressed"].map((state) => [
+    "--text-standard",
+    `--affordance-${state}`,
+  ]),
+  ...["prominent", "prominent-hover", "prominent-pressed"].map((state) => [
+    "--text-inverse",
+    `--affordance-${state}`,
+  ]),
+  ...["danger", "danger-hover", "danger-pressed"].map((state) => [
+    "--text-danger",
+    `--affordance-${state}`,
+  ]),
   ["--text-on-accent", "--purple-9"],
   ["--text-on-accent", "--purple-10"],
   // `bg-neutral-11` with `text-neutral-1` — the inverse pair, written as steps

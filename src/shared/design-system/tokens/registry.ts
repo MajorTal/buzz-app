@@ -294,10 +294,291 @@ export const RAMPS: Ramp[] = [
 
 export const ROLE_GROUPS: RoleGroup[] = [
   {
+    id: "semantic-surface",
+    name: "Surface",
+    description: "Shared surface roles, with values for both themes.",
+    roles: [
+      {
+        token: "bg-surface-base",
+        variable: "--surface-base",
+        pointsAt: "neutral-2 light / neutral-1 dark",
+        use: "The plain background behind panels.",
+        status: "core",
+      },
+      {
+        token: "bg-surface-panel",
+        variable: "--surface-panel",
+        pointsAt: "neutral-1 light / neutral-3 dark",
+        use: "A content panel or card.",
+        status: "core",
+      },
+      {
+        token: "bg-surface-popover",
+        variable: "--surface-popover",
+        pointsAt: "neutral-1 light / neutral-5 dark",
+        use: "A menu, dialog or other raised surface.",
+        status: "core",
+      },
+      {
+        token: "bg-surface-inset",
+        variable: "--surface-inset",
+        pointsAt: "neutral-2 light / neutral-2 dark",
+        use: "A recessed region inside a panel.",
+        status: "core",
+      },
+    ],
+  },
+  {
+    id: "semantic-text",
+    name: "Text",
+    description: "Shared text roles, with values for both themes.",
+    roles: [
+      {
+        token: "text-standard",
+        variable: "--text-standard",
+        pointsAt: "neutral-12 light / neutral-12 dark",
+        use: "Normal reading text.",
+        status: "core",
+      },
+      {
+        token: "text-subtle",
+        variable: "--text-subtle",
+        pointsAt: "neutral-10 light / neutral-11 dark",
+        use: "Supporting text that must remain readable.",
+        status: "core",
+      },
+      {
+        token: "text-metadata",
+        variable: "--text-metadata",
+        pointsAt: "neutral-9 light / neutral-10 dark",
+        use: "Nonessential metadata.",
+        status: "core",
+      },
+      {
+        token: "text-inverse",
+        variable: "--text-inverse",
+        pointsAt: "neutral-1 light / neutral-1 dark",
+        use: "Text on prominent actions.",
+        status: "core",
+      },
+      {
+        token: "text-unavailable",
+        variable: "--text-unavailable",
+        pointsAt: "neutral-7 light / neutral-7 dark",
+        use: "Unavailable controls only.",
+        status: "core",
+      },
+      {
+        token: "text-danger",
+        variable: "--text-danger",
+        pointsAt: "red-12 light / red-12 dark",
+        use: "Error text and destructive action labels.",
+        status: "core",
+      },
+      {
+        token: "text-warning",
+        variable: "--text-warning",
+        pointsAt: "amber-12 light / amber-12 dark",
+        use: "Warning text.",
+        status: "core",
+      },
+      {
+        token: "text-success",
+        variable: "--text-success",
+        pointsAt: "green-12 light / green-12 dark",
+        use: "Success text.",
+        status: "core",
+      },
+      {
+        token: "text-accent",
+        variable: "--text-accent",
+        pointsAt: "purple-12 light / purple-12 dark",
+        use: "Linked or selected identity text.",
+        status: "core",
+      },
+    ],
+  },
+  {
+    id: "semantic-border",
+    name: "Border",
+    description: "Shared border roles, with values for both themes.",
+    roles: [
+      {
+        token: "border-standard",
+        variable: "--border-standard",
+        pointsAt: "neutral-3 light / neutral-4 dark",
+        use: "A quiet separator or panel edge.",
+        status: "core",
+      },
+      {
+        token: "border-prominent",
+        variable: "--border-prominent",
+        pointsAt: "neutral-8 light / neutral-8 dark",
+        use: "A visible input or choice boundary.",
+        status: "core",
+      },
+      {
+        token: "border-focus",
+        variable: "--border-focus",
+        pointsAt: "neutral-12 light / neutral-12 dark",
+        use: "Keyboard focus.",
+        status: "core",
+      },
+      {
+        token: "border-danger",
+        variable: "--border-danger",
+        pointsAt: "red-8 light / red-8 dark",
+        use: "Invalid field boundary.",
+        status: "core",
+      },
+      {
+        token: "border-warning",
+        variable: "--border-warning",
+        pointsAt: "amber-8 light / amber-8 dark",
+        use: "Warning boundary.",
+        status: "core",
+      },
+      {
+        token: "border-accent",
+        variable: "--border-accent",
+        pointsAt: "purple-8 light / purple-8 dark",
+        use: "An identity accent boundary.",
+        status: "core",
+      },
+    ],
+  },
+  {
+    id: "semantic-affordance",
+    name: "Affordance",
+    description: "Shared affordance roles, with values for both themes.",
+    roles: [
+      {
+        token: "bg-affordance-prominent",
+        variable: "--affordance-prominent",
+        pointsAt: "neutral-12 light / neutral-12 dark",
+        use: "The main action fill.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-prominent-hover",
+        variable: "--affordance-prominent-hover",
+        pointsAt: "neutral-11 light / neutral-11 dark",
+        use: "The main action under a pointer.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-prominent-pressed",
+        variable: "--affordance-prominent-pressed",
+        pointsAt: "neutral-action-pressed",
+        use: "The main action while pressed.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-subtle",
+        variable: "--affordance-subtle",
+        pointsAt: "neutral-2 light / neutral-5 dark",
+        use: "A secondary action fill.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-subtle-hover",
+        variable: "--affordance-subtle-hover",
+        pointsAt: "neutral-3 light / neutral-6 dark",
+        use: "A secondary action under a pointer.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-subtle-pressed",
+        variable: "--affordance-subtle-pressed",
+        pointsAt: "neutral-4 light / neutral-7 dark",
+        use: "A secondary action while pressed.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-selected",
+        variable: "--affordance-selected",
+        pointsAt: "neutral-3 light / neutral-5 dark",
+        use: "A persistently selected item.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-disabled",
+        variable: "--affordance-disabled",
+        pointsAt: "neutral-3 light / neutral-3 dark",
+        use: "An unavailable control fill.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-danger",
+        variable: "--affordance-danger",
+        pointsAt: "red-3 light / red-3 dark",
+        use: "A destructive action or error fill.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-danger-hover",
+        variable: "--affordance-danger-hover",
+        pointsAt: "red-4 light / red-4 dark",
+        use: "A destructive action under a pointer.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-danger-pressed",
+        variable: "--affordance-danger-pressed",
+        pointsAt: "red-5 light / red-5 dark",
+        use: "A destructive action while pressed.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-warning",
+        variable: "--affordance-warning",
+        pointsAt: "amber-3 light / amber-3 dark",
+        use: "A warning fill.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-success",
+        variable: "--affordance-success",
+        pointsAt: "green-3 light / green-3 dark",
+        use: "A success fill.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-accent",
+        variable: "--affordance-accent",
+        pointsAt: "purple-3 light / purple-3 dark",
+        use: "A quiet identity or selection fill.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-accent-hover",
+        variable: "--affordance-accent-hover",
+        pointsAt: "purple-4 light / purple-4 dark",
+        use: "A quiet identity fill under a pointer.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-accent-prominent",
+        variable: "--affordance-accent-prominent",
+        pointsAt: "purple-9 light / purple-9 dark",
+        use: "An identity accent fill paired with text-on-accent.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-accent-prominent-hover",
+        variable: "--affordance-accent-prominent-hover",
+        pointsAt: "purple-10 light / purple-10 dark",
+        use: "An identity accent fill under a pointer.",
+        status: "core",
+      },
+    ],
+  },
+
+  {
     id: "surfaces",
     name: "Structural surfaces",
     description:
-      "The roles that exist because a ramp step cannot say them: each takes a different step in light and dark, so no single class like `bg-neutral-1` is correct in both. That is the whole test for whether a colour earns a name. Ask one question: is it behind, on, above, or in? (`bg-hover` was here and is now written as `bg-neutral-4` \u2014 it was the same step in both modes. Hover is a *relationship*, one step more contrast than whatever is underneath, which no single token could express anyway.)",
+      "Legacy aliases maintained during migration. The original rationale was: each takes a different step in light and dark, so no single class like `bg-neutral-1` is correct in both. That is the whole test for whether a colour earns a name. Ask one question: is it behind, on, above, or in? (`bg-hover` was here and is now written as `bg-neutral-4` \u2014 it was the same step in both modes. Hover is a *relationship*, one step more contrast than whatever is underneath, which no single token could express anyway.)",
     roles: [
       {
         token: "bg-app",
@@ -414,7 +695,10 @@ export const VOCABULARY: Array<{ group: string; words: string[] }> = [
   { group: "property", words: ["bg", "text", "border", "ring"] },
   { group: "region", words: ["app", "panel", "float", "chrome", "inset"] },
   { group: "emphasis", words: ["primary", "secondary", "tertiary", "default"] },
-  { group: "state", words: ["hover", "selected", "disabled"] },
+  {
+    group: "state",
+    words: ["hover", "pressed", "selected", "disabled", "loading"],
+  },
   { group: "material", words: ["glass"] },
   { group: "modifier", words: ["tint"] },
   { group: "identity", words: ["accent", "inverse"] },
@@ -425,11 +709,12 @@ export const VOCABULARY: Array<{ group: string; words: string[] }> = [
   { group: "paired", words: ["on-accent", "on-inverse"] },
 ];
 
-export const GRAMMAR = "<property>-<role>[-<modifier>][-<material>][-<state>]";
+export const GRAMMAR =
+  "color / <surface | text | border | affordance> / <purpose> [/ state]";
 
 /** Fixed order, so there is only one correct spelling. */
 export const GRAMMAR_EXAMPLES = {
-  legal: ["bg-accent-tint-hover", "text-primary", "bg-chrome-selected"],
+  legal: ["bg-surface-panel", "text-standard", "bg-affordance-subtle-hover"],
   illegal: ["bg-chrome-hover-glass", "bg-hover-chrome"],
 };
 
@@ -611,7 +896,7 @@ export const TYPE_FAMILIES = [
 
 /** Source for the primitive ladder and resolved roles displayed below. */
 export const TYPE_SOURCE =
-  "https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json";
+  "https://github.com/block/buzz-app/blob/main/src/shared/design-system/styles/typography.css";
 
 /** Active size primitives, with xsmall sharing the 12px step. */
 export const TYPE_RAMPS = [

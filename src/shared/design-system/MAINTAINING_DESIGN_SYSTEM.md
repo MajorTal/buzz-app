@@ -12,30 +12,16 @@ Build the screen or interaction you are trying to make. Use the existing colors,
 
 A repeated need is evidence. One-off work is evidence too: it may reveal that a ramp step is wrong, a component needs another supported state, or a rule no longer reflects the product.
 
-## Color: use the ramps first
+## Color: use semantic roles
 
-Each color ramp has a version for light mode and a version for dark mode. A step has the same job in both: a quiet neutral surface, a selected row, a strong accent, or readable colored text. That lets a screen use a normal ramp step such as `neutral-2` and still work in both modes.
+Choose a name by what the color does: surface, text, border or affordance.
+The shared palette supplies values to those roles in light and dark mode.
+Components should not choose a palette step directly, even when both modes use
+the same step. A role lets us adjust that job without editing every caller.
 
-A semantic color name is earned when a plain ramp step cannot tell the truth:
-
-- Light and dark need different steps for the same job. A panel, for example, needs a different relationship to its surroundings in each mode.
-- A name protects a real rule. The three text levels and the single shared border weight are examples.
-- A pattern has appeared enough times that giving it one name makes the product easier to understand and keep consistent.
-
-Do not create a semantic name just to avoid choosing a ramp step. If a name points to the same step in both modes, it is usually hiding a decision rather than recording one.
-
-## Refine the ramp when the product teaches us something
-
-The ramps are not sacred. They began as a useful starting point and should change when real product work gives us better evidence.
-
-The lighter search-field neutral is a good example. A real prototype showed that the old value was too heavy, so we corrected the neutral ramp instead of adding a search-only color or a fractional stop. That improvement now benefits every quiet compact surface that uses the same step.
-
-Before adding a new step or a new role, ask:
-
-1. Is an existing step already the right answer?
-2. If not, is the ramp itself missing the right relationship?
-3. Does light mode need one step and dark mode another? If so, give that relationship a semantic name.
-4. Will people see this pattern again, or is it one moment in one screen?
+Keep roles grounded in real controls. Add the required hover, pressed or disabled
+state beside the base role and check its paired text. Update the registry and
+viewer in the same change. Legacy names exist only to support staged migration.
 
 ## Components grow from real repetition
 
@@ -51,7 +37,7 @@ Do not build a catalogue in advance. Small, proven components are more flexible 
 
 ## Keep the important states visible
 
-Every interactive piece should have a clear default, hover, selected state where it applies, and disabled state where it matters. Selection is a lasting statement, not just a stronger hover. Keyboard focus should be visible, and the same action should work with a pointer or keyboard.
+Every interactive piece should have a clear default, hover, pressed, selected state where it applies, and disabled state where it matters. Selection is a lasting statement, not just a stronger hover. Keyboard focus should be visible, and the same action should work with a pointer or keyboard.
 
 Check narrow, medium, and wide layouts. Check light and dark mode together. A decision that works only in a component specimen is not finished.
 

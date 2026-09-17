@@ -301,6 +301,7 @@
   --neutral-9: #666666; /* text-tertiary                           */
   --neutral-10: #525252; /* text-secondary                         */
   --neutral-11: #191919; /* inverse fill, paired with neutral-1    */
+  --neutral-action-pressed: #525252;
   --neutral-12: #000000; /* text-primary                           */
 
   /* --- Glass. A translucency ramp of fills. ---------------- */
@@ -396,6 +397,7 @@
   --neutral-9: #808080;
   --neutral-10: #a4a4a4;
   --neutral-11: #c7c7c7;
+  --neutral-action-pressed: #b8b8b8;
   --neutral-12: #ffffff;
 
   /* Every coloured family is absent here on purpose. A family points at a
@@ -478,6 +480,87 @@
   --gradient-4: var(--gradient-ultraviolet);
 }
 
+/* Semantic colors: color / purpose / emphasis / state.
+   Components consume roles; palette steps stay inside this shared layer. */
+:root {
+  --surface-base: var(--neutral-2);
+  --surface-panel: var(--neutral-1);
+  --surface-popover: var(--neutral-1);
+  --surface-inset: var(--neutral-2);
+  --text-standard: var(--neutral-12);
+  --text-subtle: var(--neutral-10);
+  --text-metadata: var(--neutral-9);
+  --text-inverse: var(--neutral-1);
+  --text-unavailable: var(--neutral-7);
+  --text-danger: var(--red-12);
+  --text-warning: var(--amber-12);
+  --text-success: var(--green-12);
+  --text-accent: var(--purple-12);
+  --border-standard: var(--neutral-3);
+  --border-prominent: var(--neutral-8);
+  --border-focus: var(--neutral-12);
+  --border-danger: var(--red-8);
+  --border-warning: var(--amber-8);
+  --affordance-prominent: var(--neutral-12);
+  --affordance-prominent-hover: var(--neutral-11);
+  --affordance-prominent-pressed: var(--neutral-action-pressed);
+  --affordance-subtle: var(--neutral-2);
+  --affordance-subtle-hover: var(--neutral-3);
+  --affordance-subtle-pressed: var(--neutral-4);
+  --affordance-selected: var(--neutral-3);
+  --affordance-disabled: var(--neutral-3);
+  --affordance-danger: var(--red-3);
+  --affordance-danger-hover: var(--red-4);
+  --affordance-danger-pressed: var(--red-5);
+  --affordance-warning: var(--amber-3);
+  --affordance-success: var(--green-3);
+  --affordance-accent: var(--purple-3);
+  --affordance-accent-hover: var(--purple-4);
+  --affordance-accent-prominent: var(--purple-9);
+  --affordance-accent-prominent-hover: var(--purple-10);
+  --border-accent: var(--purple-8);
+}
+
+:root[data-color-mode="dark"],
+.dark {
+  --surface-base: var(--neutral-1);
+  --surface-panel: var(--neutral-3);
+  --surface-popover: var(--neutral-5);
+  --surface-inset: var(--neutral-2);
+  --text-standard: var(--neutral-12);
+  --text-subtle: var(--neutral-11);
+  --text-metadata: var(--neutral-10);
+  --text-inverse: var(--neutral-1);
+  --text-unavailable: var(--neutral-7);
+  --text-danger: var(--red-12);
+  --text-warning: var(--amber-12);
+  --text-success: var(--green-12);
+  --text-accent: var(--purple-12);
+  --border-standard: var(--neutral-4);
+  --border-prominent: var(--neutral-8);
+  --border-focus: var(--neutral-12);
+  --border-danger: var(--red-8);
+  --border-warning: var(--amber-8);
+  --affordance-prominent: var(--neutral-12);
+  --affordance-prominent-hover: var(--neutral-11);
+  --affordance-prominent-pressed: var(--neutral-action-pressed);
+  --affordance-subtle: var(--neutral-5);
+  --affordance-subtle-hover: var(--neutral-6);
+  --affordance-subtle-pressed: var(--neutral-7);
+  --affordance-selected: var(--neutral-5);
+  --affordance-disabled: var(--neutral-3);
+  --affordance-danger: var(--red-3);
+  --affordance-danger-hover: var(--red-4);
+  --affordance-danger-pressed: var(--red-5);
+  --affordance-warning: var(--amber-3);
+  --affordance-success: var(--green-3);
+  --affordance-accent: var(--purple-3);
+  --affordance-accent-hover: var(--purple-4);
+  --affordance-accent-prominent: var(--purple-9);
+  --affordance-accent-prominent-hover: var(--purple-10);
+  --border-accent: var(--purple-8);
+}
+
 /* ============================================================
    LAYER 2 — PUBLIC ROLES
    The only layer a screen may use. Every value below points at
@@ -486,102 +569,30 @@
    ============================================================ */
 
 :root {
-  /* --- Structural surfaces. ---------------------------------
-     THE ROLES THAT EXIST BECAUSE A RAMP STEP CANNOT SAY THEM.
-     Each one takes a DIFFERENT step per mode, so no class like
-     `bg-neutral-1` is correct in both. That is the whole test for
-     whether a name is earned; everything that passed it is here.
-
-     `bg-app` qualifies for the same reason in a different shape:
-     the gradient itself is swapped per mode.                  */
   --bg-app: var(--gradient-1);
-  --bg-panel: var(--neutral-1); /* dark: neutral-3 */
-  --bg-float: var(--neutral-1); /* dark: neutral-5 */
+  --bg-panel: var(--surface-panel); /* dark: neutral-3 */
+  --bg-float: var(--surface-popover); /* dark: neutral-5 */
   --bg-scrim: #00000060;
-  --border-control: var(--neutral-8);
+  --border-control: var(--border-prominent);
   /* Emoji artwork scales with text without becoming a readable type role. */
   --size-emoji-display: calc(var(--type-rem) * 2.625);
   --size-emoji-line: calc(var(--type-rem) * 3);
   --size-emoji-inline: calc(var(--type-rem) * 1.375);
 
-  /* `bg-hover` was here and is gone. It was neutral-4 in both modes, so
-     `bg-neutral-4` says it exactly. Its five call sites now do.
-
-     Worth knowing before recreating it: hover means "one step more
-     contrast than whatever is underneath", which is a relationship, not
-     a value — hover on a panel and hover on an inset are different
-     numbers. A single token could never express that, so the name was
-     promising something it did not deliver.                   */
-
-  /* --- Emphasis. -------------------------------------------
-     These are the exception to the rule above: every one is the
-     same step in both modes, so a class would work. They stay
-     because the NAME enforces something — there are deliberately
-     three levels of text and one border weight, and a ramp cannot
-     say "three". Reaching for `text-neutral-11` because it looks
-     right is how a fourth level appears without anyone deciding.  */
-  --text-primary: var(--neutral-12);
-  --text-secondary: var(--neutral-10);
-  --text-tertiary: var(--neutral-9);
+  --text-primary: var(--text-standard);
+  --text-secondary: var(--text-subtle);
+  --text-tertiary: var(--text-metadata);
   /* Deliberately below the contrast targets: low contrast is the signal that a
      control is unavailable, and WCAG exempts inactive controls for the same
      reason. Raising it to Lc 60 would make disabled read as enabled. Never put
      information here that a person needs. */
-  --text-disabled: var(--neutral-7);
+  --text-disabled: var(--text-unavailable);
 
   /* One border, not three. `primary` names the sole deliberate weight,
      and neutral-4 keeps it at the threshold of perception over both the
      panel and the atmospheric backdrop. A second weight arrives only with
      a design that proves a different boundary needs one. */
-  --border-primary: var(--neutral-3);
-
-  /* --- Identity: deliberately absent. ----------------------
-     There were six accent roles and every one held the same purple
-     step in both modes, so each was a name in front of a number —
-     `bg-accent` was `purple-9` and nothing else. The screens now say
-     `bg-purple-9`, `bg-purple-3`, `text-purple-12`, `border-purple-8`.
-
-     `bg-inverse` went the same way (`neutral-11`), and so did its
-     paired text (`neutral-1`).
-
-     The argument FOR naming them was that accent is a slot whose hue
-     could change. It is a real argument and it lost to a simpler fact:
-     the hue already changed once — the accent moved to Tailwind purple
-     — and it was five values in the ramp, not a rename. The ramp is
-     the slot. A role in front of it only adds a hop.
-
-     When a repeated accent PATTERN appears — not a colour, a pattern,
-     like a tinted callout that turns up on four screens — that earns a
-     name, and it will be named for the pattern.               */
-
-  /* --- Status: deliberately absent. ------------------------
-     There were twenty roles here — danger, success, warning, info, five
-     each, the accent's shape copied four times. Nineteen of the twenty
-     had no reader outside the /design pages that displayed them, and the
-     one real consumer was a 8px presence dot.
-
-     They were invented by symmetry rather than by need, and the symmetry
-     was actively misleading: the red ramp alone offers red-3, red-8,
-     red-9 and red-12 for "an error", and a set of pre-made names hid
-     that choice instead of making it. `text-danger` shipped pointing at
-     the wrong red for months (see the registration note below) and
-     nothing noticed, because no design had ever looked at it.
-
-     Status colour gets designed when there is a screen to design it on.
-     Until then the ramps are right there: an error message picks its
-     step, and once two screens pick the same one it earns a name. The
-     hues stay in the palette — nothing was deleted from layer 0.
-
-     Two things briefly had names here — `text-error` and
-     `bg-agent-running` — and they went too, for the same reason as the
-     accent: both were one step, identical in both modes. Error text is
-     `text-red-12` and the running dot is `bg-green-9`, written where
-     they are used.
-
-     The measurement that chose red-12 is the part worth keeping, and it
-     lives in DESIGN.md rather than in a token: red-11 is the more
-     obviously red choice and fails the Lc 60 body target on a dark panel
-     (59.7) and the dark composer (57.5).                      */
+  --border-primary: var(--border-standard);
 
   /* --- Material. Translucency and blur live inside the value.
      A component never assembles them.
@@ -599,16 +610,6 @@
   --bg-glass-secondary: var(--glass-4);
   --bg-glass-secondary-hover: var(--glass-5);
   --bg-chrome-selected: var(--neutral-1);
-
-  /* --- Focus: `purple-8`, written directly. -----------------
-     Same step in both modes, so it was a name in front of a number too.
-     The judgement that survives is not the value: purple-8 is legible on
-     every neutral surface (WCAG 3.0–3.5:1) but measures 1.1:1 on
-     `purple-9` and disappears. **A focused primary button needs the ring
-     separated from the fill** — an offset in the surface colour, not a
-     different ring hue, so one focus treatment works everywhere. That
-     belongs to whichever component layer introduces focus. It is in
-     DESIGN.md, which is where a rule lives; a token could not state it. */
 
   /* --- Geometry. Repeated relationships from Messages. ----- */
   --space-workspace-inset: var(--space-4);
@@ -647,14 +648,6 @@
   --easing-state: var(--ease-state);
   --easing-settle: var(--ease-settle);
 
-  /* ==========================================================
-     DELIBERATE EXCEPTIONS — the entire list.
-     ==========================================================
-
-     1. Paired text. Computed from its fill's lightness rather
-        than fixed, because white is readable on a blue or
-        purple fill and unreadable on yellow or lime. Until the
-        computation lands, these hold literals.                */
   --text-on-accent: #ffffff;
 
   /* `text-on-inverse` was `var(--neutral-1)` in both modes and went with
@@ -689,20 +682,20 @@
 
 :root[data-color-mode="dark"],
 .dark {
-  --bg-panel: var(--neutral-3);
-  --bg-float: var(--neutral-5);
+  --bg-panel: var(--surface-panel);
+  --bg-float: var(--surface-popover);
   --bg-scrim: #000000a6;
-  --border-control: var(--neutral-8);
+  --border-control: var(--border-prominent);
   --bg-chrome-selected: var(--neutral-5);
 
   /* BlockUI's darker secondary/tertiary grays fall below Buzz's APCA targets
      on raised panels. Keep the BlockUI ramp, selecting its lighter steps for
      readable text: secondary >= 60, metadata >= 45 on every opaque surface. */
-  --text-secondary: var(--neutral-11);
-  --text-tertiary: var(--neutral-10);
+  --text-secondary: var(--text-subtle);
+  --text-tertiary: var(--text-metadata);
 
   /* BlockUI subtle border: E8E8E8 in light, 232323 in dark. */
-  --border-primary: var(--neutral-4);
+  --border-primary: var(--border-standard);
 
   --rim-lit: #ffffff2e;
   --rim-shade: #ffffff0f;
@@ -716,27 +709,47 @@
 
 @theme inline {
   --color-*: initial;
+  /* Semantic utilities. Text and border stay in their own namespaces. */
+  --color-surface-base: var(--surface-base);
+  --color-surface-panel: var(--surface-panel);
+  --color-surface-popover: var(--surface-popover);
+  --color-surface-inset: var(--surface-inset);
+  --text-color-standard: var(--text-standard);
+  --text-color-subtle: var(--text-subtle);
+  --text-color-metadata: var(--text-metadata);
+  --text-color-inverse: var(--text-inverse);
+  --text-color-unavailable: var(--text-unavailable);
+  --text-color-danger: var(--text-danger);
+  --text-color-warning: var(--text-warning);
+  --text-color-success: var(--text-success);
+  --text-color-accent: var(--text-accent);
+  --border-color-standard: var(--border-standard);
+  --border-color-prominent: var(--border-prominent);
+  --border-color-focus: var(--border-focus);
+  --border-color-danger: var(--border-danger);
+  --border-color-warning: var(--border-warning);
+  --color-affordance-prominent: var(--affordance-prominent);
+  --color-affordance-prominent-hover: var(--affordance-prominent-hover);
+  --color-affordance-prominent-pressed: var(--affordance-prominent-pressed);
+  --color-affordance-subtle: var(--affordance-subtle);
+  --color-affordance-subtle-hover: var(--affordance-subtle-hover);
+  --color-affordance-subtle-pressed: var(--affordance-subtle-pressed);
+  --color-affordance-selected: var(--affordance-selected);
+  --color-affordance-disabled: var(--affordance-disabled);
+  --color-affordance-danger: var(--affordance-danger);
+  --color-affordance-danger-hover: var(--affordance-danger-hover);
+  --color-affordance-danger-pressed: var(--affordance-danger-pressed);
+  --color-affordance-warning: var(--affordance-warning);
+  --color-affordance-success: var(--affordance-success);
+  --color-affordance-accent: var(--affordance-accent);
+  --color-affordance-accent-hover: var(--affordance-accent-hover);
+  --color-affordance-accent-prominent: var(--affordance-accent-prominent);
+  --color-affordance-accent-prominent-hover: var(
+    --affordance-accent-prominent-hover
+  );
+  --border-color-accent: var(--border-accent);
 
-  /* ---------------------------------------------------------------
-     THE RAMPS, REACHABLE DIRECTLY.
-
-     `bg-neutral-4`, `text-red-12`, `border-purple-8`. This is the layer
-     a screen is built from now, and it is a deliberate reversal: the
-     colour guard used to reject exactly these classes.
-
-     The reason it is safe here and was not safe in Tailwind's own
-     palette is that **every step is authored per mode.** `neutral-11`
-     is one value in light and another in dark, so a component naming a
-     step still behaves in both. Tailwind's `neutral-800` is a single
-     literal, which is why reaching for it used to break dark mode and
-     why a semantic name was the only correct move.
-
-     What a semantic role is still FOR is the case a step cannot
-     express — see the four surface roles above, where light and dark
-     take different steps. Everything else was a name in front of a
-     number, and a name in front of a number hides the choice instead
-     of recording it.
-     --------------------------------------------------------------- */
+  /* Palette utilities remain for the palette viewer and staged migration. */
   /* neutral */
   --color-neutral-1: var(--neutral-1);
   --color-neutral-2: var(--neutral-2);

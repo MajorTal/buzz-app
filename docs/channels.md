@@ -80,9 +80,9 @@ unstar tombstones are retained. Invalid/unreadable/over-budget heads fail closed
 only a successful absent-head read can seed a coordinate. Same-host writes are
 serialized per relay. This is confirmed whole-record replacement, not atomic
 cross-device merging, a durable pending outbox, or automatic retry: simultaneous
-writers on different hosts can still race. Failure leaves the last confirmed UI
-state and offers an explicit retry; a failed confirmation may follow a publication
-that reached the relay.
+writers on different hosts can still race. Failure retains the last fully confirmed UI
+placement and offers an explicit retry; a failed confirmation may follow a
+publication that reached the relay.
 
 The session preference owner serializes local commands and fences refreshes,
 caller cancellation, cache clear and disposal. `session.ts` only composes host
@@ -91,7 +91,19 @@ pending work but cannot retract a publication already accepted by the relay.
 Stream rows expose these actions by right-click/long-press, Shift+F10 or the
 Context Menu key. Menus remain open during saving and failed-save retry; confirmed
 relocation expands the destination and restores focus by channel identity. Starred
-placement is exclusive, retaining the saved assignment so Unstar restores it.
+is a built-in group pinned first, offered alongside saved groups in one "Move to…"
+chooser. Placement is exclusive. "Remove from Starred" and "Remove from [group]"
+return to Channels, never to a remembered group. Moving out of Starred directly
+into a saved group is supported.
+
+The legacy format still stores stars and assignments separately. The preference
+owner confirms the requested assignment (or its removal) **before** clearing Star;
+removal always checks the fresh assignment head, not just the cached projection.
+Only the complete move updates local placement, and refreshes cannot expose an
+intermediate write. If the second write fails, the channel remains Starred and an
+explicit retry finishes the move; a reload reflects whatever reached the relay.
+This is ordered two-record persistence, not an atomic multi-device move. A prior
+assignment may remain stored while starred but is never used as an Unstar target.
 Forums/DMs, group CRUD/reorder and independent sorting are outside this slice.
 Hosts without the write capabilities retain the read-only projection.
 

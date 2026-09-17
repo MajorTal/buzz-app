@@ -124,7 +124,7 @@ it("encrypts explicit Star/Unstar with monotonic timestamps and preserves unrela
       h.secret,
       50000,
     ).stars.channels,
-  ).toEqual({ new: { starred: false, updatedAt: 50000 } });
+  ).toEqual({});
 });
 it("refuses untrusted, ambiguous, malformed and over-budget heads rather than seeding", () => {
   const h = harness(),

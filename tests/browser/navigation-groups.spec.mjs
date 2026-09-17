@@ -31,17 +31,17 @@ test("row menu moves and removes a channel through the confirmed saved-group wri
   ).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("End");
   await expect(
-    page.getByRole("menuitem", { name: "Remove from group" }),
+    page.getByRole("menuitem", { name: "Remove from Work" }),
   ).toBeFocused();
   await page.keyboard.press("Home");
   await expect(
-    menu.getByRole("menuitem", { name: "Star", exact: true }),
+    menu.getByRole("menuitemradio", { name: "Starred", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(menu.getByRole("menuitemradio", { name: "Work" })).toBeFocused();
   await page.keyboard.press("ArrowDown");
   await expect(
-    page.getByRole("menuitem", { name: "Remove from group" }),
+    page.getByRole("menuitem", { name: "Remove from Work" }),
   ).toBeFocused();
   await page.keyboard.press("Enter");
   await expect(
@@ -78,7 +78,7 @@ test("row menu moves and removes a channel through the confirmed saved-group wri
 
 // Real context-menu keyboard/focus, viewport placement and row relocation require
 // a browser. Intent validation, concurrency and persistence matrices stay below.
-test("Star and Unstar retain the assigned group, keep one row, and recover from a failed save", async ({
+test("group moves include Starred, remove to Channels, and recover from a failed save", async ({
   page,
   app,
 }, testInfo) => {
@@ -122,11 +122,13 @@ test("Star and Unstar retain the assigned group, keep one row, and recover from 
     });
   });
   try {
-    await menu.getByRole("menuitem", { name: "Star", exact: true }).click();
+    await menu
+      .getByRole("menuitemradio", { name: "Starred", exact: true })
+      .click();
     await requestStarted;
     await expect(menu.getByRole("status")).toHaveText("Saving…");
     await expect(
-      menu.getByRole("menuitem", { name: "Star", exact: true }),
+      menu.getByRole("menuitemradio", { name: "Starred", exact: true }),
     ).toHaveAttribute("aria-disabled", "true");
     await expect(
       page.locator(
@@ -140,12 +142,12 @@ test("Star and Unstar retain the assigned group, keep one row, and recover from 
     "Relay request failed (502)",
   );
   await expect(
-    menu.getByRole("menuitem", { name: "Star", exact: true }),
+    menu.getByRole("menuitemradio", { name: "Starred", exact: true }),
   ).toBeEnabled();
   await page.unroute("**/sidebar-star");
   await page.keyboard.press("Home");
   await expect(
-    menu.getByRole("menuitem", { name: "Star", exact: true }),
+    menu.getByRole("menuitemradio", { name: "Starred", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Enter");
   const relocated = starred.getByRole("button", { name: "Beta", exact: true });
@@ -159,7 +161,7 @@ test("Star and Unstar retain the assigned group, keep one row, and recover from 
     blob: { channels: { alpha: { starred: true }, beta: { starred: true } } },
   });
 
-  // Work is absent while its only row is starred. Unstar must restore it.
+  // Work is absent while its only row is starred. Removal returns to Channels.
   await relocated.click({ button: "right" });
   await expect(menu).toBeVisible();
   const bounds = await menu.boundingBox();
@@ -168,14 +170,54 @@ test("Star and Unstar retain the assigned group, keep one row, and recover from 
   expect(bounds.y).toBeGreaterThanOrEqual(0);
   expect(bounds.x + bounds.width).toBeLessThanOrEqual(viewport.width);
   expect(bounds.y + bounds.height).toBeLessThanOrEqual(viewport.height);
-  await menu.getByRole("menuitem", { name: "Unstar", exact: true }).click();
+  await expect(
+    menu.getByRole("menuitemradio", { name: "Starred", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
+  await menu
+    .getByRole("menuitem", { name: "Remove from Starred", exact: true })
+    .click();
+  const ungrouped = sidebar.locator(
+    '[data-sidebar-section="channels"] [data-channel-id="beta"]',
+  );
+  await expect(ungrouped).toBeVisible();
+  await expect(ungrouped).toBeFocused();
+  await expect(beta).toHaveCount(0);
+  await expect(sidebar.locator('[data-channel-id="beta"]')).toHaveCount(1);
+  expect(app.report.sidebarPublications).toHaveLength(3);
+  expect(app.report.sidebarPublications[1]).toMatchObject({
+    coordinate: "channel-sections",
+    blob: { assignments: {} },
+  });
+  expect(app.report.sidebarPublications[2]).toMatchObject({
+    coordinate: "channel-stars",
+    blob: { channels: { alpha: { starred: true }, beta: { starred: false } } },
+  });
+  await page.reload();
+  // Roster rows can render before preference decode reattaches their menus.
+  await expect(
+    starred.getByRole("button", { name: "Alpha", exact: true }),
+  ).toBeVisible();
+  await expect(ungrouped).toBeVisible();
+  await expect(beta).toHaveCount(0);
+
+  // Direct moves out of Starred use the same chooser, without a separate Unstar.
+  await ungrouped.click({ button: "right" });
+  await menu
+    .getByRole("menuitemradio", { name: "Starred", exact: true })
+    .click();
+  await expect(relocated).toBeFocused();
+  await relocated.click({ button: "right" });
+  await menu.getByRole("menuitemradio", { name: "Work", exact: true }).click();
   await expect(beta).toBeVisible();
   await expect(beta).toBeFocused();
   await expect(sidebar.locator('[data-channel-id="beta"]')).toHaveCount(1);
-  expect(app.report.sidebarPublications).toHaveLength(2);
-  expect(app.report.sidebarPublications[1]).toMatchObject({
+  expect(app.report.sidebarPublications.at(-2)).toMatchObject({
+    coordinate: "channel-sections",
+    blob: { assignments: { beta: "work" } },
+  });
+  expect(app.report.sidebarPublications.at(-1)).toMatchObject({
     coordinate: "channel-stars",
-    blob: { channels: { alpha: { starred: true }, beta: { starred: false } } },
+    blob: { channels: { beta: { starred: false } } },
   });
   expect(app.report.unexpected).toEqual([]);
 });

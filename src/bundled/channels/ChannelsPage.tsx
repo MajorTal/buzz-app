@@ -555,12 +555,7 @@ function ChannelWorkspace({
     try {
       await preferences.setStar(channelId, starred);
       if (generation !== rowMenuGeneration.current) return;
-      const sectionId = preferences.data?.assignments[channelId];
-      const sectionKey = starred
-        ? "starred"
-        : preferences.data?.sections.some((group) => group.id === sectionId)
-          ? `group:${sectionId}`
-          : "channels";
+      const sectionKey = starred ? "starred" : "channels";
       sidebar.toggle(sectionKey, true);
       setRowFocus({ channelId, sectionKey });
       closeRowMenu();
@@ -618,18 +613,13 @@ function ChannelWorkspace({
                   : undefined;
                 const movable =
                   preferences.writable &&
-                  section.key !== "starred" &&
-                  channel.channelType !== "dm" &&
-                  channel.channelType !== "forum" &&
-                  !!preferences.data?.sections.length;
-                const starrable =
                   preferences.starWritable &&
                   !!preferences.data &&
                   channel.channelType !== "dm" &&
                   channel.channelType !== "forum";
                 const starred = section.key === "starred";
                 const menuOpen =
-                  (movable || starrable) &&
+                  movable &&
                   rowMenu?.channel.id === channel.id &&
                   rowMenu.sectionId === currentSectionId;
                 const channelButton = (
@@ -652,7 +642,7 @@ function ChannelWorkspace({
                     <UnreadBadge session={queries} channelId={channel.id} />
                   </button>
                 );
-                if (!movable && !starrable) {
+                if (!movable) {
                   return (
                     <div key={channel.id} className={styles.channelRow}>
                       {channelButton}
@@ -700,64 +690,63 @@ function ChannelWorkspace({
                         ) ?? false
                       }
                     >
-                      {starrable && (
-                        <MenuItem
-                          closeOnClick={false}
-                          disabled={
-                            groupWrite?.channelId === channel.id &&
-                            groupWrite.pending
-                          }
-                          onClick={() =>
-                            void setChannelStar(channel.id, !starred)
-                          }
-                        >
-                          {starred ? "Unstar" : "Star"}
-                        </MenuItem>
-                      )}
-                      {movable && (
+                      <MenuGroup>
+                        <MenuGroupLabel>Move to…</MenuGroupLabel>
+                      </MenuGroup>
+                      <MenuRadioGroup
+                        value={
+                          starred
+                            ? "starred"
+                            : currentSectionId
+                              ? `group:${currentSectionId}`
+                              : "channels"
+                        }
+                        onValueChange={(destination) => {
+                          if (destination === "starred")
+                            void setChannelStar(channel.id, true);
+                          else
+                            void assignGroup(
+                              channel.id,
+                              destination.slice("group:".length),
+                            );
+                        }}
+                        disabled={
+                          groupWrite?.channelId === channel.id &&
+                          groupWrite.pending
+                        }
+                      >
+                        <MenuRadioItem value="starred" closeOnClick={false}>
+                          <MenuIcon>★</MenuIcon>
+                          Starred
+                        </MenuRadioItem>
+                        {preferences.data?.sections.map((group) => (
+                          <MenuRadioItem
+                            key={group.id}
+                            value={`group:${group.id}`}
+                            closeOnClick={false}
+                          >
+                            {group.icon && <MenuIcon>{group.icon}</MenuIcon>}
+                            {group.name}
+                          </MenuRadioItem>
+                        ))}
+                      </MenuRadioGroup>
+                      {(starred || currentSectionId) && (
                         <>
-                          {starrable && <MenuSeparator />}
-                          <MenuGroup>
-                            <MenuGroupLabel>Move to group</MenuGroupLabel>
-                          </MenuGroup>
-                          <MenuRadioGroup
-                            value={currentSectionId ?? ""}
-                            onValueChange={(sectionId) =>
-                              void assignGroup(channel.id, sectionId)
-                            }
+                          <MenuSeparator />
+                          <MenuItem
+                            closeOnClick={false}
                             disabled={
                               groupWrite?.channelId === channel.id &&
                               groupWrite.pending
                             }
+                            onClick={() => {
+                              if (starred)
+                                void setChannelStar(channel.id, false);
+                              else void assignGroup(channel.id);
+                            }}
                           >
-                            {preferences.data?.sections.map((group) => (
-                              <MenuRadioItem
-                                key={group.id}
-                                value={group.id}
-                                closeOnClick={false}
-                              >
-                                {group.icon && (
-                                  <MenuIcon>{group.icon}</MenuIcon>
-                                )}
-                                {group.name}
-                              </MenuRadioItem>
-                            ))}
-                          </MenuRadioGroup>
-                          {currentSectionId && (
-                            <>
-                              <MenuSeparator />
-                              <MenuItem
-                                closeOnClick={false}
-                                disabled={
-                                  groupWrite?.channelId === channel.id &&
-                                  groupWrite.pending
-                                }
-                                onClick={() => void assignGroup(channel.id)}
-                              >
-                                Remove from group
-                              </MenuItem>
-                            </>
-                          )}
+                            Remove from {section.title}
+                          </MenuItem>
                         </>
                       )}
                       {groupWrite?.channelId === channel.id &&

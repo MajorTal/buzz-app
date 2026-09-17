@@ -29,6 +29,7 @@ export function createSidebarPreferencesStore(
   let writeQueue = Promise.resolve();
   let writeLifetime = new AbortController();
   let mutation = 0;
+  let writing = false;
   let generation = 0;
   const retained = (data: SidebarPreferences): SidebarPreferences =>
     Object.freeze({
@@ -44,6 +45,7 @@ export function createSidebarPreferencesStore(
   };
   function refresh(): Promise<void> {
     if (closed || !available) return Promise.resolve();
+    if (writing) return writeQueue;
     if (active) return active.promise;
     const controller = new AbortController();
     const refreshMutation = mutation;
@@ -83,86 +85,103 @@ export function createSidebarPreferencesStore(
     });
     return job.promise;
   }
+  // The legacy format uses two coordinates. Keep a move in one session queue,
+  // confirm the destination assignment before clearing Star, and expose the new
+  // placement only after both writes succeed. Failure is explicitly retryable;
+  // this is not an atomic cross-host transaction.
+  function move(
+    channelId: string,
+    destination: { starred: true } | { sectionId?: string },
+    signal?: AbortSignal,
+  ): Promise<SidebarPreferences> {
+    const starring = "starred" in destination;
+    if (closed || !snapshot.data || !writeStar || !write)
+      return Promise.reject(
+        new Error("Sidebar group moves are unavailable in this host"),
+      );
+    const writeGeneration = generation;
+    const writeSignal = AbortSignal.any([
+      writeLifetime.signal,
+      ...(signal ? [signal] : []),
+    ]);
+    const check = () => {
+      if (closed || generation !== writeGeneration)
+        throw new Error("Sidebar group moves are unavailable");
+      writeSignal.throwIfAborted();
+    };
+    const run = writeQueue
+      .catch(() => {})
+      .then(async () => {
+        check();
+        mutation++;
+        writing = true;
+        try {
+          // Always re-read/write the assignment on removal, even if the cached
+          // projection has no assignment (another client may have added one).
+          const groups = starring
+            ? undefined
+            : await write(
+                {
+                  channelId,
+                  ...(destination.sectionId
+                    ? { sectionId: destination.sectionId }
+                    : {}),
+                },
+                writeSignal,
+              );
+          check();
+          const stars = await writeStar(
+            { channelId, starred: starring },
+            writeSignal,
+          );
+          check();
+          const current = snapshot.data;
+          if (!current) throw new Error("Sidebar group moves are unavailable");
+          const data = retained({ ...current, ...groups, starred: stars });
+          publish({ status: "ready", data });
+          return data;
+        } catch (error) {
+          // A refresh fenced by this move must not leave a permanent loading
+          // state if the move fails too. Retain its last confirmed placement.
+          if (
+            generation === writeGeneration &&
+            !closed &&
+            snapshot.status === "loading"
+          )
+            publish({
+              ...snapshot,
+              status: "error",
+              error: error instanceof Error ? error.message : String(error),
+            });
+          throw error;
+        } finally {
+          if (generation === writeGeneration) {
+            mutation++;
+            writing = false;
+          }
+        }
+      });
+    writeQueue = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    return run;
+  }
   return {
     queries: Object.freeze({
       available,
-      writable: !!write,
+      writable: !!write && !!writeStar,
       assign(channelId: string, sectionId?: string, signal?: AbortSignal) {
-        if (closed || !write || !snapshot.data)
-          return Promise.reject(
-            new Error("Saved sidebar groups are read-only in this host"),
-          );
-        const writeGeneration = generation;
-        const writeSignal = AbortSignal.any([
-          writeLifetime.signal,
-          ...(signal ? [signal] : []),
-        ]);
-        const run = writeQueue
-          .catch(() => {})
-          .then(async () => {
-            if (closed || generation !== writeGeneration)
-              throw new Error("Saved sidebar groups are unavailable");
-            writeSignal.throwIfAborted();
-            const groups = await write(
-              { channelId, ...(sectionId ? { sectionId } : {}) },
-              writeSignal,
-            );
-            if (closed || generation !== writeGeneration)
-              throw new Error("Saved sidebar groups are unavailable");
-            writeSignal.throwIfAborted();
-            mutation++;
-            const current = snapshot.data;
-            publish({
-              status: "ready",
-              data: retained({
-                sections: groups.sections,
-                assignments: groups.assignments,
-                starred: current?.starred ?? [],
-              }),
-            });
-            return groups;
-          });
-        writeQueue = run.then(
-          () => undefined,
-          () => undefined,
-        );
-        return run;
+        return move(channelId, sectionId ? { sectionId } : {}, signal);
       },
-      starWritable: !!writeStar,
-      setStar(channelId: string, starred: boolean, signal?: AbortSignal) {
-        if (closed || !writeStar || !snapshot.data)
-          return Promise.reject(
-            new Error("Sidebar stars are unavailable in this host"),
-          );
-        const writeGeneration = generation;
-        const writeSignal = AbortSignal.any([
-          writeLifetime.signal,
-          ...(signal ? [signal] : []),
-        ]);
-        const run = writeQueue
-          .catch(() => {})
-          .then(async () => {
-            if (closed || generation !== writeGeneration)
-              throw new Error("Sidebar stars are unavailable");
-            writeSignal.throwIfAborted();
-            const stars = await writeStar({ channelId, starred }, writeSignal);
-            if (closed || generation !== writeGeneration)
-              throw new Error("Sidebar stars are unavailable");
-            writeSignal.throwIfAborted();
-            const current = snapshot.data;
-            if (!current) throw new Error("Sidebar stars are unavailable");
-            mutation++;
-            publish({
-              status: "ready",
-              data: retained({ ...current, starred: stars }),
-            });
-            return stars;
-          });
-        writeQueue = run.then(
-          () => undefined,
-          () => undefined,
+      starWritable: !!write && !!writeStar,
+      async setStar(channelId: string, starred: boolean, signal?: AbortSignal) {
+        const data = await move(
+          channelId,
+          starred ? { starred: true } : {},
+          signal,
         );
-        return run;
+        return data.starred;
       },
       // Keep explicit one-shot reads compatible; views use the retained snapshot.
       read,
@@ -183,6 +202,7 @@ export function createSidebarPreferencesStore(
     clear() {
       if (closed) return;
       generation++;
+      writing = false;
       mutation++;
       writeLifetime.abort();
       writeLifetime = new AbortController();
@@ -194,6 +214,7 @@ export function createSidebarPreferencesStore(
       closed = true;
       writeLifetime.abort();
       generation++;
+      writing = false;
       mutation++;
       active?.controller.abort();
       active = undefined;

@@ -31,8 +31,24 @@ function setup(
   const owner = createRelaySession({
     ...wire.transport,
     decodeSidebarPreferences: decode,
-    ...(write ? { writeSidebarAssignment: write } : {}),
-    ...(writeStar ? { writeSidebarStar: writeStar } : {}),
+    ...(write || writeStar
+      ? {
+          writeSidebarAssignment:
+            write ??
+            (async ({ channelId, sectionId }) => {
+              const assignments = { ...data.assignments };
+              if (sectionId) assignments[channelId] = sectionId;
+              else delete assignments[channelId];
+              return { sections: data.sections, assignments };
+            }),
+          writeSidebarStar:
+            writeStar ??
+            (async ({ channelId, starred }) => [
+              ...data.starred.filter((id) => id !== channelId),
+              ...(starred ? [channelId] : []),
+            ]),
+        }
+      : {}),
   });
   return { wire, owner, preferences: owner.session.sidebarPreferences, decode };
 }
@@ -309,7 +325,8 @@ it.each(["clearCache", "dispose"] as const)(
 it("serializes confirmed assignment and star writes without losing either projection", async () => {
   const gate = deferred<readonly string[]>();
   const started = deferred<void>();
-  const star = vi.fn<SidebarStarMutator>(async () => {
+  const star = vi.fn<SidebarStarMutator>(async ({ starred }) => {
+    if (!starred) return ["alpha"];
     started.resolve();
     return gate.promise;
   });
@@ -335,7 +352,7 @@ it("serializes confirmed assignment and star writes without losing either projec
       data: {
         ...data,
         assignments: { alpha: "work", beta: "work" },
-        starred: ["alpha", "beta"],
+        starred: ["alpha"],
       },
     });
     expect(Object.isFrozen(preferences.snapshot().data?.starred)).toBe(true);

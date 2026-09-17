@@ -41,7 +41,8 @@ export function prepareSidebarStar(events, intent, secret, now = Date.now()) {
     const previous = Object.hasOwn(current.channels, intent.channelId)
       ? current.channels[intent.channelId]
       : undefined;
-    if (previous?.starred === intent.starred) return { stars: current };
+    if (previous?.starred === intent.starred || (!previous && !intent.starred))
+      return { stars: current };
     const stars = {
       ...current,
       channels: {

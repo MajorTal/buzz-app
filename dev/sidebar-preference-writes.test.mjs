@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import { generateSecretKey, getPublicKey, verifyEvent } from "nostr-tools";
 import { relayBrokerPlugin } from "./relay-broker.mjs";
+import { prepareSidebarSort } from "./sidebar-sort.mjs";
 import { prepareSidebarStar } from "./sidebar-stars.mjs";
 import { connectBrokerTransport } from "../src/features/relay/transport.ts";
 import { fixtureRelayUrl, fixtureAliases } from "../tests/relay-config.ts";
@@ -16,6 +17,7 @@ async function harness() {
     viewer = getPublicKey(key);
   let handler, queryFailure, publicationFailure;
   let conflict = false;
+  let activityEvents = [];
   const heads = new Map(),
     calls = [];
   const server = createServer((req, res) => {
@@ -50,6 +52,7 @@ async function harness() {
         return Response.json({ accepted: true, event_id: body.id });
       }
       if (queryFailure) return queryFailure;
+      if (body[0]["#h"]) return Response.json(activityEvents);
       const head = heads.get(body[0]["#d"][0]);
       return Response.json(head ? [head] : []);
     },
@@ -72,6 +75,9 @@ async function harness() {
   return {
     key,
     viewer,
+    setActivity(events) {
+      activityEvents = events;
+    },
     transport,
     calls,
     heads,
@@ -84,8 +90,8 @@ async function harness() {
     conflict() {
       conflict = true;
     },
-    post(value, origin) {
-      return fetch(`${base}/api/relay/sidebar-star`, {
+    post(value, origin, route = "sidebar-star") {
+      return fetch(`${base}/api/relay/${route}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -177,3 +183,98 @@ it.each(["query", "oversized", "publication", "receipt", "conflict"])(
       );
   },
 );
+
+it("real broker sorting preserves saved-section keys in transport confirmation and removes A–Z overrides", async () => {
+  const h = await harness();
+  const signal = new AbortController().signal;
+  h.heads.set(
+    "channel-sort",
+    prepareSidebarSort(
+      [],
+      { group: "forums", mode: "recent", sectionIds: [] },
+      h.key,
+    ).event,
+  );
+  expect(
+    await h.transport.writeSidebarSort(
+      "section:work",
+      "recent",
+      ["work"],
+      signal,
+    ),
+  ).toEqual({ forums: "recent", "section:work": "recent" });
+  expect(h.calls.map((call) => new URL(call.url).pathname)).toEqual([
+    "/query",
+    "/events",
+    "/query",
+  ]);
+  expect(h.calls[0].body).toEqual([
+    { kinds: [30078], authors: [h.viewer], "#d": ["channel-sort"], limit: 1 },
+  ]);
+  expect(
+    await h.transport.writeSidebarSort(
+      "section:work",
+      "alpha",
+      ["work"],
+      signal,
+    ),
+  ).toEqual({ forums: "recent" });
+});
+
+it.each(["query", "oversized", "publication", "receipt", "conflict"])(
+  "does not confirm sidebar sorting after %s failure",
+  async (failure) => {
+    const h = await harness();
+    if (failure === "query")
+      h.failQuery(new Response("failed", { status: 503 }));
+    if (failure === "oversized")
+      h.failQuery(new Response(`[${" ".repeat(270000)}]`));
+    if (failure === "publication")
+      h.failPublication(new Response("failed", { status: 503 }));
+    if (failure === "receipt")
+      h.failPublication(Response.json({ accepted: false, event_id: "wrong" }));
+    if (failure === "conflict") h.conflict();
+    await expect(
+      h.transport.writeSidebarSort(
+        "channels",
+        "recent",
+        [],
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow();
+    if (["query", "oversized"].includes(failure))
+      expect(h.calls.filter((call) => call.url.endsWith("/events"))).toEqual(
+        [],
+      );
+  },
+);
+
+it("activity uses the purpose-bound 128-channel broker route without widening generic query admission", async () => {
+  const h = await harness();
+  const ids = Array.from({ length: 128 }, (_, i) => `room-${i}`);
+  expect(
+    await h.transport.channelActivity(ids, new AbortController().signal),
+  ).toEqual([]);
+  const filters = h.calls[0].body;
+  expect(filters).toEqual(
+    ids.map((id) => ({
+      kinds: [9, 40002, 45001, 45003],
+      "#h": [id],
+      limit: 1,
+    })),
+  );
+  const before = h.calls.length;
+  for (const [route, body] of [
+    ["query", filters],
+    ["channel-activity", [...filters, filters[0]]],
+    ["channel-activity", [{ ...filters[0], limit: 2 }]],
+    ["channel-activity", [{ ...filters[0], kinds: [0] }]],
+    ["channel-activity", [{ ...filters[0], authors: [h.viewer] }]],
+  ])
+    expect((await h.post(body, undefined, route)).status).toBe(400);
+  expect(h.calls).toHaveLength(before);
+  h.setActivity([{ kind: 9, content: "unsigned" }]);
+  await expect(
+    h.transport.channelActivity(["room-0"], new AbortController().signal),
+  ).rejects.toThrow();
+});

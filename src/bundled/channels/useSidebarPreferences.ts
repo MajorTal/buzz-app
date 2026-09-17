@@ -19,6 +19,8 @@ export function useSidebarPreferences(
     writable: queries.writable,
     assign: queries.assign,
     starWritable: queries.starWritable,
+    sortWritable: queries.sortWritable,
+    setSort: queries.setSort,
     setStar: queries.setStar,
     reload: queries.refresh,
   };

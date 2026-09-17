@@ -5,6 +5,8 @@ export type ChannelSummary = Readonly<{
   id: string;
   name: string;
   preview?: string | undefined;
+  /** Newest verified user-visible activity for sidebar ordering, in Unix seconds. */
+  lastActivityAt?: number | undefined;
   /** Members-only channel omitted from directories (NIP-29 `hidden`), such as a DM. */
   hidden?: true;
   /** Relay-authored metadata; absent while metadata is unavailable. */

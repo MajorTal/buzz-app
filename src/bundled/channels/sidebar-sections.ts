@@ -18,42 +18,79 @@ export function sidebarSections(
   const groups = preferences?.sections ?? [];
   const ids = new Set(groups.map((group) => group.id));
   const assignment = (id: string) => preferences?.assignments[id];
+  const compareName = (a: ChannelSummary, b: ChannelSummary) =>
+    a.name.toLowerCase() < b.name.toLowerCase()
+      ? -1
+      : a.name.toLowerCase() > b.name.toLowerCase()
+        ? 1
+        : a.id.localeCompare(b.id);
+  const sort = (rows: readonly ChannelSummary[], key: string) =>
+    [...rows].sort((a, b) => {
+      if (preferences?.sort?.[key] === "recent") {
+        if (
+          a.lastActivityAt !== undefined &&
+          b.lastActivityAt !== undefined &&
+          a.lastActivityAt !== b.lastActivityAt
+        )
+          return b.lastActivityAt - a.lastActivityAt;
+        if (a.lastActivityAt !== undefined && b.lastActivityAt === undefined)
+          return -1;
+        if (a.lastActivityAt === undefined && b.lastActivityAt !== undefined)
+          return 1;
+      }
+      return compareName(a, b);
+    });
   return [
     {
       key: "starred",
       title: "Starred",
       icon: "★",
-      rows: streams.filter((channel) => stars.has(channel.id)),
+      rows: sort(
+        streams.filter((channel) => stars.has(channel.id)),
+        "starred",
+      ),
     },
     ...groups.map((group) => ({
       key: `group:${group.id}`,
       title: group.name,
       icon: group.icon,
-      rows: streams.filter(
-        (channel) =>
-          !stars.has(channel.id) && assignment(channel.id) === group.id,
+      rows: sort(
+        streams.filter(
+          (channel) =>
+            !stars.has(channel.id) && assignment(channel.id) === group.id,
+        ),
+        `section:${group.id}`,
       ),
     })),
     {
       key: "channels",
       title: "Channels",
       icon: undefined,
-      rows: streams.filter(
-        (channel) =>
-          !stars.has(channel.id) && !ids.has(assignment(channel.id) ?? ""),
+      rows: sort(
+        streams.filter(
+          (channel) =>
+            !stars.has(channel.id) && !ids.has(assignment(channel.id) ?? ""),
+        ),
+        "channels",
       ),
     },
     {
       key: "forums",
       title: "Forums",
       icon: undefined,
-      rows: active.filter((channel) => channel.channelType === "forum"),
+      rows: sort(
+        active.filter((channel) => channel.channelType === "forum"),
+        "forums",
+      ),
     },
     {
       key: "dms",
       title: "DMs",
       icon: undefined,
-      rows: active.filter((channel) => channel.channelType === "dm"),
+      rows: sort(
+        active.filter((channel) => channel.channelType === "dm"),
+        "dms",
+      ),
     },
   ].filter((section) => section.rows.length);
 }

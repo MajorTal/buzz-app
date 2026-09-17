@@ -77,6 +77,12 @@ it("reads legacy preferences through the production session, transport, and boun
         "#d": ["channel-stars"],
         limit: 1,
       },
+      {
+        kinds: [30078],
+        authors: [viewer.pubkey],
+        "#d": ["channel-sort"],
+        limit: 1,
+      },
     ]);
     return Response.json(result);
   });

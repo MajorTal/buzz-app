@@ -25,6 +25,7 @@ import {
   PlugZap,
   MessageCircle,
   MoreHorizontal,
+  ArrowUpDown,
   Users,
 } from "lucide-react";
 import type { RelayData } from "../../features/relay/service";
@@ -59,6 +60,11 @@ import {
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
+  MenuRoot,
+  MenuSubmenu,
+  MenuSubmenuPopup,
+  MenuSubmenuTrigger,
+  MenuTrigger,
   MenuSeparator,
 } from "../../shared/design-system/ui/Menu";
 import styles from "./Channels.module.css";
@@ -192,6 +198,9 @@ function ChannelWorkspace({
     messageId: string;
   }>();
   const threadTrigger = useRef<HTMLElement | null>(null);
+  const [sectionMenu, setSectionMenu] = useState<{ key: string }>();
+  const [sortWrite, setSortWrite] = useState<{ key: string; error?: string }>();
+  const sortIntent = useRef(0);
   const [rowMenu, setRowMenu] = useState<{
     channel: ChannelSummary;
     sectionId?: string;
@@ -502,6 +511,29 @@ function ChannelWorkspace({
       ),
     [channels, search],
   );
+  const closeSectionMenu = useCallback(() => {
+    sortIntent.current++;
+    setSectionMenu(undefined);
+    setSortWrite(undefined);
+  }, []);
+  const setSectionSort = async (key: string, mode: "alpha" | "recent") => {
+    const intent = ++sortIntent.current;
+    setSortWrite({ key });
+    try {
+      await preferences.setSort(
+        key.startsWith("group:") ? `section:${key.slice(6)}` : key,
+        mode,
+        preferences.data?.sections.map((section) => section.id) ?? [],
+      );
+      if (sortIntent.current === intent) closeSectionMenu();
+    } catch (error) {
+      if (sortIntent.current !== intent) return;
+      setSortWrite({
+        key,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
   const closeRowMenu = useCallback(() => {
     rowMenuGeneration.current++;
     setRowMenu(undefined);
@@ -605,6 +637,82 @@ function ChannelWorkspace({
                   )}
                   {section.title}
                 </span>
+                {preferences.sortWritable && (
+                  <MenuRoot
+                    open={sectionMenu?.key === section.key}
+                    onOpenChange={(open) => {
+                      if (open) {
+                        closeSectionMenu();
+                        setSectionMenu({ key: section.key });
+                      } else if (sectionMenu?.key === section.key)
+                        closeSectionMenu();
+                    }}
+                  >
+                    <MenuTrigger
+                      render={(props) => (
+                        <button
+                          {...props}
+                          type="button"
+                          className={styles.sectionMenuButton}
+                          aria-label={`More actions for ${section.title}`}
+                          onClick={(event) => {
+                            event.preventDefault();
+                            event.stopPropagation();
+                            props.onClick?.(event);
+                          }}
+                        >
+                          <MoreHorizontal size={16} aria-hidden="true" />
+                        </button>
+                      )}
+                    />
+                    <MenuPopup
+                      align="end"
+                      aria-label={`Actions for ${section.title}`}
+                    >
+                      <MenuSubmenu>
+                        <MenuSubmenuTrigger>
+                          <MenuIcon>
+                            <ArrowUpDown size={14} />
+                          </MenuIcon>
+                          Sort
+                        </MenuSubmenuTrigger>
+                        <MenuSubmenuPopup aria-label={`Sort ${section.title}`}>
+                          <MenuRadioGroup
+                            value={
+                              preferences.data?.sort?.[
+                                section.key.startsWith("group:")
+                                  ? `section:${section.key.slice(6)}`
+                                  : section.key
+                              ] ?? "alpha"
+                            }
+                            onValueChange={(mode) =>
+                              void setSectionSort(
+                                section.key,
+                                mode as "alpha" | "recent",
+                              )
+                            }
+                            disabled={
+                              sortWrite?.key === section.key && !sortWrite.error
+                            }
+                          >
+                            <MenuRadioItem closeOnClick={false} value="recent">
+                              Recent
+                            </MenuRadioItem>
+                            <MenuRadioItem closeOnClick={false} value="alpha">
+                              A–Z
+                            </MenuRadioItem>
+                          </MenuRadioGroup>
+                          {sortWrite?.key === section.key &&
+                            !sortWrite.error && <p role="status">Saving…</p>}
+                          {sortWrite?.key === section.key &&
+                            sortWrite.error && (
+                              <p role="alert">{sortWrite.error}</p>
+                            )}
+                        </MenuSubmenuPopup>
+                      </MenuSubmenu>
+                    </MenuPopup>
+                  </MenuRoot>
+                )}
               </summary>
               {section.rows.map((channel) => {
                 const Icon =

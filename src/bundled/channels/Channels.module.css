@@ -415,3 +415,16 @@
   border-top: 1px solid var(--border);
   overflow: hidden;
 }
+
+.channelSection > summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.channelList .sectionMenuButton {
+  width: 28px;
+  min-height: 28px;
+  padding: 0;
+  justify-content: center;
+  color: var(--text-muted);
+}

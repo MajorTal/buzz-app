@@ -4,6 +4,7 @@ import type { RelayReader } from "./reader.ts";
 export const SIDEBAR_COORDINATES = [
   "channel-sections",
   "channel-stars",
+  "channel-sort",
 ] as const;
 export type SidebarGroups = Readonly<{
   sections: readonly Readonly<{
@@ -14,14 +15,22 @@ export type SidebarGroups = Readonly<{
   }>[];
   assignments: Readonly<Record<string, string>>;
 }>;
+export type SidebarSortMode = "alpha" | "recent";
 export type SidebarPreferences = SidebarGroups &
   Readonly<{
     starred: readonly string[];
+    sort?: Readonly<Record<string, SidebarSortMode>>;
   }>;
 export type SidebarAssignmentIntent = Readonly<{
   channelId: string;
   sectionId?: string;
 }>;
+export type SidebarSortMutator = (
+  group: string,
+  mode: SidebarSortMode,
+  sectionIds: readonly string[],
+  signal: AbortSignal,
+) => Promise<Readonly<Record<string, SidebarSortMode>>>;
 export type SidebarAssignmentMutator = (
   intent: SidebarAssignmentIntent,
   signal: AbortSignal,
@@ -48,11 +57,14 @@ function text(value: unknown, max = 256): string {
 export function projectSidebarPreferences(
   sections: unknown,
   stars: unknown,
+  sort?: unknown,
+  sortSectionIds?: readonly string[],
 ): SidebarPreferences {
   const result: {
     sections: { id: string; name: string; icon?: string; order: number }[];
     assignments: Record<string, string>;
     starred: string[];
+    sort?: Record<string, SidebarSortMode>;
   } = {
     sections: [],
     assignments: {},
@@ -112,6 +124,27 @@ export function projectSidebarPreferences(
         throw new Error("Invalid sidebar star");
       if (entry.starred) result.starred.push(id);
     }
+  }
+  if (sort !== undefined) {
+    const data = object(sort);
+    if (data.version !== 1) throw new Error("Unsupported sidebar sort");
+    const entries = Object.entries(object(data.groups));
+    if (entries.length > 104) throw new Error("Sidebar sort budget exceeded");
+    const fixed = new Set(["starred", "channels", "forums", "dms"]);
+    const liveSections = new Set(
+      (sortSectionIds ?? result.sections.map((section) => section.id)).map(
+        (id) => `section:${id}`,
+      ),
+    );
+    result.sort = Object.fromEntries(
+      entries
+        .filter(
+          (entry): entry is [string, SidebarSortMode] =>
+            entry[1] === "alpha" || entry[1] === "recent",
+        )
+        .map(([key, mode]) => [text(key, 264), mode] as const)
+        .filter(([key]) => fixed.has(key) || liveSections.has(key)),
+    );
   }
   return result;
 }

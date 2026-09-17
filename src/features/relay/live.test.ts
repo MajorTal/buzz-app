@@ -809,3 +809,36 @@ it("keeps misrouted activity out of accessible conversations; session rejects am
   owner.dispose();
   expect(vi.getTimerCount()).toBe(0);
 });
+
+it("requests forum posts and replies on existing channel routes for live recency", async () => {
+  vi.useFakeTimers();
+  const h = setup(["forum"]);
+  try {
+    await h.first.auth();
+    await vi.advanceTimersByTimeAsync(750);
+    const request = h.first
+      .requests()
+      .find((entry) => entry[2]["#h"]?.[0] === "forum");
+    assert.exists(request);
+    expect(request[2].kinds).toEqual(
+      expect.arrayContaining([9, 40002, 45001, 45003]),
+    );
+    expect(h.first.requests()).toHaveLength(3);
+    await h.first.receive(["EOSE", request[1]]);
+    for (const kind of [45001, 45003]) {
+      const event = signed(h.key, {
+        kind,
+        tags: [["h", "forum"]],
+        content: "forum activity",
+        created_at: 1700000000,
+      });
+      await h.first.receive(["EVENT", request[1], event]);
+      expect(h.callbacks.receive).toHaveBeenLastCalledWith([event], {
+        phase: "live",
+        channelId: "forum",
+      });
+    }
+  } finally {
+    h.owner.dispose();
+  }
+});

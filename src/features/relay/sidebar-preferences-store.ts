@@ -1,6 +1,8 @@
 import type {
   SidebarAssignmentMutator,
   SidebarStarMutator,
+  SidebarSortMode,
+  SidebarSortMutator,
   SidebarPreferences,
 } from "./sidebar-preferences";
 
@@ -16,6 +18,7 @@ export function createSidebarPreferencesStore(
   available: boolean,
   write?: SidebarAssignmentMutator,
   writeStar?: SidebarStarMutator,
+  writeSort?: SidebarSortMutator,
   notify = (listener: () => void) => listener(),
 ) {
   const listeners = new Set<() => void>();
@@ -30,6 +33,30 @@ export function createSidebarPreferencesStore(
   let writeLifetime = new AbortController();
   let mutation = 0;
   let generation = 0;
+  let nextSortMutation = 0;
+  const pendingSorts = new Map<
+    number,
+    { group: string; mode: SidebarSortMode }
+  >();
+  let confirmedSort: Readonly<Record<string, SidebarSortMode>> = {};
+  const withSort = (
+    sort: Readonly<Record<string, SidebarSortMode>>,
+    group: string,
+    mode: SidebarSortMode,
+  ) => {
+    const next = { ...sort };
+    if (mode === "alpha") delete next[group];
+    else next[group] = mode;
+    return next;
+  };
+  const withPendingSorts = (
+    sort: Readonly<Record<string, SidebarSortMode>>,
+  ) => {
+    let next = sort;
+    for (const pending of pendingSorts.values())
+      next = withSort(next, pending.group, pending.mode);
+    return next;
+  };
   const retained = (data: SidebarPreferences): SidebarPreferences =>
     Object.freeze({
       sections: Object.freeze(
@@ -37,6 +64,7 @@ export function createSidebarPreferencesStore(
       ),
       assignments: Object.freeze({ ...data.assignments }),
       starred: Object.freeze([...data.starred]),
+      ...(data.sort ? { sort: Object.freeze({ ...data.sort }) } : {}),
     });
   const publish = (next: Snapshot) => {
     snapshot = Object.freeze(next);
@@ -60,7 +88,15 @@ export function createSidebarPreferencesStore(
           mutation !== refreshMutation
         )
           return;
-        publish({ status: "ready", data: retained(data) });
+        confirmedSort = { ...(data.sort ?? {}) };
+        publish({
+          status: "ready",
+          data: retained(
+            pendingSorts.size
+              ? { ...data, sort: withPendingSorts(confirmedSort) }
+              : data,
+          ),
+        });
       } catch (error) {
         if (
           !closed &&
@@ -118,6 +154,7 @@ export function createSidebarPreferencesStore(
                 sections: groups.sections,
                 assignments: groups.assignments,
                 starred: current?.starred ?? [],
+                ...(current?.sort ? { sort: current.sort } : {}),
               }),
             });
             return groups;
@@ -164,6 +201,82 @@ export function createSidebarPreferencesStore(
         );
         return run;
       },
+      sortWritable: !!writeSort,
+      setSort(
+        group: string,
+        mode: SidebarSortMode,
+        sectionIds: readonly string[],
+        signal?: AbortSignal,
+      ) {
+        if (closed || !writeSort || !snapshot.data)
+          return Promise.reject(
+            new Error("Sidebar sorting is read-only in this host"),
+          );
+        const writeGeneration = generation;
+        const writeSignal = AbortSignal.any([
+          writeLifetime.signal,
+          ...(signal ? [signal] : []),
+        ]);
+        if (writeSignal.aborted) return Promise.reject(writeSignal.reason);
+        const id = ++nextSortMutation;
+        pendingSorts.set(id, { group, mode });
+        mutation++;
+        const current = snapshot.data ?? {
+          sections: [],
+          assignments: {},
+          starred: [],
+        };
+        publish({
+          status: "ready",
+          data: retained({
+            ...current,
+            sort: withSort(current.sort ?? confirmedSort, group, mode),
+          }),
+        });
+        const settle = (sort?: Readonly<Record<string, SidebarSortMode>>) => {
+          if (closed || generation !== writeGeneration) return;
+          if (sort) confirmedSort = { ...sort };
+          pendingSorts.delete(id);
+          const latest = snapshot.data ?? current;
+          publish({
+            status: "ready",
+            data: retained({
+              ...latest,
+              sort: withPendingSorts(confirmedSort),
+            }),
+          });
+        };
+        const run = writeQueue
+          .catch(() => {})
+          .then(async () => {
+            if (closed || generation !== writeGeneration)
+              throw new Error("Sidebar sorting is unavailable");
+            try {
+              writeSignal.throwIfAborted();
+              const sort = await writeSort(
+                group,
+                mode,
+                sectionIds,
+                writeSignal,
+              );
+              if (closed || generation !== writeGeneration)
+                throw new Error("Sidebar sorting is unavailable");
+              writeSignal.throwIfAborted();
+              mutation++;
+              settle(sort);
+              return sort;
+            } catch (error) {
+              if (!closed && generation === writeGeneration) mutation++;
+              settle();
+              throw error;
+            }
+          });
+        writeQueue = run.then(
+          () => undefined,
+          () => undefined,
+        );
+        return run;
+      },
       // Keep explicit one-shot reads compatible; views use the retained snapshot.
       read,
       snapshot: () => snapshot,
@@ -184,6 +297,8 @@ export function createSidebarPreferencesStore(
       if (closed) return;
       generation++;
       mutation++;
+      pendingSorts.clear();
+      confirmedSort = {};
       writeLifetime.abort();
       writeLifetime = new AbortController();
       active?.controller.abort();
@@ -192,6 +307,8 @@ export function createSidebarPreferencesStore(
     },
     dispose() {
       closed = true;
+      pendingSorts.clear();
+      confirmedSort = {};
       writeLifetime.abort();
       generation++;
       mutation++;

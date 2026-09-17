@@ -41,6 +41,7 @@ function setup(
       decodeSidebarPreferences: async () => ({
         sections: [],
         assignments: {},
+        muted: [],
         starred: Object.freeze([...starred]),
       }),
     };

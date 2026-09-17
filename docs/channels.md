@@ -63,7 +63,7 @@ The workspace React key includes community/viewer scope **and** connection
 generation. This resets session-owned component state on switching or reconnecting;
 drafts, channel selection and reading geometry retain their stable scope keys.
 
-Saved sidebar groups, ordering, assignments and stars live in the session's
+Saved sidebar groups, ordering, assignments, stars and mutes live in the session's
 `sidebarPreferences` snapshot, not in the mounted Messages page. `ensure()` shares
 one initial read; `refresh()` explicitly reloads/retries while retaining the last
 good snapshot through loading/errors. Page exits neither restart nor cancel that
@@ -72,12 +72,13 @@ late completion cannot repopulate a retired snapshot. These are account-owned
 preferences, not channel access grants: sidebar sections still intersect the
 authorized roster. There is no new disk cache or automatic cross-device sync.
 
-The browser/development host exposes narrow **assign/remove group** and
-**Star/Unstar** commands. Each re-reads the viewer's signed encrypted coordinate,
-changes only the requested entry, publishes through the shared relay admission
-lane, then re-reads to confirm the requested state. Unrelated fields and explicit
-unstar tombstones are retained. Invalid/unreadable/over-budget heads fail closed;
-only a successful absent-head read can seed a coordinate. Same-host writes are
+The browser/development host exposes narrow **assign/remove group**,
+**Star/Unstar**, and **Mute/Unmute** commands. Each re-reads the viewer's signed
+encrypted coordinate, changes only the requested entry, publishes through the shared
+relay admission lane, then re-reads to confirm the requested state. Unrelated fields
+and explicit unstar/unmute tombstones are retained. Invalid/unreadable/over-budget
+heads fail closed; only a successful absent-head read can seed a coordinate.
+Same-host writes are
 serialized per relay. This is confirmed whole-record replacement, not atomic
 cross-device merging, a durable pending outbox, or automatic retry: simultaneous
 writers on different hosts can still race. Failure leaves the last confirmed UI
@@ -92,8 +93,14 @@ Stream rows expose these actions by right-click/long-press, Shift+F10 or the
 Context Menu key. Menus remain open during saving and failed-save retry; confirmed
 relocation expands the destination and restores focus by channel identity. Starred
 placement is exclusive, retaining the saved assignment so Unstar restores it.
-Forums/DMs, group CRUD/reorder and independent sorting are outside this slice.
-Hosts without the write capabilities retain the read-only projection.
+Group assignment and stars remain stream-only; group CRUD/reorder and independent
+sorting are outside this slice. Mute and Mark as Read also apply to forum/DM rows
+when the host supports them. Mute changes [notification eligibility](notifications.md),
+not unread truth; its row indicator says “Muted; mentions still notify”. Mark as
+Read delegates to the [durable unread owner](unread.md) without selecting the row,
+and closes only after the local transaction commits. These actions share the same
+saving/error/retry and focus-return behavior. Hosts without the write capabilities
+retain the read-only projection; Mark as Read requires `frontier-sync`.
 
 Search, collapsed section keys and sidebar scroll remain separate, scoped view
 intent. They are saved on page exit and restored before paint when the roster and

@@ -35,6 +35,16 @@ checks, not that an OS banner was displayed or read.
   complete snapshot); local-only hosts wait only for local storage. Failed or
   cancelled observation does not release alerts. Visibility is checked after UI
   presentation, without publishing read intent.
+- Channel Mute/Unmute uses the session's confirmed, encrypted `channel-mutes`
+  preference, independently of whether Channels is mounted. Muted channels suppress
+  DM and participating-thread alerts; explicit mentions still pass the channel-mute
+  gate, not global off/category/read/access/permission gates. This does not introduce
+  a broadcast notification category or change unread badges. Unknown or failed
+  preference reads hold non-mention candidates until explicit retry; a confirmed
+  mute cancels pending candidates, including an in-flight permission check. Unmute
+  does not replay cancelled alerts. Existing shown OS banners are not withdrawn.
+  Hosts without preference decoding retain existing notification behavior; this
+  slice adds no native preference adapter or automatic cross-device synchronization.
 - Permission is requested explicitly from Settings where a browser needs a user
   gesture. A fresh pending candidate is reconsidered after Allow; a newer off
   choice still wins. Observable API errors are reported, never auto-retried.

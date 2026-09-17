@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import { generateSecretKey, getPublicKey, verifyEvent } from "nostr-tools";
 import { relayBrokerPlugin } from "./relay-broker.mjs";
+import { prepareSidebarMute } from "./sidebar-mutes.mjs";
 import { prepareSidebarStar } from "./sidebar-stars.mjs";
 import { connectBrokerTransport } from "../src/features/relay/transport.ts";
 import { fixtureRelayUrl, fixtureAliases } from "../tests/relay-config.ts";
@@ -84,8 +85,8 @@ async function harness() {
     conflict() {
       conflict = true;
     },
-    post(value, origin) {
-      return fetch(`${base}/api/relay/sidebar-star`, {
+    post(value, origin, route = "sidebar-star") {
+      return fetch(`${base}/api/relay/${route}`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -168,6 +169,83 @@ it.each(["query", "oversized", "publication", "receipt", "conflict"])(
     await expect(
       h.transport.writeSidebarStar(
         { channelId: "alpha", starred: true },
+        new AbortController().signal,
+      ),
+    ).rejects.toThrow();
+    if (["query", "oversized"].includes(failure))
+      expect(h.calls.filter((call) => call.url.endsWith("/events"))).toEqual(
+        [],
+      );
+  },
+);
+
+it("real broker Mute roundtrip signs scoped requests and confirms before projecting", async () => {
+  const h = await harness(),
+    signal = new AbortController().signal;
+  h.heads.set(
+    "channel-mutes",
+    prepareSidebarMute([], { channelId: "other", muted: true }, h.key).event,
+  );
+  expect(
+    await h.transport.writeSidebarMute(
+      { channelId: "alpha", muted: true },
+      signal,
+    ),
+  ).toEqual(["other", "alpha"]);
+  expect(h.calls.map((call) => new URL(call.url).pathname)).toEqual([
+    "/query",
+    "/events",
+    "/query",
+  ]);
+  expect(h.calls[0].body).toEqual([
+    { kinds: [30078], authors: [h.viewer], "#d": ["channel-mutes"], limit: 1 },
+  ]);
+  expect(
+    await h.transport.writeSidebarMute(
+      { channelId: "alpha", muted: false },
+      signal,
+    ),
+  ).toEqual(["other"]);
+  expect(h.calls.filter((call) => call.url.endsWith("/events"))).toHaveLength(
+    2,
+  );
+  await h.transport.writeSidebarMute(
+    { channelId: "alpha", muted: false },
+    signal,
+  );
+  expect(h.calls.filter((call) => call.url.endsWith("/events"))).toHaveLength(
+    2,
+  );
+});
+it("refuses invalid intent and foreign origins without upstream requests", async () => {
+  const h = await harness();
+  const post = (value, origin) => h.post(value, origin, "sidebar-mute");
+  expect((await post({ channelId: "alpha", muted: "true" })).status).toBe(400);
+  expect(
+    (await post({ channelId: "alpha", muted: true }, "https://foreign.invalid"))
+      .status,
+  ).toBe(403);
+  expect(
+    (await post({ channelId: "x".repeat(2100), muted: true })).status,
+  ).toBe(413);
+  expect(h.calls).toEqual([]);
+});
+it.each(["query", "oversized", "publication", "receipt", "conflict"])(
+  "does not claim a saved Mute after %s failure",
+  async (failure) => {
+    const h = await harness();
+    if (failure === "query")
+      h.failQuery(new Response("failed", { status: 503 }));
+    if (failure === "oversized")
+      h.failQuery(new Response(`[${" ".repeat(270000)}]`));
+    if (failure === "publication")
+      h.failPublication(new Response("failed", { status: 503 }));
+    if (failure === "receipt")
+      h.failPublication(Response.json({ accepted: false, event_id: "wrong" }));
+    if (failure === "conflict") h.conflict();
+    await expect(
+      h.transport.writeSidebarMute(
+        { channelId: "alpha", muted: true },
         new AbortController().signal,
       ),
     ).rejects.toThrow();

@@ -140,9 +140,10 @@ export function policyRelay({
           );
         }
         if (filters.length !== 1) {
-          // The read-only sidebar projection reads the two exact coordinates.
-          expect(filters).toHaveLength(2);
+          // The sidebar projection reads only these exact account coordinates.
+          expect(filters).toHaveLength(3);
           expect(filters.map((filter) => filter["#d"]?.[0]).sort()).toEqual([
+            "channel-mutes",
             "channel-sections",
             "channel-stars",
           ]);

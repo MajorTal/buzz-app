@@ -55,6 +55,8 @@ export interface UnreadCapability {
     target: ReadTarget,
     messageId: string,
   ): Promise<ReadMutationResult>;
+  /** Explicit channel prefix through retained verified evidence, including replies. */
+  markChannelRead(channelId: string): Promise<ReadMutationResult>;
   markUnreadLocal(target: ReadTarget): Promise<ReadMutationResult>;
   readonly syncedManualUnread: false;
 }
@@ -636,6 +638,32 @@ export function createUnread({
           requireMessage(target, id) === event,
         true,
       );
+    },
+    async markChannelRead(channelId) {
+      if (closed || !allowed(channelId))
+        throw new Error("Read target unavailable");
+      indexEvidence();
+      const rows = byChannel.get(channelId) ?? [];
+      // Snapshot the cut at invocation, not after a queued storage write. Do not
+      // substitute wall time or a preview timestamp for verified domain evidence.
+      const latest = rows.reduce<RelayEvent | undefined>(
+        (head, { event }) =>
+          !head || event.created_at > head.created_at ? event : head,
+        undefined,
+      );
+      const keys = new Set([channelId]);
+      for (const { event, rootId } of rows) {
+        keys.add(`msg:${event.id}`);
+        if (rootId) keys.add(`thread:${rootId}`);
+        // A retained top-level message establishes its thread's channel even
+        // when that thread's replies are outside our bounded evidence window.
+        if (!threadReference(event)) keys.add(`thread:${event.id}`);
+      }
+      const generation = epoch;
+      const valid = () => !closed && generation === epoch && allowed(channelId);
+      return latest
+        ? reads.read(channelId, latest.created_at, valid, true, [...keys])
+        : reads.clearLocalUnread(channelId, [channelId], valid);
     },
     async markUnreadLocal(target) {
       const key = targetKey(target);

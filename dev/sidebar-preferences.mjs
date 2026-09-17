@@ -11,7 +11,7 @@ export const SIDEBAR_UPLOAD_MS = 10_000;
 export function decodeSidebarPreferences(events, secret) {
   if (
     !Array.isArray(events) ||
-    events.length > 2 ||
+    events.length > SIDEBAR_COORDINATES.length ||
     Buffer.byteLength(JSON.stringify(events)) > SIDEBAR_REQUEST_BYTES
   )
     throw new Error("Invalid sidebar records");
@@ -49,6 +49,7 @@ export function decodeSidebarPreferences(events, secret) {
     return projectSidebarPreferences(
       decoded.get("channel-sections"),
       decoded.get("channel-stars"),
+      decoded.get("channel-mutes"),
     );
   } finally {
     key.fill(0);

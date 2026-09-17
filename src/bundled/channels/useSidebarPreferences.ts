@@ -20,6 +20,8 @@ export function useSidebarPreferences(
     assign: queries.assign,
     starWritable: queries.starWritable,
     setStar: queries.setStar,
+    muteWritable: queries.muteWritable,
+    setMute: queries.setMute,
     reload: queries.refresh,
   };
 }

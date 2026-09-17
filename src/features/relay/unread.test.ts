@@ -32,8 +32,14 @@ function setup(options: ChannelStoreOptions = {}) {
     alice = keypair();
   let journal: ReadJournal | undefined;
   let hold: Promise<void> | undefined;
+  let failure: Error | undefined;
   const storage: ReadStateStorage = {
     async update(change) {
+      if (failure) {
+        const error = failure;
+        failure = undefined;
+        throw error;
+      }
       if (hold) {
         const wait = hold;
         hold = undefined;
@@ -96,6 +102,9 @@ function setup(options: ChannelStoreOptions = {}) {
     target,
     snapshot: () => owner.session.unread.snapshot(target),
     journal: () => journal,
+    failSave() {
+      failure = new Error("disk full");
+    },
     holdSave() {
       let release = () => {};
       hold = new Promise<void>((resolve) => {
@@ -773,4 +782,141 @@ it("attention fails closed after deletion or access loss, and viewing cannot sur
   h.grant("room", 30);
   h.emit([row]);
   expect(h.session.unread.attention("room", row.id).viewing).toBe(false);
+});
+
+it("channel read atomically clears owned marks through the latest reply, preserving other channels and later arrivals", async () => {
+  const h = setup();
+  h.grant("room");
+  h.grant("other");
+  const root = message(h.alice, "room", "root", 11);
+  const reply = message(h.alice, "room", "reply", 20, [
+    ["e", root.id, "", "reply"],
+    ["p", h.viewer.pubkey],
+  ]);
+  const other = message(h.alice, "other", "other", 12);
+  h.emit([root, reply, other]);
+  const unread = h.session.unread;
+  const thread = {
+    kind: "thread" as const,
+    channelId: "room",
+    rootId: root.id,
+  };
+  const msg = {
+    kind: "message" as const,
+    channelId: "room",
+    messageId: reply.id,
+  };
+  await unread.markUnreadLocal(h.target);
+  await unread.markUnreadLocal(thread);
+  await unread.markUnreadLocal(msg);
+  await unread.markUnreadLocal({ kind: "channel", channelId: "other" });
+  const before = h.journal();
+  const release = h.holdSave();
+  const pending = unread.markChannelRead("room");
+  // Arrival is beyond the captured frontier while its durable transaction waits.
+  const later = message(h.alice, "room", "later", 21);
+  h.emit([later]);
+  expect(h.snapshot().manual).toBe("local-only");
+  release();
+  expect(await pending).toMatchObject({ durability: "saved", sync: "pending" });
+  expect(h.journal()?.revision).toBe((before?.revision ?? 0) + 1);
+  expect(h.journal()?.state.frontiers).toEqual({ room: 20 });
+  expect(h.journal()?.localUnread).toEqual({
+    other: before?.localUnread.other,
+  });
+  expect(unread.snapshot(thread)).toMatchObject({
+    manual: "none",
+    observedCount: 0,
+  });
+  expect(unread.snapshot(msg)).toMatchObject({
+    manual: "none",
+    observedCount: 0,
+  });
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 1,
+    attentionCount: 0,
+    manual: "none",
+  });
+  expect(
+    unread.snapshot({ kind: "channel", channelId: "other" }),
+  ).toMatchObject({ observedCount: 1, manual: "local-only" });
+  expect(h.session.channels.window("room").rows).toHaveLength(0);
+});
+
+it("channel read clears local intent without fabricating a frontier when no messages are known", async () => {
+  const h = setup();
+  h.grant("room");
+  await h.session.unread.markUnreadLocal(h.target);
+  await h.session.unread.markChannelRead("room");
+  expect(h.journal()?.state.frontiers).toEqual({});
+  expect(h.snapshot()).toMatchObject({ observedCount: null, manual: "none" });
+  expect(h.host.sign).not.toHaveBeenCalled();
+});
+
+it.each(["clearCache", "dispose", "revoke-regrant"] as const)(
+  "channel read rejects delayed intent after %s without clearing saved marks",
+  async (action) => {
+    const h = setup();
+    h.grant("room");
+    h.emit([message(h.alice, "room", "root", 11)]);
+    await h.session.unread.markUnreadLocal(h.target);
+    const before = h.journal();
+    const release = h.holdSave();
+    const result = h.session.unread.markChannelRead("room");
+    const rejected = expect(result).rejects.toThrow();
+    if (action === "revoke-regrant") {
+      h.emit([roster(h.relay, "room", [], 20)]);
+      h.grant("room", 21);
+    } else await h[action]();
+    release();
+    await rejected;
+    expect(h.journal()?.state.frontiers).toEqual(before?.state.frontiers);
+    expect(h.journal()?.localUnread).toEqual(before?.localUnread);
+  },
+);
+
+it("channel read cannot use another channel, deleted content or auxiliary events as its frontier", async () => {
+  const h = setup();
+  h.grant("room");
+  h.grant("other");
+  const root = message(h.alice, "room", "root", 11);
+  const removed = message(h.alice, "room", "deleted", 20);
+  h.emit([
+    root,
+    removed,
+    message(h.alice, "other", "other", 30),
+    signed(h.alice, {
+      kind: 5,
+      created_at: 40,
+      tags: [
+        ["h", "room"],
+        ["e", removed.id],
+      ],
+      content: "",
+    }),
+  ]);
+  await h.session.unread.markChannelRead("room");
+  expect(h.journal()?.state.frontiers).toEqual({ room: 11 });
+  await expect(h.session.unread.markChannelRead("denied")).rejects.toThrow(
+    "unavailable",
+  );
+});
+
+it("failed channel read saves neither frontier nor clears, and an explicit retry succeeds", async () => {
+  const h = setup();
+  h.grant("room");
+  h.emit([message(h.alice, "room", "root", 11)]);
+  await h.session.unread.markUnreadLocal(h.target);
+  const before = h.journal();
+  h.failSave();
+  await expect(h.session.unread.markChannelRead("room")).rejects.toThrow(
+    "disk full",
+  );
+  expect(h.journal()).toEqual(before);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 1,
+    manual: "local-only",
+  });
+  await h.session.unread.markChannelRead("room");
+  expect(h.snapshot()).toMatchObject({ observedCount: 0, manual: "none" });
 });

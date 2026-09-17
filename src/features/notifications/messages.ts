@@ -54,6 +54,7 @@ export function bindMessageNotifications(
   let stopIncoming = () => {};
   let stopAccess = () => {};
   let stopSync = () => {};
+  let stopPreferences = () => {};
   const update = () => {
     const client = communities.snapshot();
     void notifications.selectViewer(client.viewer);
@@ -67,6 +68,7 @@ export function bindMessageNotifications(
     stopIncoming();
     stopAccess();
     stopSync();
+    stopPreferences();
     notifications.revalidate();
     session = relay.session;
     identity = next;
@@ -119,6 +121,18 @@ export function bindMessageNotifications(
               message.messageId,
             );
             const sync = owned.unread.sync();
+            // Mentions bypass channel mute, as in the legacy policy. Unknown
+            // preferences must not briefly release ordinary alerts at startup.
+            if (attention.category !== "mention") {
+              const preferences = owned.sidebarPreferences.snapshot();
+              if (preferences.data?.muted.includes(message.channelId))
+                return false;
+              if (
+                preferences.status !== "ready" &&
+                preferences.status !== "unsupported"
+              )
+                return "wait";
+            }
             if (
               attention.status === "ineligible" ||
               (!notifications.snapshot().preferences.notifyWhileViewing &&
@@ -150,6 +164,13 @@ export function bindMessageNotifications(
     stopIncoming = owned.subscribeIncoming(receive);
     // Only reconsider retained live candidates; readiness is not an event source.
     stopSync = owned.unread.subscribeSync(() => notifications.revalidate());
+    const preferencesChanged = () => {
+      notifications.revalidate();
+      if (owned.sidebarPreferences.snapshot().status === "idle")
+        void owned.sidebarPreferences.ensure();
+    };
+    stopPreferences = owned.sidebarPreferences.subscribe(preferencesChanged);
+    preferencesChanged();
     // App-global ownership: Channels may not be mounted. Start its shared
     // observation only after discovery, so an empty startup roster cannot
     // consume the unread owner's one-shot evidence repair.
@@ -175,5 +196,6 @@ export function bindMessageNotifications(
     stopIncoming();
     stopAccess();
     stopSync();
+    stopPreferences();
   };
 }

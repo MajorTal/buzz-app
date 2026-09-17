@@ -22,6 +22,7 @@ import {
 import {
   Hash,
   Search,
+  BellOff,
   PlugZap,
   MessageCircle,
   MoreHorizontal,
@@ -549,6 +550,24 @@ function ChannelWorkspace({
       });
     }
   };
+  const runChannelAction = async (
+    channelId: string,
+    action: () => Promise<unknown>,
+  ) => {
+    const generation = rowMenuGeneration.current;
+    setGroupWrite({ channelId, pending: true });
+    try {
+      await action();
+      if (generation === rowMenuGeneration.current) closeRowMenu();
+    } catch (error) {
+      if (generation !== rowMenuGeneration.current) return;
+      setGroupWrite({
+        channelId,
+        pending: false,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  };
   const setChannelStar = async (channelId: string, starred: boolean) => {
     const generation = rowMenuGeneration.current;
     setGroupWrite({ channelId, pending: true });
@@ -628,8 +647,14 @@ function ChannelWorkspace({
                   channel.channelType !== "dm" &&
                   channel.channelType !== "forum";
                 const starred = section.key === "starred";
+                const muteable = preferences.muteWritable && !!preferences.data;
+                const muted =
+                  preferences.data?.muted.includes(channel.id) ?? false;
+                const readable =
+                  queries.unread.sync().capability === "frontier-sync";
+                const actionable = movable || starrable || muteable || readable;
                 const menuOpen =
-                  (movable || starrable) &&
+                  actionable &&
                   rowMenu?.channel.id === channel.id &&
                   rowMenu.sectionId === currentSectionId;
                 const channelButton = (
@@ -649,10 +674,16 @@ function ChannelWorkspace({
                   >
                     <Icon size={17} />
                     <span>{channel.name}</span>
+                    {muted && (
+                      <BellOff
+                        size={14}
+                        aria-label="Muted; mentions still notify"
+                      />
+                    )}
                     <UnreadBadge session={queries} channelId={channel.id} />
                   </button>
                 );
-                if (!movable && !starrable) {
+                if (!actionable) {
                   return (
                     <div key={channel.id} className={styles.channelRow}>
                       {channelButton}
@@ -759,6 +790,41 @@ function ChannelWorkspace({
                             </>
                           )}
                         </>
+                      )}
+                      {(muteable || readable) && (starrable || movable) && (
+                        <MenuSeparator />
+                      )}
+                      {muteable && (
+                        <MenuItem
+                          closeOnClick={false}
+                          disabled={
+                            groupWrite?.channelId === channel.id &&
+                            groupWrite.pending
+                          }
+                          onClick={() =>
+                            void runChannelAction(channel.id, () =>
+                              preferences.setMute(channel.id, !muted),
+                            )
+                          }
+                        >
+                          {muted ? "Unmute" : "Mute"}
+                        </MenuItem>
+                      )}
+                      {readable && (
+                        <MenuItem
+                          closeOnClick={false}
+                          disabled={
+                            groupWrite?.channelId === channel.id &&
+                            groupWrite.pending
+                          }
+                          onClick={() =>
+                            void runChannelAction(channel.id, () =>
+                              queries.unread.markChannelRead(channel.id),
+                            )
+                          }
+                        >
+                          Mark as Read
+                        </MenuItem>
                       )}
                       {groupWrite?.channelId === channel.id &&
                         groupWrite.pending && <p role="status">Saving…</p>}

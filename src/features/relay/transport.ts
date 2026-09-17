@@ -12,6 +12,7 @@ import {
   projectSidebarPreferences,
   type SidebarAssignmentMutator,
   type SidebarStarMutator,
+  type SidebarMuteMutator,
   type SidebarDecoder,
   type SidebarPreferences,
 } from "./sidebar-preferences";
@@ -64,6 +65,7 @@ export interface ReadTransport {
   /** Host-only, relay-scoped mutation of one existing sidebar group assignment. */
   readonly writeSidebarAssignment?: SidebarAssignmentMutator;
   readonly writeSidebarStar?: SidebarStarMutator;
+  readonly writeSidebarMute?: SidebarMuteMutator;
   readonly profiling?: RelayProfiler;
   /** Verified incoming traffic. The session owns this subscription and fences late delivery. */
   subscribe?(callbacks: LiveCallbacks): LiveSubscription;
@@ -173,6 +175,7 @@ export async function connectBrokerTransport(
     sidebarPreferences?: boolean;
     sidebarPreferenceWrites?: boolean;
     sidebarStarWrites?: boolean;
+    sidebarMuteWrites?: boolean;
     agentLibrary?: boolean;
     agentActivity?: boolean;
     readState?: boolean;
@@ -373,6 +376,26 @@ export async function connectBrokerTransport(
               throw new Error((await readApiFailure(result)).error);
             return projectSidebarPreferences(undefined, await result.json())
               .starred;
+          },
+        }
+      : {}),
+    ...(session.sidebarMuteWrites
+      ? {
+          async writeSidebarMute(intent, signal) {
+            const result = await fetch(`${endpoint}/sidebar-mute`, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(intent),
+              signal,
+            });
+            if (!result.ok)
+              throw new Error((await readApiFailure(result)).error);
+            return projectSidebarPreferences(
+              undefined,
+              undefined,
+              await result.json(),
+            ).muted;
           },
         }
       : {}),

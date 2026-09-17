@@ -340,6 +340,7 @@ export function createReadState({
     timestamp: number | undefined,
     unread: boolean | undefined,
     valid: () => boolean,
+    clearLocalKeys: readonly string[] = [key],
   ): Promise<ReadMutationResult> {
     return queue(async () => {
       await ready;
@@ -373,7 +374,8 @@ export function createReadState({
                 );
           const localUnread = { ...current.localUnread };
           // Automatic observations do not clear explicit local manual-unread intent.
-          if (unread === false) delete localUnread[key];
+          if (unread === false)
+            for (const clearKey of clearLocalKeys) delete localUnread[clearKey];
           if (unread === true) localUnread[key] = revision;
           return {
             ...current,
@@ -576,7 +578,20 @@ export function createReadState({
       timestamp: number,
       valid: () => boolean,
       explicit = false,
-    ) => mutate(key, timestamp, explicit ? false : undefined, valid),
+      clearLocalKeys?: readonly string[],
+    ) =>
+      mutate(
+        key,
+        timestamp,
+        explicit ? false : undefined,
+        valid,
+        clearLocalKeys,
+      ),
+    clearLocalUnread: (
+      key: string,
+      keys: readonly string[],
+      valid: () => boolean,
+    ) => mutate(key, undefined, false, valid, keys),
     markLocalUnread: (key: string, valid: () => boolean) =>
       mutate(key, undefined, true, valid),
     accept(events: readonly RelayEvent[]) {

@@ -614,7 +614,11 @@ export const test = base.extend({
                     ([key]) => key === "d",
                   )?.[1];
                   if (
-                    ["channel-sections", "channel-stars"].includes(coordinate)
+                    [
+                      "channel-sections",
+                      "channel-stars",
+                      "channel-mutes",
+                    ].includes(coordinate)
                   ) {
                     expect(event.tags).toContainEqual(["t", coordinate]);
                     const blob = JSON.parse(
@@ -1022,26 +1026,29 @@ export const test = base.extend({
         observerFailures.splice(match, 1);
         return true;
       };
-      // The Star retry journey injects one specific failed host request. Match
+      // The Star/Mute retry journeys inject specific failed host requests. Match
       // that exact URL once, not every 502 or every console error in the test.
-      const starFailures = [...(report.sidebarStarFailures ?? [])];
-      const injectedStarFailure = (message, index) => {
+      const preferenceFailures = [
+        ...(report.sidebarStarFailures ?? []),
+        ...(report.sidebarMuteFailures ?? []),
+      ];
+      const injectedPreferenceFailure = (message, index) => {
         if (
           !/^Failed to load resource: the server responded with a status of 502/.test(
             message,
           )
         )
           return false;
-        const match = starFailures.indexOf(consoleLocations.get(index));
+        const match = preferenceFailures.indexOf(consoleLocations.get(index));
         if (match < 0) return false;
-        starFailures.splice(match, 1);
+        preferenceFailures.splice(match, 1);
         return true;
       };
       expect(
         report.consoleErrors.filter(
           (message, index) =>
             !retiredConsole(message, index) &&
-            !injectedStarFailure(message, index) &&
+            !injectedPreferenceFailure(message, index) &&
             !(
               expectedPageFailure &&
               message.includes("Fixture page render failure")

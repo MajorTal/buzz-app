@@ -46,6 +46,7 @@ async function setup(
       sections: [],
       assignments: {},
       starred,
+      muted: [],
     }),
     query: vi.fn((...args: Parameters<typeof h.transport.query>) =>
       args[0].some((filter) => filter.kinds?.includes(0))

@@ -1,6 +1,7 @@
 import type {
   SidebarAssignmentMutator,
   SidebarStarMutator,
+  SidebarMuteMutator,
   SidebarPreferences,
 } from "./sidebar-preferences";
 
@@ -16,6 +17,7 @@ export function createSidebarPreferencesStore(
   available: boolean,
   write?: SidebarAssignmentMutator,
   writeStar?: SidebarStarMutator,
+  writeMute?: SidebarMuteMutator,
   notify = (listener: () => void) => listener(),
 ) {
   const listeners = new Set<() => void>();
@@ -37,6 +39,7 @@ export function createSidebarPreferencesStore(
       ),
       assignments: Object.freeze({ ...data.assignments }),
       starred: Object.freeze([...data.starred]),
+      muted: Object.freeze([...data.muted]),
     });
   const publish = (next: Snapshot) => {
     snapshot = Object.freeze(next);
@@ -118,6 +121,7 @@ export function createSidebarPreferencesStore(
                 sections: groups.sections,
                 assignments: groups.assignments,
                 starred: current?.starred ?? [],
+                muted: current?.muted ?? [],
               }),
             });
             return groups;
@@ -157,6 +161,42 @@ export function createSidebarPreferencesStore(
               data: retained({ ...current, starred: stars }),
             });
             return stars;
+          });
+        writeQueue = run.then(
+          () => undefined,
+          () => undefined,
+        );
+        return run;
+      },
+      muteWritable: !!writeMute,
+      setMute(channelId: string, muted: boolean, signal?: AbortSignal) {
+        if (closed || !writeMute || !snapshot.data)
+          return Promise.reject(
+            new Error("Sidebar mutes are unavailable in this host"),
+          );
+        const writeGeneration = generation;
+        const writeSignal = AbortSignal.any([
+          writeLifetime.signal,
+          ...(signal ? [signal] : []),
+        ]);
+        const run = writeQueue
+          .catch(() => {})
+          .then(async () => {
+            if (closed || generation !== writeGeneration)
+              throw new Error("Sidebar mutes are unavailable");
+            writeSignal.throwIfAborted();
+            const mutes = await writeMute({ channelId, muted }, writeSignal);
+            if (closed || generation !== writeGeneration)
+              throw new Error("Sidebar mutes are unavailable");
+            writeSignal.throwIfAborted();
+            const current = snapshot.data;
+            if (!current) throw new Error("Sidebar mutes are unavailable");
+            mutation++;
+            publish({
+              status: "ready",
+              data: retained({ ...current, muted: mutes }),
+            });
+            return mutes;
           });
         writeQueue = run.then(
           () => undefined,

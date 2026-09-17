@@ -4,6 +4,7 @@ import { flush, keypair, scriptedTransport } from "./testing";
 import type {
   SidebarAssignmentMutator,
   SidebarStarMutator,
+  SidebarMuteMutator,
   SidebarPreferences,
 } from "./sidebar-preferences";
 
@@ -20,12 +21,14 @@ function deferred<T>() {
 const data: SidebarPreferences = {
   sections: [{ id: "work", name: "Work", order: 0 }],
   assignments: { alpha: "work" },
+  muted: [],
   starred: ["beta"],
 };
 function setup(
   decode = vi.fn(async (): Promise<SidebarPreferences> => data),
   write?: SidebarAssignmentMutator,
   writeStar?: SidebarStarMutator,
+  writeMute?: SidebarMuteMutator,
 ) {
   const wire = scriptedTransport(keypair().pubkey, keypair().pubkey);
   const owner = createRelaySession({
@@ -33,6 +36,7 @@ function setup(
     decodeSidebarPreferences: decode,
     ...(write ? { writeSidebarAssignment: write } : {}),
     ...(writeStar ? { writeSidebarStar: writeStar } : {}),
+    ...(writeMute ? { writeSidebarMute: writeMute } : {}),
   });
   return { wire, owner, preferences: owner.session.sidebarPreferences, decode };
 }
@@ -68,6 +72,7 @@ it("applies a confirmed assignment to the retained session snapshot", async () =
           { id: "later", name: "Later", order: 1 },
         ],
         assignments: { alpha: "later" },
+        muted: [],
         starred: ["beta"],
       },
     });
@@ -335,6 +340,7 @@ it("serializes confirmed assignment and star writes without losing either projec
       data: {
         ...data,
         assignments: { alpha: "work", beta: "work" },
+        muted: [],
         starred: ["alpha", "beta"],
       },
     });
@@ -468,6 +474,190 @@ it("does not mutate before a successful initial preference read or without host 
   const readonly = setup();
   try {
     expect(readonly.preferences.starWritable).toBe(false);
+  } finally {
+    readonly.owner.dispose();
+  }
+});
+
+it("serializes confirmed assignment and mute writes without losing either projection", async () => {
+  const gate = deferred<readonly string[]>();
+  const started = deferred<void>();
+  const mute = vi.fn<SidebarMuteMutator>(async () => {
+    started.resolve();
+    return gate.promise;
+  });
+  const assign = vi.fn<SidebarAssignmentMutator>(async () => ({
+    sections: data.sections,
+    assignments: { alpha: "work", beta: "work" },
+  }));
+  const { wire, owner, preferences } = setup(
+    undefined,
+    assign,
+    undefined,
+    mute,
+  );
+  try {
+    const initial = preferences.ensure();
+    await flush();
+    wire.next().respond([]);
+    await initial;
+    const pending = preferences.setMute("alpha", true);
+    await started.promise;
+    const queued = preferences.assign("beta", "work");
+    expect(preferences.snapshot().data).toEqual(data);
+    expect(assign).not.toHaveBeenCalled();
+    gate.resolve(["alpha", "beta"]);
+    await Promise.all([pending, queued]);
+    expect(preferences.snapshot()).toEqual({
+      status: "ready",
+      data: {
+        ...data,
+        assignments: { alpha: "work", beta: "work" },
+        muted: ["alpha", "beta"],
+      },
+    });
+    expect(Object.isFrozen(preferences.snapshot().data?.muted)).toBe(true);
+    expect(mute).toHaveBeenCalledWith(
+      { channelId: "alpha", muted: true },
+      expect.any(AbortSignal),
+    );
+  } finally {
+    gate.resolve([]);
+    owner.dispose();
+  }
+});
+
+it("failed Mute retains the confirmed snapshot and a retry can unmute", async () => {
+  const mute = vi
+    .fn<SidebarMuteMutator>()
+    .mockRejectedValueOnce(new Error("publish rejected"))
+    .mockResolvedValueOnce([]);
+  const { wire, owner, preferences } = setup(
+    undefined,
+    undefined,
+    undefined,
+    mute,
+  );
+  try {
+    const initial = preferences.ensure();
+    await flush();
+    wire.next().respond([]);
+    await initial;
+    const retained = preferences.snapshot();
+    await expect(preferences.setMute("beta", false)).rejects.toThrow(
+      "publish rejected",
+    );
+    expect(preferences.snapshot()).toBe(retained);
+    await preferences.setMute("beta", false);
+    expect(preferences.snapshot().data).toEqual({ ...data, muted: [] });
+  } finally {
+    owner.dispose();
+  }
+});
+
+it.each(["success", "failure"])(
+  "a stale refresh %s cannot overwrite confirmed Mute",
+  async (outcome) => {
+    const gate = deferred<SidebarPreferences>();
+    const started = deferred<void>();
+    const decode = vi
+      .fn(async () => data)
+      .mockImplementationOnce(async () => data);
+    const { wire, owner, preferences } = setup(
+      decode,
+      undefined,
+      undefined,
+      async () => ["alpha", "beta"],
+    );
+    try {
+      const initial = preferences.ensure();
+      await flush();
+      wire.next().respond([]);
+      await initial;
+      decode.mockImplementationOnce(() => {
+        started.resolve();
+        return gate.promise;
+      });
+      const refresh = preferences.refresh();
+      await flush();
+      wire.next().respond([]);
+      await started.promise;
+      await preferences.setMute("alpha", true);
+      const retained = preferences.snapshot();
+      if (outcome === "success") gate.resolve(data);
+      else gate.reject(new Error("old read failed"));
+      await refresh;
+      expect(preferences.snapshot()).toBe(retained);
+      expect(retained.status).toBe("ready");
+      expect(retained.data?.muted).toEqual(["alpha", "beta"]);
+    } finally {
+      gate.resolve(data);
+      owner.dispose();
+    }
+  },
+);
+
+it.each(["clearCache", "dispose", "cancel"] as const)(
+  "%s aborts Mute and fences active and queued writes",
+  async (action) => {
+    const gate = deferred<readonly string[]>();
+    const started = deferred<AbortSignal>();
+    const mute = vi.fn<SidebarMuteMutator>(async (_intent, signal) => {
+      started.resolve(signal);
+      return gate.promise;
+    });
+    const { wire, owner, preferences } = setup(
+      undefined,
+      undefined,
+      undefined,
+      mute,
+    );
+    const caller = new AbortController();
+    try {
+      const initial = preferences.ensure();
+      await flush();
+      wire.next().respond([]);
+      await initial;
+      const pending = preferences.setMute("alpha", true, caller.signal);
+      const activeSignal = await started.promise;
+      const queued = preferences.setMute("beta", false, caller.signal);
+      const result = Promise.allSettled([pending, queued]);
+      if (action === "cancel") caller.abort();
+      else await owner[action]();
+      expect(activeSignal.aborted).toBe(true);
+      gate.resolve(["alpha", "beta"]);
+      expect((await result).map((entry) => entry.status)).toEqual([
+        "rejected",
+        "rejected",
+      ]);
+      expect(mute).toHaveBeenCalledOnce();
+      expect(preferences.snapshot().data).toEqual(
+        action === "cancel" ? data : undefined,
+      );
+    } finally {
+      gate.resolve([]);
+      owner.dispose();
+    }
+  },
+);
+
+it("does not mutate before a successful initial preference read or without host capability", async () => {
+  const mute = vi.fn<SidebarMuteMutator>(async () => []);
+  const assign = vi.fn<SidebarAssignmentMutator>(async () => data);
+  const { owner, preferences } = setup(undefined, assign, undefined, mute);
+  try {
+    await expect(preferences.setMute("alpha", true)).rejects.toThrow(
+      "unavailable",
+    );
+    await expect(preferences.assign("alpha", "work")).rejects.toThrow();
+    expect(mute).not.toHaveBeenCalled();
+    expect(assign).not.toHaveBeenCalled();
+  } finally {
+    owner.dispose();
+  }
+  const readonly = setup();
+  try {
+    expect(readonly.preferences.muteWritable).toBe(false);
   } finally {
     readonly.owner.dispose();
   }

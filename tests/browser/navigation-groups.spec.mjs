@@ -31,7 +31,7 @@ test("row menu moves and removes a channel through the confirmed saved-group wri
   ).toHaveAttribute("aria-checked", "true");
   await page.keyboard.press("End");
   await expect(
-    page.getByRole("menuitem", { name: "Remove from group" }),
+    page.getByRole("menuitem", { name: "Mark as Read", exact: true }),
   ).toBeFocused();
   await page.keyboard.press("Home");
   await expect(

@@ -26,6 +26,7 @@ it("intersects groups/stars with active authorized streams, keeping forums and D
       "group-dm": "channels",
       other: "missing",
     },
+    muted: [],
     starred: ["star", "archived", "hidden", "revoked", "dm", "forum"],
   };
   const project = (channels: readonly ChannelSummary[]) =>
@@ -54,6 +55,7 @@ it("Star placement is exclusive and Unstar restores the saved assignment", () =>
   const saved = {
     sections: [{ id: "work", name: "Work", order: 0 }],
     assignments: { beta: "work" },
+    muted: [],
     starred: ["alpha", "beta"],
   };
   const placements = (starred: string[]) =>

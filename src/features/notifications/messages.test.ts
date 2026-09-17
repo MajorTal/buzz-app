@@ -2,6 +2,10 @@ import { Context } from "@deepseek-ai/cordis";
 import { PluginRuntime } from "../../plugins/runtime";
 import { afterEach, expect, it, vi } from "vitest";
 import { createRelaySession } from "../relay/session";
+import type {
+  SidebarDecoder,
+  SidebarMuteMutator,
+} from "../relay/sidebar-preferences";
 import type { LiveCallbacks } from "../relay/live";
 import type { ReadFilter } from "../relay/events";
 import type { Communities } from "../communities/service";
@@ -40,6 +44,7 @@ async function setup(
     channelsMounted?: boolean;
     deferRoster?: boolean;
   },
+  sidebar?: { decode: SidebarDecoder; write?: SidebarMuteMutator },
 ) {
   const viewer = keypair(),
     peer = keypair(),
@@ -104,6 +109,12 @@ async function setup(
             ...(remote.observation === "snapshot"
               ? { readStateSnapshot: markerQuery }
               : {}),
+          }
+        : {}),
+      ...(sidebar
+        ? {
+            decodeSidebarPreferences: sidebar.decode,
+            ...(sidebar.write ? { writeSidebarMute: sidebar.write } : {}),
           }
         : {}),
       media: () => undefined,
@@ -722,3 +733,136 @@ it("notification startup waits for the roster without consuming the shared evide
   expect(h.markerQuery).toHaveBeenCalledOnce();
   expect(evidence()).toHaveLength(1);
 });
+
+it.each(["direct", "thread"] as const)(
+  "confirmed mute suppresses %s alerts but preserves unread and explicit mentions",
+  async (category) => {
+    vi.spyOn(Date, "now").mockReturnValue(1_780_000_000_000);
+    const write = vi.fn<SidebarMuteMutator>(async ({ muted }) =>
+      muted ? ["room"] : [],
+    );
+    const h = await setup(Promise.resolve(), undefined, undefined, {
+      decode: async () => ({
+        sections: [],
+        assignments: {},
+        starred: [],
+        muted: [],
+      }),
+      write,
+    });
+    await h.owner.session.sidebarPreferences.ensure();
+    const root = message(h.viewer, "room", "root", 1_779_999_999);
+    if (category === "direct")
+      h.emit([
+        signed(h.relay, {
+          kind: 39000,
+          created_at: 1_780_000_000,
+          content: JSON.stringify({ name: "Room", channel_type: "dm" }),
+          tags: [
+            ["d", "room"],
+            ["name", "Room"],
+            ["t", "dm"],
+          ],
+        }),
+      ]);
+    else h.emit([root], "replay");
+    const make = (text: string) =>
+      message(
+        h.peer,
+        "room",
+        text,
+        1_780_000_000,
+        category === "thread" ? [["e", root.id, "", "reply"]] : [],
+      );
+    await h.owner.session.sidebarPreferences.setMute("room", true);
+    const quiet = make("quiet");
+    h.emit([quiet], "live");
+    // Mention is an observable presentation barrier behind the muted candidate.
+    h.emit([h.make("mention")], "live");
+    await vi.waitFor(() => expect(h.show).toHaveBeenCalledOnce());
+    expect(h.show.mock.calls[0]?.[0].body).toBe("mention");
+    expect(h.owner.session.unread.attention("room", quiet.id).unread).toBe(
+      true,
+    );
+    await h.owner.session.sidebarPreferences.setMute("room", false);
+    h.emit([make("audible")], "live");
+    await vi.waitFor(() => expect(h.show).toHaveBeenCalledTimes(2));
+    expect(h.show.mock.calls[1]?.[0].body).toBe("audible");
+  },
+);
+
+it("a confirmed mute cancels an alert waiting on permission, even after unmute", async () => {
+  vi.spyOn(Date, "now").mockReturnValue(1_780_000_000_000);
+  const h = await setup(Promise.resolve(), undefined, undefined, {
+    decode: async () => ({
+      sections: [],
+      assignments: {},
+      starred: [],
+      muted: [],
+    }),
+    write: async ({ muted }) => (muted ? ["room"] : []),
+  });
+  await h.owner.session.sidebarPreferences.ensure();
+  let release!: (permission: "granted") => void;
+  h.permission.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  const root = message(h.viewer, "room", "root", 1_779_999_999);
+  const reply = message(h.peer, "room", "cancelled reply", 1_780_000_000, [
+    ["e", root.id, "", "reply"],
+  ]);
+  h.emit([root], "replay");
+  h.emit([reply], "live");
+  await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+  try {
+    await h.owner.session.sidebarPreferences.setMute("room", true);
+    await h.owner.session.sidebarPreferences.setMute("room", false);
+  } finally {
+    release("granted");
+  }
+  // A fresh candidate drains the presentation turn after permission resolves.
+  h.emit([h.make("fresh mention")], "live");
+  await vi.waitFor(() => expect(h.show).toHaveBeenCalledOnce());
+  expect(h.show.mock.calls[0]?.[0].body).toBe("fresh mention");
+  expect(h.owner.session.unread.attention("room", reply.id).unread).toBe(true);
+});
+
+it.each([true, false])(
+  "initial mute read failure holds ordinary alerts until explicit retry (muted=%s), without Channels mounted",
+  async (muted) => {
+    vi.spyOn(Date, "now").mockReturnValue(1_780_000_000_000);
+    const decode = vi
+      .fn<SidebarDecoder>()
+      .mockRejectedValueOnce(new Error("preferences unavailable"))
+      .mockResolvedValue({
+        sections: [],
+        assignments: {},
+        starred: [],
+        muted: muted ? ["room"] : [],
+      });
+    const h = await setup(Promise.resolve(), undefined, undefined, { decode });
+    await h.owner.session.sidebarPreferences.ensure();
+    expect(h.owner.session.sidebarPreferences.snapshot().status).toBe("error");
+    const root = message(h.viewer, "room", "root", 1_779_999_999);
+    h.emit([root], "replay");
+    const reply = message(h.peer, "room", "waiting", 1_780_000_000, [
+      ["e", root.id, "", "reply"],
+    ]);
+    h.emit([reply], "live");
+    // A mention bypasses only mute readiness, not existing read/permission policy.
+    h.emit([h.make("mention")], "live");
+    await vi.waitFor(() => expect(h.show).toHaveBeenCalledOnce());
+    expect(h.show.mock.calls[0]?.[0].body).toBe("mention");
+    await h.owner.session.sidebarPreferences.refresh();
+    if (!muted) await vi.waitFor(() => expect(h.show).toHaveBeenCalledTimes(2));
+    else {
+      h.emit([h.make("second mention")], "live");
+      await vi.waitFor(() => expect(h.show).toHaveBeenCalledTimes(2));
+      expect(h.show.mock.calls[1]?.[0].body).toBe("second mention");
+    }
+    expect(decode).toHaveBeenCalledTimes(2);
+  },
+);

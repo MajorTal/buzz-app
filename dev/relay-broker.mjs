@@ -1,4 +1,8 @@
 import {
+  assertSidebarMuteIntent,
+  mutateSidebarMute,
+} from "./sidebar-mutes.mjs";
+import {
   assertSidebarStarIntent,
   mutateSidebarStar,
 } from "./sidebar-stars.mjs";
@@ -561,10 +565,12 @@ export function relayBrokerPlugin({
             [
               "/api/relay/sidebar-assignment",
               "/api/relay/sidebar-star",
+              "/api/relay/sidebar-mute",
             ].includes(route) &&
             req.method === "POST"
           ) {
             const starring = route === "/api/relay/sidebar-star";
+            const muting = route === "/api/relay/sidebar-mute";
             let raw = "";
             for await (const part of req) {
               raw += part;
@@ -577,6 +583,7 @@ export function relayBrokerPlugin({
             try {
               intent = JSON.parse(raw);
               if (starring) assertSidebarStarIntent(intent);
+              else if (muting) assertSidebarMuteIntent(intent);
               else assertSidebarAssignmentIntent(intent);
             } catch {
               return json(res, 400, {
@@ -595,7 +602,13 @@ export function relayBrokerPlugin({
                   {
                     kinds: [30078],
                     authors: [viewer],
-                    "#d": [starring ? "channel-stars" : "channel-sections"],
+                    "#d": [
+                      starring
+                        ? "channel-stars"
+                        : muting
+                          ? "channel-mutes"
+                          : "channel-sections",
+                    ],
                     limit: 1,
                   },
                 ];
@@ -670,12 +683,13 @@ export function relayBrokerPlugin({
                       "Sidebar preference publication was not accepted",
                     );
                 };
-                return (starring ? mutateSidebarStar : mutateSidebarAssignment)(
-                  intent,
-                  key,
-                  readHead,
-                  publishEvent,
-                );
+                return (
+                  starring
+                    ? mutateSidebarStar
+                    : muting
+                      ? mutateSidebarMute
+                      : mutateSidebarAssignment
+                )(intent, key, readHead, publishEvent);
               });
             sidebarMutations.set(relay, mutation);
             try {
@@ -727,6 +741,7 @@ export function relayBrokerPlugin({
               readState: true,
               sidebarPreferenceWrites: true,
               sidebarStarWrites: true,
+              sidebarMuteWrites: true,
               agentLibrary: true,
               live: true,
               agentActivity: true,

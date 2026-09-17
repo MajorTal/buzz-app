@@ -41,6 +41,7 @@ const stars = {
 const expected = {
   sections: groups.sections,
   assignments: { general: "work" },
+  muted: [],
   starred: ["general"],
 };
 
@@ -75,6 +76,12 @@ it("reads legacy preferences through the production session, transport, and boun
         kinds: [30078],
         authors: [viewer.pubkey],
         "#d": ["channel-stars"],
+        limit: 1,
+      },
+      {
+        kinds: [30078],
+        authors: [viewer.pubkey],
+        "#d": ["channel-mutes"],
         limit: 1,
       },
     ]);
@@ -221,6 +228,7 @@ it("reads legacy preferences through the production session, transport, and boun
     expect(await owner.session.sidebarPreferences.read()).toEqual({
       sections: [],
       assignments: {},
+      muted: [],
       starred: [],
     });
     upstream.mockImplementationOnce(async () =>

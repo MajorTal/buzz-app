@@ -65,6 +65,14 @@ could hide unseen siblings. Oversized rows that never fit fully are not auto-rea
 - `markThrough(target, messageId)` is explicit prefix intent through verified
   evidence. It can mark unloaded earlier messages read; do not use it for viewport
   observation. A channel prefix requires a top-level message, not a reply.
+- `markChannelRead(channelId)` snapshots the newest retained verified message
+  (including replies) when invoked, then atomically advances the channel frontier
+  and clears the channel's owned local manual-unread marks. It does not fetch
+  history, select the row, or substitute the wall clock for message evidence.
+  Arrivals beyond that timestamp remain unread; like other timestamp prefixes,
+  this also covers messages at or before the cut that arrive later.
+  With no message evidence, it clears only the channel's local mark and invents
+  no frontier. Success means local durability; publication may still be pending.
 - `markUnreadLocal(target)` is durable **on this browser profile/device only**.
   Automatic reading does not clear it. An explicit mark-through clears that
   target's local mark. `syncedManualUnread` is `false`.
@@ -98,6 +106,23 @@ Unread ancestry uses the same canonical marked-reference parser as thread openin
 and row projection (case-insensitive hex, last valid marker wins). Resolution still
 requires bounded, retained same-channel message evidence; references alone do not
 grant access or trigger a read.
+
+## Explicit clearing matrix
+
+| Intent | Durable frontier | Local manual-unread clears |
+| --- | --- | --- |
+| Automatic visible dwell | Individual verified message | None |
+| `markThrough(target, messageId)` | Explicit verified target prefix | That target only |
+| `markChannelRead(channelId)` | Channel through newest retained verified message, including replies | Channel, retained messages, verified same-channel reply roots, and threads whose top-level root is retained |
+| Channel read with no evidence | None | Channel only |
+| Mute/Unmute | None | None |
+
+Channel read does not clear other channels, unproven ancestry, or remote manual
+unread overrides. Bounded evidence cannot establish ownership of every historical
+local mark. The channel frontier and owned local clears commit in one transaction;
+storage failure changes neither, and disposal/cache clear or access revoke/regrant
+invalidates queued intent. Automatic dwell retains its existing cancellation rule
+for newer manual-unread intent.
 
 ## Durable sync and privacy
 

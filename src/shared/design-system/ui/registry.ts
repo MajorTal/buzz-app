@@ -17,8 +17,14 @@ export type BaseUiPart = {
 export const BASE_UI_PARTS = {
   avatar: { name: "Avatar", docs: "avatar", module: "@base-ui/react/avatar" },
   button: { name: "Button", docs: "button", module: "@base-ui/react/button" },
+  contextMenu: {
+    name: "Context Menu",
+    docs: "context-menu",
+    module: "@base-ui/react/context-menu",
+  },
   field: { name: "Field", docs: "field", module: "@base-ui/react/field" },
   input: { name: "Input", docs: "input", module: "@base-ui/react/input" },
+  menu: { name: "Menu", docs: "menu", module: "@base-ui/react/menu" },
   select: { name: "Select", docs: "select", module: "@base-ui/react/select" },
   switch: { name: "Switch", docs: "switch", module: "@base-ui/react/switch" },
   tabs: { name: "Tabs", docs: "tabs", module: "@base-ui/react/tabs" },
@@ -335,6 +341,26 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     owner: "desktop-new Design system",
     source: "shared/design-system/ui/Accordion.tsx",
     baseUi: [BASE_UI_PARTS.accordion],
+    composes: [],
+  },
+  {
+    slug: "menu",
+    name: "Menu",
+    purpose: "Present contextual actions and choices from a compact trigger.",
+    behavior:
+      "Base UI owns positioning, dismissal, keyboard navigation, selection, and nested submenus",
+    variants: [
+      "actions",
+      "links",
+      "checkbox choices",
+      "radio choices",
+      "nested submenus",
+    ],
+    status: "proposed",
+    collection: "components",
+    owner: "desktop-new Design system",
+    source: "shared/design-system/ui/Menu.tsx",
+    baseUi: [BASE_UI_PARTS.menu, BASE_UI_PARTS.contextMenu],
     composes: [],
   },
   {

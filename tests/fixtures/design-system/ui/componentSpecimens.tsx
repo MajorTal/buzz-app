@@ -3,6 +3,9 @@ import { PanelSwapPlaygrounds } from "./PanelSwapPlaygrounds";
 import { FlexWorkspace } from "../../../../src/shared/design-system/ui/FlexWorkspace";
 import { BentoSpecimen } from "./BentoSpecimen";
 import {
+  IconArrowsSort,
+  IconBell,
+  IconCheck,
   IconDots,
   IconHash,
   IconMessageCircle,
@@ -14,6 +17,21 @@ import { useState } from "react";
 import { Switch } from "../../../../src/shared/design-system/ui/Switch";
 import { Accordion } from "../../../../src/shared/design-system/ui/Accordion";
 import { Select } from "../../../../src/shared/design-system/ui/Select";
+import {
+  MenuCheckboxItem,
+  MenuIcon,
+  MenuItem,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+  MenuRoot,
+  MenuSeparator,
+  MenuSubmenu,
+  MenuSubmenuPopup,
+  MenuSubmenuTrigger,
+  MenuTrailing,
+  MenuTrigger,
+} from "../../../../src/shared/design-system/ui/Menu";
 import { Avatar } from "../../../../src/shared/design-system/ui/Avatar";
 import { InlineChip } from "../../../../src/shared/design-system/ui/InlineChip";
 import { Button } from "../../../../src/shared/design-system/ui/Button";
@@ -833,6 +851,60 @@ function SwitchSpecimen() {
   );
 }
 
+function MenuSpecimen() {
+  const [sort, setSort] = useState("recent");
+  const [notifications, setNotifications] = useState(true);
+  return (
+    <MenuRoot>
+      <MenuTrigger
+        render={
+          <IconButton
+            aria-label="More actions"
+            icon={<IconDots size={16} aria-hidden="true" />}
+          />
+        }
+      />
+      <MenuPopup>
+        <MenuItem>
+          <MenuIcon>
+            <IconCheck size={16} />
+          </MenuIcon>
+          Mark all as read
+        </MenuItem>
+        <MenuCheckboxItem
+          checked={notifications}
+          onCheckedChange={setNotifications}
+        >
+          <MenuIcon>
+            <IconBell size={16} />
+          </MenuIcon>
+          Notifications
+        </MenuCheckboxItem>
+        <MenuSeparator />
+        <MenuSubmenu>
+          <MenuSubmenuTrigger>
+            <MenuIcon>
+              <IconArrowsSort size={16} />
+            </MenuIcon>
+            Sort
+          </MenuSubmenuTrigger>
+          <MenuSubmenuPopup>
+            <MenuRadioGroup value={sort} onValueChange={setSort}>
+              <MenuRadioItem value="recent">Recent</MenuRadioItem>
+              <MenuRadioItem value="alpha">A–Z</MenuRadioItem>
+            </MenuRadioGroup>
+            <MenuSeparator />
+            <MenuItem disabled>
+              Disabled action
+              <MenuTrailing>⌘D</MenuTrailing>
+            </MenuItem>
+          </MenuSubmenuPopup>
+        </MenuSubmenu>
+      </MenuPopup>
+    </MenuRoot>
+  );
+}
+
 function SelectSpecimen() {
   const [value, setValue] = useState("channel");
   return (
@@ -866,6 +938,7 @@ export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
   "full-page-surface": FullPageSurfaceSpecimen,
   panel: PanelSpecimen,
   tabs: TabsSpecimen,
+  menu: MenuSpecimen,
   select: SelectSpecimen,
   switch: SwitchSpecimen,
   accordion: () => (

@@ -107,11 +107,13 @@ test("radio and checkbox labels change the actual form values while disabled cho
   const user = userEvent.setup();
   render(
     <form aria-label="Preferences">
-      <RadioGroup name="mode" aria-label="Color mode" defaultValue="light">
-        <Radio value="light" label="Light" />
-        <Radio value="dark" label="Dark" />
-        <Radio value="unavailable" label="Unavailable" disabled />
-      </RadioGroup>
+      <Field label="Color mode">
+        <RadioGroup name="mode" defaultValue="light">
+          <Radio value="light" label="Light" />
+          <Radio value="dark" label="Dark" />
+          <Radio value="unavailable" label="Unavailable" disabled />
+        </RadioGroup>
+      </Field>
       <Checkbox name="summary" value="yes" label="Include summary" />
     </form>,
   );

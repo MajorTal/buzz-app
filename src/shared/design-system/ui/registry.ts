@@ -111,7 +111,11 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     status: "proposed",
     collection: "components",
     source: "shared/design-system/ui/RadioGroup.tsx",
-    baseUi: [BASE_UI_PARTS.radioGroup, BASE_UI_PARTS.radio],
+    baseUi: [
+      BASE_UI_PARTS.radioGroup,
+      BASE_UI_PARTS.radio,
+      BASE_UI_PARTS.field,
+    ],
     composes: [],
   },
 

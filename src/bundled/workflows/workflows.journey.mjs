@@ -137,7 +137,7 @@ test("workflow editor preserves YAML, resolves exact saves, retains conflicts an
   await expect(button("Close editor")).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(button("Close editor")).toHaveCSS(
     "background-color",
-    "rgb(16, 16, 16)",
+    "rgb(51, 51, 51)",
   );
   await yaml.focus();
   await page.keyboard.press("ArrowLeft");

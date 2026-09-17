@@ -1,7 +1,9 @@
+import { Field as BaseField } from "@base-ui/react/field";
 import { RadioGroup as BaseRadioGroup } from "@base-ui/react/radio-group";
 import { Radio as BaseRadio } from "@base-ui/react/radio";
 import { useId, type ComponentProps, type ReactNode } from "react";
 
+/** Compose inside Field so each Radio has its own labelled Field.Item. */
 export function RadioGroup<Value>({
   children,
   ...props
@@ -28,28 +30,33 @@ export function Radio({
   const controlId = id ?? generatedId;
   const descriptionId = `${controlId}-description`;
   return (
-    <label className="buzz-choice" data-variant={variant} htmlFor={controlId}>
-      <BaseRadio.Root
-        {...props}
-        id={controlId}
-        aria-describedby={
-          [props["aria-describedby"], description ? descriptionId : undefined]
-            .filter(Boolean)
-            .join(" ") || undefined
-        }
-        data-buzz-ui=""
-        className="buzz-radio"
-      >
-        <BaseRadio.Indicator className="buzz-radio-indicator" />
-      </BaseRadio.Root>
-      <span>
-        <span className="buzz-choice-label">{label}</span>
-        {description && (
-          <span id={descriptionId} className="buzz-choice-description">
-            {description}
+    <BaseField.Item>
+      <label className="buzz-choice" data-variant={variant} htmlFor={controlId}>
+        <BaseRadio.Root
+          {...props}
+          id={controlId}
+          aria-labelledby={props["aria-labelledby"] ?? `${controlId}-label`}
+          aria-describedby={
+            [props["aria-describedby"], description ? descriptionId : undefined]
+              .filter(Boolean)
+              .join(" ") || undefined
+          }
+          data-buzz-ui=""
+          className="buzz-radio"
+        >
+          <BaseRadio.Indicator className="buzz-radio-indicator" />
+        </BaseRadio.Root>
+        <span>
+          <span id={`${controlId}-label`} className="buzz-choice-label">
+            {label}
           </span>
-        )}
-      </span>
-    </label>
+          {description && (
+            <span id={descriptionId} className="buzz-choice-description">
+              {description}
+            </span>
+          )}
+        </span>
+      </label>
+    </BaseField.Item>
   );
 }

@@ -31,6 +31,10 @@ test("pending dialogs reject close and Escape, then allow dismissal once release
   );
   const view = render(content(true));
   expect(screen.getByRole("dialog", { name: "Edit notes" })).toBeVisible();
+  expect(screen.getByRole("dialog", { name: "Edit notes" })).toHaveAttribute(
+    "aria-modal",
+    "true",
+  );
   expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
   await user.click(screen.getByRole("textbox", { name: "Name" }));
   await user.keyboard("{Escape}");

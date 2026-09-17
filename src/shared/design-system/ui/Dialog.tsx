@@ -48,6 +48,7 @@ export function Dialog({
         <BaseDialog.Popup
           data-buzz-ui=""
           className="buzz-dialog"
+          aria-modal="true"
           initialFocus={initialFocus}
           finalFocus={finalFocus}
         >

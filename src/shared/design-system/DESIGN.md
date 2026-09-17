@@ -88,6 +88,23 @@ carry the shared field appearance. RadioGroup is for one choice, Checkbox for an
 independent choice and Switch for an immediate on/off setting. Use the native
 form semantics exposed by those Base UI primitives rather than duplicating them.
 
+## Compositions
+
+Dialog composes a Base UI modal with a shared title, optional description, body,
+close button and actions. Pending operations set preventClose so Escape and the
+close button agree. It retains the app's explicit dismissal behavior: outside
+clicks do not discard a form. Provide initialFocus for search dialogs and
+finalFocus when a flow has an external trigger or opens a second dialog.
+
+Use Tooltip for short hints on labelled controls; use PreviewCard for richer
+content. Tooltip owns its description link and inherits placement, focus and
+Escape behavior from Base UI. Overlay layers keep menus and hints above dialogs.
+
+Tabs with content use renderPanel, which lets Base UI connect each tab and panel.
+Route navigation uses NavigationItem with aria-current instead. NavigationItem
+forwards normal button events, refs and data attributes so unread observation,
+preloading and product shortcuts remain with the caller.
+
 ## State
 
 - **Design default, hover, pressed, focus, selected, disabled and loading states where they apply.** Pressed changes fill without moving the control. Loading keeps the label footprint and prevents repeated activation; CSS alone cannot enforce it.

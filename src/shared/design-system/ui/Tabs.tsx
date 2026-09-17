@@ -31,7 +31,10 @@ export function Tabs<Value extends string>({
   variant = "chrome",
   previewValue,
   arrivalValue,
+  renderPanel,
 }: {
+  /** Omit only when composing an existing externally owned view. */
+  renderPanel?: (value: Value) => ReactNode;
   value: Value;
   items: readonly TabItem<Value>[];
   label: string;
@@ -43,14 +46,8 @@ export function Tabs<Value extends string>({
   /** Brief visual confirmation of a tab arriving after a completed move. */
   arrivalValue?: Value | undefined;
 }) {
-  return (
-    <BaseTabs.Root
-      data-buzz-ui=""
-      className="buzz-tabs"
-      data-variant={variant}
-      value={value}
-      onValueChange={(nextValue) => onValueChange(nextValue as Value)}
-    >
+  const strip = (
+    <>
       <BaseTabs.List className="buzz-tabs-list" aria-label={label}>
         <BaseTabs.Indicator className="buzz-tabs-indicator" />
         {items.map((item) => (
@@ -78,6 +75,33 @@ export function Tabs<Value extends string>({
         ))}
       </BaseTabs.List>
       {trailingAction}
+    </>
+  );
+  return (
+    <BaseTabs.Root
+      data-buzz-ui=""
+      className={renderPanel ? "buzz-tab-panels" : "buzz-tabs"}
+      data-variant={variant}
+      value={value}
+      onValueChange={(nextValue) => onValueChange(nextValue as Value)}
+    >
+      {renderPanel ? (
+        <div className="buzz-tabs" data-variant={variant}>
+          {strip}
+        </div>
+      ) : (
+        strip
+      )}
+      {renderPanel &&
+        items.map((item) => (
+          <BaseTabs.Panel
+            key={item.value}
+            value={item.value}
+            className="buzz-tabs-panel"
+          >
+            {renderPanel(item.value)}
+          </BaseTabs.Panel>
+        ))}
     </BaseTabs.Root>
   );
 }

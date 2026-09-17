@@ -1,5 +1,5 @@
 import { Button as BaseButton } from "@base-ui/react/button";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 export function NavigationItem({
   label,
@@ -7,23 +7,26 @@ export function NavigationItem({
   trailing,
   selected = false,
   inset = false,
-  onClick,
+  variant = "row",
+  ...props
 }: {
   label: string;
   icon?: ReactNode;
   trailing?: ReactNode;
   selected?: boolean;
   inset?: boolean;
-  onClick?: () => void;
-}) {
+  variant?: "row" | "pill";
+} & Omit<ComponentProps<typeof BaseButton>, "className" | "children">) {
   return (
     <BaseButton
+      {...props}
+      type={props.type ?? "button"}
+      data-variant={variant}
       data-buzz-ui=""
       className="navigation-item"
       data-selected={selected || undefined}
       data-inset={inset || undefined}
-      onClick={onClick}
-      aria-current={selected ? "page" : undefined}
+      aria-current={props["aria-current"] ?? (selected ? "page" : undefined)}
     >
       {icon}
       <span className="navigation-item-label">{label}</span>

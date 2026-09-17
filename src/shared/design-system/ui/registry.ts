@@ -38,6 +38,11 @@ export const BASE_UI_PARTS = {
     docs: "accordion",
     module: "@base-ui/react/accordion",
   },
+  tooltip: {
+    name: "Tooltip",
+    docs: "tooltip",
+    module: "@base-ui/react/tooltip",
+  },
   dialog: { name: "Dialog", docs: "dialog", module: "@base-ui/react/dialog" },
   popover: {
     name: "Popover",
@@ -89,6 +94,32 @@ export type ComponentDefinition = {
 };
 
 export const COMPONENTS: readonly ComponentDefinition[] = [
+  {
+    slug: "tooltip",
+    name: "Tooltip",
+    purpose: "A short hint for an already labelled control.",
+    behavior: "Base UI owns focus, positioning and dismissal",
+    variants: ["default"],
+    status: "proposed",
+    collection: "components",
+    source: "shared/design-system/ui/Tooltip.tsx",
+    baseUi: [BASE_UI_PARTS.tooltip],
+    composes: [],
+  },
+
+  {
+    slug: "dialog",
+    name: "Dialog",
+    purpose: "A shared modal frame with title, content and actions.",
+    behavior: "Base UI owns focus, positioning and dismissal",
+    variants: ["default"],
+    status: "proposed",
+    collection: "components",
+    source: "shared/design-system/ui/Dialog.tsx",
+    baseUi: [BASE_UI_PARTS.dialog],
+    composes: ["icon-button"],
+  },
+
   {
     slug: "checkbox",
     name: "Checkbox",

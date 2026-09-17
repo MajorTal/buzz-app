@@ -1,0 +1,99 @@
+@layer components {
+  .buzz-dialog-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: var(--layer-dialog-backdrop);
+    background: var(--bg-scrim);
+  }
+  .buzz-dialog {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: var(--layer-dialog);
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+    width: min(31rem, calc(100vw - 2rem));
+    max-height: calc(100dvh - 3rem);
+    overflow: auto;
+    border: 1px solid var(--border-standard);
+    border-radius: var(--radius-panel);
+    padding: var(--space-6);
+    background: var(--surface-popover);
+    color: var(--text-standard);
+    box-shadow: var(--shadow-sm);
+  }
+  .buzz-dialog-header {
+    display: flex;
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--space-4);
+  }
+  .buzz-dialog-header > h2 {
+    margin: 0;
+  }
+  .buzz-dialog-description {
+    @apply text-body-sm;
+    margin: 0;
+    color: var(--text-subtle);
+  }
+  .buzz-dialog-body {
+    min-width: 0;
+  }
+  .buzz-dialog-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: end;
+    gap: var(--space-3);
+  }
+  .buzz-tooltip-positioner {
+    z-index: var(--layer-tooltip);
+  }
+  .buzz-tooltip {
+    @apply text-label-sm;
+    max-width: min(24rem, calc(100vw - 2rem));
+    border-radius: var(--radius-pill);
+    padding: var(--space-2) var(--space-4);
+    background: var(--affordance-prominent);
+    color: var(--text-inverse);
+    box-shadow: var(--shadow-sm);
+    overflow-wrap: anywhere;
+  }
+  .buzz-tab-panels {
+    display: grid;
+    gap: var(--space-4);
+    min-width: 0;
+  }
+  .buzz-tabs-panel {
+    min-width: 0;
+  }
+  html[data-keyboard-navigation] .buzz-tabs-panel:focus-visible {
+    outline: 2px solid var(--border-focus);
+    outline-offset: 2px;
+  }
+  .navigation-item[data-variant="pill"] {
+    width: auto;
+    flex-shrink: 0;
+    border-radius: var(--radius-pill);
+    padding-inline: var(--space-4);
+  }
+  .navigation-item[data-variant="pill"] .navigation-item-label {
+    flex: initial;
+  }
+  .navigation-item[data-variant="pill"][data-selected] {
+    background: var(--surface-panel);
+    color: var(--text-standard);
+  }
+  .navigation-item:active {
+    background: var(--affordance-subtle-pressed);
+  }
+  @media (max-width: 480px) {
+    .buzz-dialog {
+      padding: var(--space-4);
+    }
+    .buzz-dialog-actions > .buzz-button {
+      flex: 1 1 auto;
+    }
+  }
+}

@@ -625,6 +625,10 @@
      inset and a 4px gap. */
   --space-chip-inset: 0.1875rem;
   --space-chip-gap: var(--space-1);
+  --layer-dialog-backdrop: 1000;
+  --layer-dialog: 1001;
+  --layer-popover: 1100;
+  --layer-tooltip: 1200;
   --size-topbar: 3.5rem;
   --size-panel-header: 3.5rem;
   --size-control-sm: 2rem;

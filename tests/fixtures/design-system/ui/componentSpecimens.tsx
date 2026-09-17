@@ -1,3 +1,5 @@
+import { Dialog } from "../../../../src/shared/design-system/ui/Dialog";
+import { Tooltip } from "../../../../src/shared/design-system/ui/Tooltip";
 import { Field } from "../../../../src/shared/design-system/ui/Field";
 import { Input } from "../../../../src/shared/design-system/ui/Input";
 import { Textarea } from "../../../../src/shared/design-system/ui/Textarea";
@@ -492,6 +494,9 @@ function TabsSpecimen() {
               value={panelDestination}
               items={DESTINATIONS}
               label="Prototype destinations on a panel"
+              renderPanel={(value) => (
+                <p className="text-body-sm">{value} content</p>
+              )}
               onValueChange={setPanelDestination}
               variant="panel"
             />
@@ -876,7 +881,42 @@ function SelectSpecimen() {
   );
 }
 
+function DialogSpecimen() {
+  const [open, setOpen] = useState(false);
+  return (
+    <SpecimenFrame>
+      <Button onClick={() => setOpen(true)}>Edit workspace</Button>
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Edit workspace"
+        description="Change the name used in this example."
+        actions={
+          <>
+            <Button onClick={() => setOpen(false)}>Cancel</Button>
+            <Button variant="prominent" onClick={() => setOpen(false)}>
+              Save
+            </Button>
+          </>
+        }
+      >
+        <Field label="Workspace name">
+          <Input defaultValue="Project notes" />
+        </Field>
+      </Dialog>
+    </SpecimenFrame>
+  );
+}
+
 export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
+  dialog: DialogSpecimen,
+  tooltip: () => (
+    <SpecimenFrame>
+      <Tooltip content="Create a note">
+        <IconButton aria-label="Create note" icon={<IconPlus size={16} />} />
+      </Tooltip>
+    </SpecimenFrame>
+  ),
   field: () => (
     <SpecimenFrame>
       <Field

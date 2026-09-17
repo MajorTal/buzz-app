@@ -34,7 +34,7 @@ export function Field({
         </BaseField.Description>
       )}
       {error && (
-        <BaseField.Error match className="buzz-field-error">
+        <BaseField.Error match role="alert" className="buzz-field-error">
           {error}
         </BaseField.Error>
       )}

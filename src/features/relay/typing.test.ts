@@ -1,4 +1,4 @@
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { createTyping } from "./typing";
 import { keypair, message, signed } from "./testing";
 
@@ -170,32 +170,36 @@ it("message suppression is signer/thread scoped and clears only older activity",
   ]);
   expect(snapshot()).toEqual([]);
 });
-it("bounds active and suppression records without eviction; teardown fences retained callbacks", () => {
-  const { owner, snapshot } = setup();
-  // Distinct roots avoid generating 1025 signing keys.
-  owner.accept(
-    Array.from({ length: 1025 }, (_, i) =>
+describe("activity capacity", () => {
+  let pulses: ReturnType<typeof pulse>[];
+  beforeAll(() => {
+    // Prepare real signed input outside the behavior check. Signing speed is
+    // not the capacity contract; keep all 1025 distinct scopes.
+    pulses = Array.from({ length: 1025 }, (_, i) =>
       pulse([
         ["h", "a"],
         ["e", i.toString(16).padStart(64, "0"), "", "reply"],
       ]),
-    ),
-    true,
-  );
-  expect(snapshot()).toHaveLength(1024);
-  expect(vi.getTimerCount()).toBe(1);
-  const listener = vi.fn();
-  const stop = owner.capability.subscribe(listener);
-  owner.clear();
-  expect(snapshot()).toEqual([]);
-  expect(listener).toHaveBeenCalledTimes(1);
-  stop();
-  owner.accept([pulse()], true);
-  expect(listener).toHaveBeenCalledTimes(1);
-  owner.dispose();
-  owner.accept([pulse()], true);
-  expect(snapshot()).toEqual([]);
-  expect(vi.getTimerCount()).toBe(0);
+    );
+  });
+  it("bounds active and suppression records without eviction; teardown fences retained callbacks", () => {
+    const { owner, snapshot } = setup();
+    owner.accept(pulses, true);
+    expect(snapshot()).toHaveLength(1024);
+    expect(vi.getTimerCount()).toBe(1);
+    const listener = vi.fn();
+    const stop = owner.capability.subscribe(listener);
+    owner.clear();
+    expect(snapshot()).toEqual([]);
+    expect(listener).toHaveBeenCalledTimes(1);
+    stop();
+    owner.accept([pulse()], true);
+    expect(listener).toHaveBeenCalledTimes(1);
+    owner.dispose();
+    owner.accept([pulse()], true);
+    expect(snapshot()).toEqual([]);
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
 
 for (const kind of [9, 40002]) {
@@ -277,26 +281,31 @@ it("rejects delayed pre-message activity after the quiet period, but admits genu
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it("retains completion evidence at capacity until stale pulses have expired", () => {
-  const { owner, snapshot } = setup();
-  const messages = Array.from({ length: 1024 }, (_, i) =>
-    signed(agent, {
-      kind: 9,
-      content: "complete",
-      created_at: epoch,
-      tags: [
-        ["h", "a"],
-        ["e", i.toString(16).padStart(64, "0"), "", "reply"],
-      ],
-    }),
-  );
-  owner.accept(messages);
-  vi.advanceTimersByTime(3000);
-  owner.accept([pulse(undefined, epoch + 3)], true);
-  expect(snapshot()).toEqual([]);
-  vi.advanceTimersByTime(5000);
-  owner.accept([pulse(undefined, epoch + 8)], true);
-  expect(snapshot()).toHaveLength(1);
-  owner.dispose();
-  expect(vi.getTimerCount()).toBe(0);
+describe("completion capacity", () => {
+  let messages: ReturnType<typeof signed>[];
+  beforeAll(() => {
+    messages = Array.from({ length: 1024 }, (_, i) =>
+      signed(agent, {
+        kind: 9,
+        content: "complete",
+        created_at: epoch,
+        tags: [
+          ["h", "a"],
+          ["e", i.toString(16).padStart(64, "0"), "", "reply"],
+        ],
+      }),
+    );
+  });
+  it("retains completion evidence at capacity until stale pulses have expired", () => {
+    const { owner, snapshot } = setup();
+    owner.accept(messages);
+    vi.advanceTimersByTime(3000);
+    owner.accept([pulse(undefined, epoch + 3)], true);
+    expect(snapshot()).toEqual([]);
+    vi.advanceTimersByTime(5000);
+    owner.accept([pulse(undefined, epoch + 8)], true);
+    expect(snapshot()).toHaveLength(1);
+    owner.dispose();
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });

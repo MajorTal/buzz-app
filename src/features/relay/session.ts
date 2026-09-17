@@ -626,6 +626,34 @@ export function createRelaySession(
       );
     },
     !!transport?.decodeSidebarPreferences,
+    (() => {
+      const write = transport?.writeSidebarAssignment;
+      return write
+        ? (intent, signal) =>
+            write(
+              intent,
+              AbortSignal.any([
+                lifetime.signal,
+                AbortSignal.timeout(20_000),
+                signal,
+              ]),
+            )
+        : undefined;
+    })(),
+    (() => {
+      const write = transport?.writeSidebarStar;
+      return write
+        ? (intent, signal) =>
+            write(
+              intent,
+              AbortSignal.any([
+                lifetime.signal,
+                AbortSignal.timeout(20_000),
+                signal,
+              ]),
+            )
+        : undefined;
+    })(),
     notify,
   );
   const session = Object.freeze({

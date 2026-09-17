@@ -72,6 +72,29 @@ late completion cannot repopulate a retired snapshot. These are account-owned
 preferences, not channel access grants: sidebar sections still intersect the
 authorized roster. There is no new disk cache or automatic cross-device sync.
 
+The browser/development host exposes narrow **assign/remove group** and
+**Star/Unstar** commands. Each re-reads the viewer's signed encrypted coordinate,
+changes only the requested entry, publishes through the shared relay admission
+lane, then re-reads to confirm the requested state. Unrelated fields and explicit
+unstar tombstones are retained. Invalid/unreadable/over-budget heads fail closed;
+only a successful absent-head read can seed a coordinate. Same-host writes are
+serialized per relay. This is confirmed whole-record replacement, not atomic
+cross-device merging, a durable pending outbox, or automatic retry: simultaneous
+writers on different hosts can still race. Failure leaves the last confirmed UI
+state and offers an explicit retry; a failed confirmation may follow a publication
+that reached the relay.
+
+The session preference owner serializes local commands and fences refreshes,
+caller cancellation, cache clear and disposal. `session.ts` only composes host
+capabilities with session lifetime and a bounded deadline. Cache clear cancels
+pending work but cannot retract a publication already accepted by the relay.
+Stream rows expose these actions by right-click/long-press, Shift+F10 or the
+Context Menu key. Menus remain open during saving and failed-save retry; confirmed
+relocation expands the destination and restores focus by channel identity. Starred
+placement is exclusive, retaining the saved assignment so Unstar restores it.
+Forums/DMs, group CRUD/reorder and independent sorting are outside this slice.
+Hosts without the write capabilities retain the read-only projection.
+
 Search, collapsed section keys and sidebar scroll remain separate, scoped view
 intent. They are saved on page exit and restored before paint when the roster and
 groups are available; navigation history does not own them. The saved-groups

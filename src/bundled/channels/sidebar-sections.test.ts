@@ -49,3 +49,22 @@ it("intersects groups/stars with active authorized streams, keeping forums and D
     ),
   ).toEqual(["star", "work", "other", "forum", "dm", "group-dm"]);
 });
+it("Star placement is exclusive and Unstar restores the saved assignment", () => {
+  const channels = [row("alpha"), row("beta")];
+  const saved = {
+    sections: [{ id: "work", name: "Work", order: 0 }],
+    assignments: { beta: "work" },
+    starred: ["alpha", "beta"],
+  };
+  const placements = (starred: string[]) =>
+    sidebarSections(channels, { ...saved, starred }).map((section) => [
+      section.key,
+      section.rows.map((channel) => channel.id),
+    ]);
+  expect(placements(saved.starred)).toEqual([["starred", ["alpha", "beta"]]]);
+  expect(placements(["alpha"])).toEqual([
+    ["starred", ["alpha"]],
+    ["group:work", ["beta"]],
+  ]);
+  expect(saved.assignments).toEqual({ beta: "work" });
+});

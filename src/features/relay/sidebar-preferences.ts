@@ -5,7 +5,7 @@ export const SIDEBAR_COORDINATES = [
   "channel-sections",
   "channel-stars",
 ] as const;
-export type SidebarPreferences = Readonly<{
+export type SidebarGroups = Readonly<{
   sections: readonly Readonly<{
     id: string;
     name: string;
@@ -13,13 +13,27 @@ export type SidebarPreferences = Readonly<{
     order: number;
   }>[];
   assignments: Readonly<Record<string, string>>;
-  starred: readonly string[];
 }>;
+export type SidebarPreferences = SidebarGroups &
+  Readonly<{
+    starred: readonly string[];
+  }>;
+export type SidebarAssignmentIntent = Readonly<{
+  channelId: string;
+  sectionId?: string;
+}>;
+export type SidebarAssignmentMutator = (
+  intent: SidebarAssignmentIntent,
+  signal: AbortSignal,
+) => Promise<SidebarGroups>;
+export type SidebarStarMutator = (
+  intent: Readonly<{ channelId: string; starred: boolean }>,
+  signal: AbortSignal,
+) => Promise<readonly string[]>;
 export type SidebarDecoder = (
   events: readonly RelayEvent[],
   signal: AbortSignal,
 ) => Promise<SidebarPreferences>;
-
 function object(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value))
     throw new Error("Invalid sidebar preferences");

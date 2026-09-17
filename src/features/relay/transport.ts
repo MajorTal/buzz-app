@@ -8,7 +8,13 @@ import {
   readSnapshotText,
 } from "./read-state-snapshot";
 import type { AgentLibraryReader } from "../agents/library";
-import type { SidebarDecoder, SidebarPreferences } from "./sidebar-preferences";
+import {
+  projectSidebarPreferences,
+  type SidebarAssignmentMutator,
+  type SidebarStarMutator,
+  type SidebarDecoder,
+  type SidebarPreferences,
+} from "./sidebar-preferences";
 import { createHostAdmission } from "./host-admission";
 import { relayOrigin } from "../communities/destination";
 import {
@@ -55,6 +61,9 @@ export interface ReadTransport {
     requestId: string,
     priority: "foreground" | "background",
   ): Promise<RelayEvent[]>;
+  /** Host-only, relay-scoped mutation of one existing sidebar group assignment. */
+  readonly writeSidebarAssignment?: SidebarAssignmentMutator;
+  readonly writeSidebarStar?: SidebarStarMutator;
   readonly profiling?: RelayProfiler;
   /** Verified incoming traffic. The session owns this subscription and fences late delivery. */
   subscribe?(callbacks: LiveCallbacks): LiveSubscription;
@@ -162,6 +171,8 @@ export async function connectBrokerTransport(
     relayUrl?: string;
     live?: boolean;
     sidebarPreferences?: boolean;
+    sidebarPreferenceWrites?: boolean;
+    sidebarStarWrites?: boolean;
     agentLibrary?: boolean;
     agentActivity?: boolean;
     readState?: boolean;
@@ -315,6 +326,53 @@ export async function connectBrokerTransport(
               session.readStateCommunity as string,
               signal,
             );
+          },
+        }
+      : {}),
+    ...(session.sidebarPreferenceWrites
+      ? {
+          async writeSidebarAssignment(intent, signal) {
+            const result = await fetch(`${endpoint}/sidebar-assignment`, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(intent),
+              signal,
+            });
+            if (!result.ok) {
+              const failure = await readApiFailure(result);
+              throw new Error(failure.error);
+            }
+            const value = (await result.json()) as SidebarPreferences;
+            const groups = projectSidebarPreferences(
+              {
+                version: 1,
+                sections: value.sections,
+                assignments: value.assignments,
+              },
+              undefined,
+            );
+            return {
+              sections: groups.sections,
+              assignments: groups.assignments,
+            };
+          },
+        }
+      : {}),
+    ...(session.sidebarStarWrites
+      ? {
+          async writeSidebarStar(intent, signal) {
+            const result = await fetch(`${endpoint}/sidebar-star`, {
+              method: "POST",
+              credentials: "same-origin",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(intent),
+              signal,
+            });
+            if (!result.ok)
+              throw new Error((await readApiFailure(result)).error);
+            return projectSidebarPreferences(undefined, await result.json())
+              .starred;
           },
         }
       : {}),

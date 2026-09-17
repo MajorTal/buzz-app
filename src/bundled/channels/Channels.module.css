@@ -152,6 +152,29 @@
   color: var(--text);
   font-weight: var(--type-weight-medium);
 }
+.channelRow {
+  position: relative;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-row);
+}
+.channelRow .channelLink {
+  min-width: 0;
+  flex: 1;
+}
+.channelRow:has(.channelLink:hover),
+.channelRow:has(.channelLink[aria-current="page"]),
+.channelRow[data-menu-open="true"] {
+  background: var(--surface-hover);
+}
+.channelRow .channelLink:hover,
+.channelRow .channelLink[aria-current="page"] {
+  background: transparent;
+}
+.channelRow:has(.channelLink[aria-current="page"]) {
+  background: var(--surface-accent);
+}
+
 .preferenceNotice {
   padding: var(--space-2);
   color: var(--text-muted);

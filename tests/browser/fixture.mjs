@@ -30,6 +30,7 @@ export const test = base.extend({
   exactMessages: [false, { option: true }],
   sidebarUnread: [false, { option: true }],
   savedSidebar: [false, { option: true }],
+  channelLifecycle: [false, { option: true }],
   expectedPageFailure: [false, { option: true }],
   largeSidebar: [false, { option: true }],
   dmLabels: [false, { option: true }],
@@ -51,6 +52,7 @@ export const test = base.extend({
       exactMessages,
       sidebarUnread,
       savedSidebar,
+      channelLifecycle,
       expectedPageFailure,
       largeSidebar,
       dmLabels,
@@ -122,7 +124,28 @@ export const test = base.extend({
       : dmLabels
         ? ["dm-peer"]
         : [];
-    const rosterIds = [...channels, ...dmIds];
+    const lifecycleRows = channelLifecycle
+      ? [
+          {
+            id: "11111111-1111-4111-8111-111111111111",
+            name: "Lifecycle channel",
+            type: "stream",
+          },
+          {
+            id: "22222222-2222-4222-8222-222222222222",
+            name: "Lifecycle DM",
+            type: "dm",
+          },
+        ]
+      : [];
+    const archivedIds = new Set();
+    const hiddenDmIds = new Set();
+    let lifecycleTime = 1700000001;
+    const rosterIds = [
+      ...channels,
+      ...dmIds,
+      ...lifecycleRows.map((row) => row.id),
+    ];
     if (savedSidebar) {
       const key = nip44.v2.utils.getConversationKey(userKey, viewer);
       for (const community of ["primary", "secondary"]) {
@@ -178,7 +201,8 @@ export const test = base.extend({
         );
     const historyDurationMs = performance.now() - historyStarted;
     for (const community of ["primary", "secondary"])
-      for (const id of dmIds) histories.set(`${community}/${id}`, []);
+      for (const id of [...dmIds, ...lifecycleRows.map((row) => row.id)])
+        histories.set(`${community}/${id}`, []);
     const targetEvents = [];
     let exact;
     if (exactMessages) {
@@ -375,25 +399,74 @@ export const test = base.extend({
       response.end(JSON.stringify(body));
     };
     const answer = (community, filter) => {
+      if (filter.kinds?.includes(30622))
+        return channelLifecycle
+          ? [
+              sign(
+                30622,
+                [
+                  ["d", viewer],
+                  ["p", viewer],
+                  ...[...hiddenDmIds].map((id) => ["h", id]),
+                ],
+                "",
+                relayKey,
+                lifecycleTime,
+              ),
+            ]
+          : [];
+      if (filter.kinds?.includes(39001))
+        return lifecycleRows
+          .filter((row) => filter["#d"]?.includes(row.id))
+          .map((row) =>
+            sign(
+              39001,
+              [
+                ["d", row.id],
+                ["p", viewer, "owner"],
+              ],
+              "",
+              relayKey,
+              lifecycleTime,
+            ),
+          );
       if (filter.kinds?.includes(39002))
-        return rosterIds.map((id) =>
-          sign(39002, [
-            ["d", id],
-            ["p", viewer],
-            ...participants
-              .slice(dmIds.indexOf(id) * 8, (dmIds.indexOf(id) + 1) * 8)
-              .map((pubkey) => ["p", pubkey]),
-          ]),
-        );
+        return rosterIds
+          .filter((id) => !filter["#d"] || filter["#d"].includes(id))
+          .map((id) =>
+            sign(39002, [
+              ["d", id],
+              ["p", viewer],
+              ...participants
+                .slice(dmIds.indexOf(id) * 8, (dmIds.indexOf(id) + 1) * 8)
+                .map((pubkey) => ["p", pubkey]),
+            ]),
+          );
       if (filter.kinds?.includes(39000))
-        return rosterIds.map((id) =>
-          sign(39000, [
-            ["d", id],
-            ["name", id === "alpha" ? "Alpha" : id === "beta" ? "Beta" : id],
-            ...(dmIds.includes(id) ? [["t", "dm"], ["hidden"]] : []),
-            ...(hiddenChannels.has(id) ? [["hidden"]] : []),
-          ]),
-        );
+        return rosterIds
+          .filter((id) => !filter["#d"] || filter["#d"].includes(id))
+          .map((id) =>
+            sign(
+              39000,
+              [
+                ["d", id],
+                [
+                  "name",
+                  lifecycleRows.find((row) => row.id === id)?.name ??
+                    (id === "alpha" ? "Alpha" : id === "beta" ? "Beta" : id),
+                ],
+                ...lifecycleRows
+                  .filter((row) => row.id === id)
+                  .map((row) => ["t", row.type]),
+                ...(archivedIds.has(id) ? [["archived", "true"]] : []),
+                ...(dmIds.includes(id) ? [["t", "dm"], ["hidden"]] : []),
+                ...(hiddenChannels.has(id) ? [["hidden"]] : []),
+              ],
+              "",
+              relayKey,
+              lifecycleTime,
+            ),
+          );
       if (filter.kinds?.includes(30078)) {
         const events = [...readEvents.get(community).values()];
         if (readState && filter.read_state_snapshot === 1)
@@ -591,7 +664,7 @@ export const test = base.extend({
           answer,
           report,
           pending,
-          ...(readState || savedSidebar
+          ...(readState || savedSidebar || channelLifecycle
             ? {
                 ...(readState
                   ? {
@@ -609,6 +682,23 @@ export const test = base.extend({
                 acceptPublication: (community, event) => {
                   expect(verifyEvent(event)).toBe(true);
                   expect(event.pubkey).toBe(viewer);
+                  if (
+                    channelLifecycle &&
+                    [9002, 9008, 9022, 41012].includes(event.kind)
+                  ) {
+                    const id = event.tags.find(([key]) => key === "h")?.[1];
+                    expect(lifecycleRows.some((row) => row.id === id)).toBe(
+                      true,
+                    );
+                    if (event.kind === 9002) archivedIds.add(id);
+                    if (event.kind === 41012) hiddenDmIds.add(id);
+                    if (event.kind === 9008 || event.kind === 9022)
+                      rosterIds.splice(rosterIds.indexOf(id), 1);
+                    lifecycleTime++;
+                    report.lifecyclePublications ??= [];
+                    report.lifecyclePublications.push(event);
+                    return;
+                  }
                   expect(event.kind).toBe(30078);
                   const coordinate = event.tags.find(
                     ([key]) => key === "d",

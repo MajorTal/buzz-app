@@ -1,4 +1,5 @@
 // FOUNDATION: One relay session owns reads, local intent, delivery and shared views.
+import { createChannelLifecycle } from "./channel-lifecycle";
 import { createWorkflows } from "../workflows/capability";
 import { isWorkflowOperation } from "../workflows/protocol";
 import {
@@ -192,6 +193,7 @@ export function createRelaySession(
     revoking++;
     try {
       accessEpoch++;
+      lifecycle.cancel();
       typing.clear();
       // Filters cannot tell us ownership of broad/ID/reference reads. Infrequent
       // authoritative access loss cancels them all, not merely explicit #h reads.
@@ -368,6 +370,16 @@ export function createRelaySession(
   );
   canAccess = channels.canAccess;
   retainedChannelEvent = channels.retainedEvent;
+  const lifecycle = createChannelLifecycle({
+    reader: transport ? requests.reader : undefined,
+    writer: transport?.channelLifecycle,
+    viewer: transport?.viewer ?? "",
+    relayAuthor: transport?.relayAuthor ?? "",
+    canAccess: (id) => !closed && canAccess(id),
+    acceptDiscovery: (events) => channels.acceptDiscovery(events),
+    removed: (id) =>
+      channels.denyChannel(id, new Error("Channel is no longer available")),
+  });
   const workflows = createWorkflows({
     reader: transport ? verified : undefined,
     viewer: transport?.viewer ?? "",
@@ -753,6 +765,7 @@ export function createRelaySession(
     emoji: emoji.queries,
     agentLibrary: agentLibrary.queries,
     workflows: workflows.capability,
+    channelLifecycle: lifecycle.capability,
     agentActivity: activity.queries,
     archives: archives.queries,
     media: (url: string, size?: "small") => transport?.media(url, size),
@@ -1174,6 +1187,7 @@ export function createRelaySession(
       activity.clear();
       typing.clear();
       sidebarPreferences.clear();
+      lifecycle.clear();
       // New windows must not yield to or receive errors from retired owners.
       catchups.clear();
       catchupQueue.clear();
@@ -1195,6 +1209,7 @@ export function createRelaySession(
       lifetime.abort();
       activity.dispose();
       sidebarPreferences.dispose();
+      lifecycle.dispose();
       stopInterests();
       stopWarmPreferences();
       traffic?.dispose();

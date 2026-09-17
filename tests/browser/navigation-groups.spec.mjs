@@ -29,9 +29,13 @@ test("row menu moves and removes a channel through the confirmed saved-group wri
   await expect(
     menu.getByRole("menuitemradio", { name: "Work" }),
   ).toHaveAttribute("aria-checked", "true");
+  // The legacy non-UUID fixture has no lifecycle authority; its retry is the final item.
+  await expect(
+    menu.getByRole("menuitem", { name: "Retry channel permissions" }),
+  ).toBeVisible();
   await page.keyboard.press("End");
   await expect(
-    page.getByRole("menuitem", { name: "Remove from group" }),
+    menu.getByRole("menuitem", { name: "Retry channel permissions" }),
   ).toBeFocused();
   await page.keyboard.press("Home");
   await expect(
@@ -136,9 +140,9 @@ test("Star and Unstar retain the assigned group, keep one row, and recover from 
   } finally {
     release();
   }
-  await expect(menu.getByRole("alert")).toHaveText(
-    "Relay request failed (502)",
-  );
+  await expect(
+    menu.getByRole("alert").filter({ hasText: "Relay request failed" }),
+  ).toHaveText("Relay request failed (502)");
   await expect(
     menu.getByRole("menuitem", { name: "Star", exact: true }),
   ).toBeEnabled();

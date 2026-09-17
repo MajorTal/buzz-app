@@ -1,3 +1,4 @@
+import { validateLifecycleTemplate } from "../src/features/relay/channel-lifecycle-protocol.ts";
 import {
   assertSidebarStarIntent,
   mutateSidebarStar,
@@ -722,6 +723,7 @@ export function relayBrokerPlugin({
               ...(await getAuthority(relay)),
               relayUrl: relay,
               writeKinds: [7, 9, ...WORKFLOW_KINDS],
+              channelLifecycle: true,
               workflowReads: true,
               sidebarPreferences: true,
               readState: true,
@@ -932,6 +934,8 @@ export function relayBrokerPlugin({
             ![
               "/api/relay/query",
               "/api/relay/sign",
+              "/api/relay/channel-lifecycle-sign",
+              "/api/relay/channel-lifecycle-publish",
               "/api/relay/publish",
               "/api/relay/read-state-sign",
               "/api/relay/read-state-publish",
@@ -1062,10 +1066,26 @@ export function relayBrokerPlugin({
               sent: false,
             });
           const timings = [];
-          const signing = route === "/api/relay/sign";
-          const publishing = route === "/api/relay/publish";
+          const lifecycle =
+            route === "/api/relay/channel-lifecycle-sign" ||
+            route === "/api/relay/channel-lifecycle-publish";
+          const signing =
+            route === "/api/relay/sign" ||
+            route === "/api/relay/channel-lifecycle-sign";
+          const publishing =
+            route === "/api/relay/publish" ||
+            route === "/api/relay/channel-lifecycle-publish";
           if (signing || publishing) {
-            if (![7, 9].includes(filters?.kind)) {
+            if (lifecycle) {
+              try {
+                validateLifecycleTemplate(filters);
+              } catch {
+                return json(res, 400, {
+                  error: "Invalid channel lifecycle command",
+                  sent: false,
+                });
+              }
+            } else if (![7, 9].includes(filters?.kind)) {
               try {
                 validateWorkflowEvent(
                   { ...filters, pubkey: signing ? viewer : filters.pubkey },

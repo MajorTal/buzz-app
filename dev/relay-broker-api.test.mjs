@@ -494,3 +494,79 @@ test("both real sign and publish routes admit direct replies but reject arbitrar
     await h.close();
   }
 });
+
+test("lifecycle uses dedicated shape-limited host routes, never the message writer", async () => {
+  const h = await harness((call) =>
+    Response.json(
+      call.url.endsWith("/events")
+        ? { accepted: true, event_id: call.body.id }
+        : [],
+    ),
+  );
+  try {
+    const transport = await connectBrokerTransport(h.base);
+    expect(transport.writer.kinds).not.toContain(9008);
+    const id = "11111111-1111-4111-8111-111111111111";
+    const template = {
+      kind: 9008,
+      tags: [["h", id]],
+      content: "",
+      created_at: 1700000000,
+    };
+    expect((await h.post("sign", template)).status).toBe(400);
+    const invalid = [
+      {
+        ...template,
+        kind: 9002,
+        tags: [
+          ["h", id],
+          ["name", "rename"],
+        ],
+      },
+      {
+        ...template,
+        kind: 9022,
+        tags: [
+          ["h", id],
+          ["p", transport.viewer],
+        ],
+      },
+      { ...template, content: "extra" },
+      {
+        ...template,
+        tags: [
+          ["h", id],
+          ["h", id],
+        ],
+      },
+    ];
+    for (const event of invalid) {
+      expect((await h.post("channel-lifecycle-sign", event)).status).toBe(400);
+      expect((await h.post("channel-lifecycle-publish", event)).status).toBe(
+        400,
+      );
+    }
+    const signal = new AbortController().signal;
+    const signed = await transport.channelLifecycle.sign(template, signal);
+    expect(verifyEvent(signed)).toBe(true);
+    expect(signed).toMatchObject(template);
+    expect((await h.post("publish", signed)).status).toBe(400);
+    await transport.channelLifecycle.publish(signed, signal);
+    expect(h.calls.filter((call) => call.url.endsWith("/events"))).toHaveLength(
+      1,
+    );
+    const foreignKey = new Uint8Array(32).fill(5);
+    const foreign = finalizeEvent(
+      { ...template, tags: template.tags.map((tag) => [...tag]) },
+      foreignKey,
+    );
+    expect((await h.post("channel-lifecycle-publish", foreign)).status).toBe(
+      400,
+    );
+    expect(h.calls.filter((call) => call.url.endsWith("/events"))).toHaveLength(
+      1,
+    );
+  } finally {
+    await h.close();
+  }
+});

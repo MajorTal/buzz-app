@@ -1,3 +1,6 @@
+import { ChannelLifecycleMenu } from "./ChannelLifecycleMenu";
+import { ChannelLifecycleDialog } from "./ChannelLifecycleDialog";
+import type { ChannelLifecycleAction } from "../../features/relay/channel-lifecycle-protocol";
 import { useChannelPanels } from "./useChannelPanels";
 import type { PageNavigation } from "../../features/navigation/service";
 import type { Navigation } from "../../features/navigation/controller";
@@ -158,6 +161,21 @@ function ChannelWorkspace({
 }) {
   const list = useChannelList(queries.channels);
   const preferences = useSidebarPreferences(queries.sidebarPreferences);
+  const lifecycle = queries.channelLifecycle;
+  const dmVisibility = useSyncExternalStore(
+    lifecycle.subscribe,
+    lifecycle.snapshot,
+    lifecycle.snapshot,
+  );
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a completed roster refresh also refreshes per-viewer visibility.
+  useEffect(() => {
+    if (list.status === "ready") void lifecycle.refreshVisibility();
+  }, [lifecycle, list.asOf, list.status]);
+  const [lifecycleDialog, setLifecycleDialog] = useState<{
+    channel: ChannelSummary;
+    action: ChannelLifecycleAction;
+  }>();
+  const lifecycleFocus = useRef<string | undefined>(undefined);
   useEffect(() => {
     if (list.status === "ready") void queries.unread.ensure();
   }, [queries, list.status]);
@@ -213,13 +231,42 @@ function ChannelWorkspace({
     list.status === "ready" && preferences.status !== "loading",
   );
   const { search } = sidebar;
-  const channels = useChannelLabels(list.channels, queries.profiles);
+  const labelled = useChannelLabels(list.channels, queries.profiles);
+  const channels = useMemo(
+    () =>
+      labelled.filter(
+        (channel) =>
+          !channel.archived &&
+          (channel.channelType !== "dm" ||
+            !dmVisibility.hidden.includes(channel.id)),
+      ),
+    [labelled, dmVisibility.hidden],
+  );
+  useLayoutEffect(() => {
+    if (!lifecycleFocus.current || lifecycleDialog) return;
+    const id = lifecycleFocus.current;
+    lifecycleFocus.current = undefined;
+    const origin = sidebar.list.current?.querySelector<HTMLButtonElement>(
+      `[data-channel-id="${CSS.escape(id)}"]`,
+    );
+    const fallback =
+      sidebar.list.current?.querySelector<HTMLButtonElement>(
+        "[data-channel-id]",
+      );
+    // Hidden/collapsed sections have no focusable row; leave an accessible fallback.
+    const target = origin?.getClientRects().length ? origin : fallback;
+    if (target?.getClientRects().length) target.focus({ preventScroll: true });
+    else
+      sidebar.list.current?.closest("aside")?.querySelector("input")?.focus();
+  }, [lifecycleDialog, sidebar.list]);
   const requestedChannel =
     navigation?.target.kind === "conversation"
       ? navigation.target.channelId
       : undefined;
   const current = requestedChannel
-    ? (channels.find((channel) => channel.id === requestedChannel) ??
+    ? (labelled.find(
+        (channel) => channel.id === requestedChannel && !channel.archived,
+      ) ??
       (list.coverage === "partial"
         ? { id: requestedChannel, name: "Conversation" }
         : undefined))
@@ -577,6 +624,43 @@ function ChannelWorkspace({
     <div
       className={`${styles.board} ${panel || showingThread || companion ? styles.withPanel : ""}`}
     >
+      {lifecycleDialog && (
+        <ChannelLifecycleDialog
+          channelId={lifecycleDialog.channel.id}
+          channelName={lifecycleDialog.channel.name}
+          action={lifecycleDialog.action}
+          lifecycle={lifecycle}
+          close={() => {
+            lifecycleFocus.current = lifecycleDialog.channel.id;
+            setLifecycleDialog(undefined);
+          }}
+          completed={() => {
+            lifecycleFocus.current = lifecycleDialog.channel.id;
+            const id = lifecycleDialog.channel.id;
+            setLifecycleDialog(undefined);
+            if (
+              current?.id === id ||
+              requestedChannel === id ||
+              selected === id
+            ) {
+              const next = channels.find(
+                (channel) => channel.id !== id && !channel.archived,
+              );
+              if (next) select(next.id);
+              else {
+                setSelected(undefined);
+                writeView(scope, "selected-channel", undefined);
+                void navigator?.open({
+                  version: 1,
+                  kind: "page",
+                  pluginId: "buzz.channels",
+                  pageId: "channels",
+                });
+              }
+            }
+          }}
+        />
+      )}
       <aside className={styles.sidebar} aria-label="Channel sidebar">
         <div className={styles.search}>
           <Search size={17} />
@@ -587,6 +671,17 @@ function ChannelWorkspace({
             onChange={(event) => sidebar.setSearch(event.target.value)}
           />
         </div>
+        {dmVisibility.status === "error" && (
+          <div role="alert">
+            Hidden conversations could not be refreshed.{" "}
+            <button
+              type="button"
+              onClick={() => void lifecycle.refreshVisibility()}
+            >
+              Retry hidden conversations
+            </button>
+          </div>
+        )}
         <SidebarUnread listRef={sidebar.list}>
           {sidebarSections(visible, preferences.data).map((section) => (
             <details
@@ -629,7 +724,6 @@ function ChannelWorkspace({
                   channel.channelType !== "forum";
                 const starred = section.key === "starred";
                 const menuOpen =
-                  (movable || starrable) &&
                   rowMenu?.channel.id === channel.id &&
                   rowMenu.sectionId === currentSectionId;
                 const channelButton = (
@@ -652,13 +746,6 @@ function ChannelWorkspace({
                     <UnreadBadge session={queries} channelId={channel.id} />
                   </button>
                 );
-                if (!movable && !starrable) {
-                  return (
-                    <div key={channel.id} className={styles.channelRow}>
-                      {channelButton}
-                    </div>
-                  );
-                }
                 return (
                   <ContextMenuRoot
                     key={channel.id}
@@ -758,6 +845,25 @@ function ChannelWorkspace({
                               </MenuItem>
                             </>
                           )}
+                        </>
+                      )}
+                      {menuOpen && (
+                        <>
+                          {(movable || starrable) && <MenuSeparator />}
+                          <ChannelLifecycleMenu
+                            channelId={channel.id}
+                            lifecycle={lifecycle}
+                            disabled={!!groupWrite?.pending}
+                            choose={(action) => {
+                              // Close the menu before mounting a native modal. Menu focus
+                              // restoration must finish before the dialog takes focus.
+                              closeRowMenu();
+                              requestAnimationFrame(() => {
+                                if (mounted.current)
+                                  setLifecycleDialog({ channel, action });
+                              });
+                            }}
+                          />
                         </>
                       )}
                       {groupWrite?.channelId === channel.id &&

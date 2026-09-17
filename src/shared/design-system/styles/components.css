@@ -276,8 +276,8 @@
   }
 
   .buzz-avatar[data-size="large"] {
-    width: var(--size-control-lg);
-    height: var(--size-control-lg);
+    width: 2.5rem;
+    height: 2.5rem;
   }
 
   .buzz-avatar[data-size="fill"] {

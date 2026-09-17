@@ -169,9 +169,7 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
       ),
     ).toBe(true);
   }
-  const primary = page
-    .getByRole("button", { name: "Save", exact: true })
-    .first();
+  const primary = page.getByRole("button", { name: "prominent", exact: true });
   await primary.click();
   await expect(page.locator("html")).not.toHaveAttribute(
     "data-keyboard-navigation",
@@ -182,7 +180,7 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
       : "Tab";
   await page.keyboard.press(tab);
   await expect(
-    page.getByRole("button", { name: "Save", exact: true }).nth(1),
+    page.getByRole("button", { name: "subtle", exact: true }),
   ).toBeFocused();
   await expect(page.locator("html")).toHaveAttribute(
     "data-keyboard-navigation",
@@ -194,7 +192,7 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
   );
   await page.keyboard.press(tab);
   await expect(
-    page.getByRole("button", { name: "Save", exact: true }).nth(1),
+    page.getByRole("button", { name: "subtle", exact: true }),
   ).toBeFocused();
   await expect(page.locator("html")).toHaveAttribute(
     "data-keyboard-navigation",
@@ -310,10 +308,10 @@ test("documentation retains table guidance and storage failure stays usable", as
   // A real cell in a real row, so run-on prose or a dropped table both fail.
   const stepRow = page
     .locator("main table tbody tr")
-    .filter({ hasText: "coloured text on a neutral surface" });
-  await expect(stepRow.locator("td").first()).toHaveText("12");
+    .filter({ hasText: "Main text on a neutral surface" });
+  await expect(stepRow.locator("td").first()).toHaveText("text-standard");
   await expect(
-    page.locator("main table thead th").filter({ hasText: "step" }),
+    page.locator("main table thead th").filter({ hasText: "Role" }),
   ).toHaveCount(1);
   await expect(page.locator("main")).not.toContainText("|---|");
   // A token is one word: it may sit on its own line, never break across two.
@@ -344,7 +342,7 @@ test("built component references retain anatomy and fallback identity", async ({
     .locator("tbody tr")
     .filter({ hasText: "Unselected tab" })
     .first();
-  await expect(selectedTabRow).toContainText("text-secondary");
+  await expect(selectedTabRow).toContainText("text-subtle");
   await expect(selectedTabRow.locator("td")).toHaveCount(6);
 
   await page.goto(`${viewer}#/design/components/avatar`);
@@ -474,5 +472,8 @@ test("typography shows the size ramp and renders xsmall mono details", async ({
   }
   await expect(
     page.getByRole("link", { name: "Typography source specification" }),
-  ).toHaveAttribute("href", /eff766161ba8aaee3258ca107f0d904dd542c708/);
+  ).toHaveAttribute(
+    "href",
+    /github\.com\/block\/buzz-app\/blob\/main\/src\/shared\/design-system\/styles\/typography\.css$/,
+  );
 });

@@ -22,6 +22,14 @@ an actual use, document it in the registry and measure its intended pairings.
 Legacy utilities and host aliases remain while their callers migrate. Do not
 add new uses. Whole materials such as glass still travel as one shared recipe.
 
+| Role | Use |
+| --- | --- |
+| `surface-panel` | Content panels and form fields. |
+| `text-standard` | Main text on a neutral surface. |
+| `text-subtle` | Supporting text. |
+| `border-prominent` | Field boundaries and stronger separators. |
+| `affordance-subtle-hover` | Hover on a quiet action. |
+
 ## Foundations
 
 The interface uses shared color, type, spacing and shape roles. Primary actions

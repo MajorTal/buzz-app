@@ -115,6 +115,9 @@ it("a signer already waiting cannot bypass a newly learned shared cooldown", asy
     "relay",
   );
   const one = t.query([{ kinds: [0], limit: 1 }]).catch((e) => e);
+  // Digest preparation runs on real crypto threads. Establish which request is
+  // waiting first before releasing pending[0]; completion order is otherwise free.
+  await vi.waitFor(() => expect(pending).toHaveLength(1));
   const two = t.query([{ kinds: [0], limit: 2 }]).catch((e) => e);
   await vi.advanceTimersByTimeAsync(600);
   await vi.waitFor(() => expect(pending).toHaveLength(2));

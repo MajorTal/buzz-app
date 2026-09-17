@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { useEffect, useState } from "react";
 import type { ChannelMessage } from "../relay/contracts";
 import { DELIVERY_GRACE_MS, deliveryFeedback } from "./delivery";
@@ -25,9 +26,14 @@ export function DeliveryNotice({
     <div className={styles.delivery}>
       <span role="status">{feedback}</span>
       {(row.delivery === "failed" || row.delivery === "unknown") && retry && (
-        <button type="button" onClick={() => retry(row.id)}>
+        <Button
+          size="sm"
+          variant="ghost"
+          type="button"
+          onClick={() => retry(row.id)}
+        >
           Retry
-        </button>
+        </Button>
       )}
     </div>
   );

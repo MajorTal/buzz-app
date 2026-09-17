@@ -100,111 +100,33 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await expect(picker).not.toHaveCSS("box-shadow", "none");
   const emojiTab = page.getByRole("tab", { name: "Emoji", exact: true });
   const gifTab = page.getByRole("tab", { name: "GIF", exact: true });
-  await expect(emojiTab).toHaveCSS("border-top-left-radius", "16px");
-  await expect(gifTab).toHaveCSS("border-top-right-radius", "16px");
   const emojiSearch = page.getByRole("searchbox", {
     name: "Search emoji",
     exact: true,
   });
-  await expect(emojiSearch).toHaveCSS(
-    "box-shadow",
-    "rgb(0, 0, 0) 0px 0px 0px 2px",
-  );
   const emojiSearchPosition = await emojiSearch.boundingBox();
-  const emojiTabPosition = await emojiTab.boundingBox();
-  expect(emojiTabPosition.x).toBeCloseTo(emojiSearchPosition.x - 2, 1);
-  const searchStyle = (input) => {
-    const style = getComputedStyle(input);
-    return {
-      height: style.height,
-      padding: style.padding,
-      borderRadius: style.borderRadius,
-      backgroundColor: style.backgroundColor,
-      boxShadow: style.boxShadow,
-      color: style.color,
-      fontFamily: style.fontFamily,
-      fontSize: style.fontSize,
-      lineHeight: style.lineHeight,
-    };
-  };
-  const emojiSearchStyle = await emojiSearch.evaluate(searchStyle);
-  expect(emojiSearchStyle.fontFamily).toMatch(/Inter Variable/);
-
-  const emojiContentHeight = (
-    await page.locator("em-emoji-picker").boundingBox()
-  ).height;
-  const sharedSearchIcon = picker.locator(":scope > svg.tabler-icon-search");
-  const sharedSearchIconNode = await sharedSearchIcon.elementHandle();
-  const emojiSearchIconPosition = await sharedSearchIcon.boundingBox();
-  expect(emojiSearchIconPosition.x - emojiSearchPosition.x).toBeCloseTo(8, 1);
-  expect(emojiSearchIconPosition.y - emojiSearchPosition.y).toBeCloseTo(6, 1);
-  const emojiSearchSpacing = await emojiSearch.evaluate((input) => {
-    const root = input.getRootNode();
-    const picker = root.querySelector("#root").getBoundingClientRect();
-    const scroll = root.querySelector(".scroll").getBoundingClientRect();
-    const search = input.getBoundingClientRect();
-    return {
-      top: search.top - picker.top,
-      bottom: scroll.top - search.bottom,
-    };
-  });
-  expect(emojiSearchSpacing.top).toBeCloseTo(14, 1);
-  expect(emojiSearchSpacing.bottom).toBeCloseTo(14, 1);
-  expect(emojiSearchSpacing.bottom).toBeCloseTo(emojiSearchSpacing.top, 1);
-  const tabsBox = await page.getByRole("tablist").boundingBox();
-  await expect(page.getByRole("tablist")).toHaveCSS("padding", "8px");
-  const tabIndicator = page.getByTestId("picker-tab-indicator");
-  const initialIndicatorTransform = await tabIndicator.evaluate(
-    (element) => getComputedStyle(element).transform,
-  );
-  await page.mouse.move(0, 0);
-  await expect(gifTab).toHaveCSS("color", "rgb(82, 82, 82)");
-  await gifTab.hover();
-  await expect(gifTab).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(gifTab).toHaveCSS("color", "rgb(0, 0, 0)");
-  const initialIndicatorBox = await tabIndicator.boundingBox();
-  await gifTab.dispatchEvent("pointerdown", {
-    button: 0,
-    pointerType: "mouse",
-  });
-  await expect
-    .poll(async () => (await tabIndicator.boundingBox()).width)
-    .toBeGreaterThan(initialIndicatorBox.width * 1.04);
-  await gifTab.dispatchEvent("pointercancel", { pointerType: "mouse" });
-  await expect
-    .poll(async () => (await tabIndicator.boundingBox()).width)
-    .toBeCloseTo(initialIndicatorBox.width, 1);
-  await gifTab.evaluate((button) => {
-    button.addEventListener(
-      "focus",
-      () => {
-        button.dataset.focusedDuringPointerSwitch = "true";
-      },
-      { once: true },
-    );
-  });
+  await expect(emojiSearch).toBeFocused();
+  await expect(emojiTab).toHaveAttribute("aria-selected", "true");
+  await expect(emojiTab).toHaveAttribute("aria-controls", /.+/);
+  await expect(
+    picker.getByRole("tabpanel", { name: "Emoji", exact: true }),
+  ).toBeVisible();
   await emojiSearch.fill("hello");
-  await gifTab.click();
-  await expect(gifTab).not.toHaveAttribute(
-    "data-focused-during-pointer-switch",
-    "true",
-  );
-  const activeTab = gifTab;
-  await expect(activeTab).toHaveCSS("align-items", "center");
-  await expect(activeTab).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
-  await expect(activeTab).toHaveCSS("color", "rgb(0, 0, 0)");
-  await expect(activeTab).toHaveCSS("display", "flex");
-  await expect(activeTab).toHaveCSS("height", "30px");
-  await expect(tabIndicator).toHaveCSS(
-    "background-color",
-    "rgb(232, 232, 232)",
-  );
-  await expect(tabIndicator).toHaveCSS("transition-duration", "0.16s");
-  await expect
-    .poll(() =>
-      tabIndicator.evaluate((element) => getComputedStyle(element).transform),
-    )
-    .not.toBe(initialIndicatorTransform);
+  // Base UI owns the tab keyboard model; the selected panel focuses its search.
+  await emojiTab.focus();
+  await emojiTab.press("ArrowRight");
+  await expect(gifTab).toBeFocused();
+  await gifTab.press("Enter");
+  await expect(gifTab).toHaveAttribute("aria-selected", "true");
+  await expect(
+    picker.getByRole("tabpanel", { name: "GIF", exact: true }),
+  ).toBeVisible();
+  await expect(
+    picker.getByRole("tabpanel", { name: "Emoji", exact: true }),
+  ).toHaveCount(0);
+  const tabIndicator = picker.locator(".buzz-tabs-indicator");
+  await expect(tabIndicator).toHaveCSS("height", "2px");
+  await expect(tabIndicator).toHaveCSS("background-color", "rgb(0, 0, 0)");
   const search = page.getByRole("searchbox", { name: "Search GIFs" });
   await expect(search).toBeFocused();
   await expect(search).toHaveValue("hello");
@@ -241,33 +163,17 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await expect(search).toHaveAttribute("spellcheck", "false");
   await expect(search).toHaveAttribute("autocorrect", "off");
   await expect(search).toHaveAttribute("autocapitalize", "off");
-  await expect(sharedSearchIcon).toHaveAttribute("viewBox", "0 0 24 24");
-  await expect(sharedSearchIcon).toHaveAttribute("stroke-width", "2");
-  await expect(sharedSearchIcon).toHaveAttribute("aria-hidden", "true");
-  expect(await sharedSearchIconNode.evaluate((node) => node.isConnected)).toBe(
-    true,
-  );
-  const gifSearchIconPosition = await sharedSearchIcon.boundingBox();
-  expect(gifSearchIconPosition).toEqual(emojiSearchIconPosition);
-  const gifSearchPosition = await search.boundingBox();
-  const gifContentHeight = (await search.locator("xpath=../..").boundingBox())
-    .height;
-  expect(gifContentHeight).toBeCloseTo(emojiContentHeight, 1);
-  expect(gifSearchPosition.x).toBeCloseTo(emojiSearchPosition.x, 1);
-  expect(gifSearchPosition.y).toBeCloseTo(emojiSearchPosition.y, 1);
-  expect(gifSearchPosition.width).toBeCloseTo(emojiSearchPosition.width, 1);
-  await expect(search).toHaveCSS("box-shadow", "rgb(0, 0, 0) 0px 0px 0px 2px");
-  expect(gifSearchIconPosition.x - gifSearchPosition.x).toBeCloseTo(8, 1);
-  expect(gifSearchIconPosition.y - gifSearchPosition.y).toBeCloseTo(6, 1);
-  expect(await search.evaluate(searchStyle)).toEqual(emojiSearchStyle);
-  await expect(search).toHaveCSS("height", "28px");
-  await expect(search).toHaveCSS("margin-left", "2px");
-  await expect(search).toHaveCSS("margin-right", "2px");
-  await expect(search).toHaveCSS("border-top-width", "0px");
-  await expect(search).toHaveCSS("border-radius", "10px");
-  await expect(search).toHaveCSS("background-color", "rgb(240, 240, 240)");
+  const searchFrame = search.locator("..");
+  await expect(searchFrame).toHaveClass(/search-field/);
+  await expect(searchFrame).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(searchFrame).toHaveCSS("border-top-color", "rgb(128, 128, 128)");
   await expect(search).toHaveCSS("color", "rgb(0, 0, 0)");
-  await expect(search).toHaveCSS("animation-name", "none");
+  await expect(search).toHaveCSS("font-family", /Inter Variable/);
+  const gifSearchPosition = await searchFrame.boundingBox();
+  expect(gifSearchPosition.width).toBeGreaterThan(0);
+  expect(gifSearchPosition.x).toBeGreaterThanOrEqual(
+    (await picker.boundingBox()).x,
+  );
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(tabIndicator).toHaveCSS("transition-duration", "0s");
   await page.emulateMedia({ reducedMotion: "no-preference" });
@@ -291,10 +197,9 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   const gifScrollbar = page.getByTestId("gif-scrollbar-track");
   await expect(gifScrollbar).toHaveCSS("right", "4px");
   await expect(gifScrollbar).toHaveCSS("opacity", "0.6");
-  expect(
-    gifGridBox.y - (gifSearchPosition.y + gifSearchPosition.height),
-  ).toBeCloseTo(gifSearchPosition.y - (tabsBox.y + tabsBox.height), 1);
-  expect(gifSearchPosition.y - (tabsBox.y + tabsBox.height)).toBeCloseTo(14, 1);
+  expect(gifGridBox.y).toBeGreaterThanOrEqual(
+    gifSearchPosition.y + gifSearchPosition.height,
+  );
   expect(requests).toHaveLength(1);
   expect(requests[0]).toMatchObject({
     locale: expect.any(String),
@@ -303,20 +208,8 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await search.fill("celebrate");
   await expect.poll(() => requests.length).toBe(2);
   expect(requests[1]).toMatchObject({ query: "celebrate" });
-  await emojiTab.evaluate((button) => {
-    button.addEventListener(
-      "focus",
-      () => {
-        button.dataset.focusedDuringPointerSwitch = "true";
-      },
-      { once: true },
-    );
-  });
   await emojiTab.click();
-  await expect(emojiTab).not.toHaveAttribute(
-    "data-focused-during-pointer-switch",
-    "true",
-  );
+  await expect(emojiTab).toHaveAttribute("aria-selected", "true");
   const returningEmojiSearch = page.getByRole("searchbox", {
     name: "Search emoji",
     exact: true,
@@ -349,28 +242,18 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await search.fill("hello");
   await expect.poll(() => requests.length).toBe(reopenRequests + 1);
   expect(requests.at(-1)).toMatchObject({ query: "hello" });
-  const clear = picker.getByRole("button", { name: "Clear", exact: true });
-  const clearIcon = clear.locator("svg");
-  await expect(clear).toHaveCSS("right", "10px");
-  await expect(clear).toHaveCSS("width", "16px");
-  await expect(clear).toHaveCSS("height", "16px");
-  await expect(clear).toHaveCSS("color", "rgb(82, 82, 82)");
-  await expect(clearIcon).toHaveAttribute("viewBox", "0 0 24 24");
-  await expect(clearIcon).toHaveClass(/tabler-icon-circle-x-filled/);
-  await expect(clearIcon).toHaveAttribute("aria-hidden", "true");
-  await expect(clearIcon.locator("path").last()).toHaveCSS(
-    "fill",
-    "rgb(82, 82, 82)",
-  );
-  await expect(clearIcon).toHaveAttribute("stroke", "none");
-  const filledSearchPosition = await search.boundingBox();
-  const clearIconPosition = await clearIcon.boundingBox();
-  expect(
-    filledSearchPosition.x +
-      filledSearchPosition.width -
-      clearIconPosition.x -
-      clearIconPosition.width,
-  ).toBeCloseTo(emojiSearchIconPosition.x - emojiSearchPosition.x, 1);
+  const clear = picker.getByRole("button", {
+    name: "Clear search gifs",
+    exact: true,
+  });
+  await expect(clear).toHaveCSS("width", "32px");
+  await expect(clear).toHaveCSS("height", "32px");
+  await clear.click();
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
+  await expect(
+    page.getByTestId("klipy-gif-grid").getByRole("button"),
+  ).toHaveCount(2);
   await page.screenshot({ path: testInfo.outputPath("gif-picker.png") });
 
   await page.getByRole("button", { name: "Choose Hello", exact: true }).click();

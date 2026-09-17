@@ -1,3 +1,4 @@
+import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import type { ReactNode } from "react";
 import { IconHome as House } from "@tabler/icons-react";
 import { isTauri } from "@tauri-apps/api/core";
@@ -66,28 +67,28 @@ export function AppShell({
           />
         </div>
         <nav aria-label="Pages" className="shell-pages">
-          <button
+          <NavigationItem
             type="button"
-            className="shell-tab"
+            variant="pill"
             aria-current={selected === "home" ? "page" : undefined}
             onClick={() => onSelect("home")}
-          >
-            <House aria-hidden="true" size={15} stroke={1.7} />
-            Home
-          </button>
+            selected={selected === "home"}
+            label="Home"
+            icon={<House aria-hidden="true" size={15} stroke={1.7} />}
+          />
           {orderPages(pages).map((page) => {
             const { label, icon: Icon } = pagePresentation(page);
             return (
-              <button
+              <NavigationItem
                 type="button"
                 key={page.key}
-                className="shell-tab"
+                variant="pill"
                 aria-current={selected === page.key ? "page" : undefined}
                 onClick={() => onSelect(page.key)}
-              >
-                <Icon aria-hidden="true" size={15} stroke={1.7} />
-                {label}
-              </button>
+                selected={selected === page.key}
+                label={label}
+                icon={<Icon aria-hidden="true" size={15} stroke={1.7} />}
+              />
             );
           })}
         </nav>

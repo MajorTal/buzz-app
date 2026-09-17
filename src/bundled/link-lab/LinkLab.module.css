@@ -3,7 +3,7 @@
   margin: 0 auto;
   padding: calc(var(--space-6) * 2) var(--space-6);
   font-family: var(--font-sans);
-  color: var(--text-primary);
+  color: var(--text-standard);
 }
 
 .page h1 {
@@ -12,7 +12,7 @@
 
 .intro,
 .status {
-  color: var(--text-secondary);
+  color: var(--text-subtle);
 }
 
 .samples {
@@ -24,12 +24,13 @@
 .samples p {
   margin: var(--space-2) 0 0;
   font-size: var(--text-body-lg);
-  line-height: 1.8;
+  line-height: var(--text-body-lg--line-height);
+  letter-spacing: var(--text-body-lg--letter-spacing);
 }
 
 .label {
   font-size: var(--text-body-sm);
-  color: var(--text-secondary);
+  color: var(--text-subtle);
 }
 
 .services {
@@ -37,15 +38,4 @@
   flex-wrap: wrap;
   gap: var(--space-3) calc(var(--space-4) + var(--space-half));
   margin-top: var(--space-3);
-}
-
-.page input {
-  width: 100%;
-  margin: calc(var(--space-2) + var(--space-half)) 0;
-  padding: calc(var(--space-2) + var(--space-half)) var(--space-3);
-  border: 1px solid var(--border-primary);
-  border-radius: var(--radius-chip);
-  background: var(--bg-panel);
-  color: inherit;
-  font: inherit;
 }

@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { RelaySession } from "../relay/session";
 import type { EventData } from "../relay/events";
@@ -144,9 +145,14 @@ function ReactionDelivery({
       {operation.delivery === "failed"
         ? "Couldn’t add reaction."
         : "Reaction delivery not confirmed."}{" "}
-      <button type="button" onClick={() => outbox.retry(operation.event.id)}>
+      <Button
+        size="sm"
+        variant="ghost"
+        type="button"
+        onClick={() => outbox.retry(operation.event.id)}
+      >
         Retry reaction
-      </button>
+      </Button>
     </span>
   );
 }

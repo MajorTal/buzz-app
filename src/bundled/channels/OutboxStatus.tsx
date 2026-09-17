@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { isWorkflowOperation } from "../../features/workflows/protocol";
 import { useState, useSyncExternalStore } from "react";
 import type { RelayProfiler } from "../../features/relay/profiling";
@@ -46,15 +47,15 @@ export function OutboxStatus({
             </span>{" "}
             {!isWorkflowOperation(item.event) &&
               (item.delivery === "failed" || item.delivery === "unknown") && (
-                <button
+                <Button
                   type="button"
                   onClick={() => outbox.retry(item.event.id)}
                 >
                   Retry
-                </button>
+                </Button>
               )}{" "}
             {item.delivery !== "sending" && (
-              <button
+              <Button
                 type="button"
                 onClick={async () => {
                   try {
@@ -66,7 +67,7 @@ export function OutboxStatus({
                 }}
               >
                 Remove from outbox
-              </button>
+              </Button>
             )}
           </li>
         ))}

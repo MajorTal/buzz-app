@@ -366,14 +366,14 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(skinTone).toBeFocused();
     await search.focus();
     const searchIcon = page.locator(
-      '[aria-label="Emoji picker"] > svg.tabler-icon-search',
+      '[aria-label="Emoji picker"] svg.tabler-icon-search',
     );
     await expect(searchIcon).toHaveAttribute("viewBox", "0 0 24 24");
     await expect(searchIcon).toHaveAttribute("stroke-width", "2");
     await expect(searchIcon).toHaveAttribute("aria-hidden", "true");
     await expect(
       page.locator(
-        '[aria-label="Emoji picker"] > svg.tabler-icon-search:visible',
+        '[aria-label="Emoji picker"] svg.tabler-icon-search:visible',
       ),
     ).toHaveCount(1);
     await expect(page.locator("em-emoji-picker .search .loupe")).toHaveCSS(
@@ -384,13 +384,13 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(search).toHaveCSS("margin-left", "2px");
     await expect(search).toHaveCSS("margin-right", "2px");
     await expect(search).toHaveCSS("border-top-width", "0px");
-    await expect(search).toHaveCSS("border-radius", "14px");
+    await expect(search).toHaveCSS("border-radius", "10px");
     await expect(search).toHaveCSS("background-color", "rgb(240, 240, 240)");
     await expect(search).toHaveCSS("color", "rgb(0, 0, 0)");
     await expect(search).toHaveCSS("outline-style", "none");
     await expect(search).toHaveCSS(
       "box-shadow",
-      "rgb(0, 0, 0) 0px 0px 0px 2px",
+      "rgb(240, 240, 240) 0px 0px 0px 1px",
     );
     const surface = page.locator("em-emoji-picker #root");
     const region = page.getByRole("region", { name: "Emoji picker" });
@@ -465,7 +465,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     );
     await expect(
       page.locator(
-        '[aria-label="Emoji picker"] > svg.tabler-icon-search:visible',
+        '[aria-label="Emoji picker"] svg.tabler-icon-search:visible',
       ),
     ).toHaveCount(1);
     const insert = page.getByRole("button", {
@@ -492,8 +492,8 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       await expect(search).toHaveCSS(
         "box-shadow",
         mode === "dark"
-          ? "rgb(255, 255, 255) 0px 0px 0px 2px"
-          : "rgb(0, 0, 0) 0px 0px 0px 2px",
+          ? "rgb(16, 16, 16) 0px 0px 0px 1px"
+          : "rgb(240, 240, 240) 0px 0px 0px 1px",
       );
       await expect(search).toHaveCSS("font-family", /Inter Variable/);
 
@@ -600,7 +600,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(scrollbar).toHaveCSS("opacity", "0.6");
     await expect(scrollbarThumb).toHaveCSS(
       "background-color",
-      "rgb(149, 149, 149)",
+      "rgb(128, 128, 128)",
     );
     for (const [index, result] of searchRowPositions.entries())
       expect(result.x).toBeCloseTo(firstRow[index].x, 1);

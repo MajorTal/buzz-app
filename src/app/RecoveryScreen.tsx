@@ -1,3 +1,4 @@
+import { Button } from "../shared/design-system/ui/Button";
 // FOUNDATION: Recovery must remain usable without executing any plugin.
 import { useSyncExternalStore } from "react";
 import type { PluginManager } from "../plugins/manager";
@@ -17,18 +18,23 @@ export function RecoveryScreen({ plugins }: { plugins: PluginManager }) {
         <summary>Error details</summary>
         <p>{reason}</p>
       </details>
-      <button type="button" disabled={busy} onClick={plugins.retry}>
+      <Button type="button" disabled={busy} onClick={plugins.retry}>
         Try again
-      </button>
+      </Button>
       {canReset ? (
         <>
           <p>
             Resetting saves a backup and restores bundled defaults. Installed
             plugin files remain on disk and can be reinstalled.
           </p>
-          <button type="button" disabled={busy} onClick={plugins.recover}>
+          <Button
+            variant="destructive"
+            type="button"
+            disabled={busy}
+            onClick={plugins.recover}
+          >
             Back up & reset settings
-          </button>
+          </Button>
         </>
       ) : (
         <p>

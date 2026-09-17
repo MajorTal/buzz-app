@@ -35,6 +35,9 @@
     min-height: 6rem;
     resize: vertical;
   }
+  .buzz-textarea[data-variant="code"] {
+    @apply text-mono;
+  }
   .buzz-input::placeholder,
   .buzz-textarea::placeholder {
     color: var(--text-subtle);

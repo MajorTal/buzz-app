@@ -1,5 +1,9 @@
 import { useEffect, useRef, useState } from "react";
-import { IconX as X } from "@tabler/icons-react";
+import { Dialog } from "../../shared/design-system/ui/Dialog";
+import { Field } from "../../shared/design-system/ui/Field";
+import { Input } from "../../shared/design-system/ui/Input";
+import { Checkbox } from "../../shared/design-system/ui/Checkbox";
+import { Button } from "../../shared/design-system/ui/Button";
 import {
   communityRequest,
   inspectProfile,
@@ -23,7 +27,6 @@ export function CommunityDialog({
   close(): void;
   onJoined?: (id: string) => void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
   const client = communities.snapshot();
   const [url, setUrl] = useState("");
   const [destination, setDestination] =
@@ -44,7 +47,6 @@ export function CommunityDialog({
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
-    dialog.current?.showModal();
     return () => {
       mounted.current = false;
     };
@@ -143,13 +145,19 @@ export function CommunityDialog({
     }
   }
   return (
-    <dialog
-      ref={dialog}
-      className={styles.dialog}
-      onCancel={(event) => {
-        if (busy) event.preventDefault();
-        else close();
+    <Dialog
+      open
+      onOpenChange={(next) => {
+        if (!next) close();
       }}
+      preventClose={busy}
+      title={
+        mode === "profile"
+          ? "Your profile"
+          : step === "profile"
+            ? `Your profile in ${info?.name && info.name !== "Buzz Relay" ? info.name : destination?.name}`
+            : "Add a community"
+      }
     >
       <form
         onSubmit={(event) => {
@@ -157,23 +165,6 @@ export function CommunityDialog({
           void submit();
         }}
       >
-        <header>
-          <h2>
-            {mode === "profile"
-              ? "Your profile"
-              : step === "profile"
-                ? `Your profile in ${info?.name && info.name !== "Buzz Relay" ? info.name : destination?.name}`
-                : "Add a community"}
-          </h2>
-          <button
-            type="button"
-            aria-label="Close"
-            disabled={busy}
-            onClick={close}
-          >
-            <X size={20} aria-hidden="true" />
-          </button>
-        </header>
         {mode === "join" && step !== "destination" && destination && (
           <p className={styles.note}>Relay: {destination.url}</p>
         )}
@@ -191,9 +182,8 @@ export function CommunityDialog({
                   Use your identity across communities. Your profile and
                   conversations stay separate in each one.
                 </p>
-                <label>
-                  Relay URL
-                  <input
+                <Field label="Relay URL">
+                  <Input
                     type="url"
                     required
                     autoComplete="url"
@@ -216,7 +206,7 @@ export function CommunityDialog({
                       setError("");
                     }}
                   />
-                </label>
+                </Field>
                 <p id="relay-url-note" className={styles.note}>
                   Enter a wss:// or https:// relay address without a path.
                   Continue contacts this relay using your Buzz identity; joining
@@ -230,16 +220,15 @@ export function CommunityDialog({
                   Connect to <strong>{destination?.name}</strong> with your Buzz
                   identity.
                 </p>
-                <label>
-                  Invite code <span className={styles.note}>(if required)</span>
-                  <input
+                <Field label="Invite code (if required)">
+                  <Input
                     disabled={busy}
                     value={code}
                     onChange={(e) => setCode(e.target.value)}
                     placeholder="Existing members can leave this blank"
                     maxLength={256}
                   />
-                </label>
+                </Field>
                 {policy && (
                   <div className={styles.policy}>
                     {policy.terms_markdown && (
@@ -261,25 +250,18 @@ export function CommunityDialog({
                       </a>
                     )}
                     {(policy.terms_markdown || policy.privacy_markdown) && (
-                      <label className={styles.check}>
-                        <input
-                          type="checkbox"
-                          checked={agreed}
-                          onChange={(e) => setAgreed(e.target.checked)}
-                        />
-                        I agree to this community’s Terms of Service and Privacy
-                        Notice.
-                      </label>
+                      <Checkbox
+                        checked={agreed}
+                        onCheckedChange={setAgreed}
+                        label="I agree to this community’s Terms of Service and Privacy Notice."
+                      />
                     )}
                     {policy.age_attestation_required && (
-                      <label className={styles.check}>
-                        <input
-                          type="checkbox"
-                          checked={adult}
-                          onChange={(e) => setAdult(e.target.checked)}
-                        />
-                        I confirm that I am at least 18 years old.
-                      </label>
+                      <Checkbox
+                        checked={adult}
+                        onCheckedChange={setAdult}
+                        label="I confirm that I am at least 18 years old."
+                      />
                     )}
                   </div>
                 )}
@@ -310,8 +292,8 @@ export function CommunityDialog({
                 {error}
               </p>
             )}
-            <footer>
-              <button
+            <footer className="mt-6 flex flex-wrap items-center justify-between gap-4">
+              <Button
                 type="button"
                 disabled={busy}
                 onClick={() => {
@@ -325,9 +307,9 @@ export function CommunityDialog({
                 }}
               >
                 Back
-              </button>
-              <button
-                className={styles.primary}
+              </Button>
+              <Button
+                variant="prominent"
                 type="submit"
                 disabled={
                   busy ||
@@ -346,11 +328,11 @@ export function CommunityDialog({
                         ? "Open community"
                         : "Publish profile & open"
                     : "Continue"}
-              </button>
+              </Button>
             </footer>
           </>
         )}
       </form>
-    </dialog>
+    </Dialog>
   );
 }

@@ -108,9 +108,15 @@
     padding: 0;
   }
 
+  /* Keep pointer-origin keyboard traversal rooted at the button in WebKit. */
+  .buzz-button[data-icon-variant] .buzz-button-label {
+    pointer-events: none;
+  }
+
   .buzz-button[data-icon-size="compact"] {
     width: var(--size-row);
     height: var(--size-row);
+    min-height: var(--size-row);
     border-radius: var(--radius-row);
   }
 
@@ -607,7 +613,7 @@
   .search-field {
     display: flex;
     width: 100%;
-    height: var(--size-control);
+    min-height: var(--size-control);
     align-items: center;
     gap: var(--space-row-gap);
     border-radius: var(--radius-control);
@@ -689,13 +695,13 @@
     display: inline-flex;
     width: 100%;
     min-width: 0;
-    height: var(--size-row);
+    min-height: var(--size-row);
     align-items: center;
     gap: var(--space-row-gap);
     overflow: hidden;
     border: 0;
     border-radius: var(--radius-row);
-    padding: 0 var(--space-control-inset);
+    padding: var(--space-1) var(--space-control-inset);
     background: transparent;
     color: var(--text-standard);
     font: inherit;

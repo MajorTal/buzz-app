@@ -15,6 +15,11 @@ export type BaseUiPart = {
 };
 
 export const BASE_UI_PARTS = {
+  alertDialog: {
+    name: "Alert Dialog",
+    docs: "alert-dialog",
+    module: "@base-ui/react/alert-dialog",
+  },
   radio: { name: "Radio", docs: "radio", module: "@base-ui/react/radio" },
   radioGroup: {
     name: "Radio Group",
@@ -95,6 +100,18 @@ export type ComponentDefinition = {
 
 export const COMPONENTS: readonly ComponentDefinition[] = [
   {
+    slug: "alert-dialog",
+    name: "AlertDialog",
+    purpose: "Confirm a consequential action before continuing.",
+    behavior: "Base UI owns modal focus and alert-dialog semantics",
+    variants: ["default", "pending"],
+    status: "core",
+    collection: "components",
+    source: "shared/design-system/ui/AlertDialog.tsx",
+    baseUi: [BASE_UI_PARTS.alertDialog],
+    composes: [],
+  },
+  {
     slug: "tooltip",
     name: "Tooltip",
     purpose: "A short hint for an already labelled control.",
@@ -142,7 +159,11 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     status: "proposed",
     collection: "components",
     source: "shared/design-system/ui/RadioGroup.tsx",
-    baseUi: [BASE_UI_PARTS.radioGroup, BASE_UI_PARTS.radio],
+    baseUi: [
+      BASE_UI_PARTS.radioGroup,
+      BASE_UI_PARTS.radio,
+      BASE_UI_PARTS.field,
+    ],
     composes: [],
   },
 

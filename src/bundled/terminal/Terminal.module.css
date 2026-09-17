@@ -3,8 +3,8 @@
   min-height: 0;
   display: flex;
   flex-direction: column;
-  background: var(--bg-panel);
-  color: var(--text-primary);
+  background: var(--surface-panel);
+  color: var(--text-standard);
 }
 .identity {
   display: flex;
@@ -32,8 +32,8 @@
 .emulator {
   height: 100%;
   position: relative;
-  background: var(--bg-panel);
-  color: var(--text-primary);
+  background: var(--surface-panel);
+  color: var(--text-standard);
 }
 .notice {
   padding: var(--space-2) var(--space-3);
@@ -48,7 +48,7 @@
   display: grid;
   place-items: center;
   overflow: hidden;
-  background: var(--bg-panel);
+  background: var(--surface-panel);
   pointer-events: none;
   user-select: none;
 }
@@ -80,12 +80,12 @@
   color: oklch(var(--splash-lightness) 0.12 var(--splash-hue));
 }
 .splashArt [data-layer="bevel_lo"] {
-  color: var(--text-secondary);
+  color: var(--text-subtle);
 }
 .splashArt [data-layer="field"] {
   color: color-mix(
     in srgb,
     oklch(var(--splash-lightness) var(--splash-chroma) var(--splash-hue)) 55%,
-    var(--bg-panel)
+    var(--surface-panel)
   );
 }

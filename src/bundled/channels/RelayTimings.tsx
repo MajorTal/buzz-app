@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { useState } from "react";
 import type { RelayProfiler } from "../../features/relay/profiling";
 
@@ -9,10 +10,10 @@ export function RelayTimings({ profiling }: { profiling: RelayProfiler }) {
   return (
     <details>
       <summary>Relay timings</summary>
-      <button type="button" onClick={() => setSamples(profiling.snapshot())}>
+      <Button type="button" onClick={() => setSamples(profiling.snapshot())}>
         Capture timings
-      </button>
-      <button
+      </Button>
+      <Button
         type="button"
         onClick={() => {
           const blob = new Blob(
@@ -28,7 +29,7 @@ export function RelayTimings({ profiling }: { profiling: RelayProfiler }) {
         }}
       >
         Export timings
-      </button>
+      </Button>
       <pre style={{ maxHeight: "16rem", overflow: "auto" }}>
         {samples
           .slice(-40)

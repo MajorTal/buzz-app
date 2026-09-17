@@ -390,6 +390,13 @@ export const ROLE_GROUPS: RoleGroup[] = [
         status: "core",
       },
       {
+        token: "text-link",
+        variable: "--text-link",
+        pointsAt: "blue-12 light / blue-12 dark",
+        use: "Inline links and mentions in prose.",
+        status: "core",
+      },
+      {
         token: "text-accent",
         variable: "--text-accent",
         pointsAt: "purple-12 light / purple-12 dark",
@@ -541,6 +548,13 @@ export const ROLE_GROUPS: RoleGroup[] = [
         variable: "--affordance-success",
         pointsAt: "green-3 light / green-3 dark",
         use: "A success fill.",
+        status: "core",
+      },
+      {
+        token: "bg-affordance-link-hover",
+        variable: "--affordance-link-hover",
+        pointsAt: "blue-4 light / blue-4 dark",
+        use: "An inline link under a pointer.",
         status: "core",
       },
       {

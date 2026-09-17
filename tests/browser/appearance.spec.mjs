@@ -13,11 +13,11 @@ async function expectMode(page, mode) {
   await expect(page.locator("html")).toHaveCSS("color-scheme", mode);
   await expect(page.locator("html")).toHaveCSS(
     "background-color",
-    mode === "dark" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
+    mode === "dark" ? "rgb(0, 0, 0)" : "rgb(240, 240, 240)",
   );
   await expect(page.locator('meta[name="theme-color"]')).toHaveAttribute(
     "content",
-    mode === "dark" ? /^#(?:000|000000)$/ : /^#(?:fff|ffffff)$/,
+    mode === "dark" ? /^#(?:000|000000)$/ : /^#f0f0f0$/,
   );
   await expect(page.locator(".shell-background")).toHaveCSS(
     "background-image",
@@ -28,7 +28,7 @@ async function expectMode(page, mode) {
   ).toHaveCSS("backdrop-filter", /blur\(/);
 }
 
-test("Appearance changes and restores both modes, native keyboard controls, dialogs and narrow layout", async ({
+test("Appearance changes and restores both modes, shared keyboard controls, dialogs and narrow layout", async ({
   page,
   app,
 }, testInfo) => {
@@ -43,15 +43,15 @@ test("Appearance changes and restores both modes, native keyboard controls, dial
   await expect(dark).toBeChecked();
   await expect(dark).toBeFocused();
   await expectMode(page, "dark");
-  expect(
-    await page
-      .locator(".shell-tab")
-      .first()
-      .evaluate((el) => getComputedStyle(el).color),
-  ).toBe("rgb(255, 255, 255)");
+  await expect(
+    page
+      .getByRole("navigation", { name: "Pages", exact: true })
+      .getByRole("button")
+      .first(),
+  ).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(button(page, "Appearance")).toHaveCSS(
     "background-color",
-    "rgb(16, 16, 16)",
+    "rgb(51, 51, 51)",
   );
   expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(
     "dark",
@@ -81,7 +81,7 @@ test("Appearance changes and restores both modes, native keyboard controls, dial
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveCSS(
       "background-color",
-      mode === "dark" ? "rgb(26, 26, 26)" : "rgb(255, 255, 255)",
+      mode === "dark" ? "rgb(51, 51, 51)" : "rgb(255, 255, 255)",
     );
     await page.keyboard.press("Escape");
   }
@@ -270,11 +270,11 @@ test("compiled host preserves compatibility utility meanings", async ({
     );
     await expect(page.locator("#old-primary")).toHaveCSS(
       "background-color",
-      mode === "Light" ? "rgb(25, 25, 25)" : "rgb(199, 199, 199)",
+      mode === "Light" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
     );
     await expect(page.locator("#old-primary")).toHaveCSS(
       "border-radius",
-      "12px",
+      "8px",
     );
     for (const id of ["old-code", "old-mono"]) {
       await expect(page.locator(`#${id}`)).toHaveCSS(

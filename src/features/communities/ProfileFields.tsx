@@ -1,3 +1,5 @@
+import { Field } from "../../shared/design-system/ui/Field";
+import { Input } from "../../shared/design-system/ui/Input";
 import type { PersonalProfile } from "./service";
 
 export function canSaveProfile(profile: PersonalProfile) {
@@ -17,11 +19,9 @@ export function ProfileFields({
   disabled?: boolean;
 }) {
   return (
-    <>
-      <label className="mt-5 block text-label-sm">
-        Display name
-        <input
-          className="mt-2 block w-full rounded-xl border border-input-line bg-surface px-3 py-2.5 font-normal"
+    <div className="grid gap-5">
+      <Field label="Display name">
+        <Input
           autoComplete="nickname"
           required
           disabled={disabled}
@@ -31,11 +31,9 @@ export function ProfileFields({
             onChange({ ...profile, name: event.target.value })
           }
         />
-      </label>
-      <label className="mt-5 block text-label-sm">
-        Picture URL <span className="font-normal text-muted">(optional)</span>
-        <input
-          className="mt-2 block w-full rounded-xl border border-input-line bg-surface px-3 py-2.5 font-normal"
+      </Field>
+      <Field label="Picture URL (optional)">
+        <Input
           type="url"
           placeholder="https://…"
           disabled={disabled}
@@ -45,7 +43,7 @@ export function ProfileFields({
             onChange({ ...profile, picture: event.target.value })
           }
         />
-      </label>
-    </>
+      </Field>
+    </div>
   );
 }

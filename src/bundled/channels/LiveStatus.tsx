@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { useSyncExternalStore } from "react";
 import type { RelaySession } from "../../features/relay/session";
 import styles from "./Channels.module.css";
@@ -84,9 +85,9 @@ export function LiveStatus({
   return (
     <div role="status" className={styles.liveStatus}>
       <span>{reason} Retained messages remain readable.</span>
-      <button type="button" onClick={live.retry}>
+      <Button type="button" onClick={live.retry}>
         Retry live updates
-      </button>
+      </Button>
     </div>
   );
 }

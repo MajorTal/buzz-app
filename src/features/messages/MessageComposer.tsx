@@ -1,3 +1,5 @@
+import { Button } from "../../shared/design-system/ui/Button";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { TypingIndicator } from "./TypingIndicator";
 import { IconArrowUp as ArrowUp, IconX as X } from "@tabler/icons-react";
 import {
@@ -446,7 +448,8 @@ function Composer({
         >
           <span>Notify:</span>
           {value.recipients.map((recipient) => (
-            <button
+            <Button
+              size="sm"
               type="button"
               key={`${recipient.pubkey}:${recipient.start}`}
               title={recipient.pubkey}
@@ -462,7 +465,7 @@ function Composer({
             >
               {recipient.name} <code>{recipient.pubkey.slice(0, 8)}</code>
               <X size={12} aria-hidden="true" />
-            </button>
+            </Button>
           ))}
         </section>
       )}
@@ -485,19 +488,21 @@ function Composer({
         <span className={styles.composerHint}>
           Shift + Enter for a new line
         </span>
-        <button
-          className={styles.sendButton}
+        <IconButton
+          size="toolbar"
+          variant="solid"
+          shape="round"
           type="submit"
           aria-label="Send message"
           title="Send message"
           disabled={disabled || !draft.trim()}
-        >
-          <ArrowUp size={18} aria-hidden="true" />
-        </button>
+          icon={<ArrowUp size={18} aria-hidden="true" />}
+        />
       </div>
       {error && <p role="alert">{error}</p>}
       {error && session.emoji?.snapshot().status === "error" && (
-        <button
+        <Button
+          size="sm"
           type="button"
           disabled={disabled}
           onClick={() => {
@@ -511,7 +516,7 @@ function Composer({
           }}
         >
           Retry message preparation
-        </button>
+        </Button>
       )}
     </form>
   );

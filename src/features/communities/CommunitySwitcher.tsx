@@ -1,9 +1,10 @@
+import { Dialog } from "../../shared/design-system/ui/Dialog";
+import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   IconChevronDown as ChevronDown,
   IconWorld as Globe2,
   IconPlus as Plus,
-  IconX as X,
 } from "@tabler/icons-react";
 import { CommunityDialog } from "./CommunityDialog";
 import type { Communities } from "./service";
@@ -33,8 +34,8 @@ export function CommunitySwitcher({
     communities.snapshot,
   );
   const [joining, setJoining] = useState(false);
-  const dialog = useRef<HTMLDialogElement>(null);
-  const trigger = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  const trigger = useRef<HTMLElement>(null);
   const wasJoining = useRef(false);
   useEffect(() => {
     // Restore only after the child modal unmounts and releases its focus trap.
@@ -45,81 +46,71 @@ export function CommunitySwitcher({
   const select = (id: string | null) => {
     if (onSelect) onSelect(id);
     else communities.select(id);
-    dialog.current?.close();
+    setOpen(false);
   };
   return (
     <>
-      <button
-        type="button"
+      <NavigationItem
         ref={trigger}
-        className={styles.switcher}
+        variant="pill"
         aria-label="Switch community"
         title={current?.name ?? "Personal space"}
-        onClick={(event) => {
-          // Safari does not focus pointer-clicked buttons. Remember this trigger
-          // before opening so native dialog dismissal restores keyboard focus.
-          event.currentTarget.focus();
-          dialog.current?.showModal();
-        }}
+        label={current?.name ?? "Personal space"}
+        icon={<Globe2 size={18} aria-hidden="true" />}
+        trailing={<ChevronDown size={14} aria-hidden="true" />}
+        onClick={() => setOpen(true)}
+      />
+      <Dialog
+        open={open}
+        onOpenChange={setOpen}
+        title="Communities"
+        closeLabel="Close communities"
+        finalFocus={joining ? false : trigger}
       >
-        <Globe2 size={18} aria-hidden="true" />
-        <span>{current?.name ?? "Personal space"}</span>
-        <ChevronDown size={14} aria-hidden="true" />
-      </button>
-      <dialog ref={dialog} className={styles.dialog} aria-label="Communities">
-        <header>
-          <h2>Communities</h2>
-          <button
-            type="button"
-            aria-label="Close communities"
-            onClick={() => dialog.current?.close()}
-          >
-            <X size={18} aria-hidden="true" />
-          </button>
-        </header>
         <nav className={styles.communityList} aria-label="Communities">
-          <button
+          <NavigationItem
             type="button"
             title="Personal space"
             aria-label="Personal space"
             aria-current={client.selected === null ? "true" : undefined}
             onClick={() => select(null)}
-          >
-            <Globe2 size={22} aria-hidden="true" />
-            <span>Personal space</span>
-          </button>
+            selected={client.selected === null}
+            label="Personal space"
+            icon={<Globe2 size={22} aria-hidden="true" />}
+          />
           {client.memberships.map((m) => (
-            <button
+            <NavigationItem
               type="button"
               key={m.id}
               title={m.name}
               aria-label={`Switch to ${m.name}`}
               aria-current={client.selected === m.id ? "true" : undefined}
               onClick={() => select(m.id)}
-            >
-              <span className={styles.communityIcon}>
-                <CommunityIcon
-                  name={m.name}
-                  {...(m.icon ? { icon: m.icon } : {})}
-                />
-              </span>
-              <span>{m.name}</span>
-            </button>
+              selected={client.selected === m.id}
+              label={m.name}
+              icon={
+                <span className={styles.communityIcon}>
+                  <CommunityIcon
+                    name={m.name}
+                    {...(m.icon ? { icon: m.icon } : {})}
+                  />
+                </span>
+              }
+            />
           ))}
-          <button
+          <NavigationItem
             type="button"
             title="Add a community"
             aria-label="Add a community"
             onClick={() => {
-              dialog.current?.close();
+              setOpen(false);
               setJoining(true);
             }}
-          >
-            <Plus size={22} aria-hidden="true" />
-            <span>Add a community</span>
-          </button>
+            label="Add a community"
+            icon={<Plus size={22} aria-hidden="true" />}
+          />
         </nav>
-      </dialog>
+      </Dialog>
       {joining && (
         <CommunityDialog
           communities={communities}

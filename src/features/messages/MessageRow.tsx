@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { memo, useCallback, useSyncExternalStore } from "react";
@@ -199,9 +200,10 @@ export const MessageRow = memo(function MessageRow({
             </div>
           )}
           {row.replyCount > 0 && onOpenThread && (
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               type="button"
-              className={styles.replies}
               aria-label={`View thread: ${row.replyCount} ${row.replyCount === 1 ? "reply" : "replies"}${unreadLabel ? `. ${unreadLabel}` : ""}`}
               onClick={(event) => {
                 event.currentTarget.focus();
@@ -248,7 +250,7 @@ export const MessageRow = memo(function MessageRow({
                   title={unreadLabel}
                 />
               )}
-            </button>
+            </Button>
           )}
         </div>
       </div>

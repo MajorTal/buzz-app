@@ -1,13 +1,12 @@
 .popup {
   /* Content layout; the shared PreviewCard owns surface, border and elevation. */
-  --radius-control: var(--corner-control);
   width: min(340px, calc(100vw - 24px));
   max-width: calc(100vw - 24px);
   max-height: min(320px, var(--available-height));
   overflow: auto;
   padding: var(--space-3);
   gap: var(--space-2);
-  color: var(--text-primary);
+  color: var(--text-standard);
   font-size: var(--text-body);
   line-height: var(--text-body--line-height);
   letter-spacing: var(--text-body--letter-spacing);
@@ -40,7 +39,7 @@
   line-height: var(--text-body-sm--line-height);
   letter-spacing: var(--text-body-sm--letter-spacing);
   font-weight: var(--text-body-sm--font-weight);
-  color: var(--text-secondary);
+  color: var(--text-subtle);
 }
 .channel {
   display: flex;
@@ -51,7 +50,7 @@
   line-height: var(--text-body-sm--line-height);
   letter-spacing: var(--text-body-sm--letter-spacing);
   font-weight: var(--text-body-sm--font-weight);
-  color: var(--text-secondary);
+  color: var(--text-subtle);
 }
 .channel svg {
   flex-shrink: 0;

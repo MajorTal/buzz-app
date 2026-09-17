@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
@@ -109,7 +110,7 @@ function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
 function button(tree: ReactNode, label: string) {
   const found = elements(tree).find(
     (e) =>
-      (e.type === "button" || e.type === IconButton) &&
+      (e.type === "button" || e.type === Button || e.type === IconButton) &&
       (e.props.children === label || e.props["aria-label"] === label),
   );
   expect(found, label).toBeDefined();

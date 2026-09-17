@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import {
   IconArrowDown as ArrowDown,
   IconArrowUp as ArrowUp,
@@ -118,17 +119,18 @@ export function SidebarUnread({
         if (!edges[edge].length) return null;
         const Icon = edge === "above" ? ArrowUp : ArrowDown;
         return (
-          <button
-            key={edge}
-            type="button"
-            className={styles.unreadEdge}
-            data-edge={edge}
-            title={`Reveal the nearest unread channel ${edge} without opening it`}
-            onClick={() => reveal(edge)}
-          >
-            <Icon size={15} aria-hidden="true" />
-            Unread {edge}
-          </button>
+          <div className={styles.unreadEdge} data-edge={edge} key={edge}>
+            <Button
+              variant="prominent"
+              size="sm"
+              type="button"
+              title={`Reveal the nearest unread channel ${edge} without opening it`}
+              onClick={() => reveal(edge)}
+            >
+              <Icon size={15} aria-hidden="true" />
+              Unread {edge}
+            </Button>
+          </div>
         );
       })}
     </div>

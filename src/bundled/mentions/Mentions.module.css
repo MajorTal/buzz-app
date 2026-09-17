@@ -7,8 +7,8 @@
   max-height: 360px;
   overflow: auto;
   padding: var(--space-3);
-  background: var(--surface);
-  border: 1px solid var(--border);
+  background: var(--surface-panel);
+  border: 1px solid var(--border-standard);
   border-radius: var(--radius-row);
   box-shadow: var(--elevation-popover);
 }
@@ -25,59 +25,15 @@
   display: grid;
   gap: var(--space-1);
 }
-.mentionPopover button {
-  width: auto;
-  height: auto;
-  border-radius: var(--radius-chip);
-}
-.mentionChoices button {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  text-align: left;
-  padding: var(--space-2);
-  gap: var(--space-2);
-  background: transparent;
-  border: 0;
-  width: 100%;
-}
 .mentionChoices code {
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);
   overflow-wrap: anywhere;
 }
-.mentionChoices button:hover {
-  background: var(--surface-accent);
-}
-.mentionLabel {
-  display: grid;
-  min-width: 0;
-  gap: var(--space-half);
-}
-.mentionLabel > span {
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
-  letter-spacing: var(--text-body-sm--letter-spacing);
-  font-weight: var(--type-weight-medium);
-}
-.mentionLabel code {
-  display: block;
-  color: var(--text-muted);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: 100%;
-}
 .mentionPopover p {
-  color: var(--text-muted);
+  color: var(--text-subtle);
 }
-.mentionPopover input {
-  border: 1px solid var(--border);
-  border-radius: var(--radius-row);
-  padding: var(--space-1h) var(--space-2);
-}
-
 .pickerControls {
   border: 0;
   padding: 0;

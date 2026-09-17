@@ -1,9 +1,11 @@
+import { Field } from "../shared/design-system/ui/Field";
+import { Radio, RadioGroup } from "../shared/design-system/ui/RadioGroup";
 import { Button } from "../shared/design-system/ui/Button";
 import { useSyncExternalStore } from "react";
 import { IconMoon as Moon, IconSun as Sun } from "@tabler/icons-react";
 import type { Appearance } from "../shared/theme/service";
 
-/** Native radios provide one Tab stop and standard arrow-key selection. */
+/** Shared radios provide one Tab stop and standard arrow-key selection. */
 export function AppearanceSettings({ appearance }: { appearance: Appearance }) {
   const { mode, error, fontScale, fontError } = useSyncExternalStore(
     appearance.subscribe,
@@ -15,42 +17,35 @@ export function AppearanceSettings({ appearance }: { appearance: Appearance }) {
         Appearance
       </h2>
       <div>
-        <fieldset
-          className="m-0 min-w-0 border-0 p-0"
-          aria-describedby="appearance-description"
+        <Field
+          label="Color mode"
+          description="Choose how Buzz looks on this device. Your choice is saved automatically."
         >
-          <legend className="mb-2 text-label">Color mode</legend>
-          <p
-            id="appearance-description"
-            className="mt-0 mb-5 text-body-sm text-muted"
+          <RadioGroup
+            name="color-mode"
+            value={mode}
+            onValueChange={(value) => appearance.setMode(value)}
           >
-            Choose how Buzz looks on this device. Your choice is saved
-            automatically.
-          </p>
-          <div className="grid gap-3 @min-[24rem]:grid-cols-2">
             {(
               [
                 ["light", "Light", Sun],
                 ["dark", "Dark", Moon],
               ] as const
             ).map(([value, label, Icon]) => (
-              <label
+              <Radio
                 key={value}
-                className="ui-choice flex cursor-pointer items-center gap-3 p-4"
-              >
-                <input
-                  type="radio"
-                  name="color-mode"
-                  value={value}
-                  checked={mode === value}
-                  onChange={() => appearance.setMode(value)}
-                />
-                <Icon size={20} aria-hidden="true" />
-                <span className="font-medium">{label}</span>
-              </label>
+                value={value}
+                variant="card"
+                label={
+                  <span className="flex items-center gap-3">
+                    <Icon size={20} aria-hidden="true" />
+                    {label}
+                  </span>
+                }
+              />
             ))}
-          </div>
-        </fieldset>
+          </RadioGroup>
+        </Field>
         <fieldset className="mt-6 min-w-0 border-0 p-0">
           <legend className="mb-2 text-label">Text size</legend>
           <p className="mt-0 mb-3 text-body-sm text-muted">

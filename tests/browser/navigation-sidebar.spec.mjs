@@ -10,7 +10,7 @@ test("channel navigation preserves sidebar search, DOM, group state and scroll",
   await open(page, app);
   const sidebar = page.getByRole("navigation", { name: "Subscribed channels" });
   const node = await sidebar.elementHandle();
-  const search = page.getByRole("textbox", { name: "Search channels" });
+  const search = page.getByRole("searchbox", { name: "Search channels" });
   await search.fill("a");
   await button(page, "Beta").click();
   await expect(
@@ -60,7 +60,7 @@ for (const destination of ["Home", "Projects", "Settings", "Back/Forward"]) {
     const sidebar = page.getByRole("navigation", {
       name: "Subscribed channels",
     });
-    const search = page.getByRole("textbox", { name: "Search channels" });
+    const search = page.getByRole("searchbox", { name: "Search channels" });
     const group = sidebar
       .locator("details")
       .filter({ has: page.locator("summary", { hasText: /^Channels$/ }) });
@@ -124,7 +124,7 @@ test("sidebar view state does not leak across communities", async ({
   app,
 }) => {
   await open(page, app);
-  const search = page.getByRole("textbox", { name: "Search channels" });
+  const search = page.getByRole("searchbox", { name: "Search channels" });
   await search.fill("Alpha");
   await button(page, "Switch community").click();
   await button(page, "Switch to Secondary").click();
@@ -144,7 +144,7 @@ test("invalid saved sidebar fields fall back without breaking Messages", async (
   app,
 }) => {
   await open(page, app);
-  await page.getByRole("textbox", { name: "Search channels" }).fill("Alpha");
+  await page.getByRole("searchbox", { name: "Search channels" }).fill("Alpha");
   await button(page, "Home").first().click();
   await page.evaluate(() => {
     const key = Object.keys(localStorage).find((key) =>
@@ -159,7 +159,7 @@ test("invalid saved sidebar fields fall back without breaking Messages", async (
   });
   await button(page, "Messages").first().click();
   await expect(
-    page.getByRole("textbox", { name: "Search channels" }),
+    page.getByRole("searchbox", { name: "Search channels" }),
   ).toHaveValue("");
   const sidebar = page.getByRole("navigation", { name: "Subscribed channels" });
   await expect(sidebar.locator("details").first()).toHaveAttribute("open");

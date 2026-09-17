@@ -5,10 +5,6 @@
   min-height: 0;
   container-type: inline-size;
   overflow: hidden;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--elevation-card);
 }
 .layout {
   display: grid;
@@ -23,20 +19,13 @@
   overflow-y: auto;
 }
 .sidebar {
-  border-right: 1px solid var(--border);
+  border-right: 1px solid var(--border-standard);
   padding: var(--space-2);
 }
 .navigation {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-}
-.navigationRow {
-  border-radius: var(--radius-row);
-  @apply flex items-center gap-3 border-0 bg-transparent px-3 py-2 text-left text-label-sm text-muted hover:bg-neutral-3 aria-[current=page]:bg-neutral-2 aria-[current=page]:text-ink;
-}
-.navigationRow svg {
-  flex-shrink: 0;
 }
 .detail {
   padding: var(--space-6);
@@ -56,7 +45,7 @@
   }
   .sidebar {
     border-right: 0;
-    border-bottom: 1px solid var(--border);
+    border-bottom: 1px solid var(--border-standard);
   }
   .navigation {
     flex-direction: row;

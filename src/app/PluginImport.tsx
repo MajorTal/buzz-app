@@ -1,3 +1,6 @@
+import { Field } from "../shared/design-system/ui/Field";
+import { Input } from "../shared/design-system/ui/Input";
+import { Radio, RadioGroup } from "../shared/design-system/ui/RadioGroup";
 import { Button } from "../shared/design-system/ui/Button";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -111,25 +114,23 @@ export function PluginImport({
               void load(() => imports.git(repository, reference));
           }}
         >
-          <label className="grid gap-1 text-body-sm">
-            Git or GitHub repository
-            <input
+          <Field label="Git or GitHub repository">
+            <Input
               required
               value={repository}
               disabled={loading}
               placeholder="https://github.com/owner/repository"
               onChange={(event) => setRepository(event.target.value)}
             />
-          </label>
-          <label className="grid gap-1 text-body-sm">
-            Branch or tag (optional)
-            <input
+          </Field>
+          <Field label="Branch or tag (optional)">
+            <Input
               value={reference}
               disabled={loading}
               placeholder="Repository default"
               onChange={(event) => setReference(event.target.value)}
             />
-          </label>
+          </Field>
           <p className="m-0 text-caption text-muted">
             HTTPS or SSH; GitHub owner/repository also works. SSH uses your
             agent and known hosts. Password prompts and credential helpers are
@@ -180,38 +181,31 @@ export function PluginImport({
               output folder, or use a repository that includes built artifacts.
             </p>
           ) : (
-            <fieldset className="m-0 grid min-w-0 gap-2 border-0 p-0">
-              <legend className="mb-2 text-label-sm">
-                Choose a plugin folder
-              </legend>
-              {preview.candidates.map((item) => (
-                <label
-                  key={item.path}
-                  className="flex cursor-pointer items-start gap-3 rounded-xl border border-line p-3 has-checked:bg-soft"
-                >
-                  <input
-                    type="radio"
-                    name="plugin-folder"
-                    className="mt-1"
+            <Field label="Choose a plugin folder">
+              <RadioGroup
+                name="plugin-folder"
+                value={selected}
+                disabled={busy}
+                onValueChange={(value) => {
+                  setSelected(value);
+                  setNotice(null);
+                }}
+              >
+                {preview.candidates.map((item) => (
+                  <Radio
+                    key={item.path}
                     value={item.path}
-                    checked={selected === item.path}
-                    disabled={busy}
-                    onChange={() => {
-                      setSelected(item.path);
-                      setNotice(null);
-                    }}
+                    variant="card"
+                    label={item.manifest.name}
+                    description={
+                      <span className="break-all">
+                        {item.path} · {item.manifest.id}
+                      </span>
+                    }
                   />
-                  <span className="min-w-0 text-body-sm">
-                    <span className="block font-medium">
-                      {item.manifest.name}
-                    </span>
-                    <span className="block break-all text-muted">
-                      {item.path} · {item.manifest.id}
-                    </span>
-                  </span>
-                </label>
-              ))}
-            </fieldset>
+                ))}
+              </RadioGroup>
+            </Field>
           )}
           {preview.warnings.length > 0 && (
             <details className="text-body-sm text-muted">

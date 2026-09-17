@@ -1,3 +1,7 @@
+import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
+import { SearchField } from "../../shared/design-system/ui/SearchField";
+import { Button } from "../../shared/design-system/ui/Button";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { IconAt as AtSign } from "@tabler/icons-react";
 import {
@@ -78,7 +82,9 @@ export function MentionPicker({
         }
       }}
     >
-      <button
+      <IconButton
+        disabled={disabled}
+        size="toolbar"
         ref={trigger}
         type="button"
         aria-label="Mention a member"
@@ -89,26 +95,23 @@ export function MentionPicker({
           setOpen(!open);
           session.channels.ensureList();
         }}
-      >
-        <AtSign size={20} aria-hidden="true" />
-      </button>
+        icon={<AtSign size={20} aria-hidden="true" />}
+      />
       {open && (
         <section
           id={id}
           className={styles.mentionPopover}
           aria-label="Mention a channel member"
         >
-          <label>
-            Search channel members
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") event.preventDefault();
-              }}
-            />
-          </label>
+          <SearchField
+            label="Search channel members"
+            value={search}
+            onValueChange={setSearch}
+            disabled={disabled}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") event.preventDefault();
+            }}
+          />
           <p>Only members of this channel are shown.</p>
           {error && <p role="status">{error}</p>}
           {list.error && (
@@ -117,37 +120,38 @@ export function MentionPicker({
           {!channel?.members && (
             <p role="status">Channel membership unavailable.</p>
           )}
-          <button
+          <Button
+            disabled={disabled}
             type="button"
             onClick={() => session.channels.refreshList?.()}
           >
             Refresh members
-          </button>
+          </Button>
           <div className={styles.mentionChoices}>
             {candidates.slice(0, 100).map((recipient) => (
-              <button
+              <NavigationItem
                 type="button"
                 key={recipient.pubkey}
                 aria-label={`${recipient.name} ${recipient.pubkey}`}
-                disabled={!!channel?.archived}
+                disabled={disabled || !!channel?.archived}
                 onClick={() => {
                   if (select(recipient)) setOpen(false);
                 }}
-              >
-                <Avatar
-                  alt=""
-                  fallback={recipient.name}
-                  src={session.media(
-                    profiles.get(recipient.pubkey)?.picture ?? "",
-                    "small",
-                  )}
-                  size="default"
-                />
-                <span className={styles.mentionLabel}>
-                  <span>{recipient.name}</span>
-                  <code title={recipient.pubkey}>{recipient.pubkey}</code>
-                </span>
-              </button>
+                label={recipient.name}
+                title={recipient.pubkey}
+                trailing={<code>{recipient.pubkey.slice(0, 12)}</code>}
+                icon={
+                  <Avatar
+                    alt=""
+                    fallback={recipient.name}
+                    src={session.media(
+                      profiles.get(recipient.pubkey)?.picture ?? "",
+                      "small",
+                    )}
+                    size="default"
+                  />
+                }
+              />
             ))}
             {candidates.length > 100 && (
               <p>Narrow your search to see more members.</p>

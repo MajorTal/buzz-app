@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { useReading } from "./use-reading";
 import { afterEach, expect, it, vi } from "vitest";
 import type { ReactElement } from "react";
@@ -363,7 +364,7 @@ function setup({
         children: ReactElement[];
       }>;
       const button = edge.props.children.find(
-        (child) => child?.type === "button",
+        (child) => child?.type === Button,
       ) as ReactElement<{ onClick(): void }>;
       button.props.onClick();
     },

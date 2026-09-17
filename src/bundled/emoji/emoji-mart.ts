@@ -156,15 +156,21 @@ export function mountEmojiMart({
   // The documented web-component attribute updates in place: do not recreate the
   // picker/dictionary (or lose search, focus and scroll) just to change appearance.
   const documentRoot = host.ownerDocument.documentElement;
-  const themeObserver = new MutationObserver(() => {
+  const syncAppearance = () => {
     picker.setAttribute(
       "theme",
       parseColorMode(documentRoot.dataset.colorMode),
     );
-  });
+    picker.toggleAttribute(
+      "data-keyboard-navigation",
+      documentRoot.hasAttribute("data-keyboard-navigation"),
+    );
+  };
+  syncAppearance();
+  const themeObserver = new MutationObserver(syncAppearance);
   themeObserver.observe(documentRoot, {
     attributes: true,
-    attributeFilter: ["data-color-mode"],
+    attributeFilter: ["data-color-mode", "data-keyboard-navigation"],
   });
   // Like the legacy picker, own search focus/corrections after async shadow render.
   const root = picker.shadowRoot;
@@ -175,24 +181,24 @@ export function mountEmojiMart({
       --font-size: var(--text-body-sm);
     }
     #root, input, button {
-      color: var(--text-primary);
+      color: var(--text-standard);
       font-family: var(--font-sans);
       font-size: var(--text-body-sm);
       line-height: var(--text-body-sm--line-height);
     }
     #root {
-      --color-a: var(--text-primary);
-      --color-b: var(--text-secondary);
-      --color-c: var(--text-tertiary);
-      --em-color-border: var(--border-primary);
-      --em-color-border-over: var(--neutral-3);
-      --buzz-category-fill: var(--neutral-3);
-      --buzz-category-icon: var(--text-secondary);
-      --buzz-category-icon-selected: var(--text-primary);
-      --buzz-category-label: var(--text-secondary);
-      --buzz-scrollbar-thumb: var(--neutral-7);
-      background: var(--bg-panel);
-      color: var(--text-primary);
+      --color-a: var(--text-standard);
+      --color-b: var(--text-subtle);
+      --color-c: var(--text-metadata);
+      --em-color-border: var(--border-standard);
+      --em-color-border-over: var(--affordance-selected);
+      --buzz-category-fill: var(--affordance-selected);
+      --buzz-category-icon: var(--text-subtle);
+      --buzz-category-icon-selected: var(--text-standard);
+      --buzz-category-label: var(--text-subtle);
+      --buzz-scrollbar-thumb: var(--border-prominent);
+      background: var(--surface-panel);
+      color: var(--text-standard);
       font-family: var(--font-sans);
     }
     #root {
@@ -228,7 +234,7 @@ export function mountEmojiMart({
       width: 100% !important;
     }
     .category .sticky {
-      background: var(--bg-panel);
+      background: var(--surface-panel);
       color: var(--buzz-category-label);
       font-size: var(--text-caption);
       font-weight: var(--type-weight-normal);
@@ -254,6 +260,11 @@ export function mountEmojiMart({
         box-shadow 100ms ease;
     }
     .search input[type="search"]:focus {
+      background: var(--picker-search-background);
+      box-shadow: 0 0 0 1px var(--picker-search-background);
+      outline: none;
+    }
+    :host([data-keyboard-navigation]) .search input[type="search"]:focus-visible {
       background: var(--picker-search-background);
       box-shadow: 0 0 0 2px var(--picker-search-ring);
       outline: none;
@@ -370,8 +381,8 @@ export function mountEmojiMart({
       display: none;
     }
     #root > .menu {
-      background: var(--bg-float);
-      border-color: var(--border-primary);
+      background: var(--surface-popover);
+      border-color: var(--border-standard);
       border-radius: var(--radius-row);
       padding: var(--space-1);
       box-shadow: var(--shadow-sm);
@@ -388,11 +399,11 @@ export function mountEmojiMart({
       padding: var(--space-1) var(--space-1h);
     }
     .menu .option:hover {
-      background: var(--neutral-3);
-      color: var(--text-primary);
+      background: var(--affordance-selected);
+      color: var(--text-standard);
     }
     .menu input[type="radio"]:checked + .option {
-      box-shadow: 0 0 0 2px var(--text-primary);
+      box-shadow: 0 0 0 2px var(--text-standard);
     }
     @media (prefers-reduced-motion: reduce) {
       #nav button::before {

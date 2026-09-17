@@ -1,5 +1,5 @@
 .popup {
-  --completion-highlight: var(--neutral-3);
+  --completion-highlight: var(--affordance-selected);
   position: fixed;
   display: flex;
   flex-direction: column;
@@ -7,16 +7,11 @@
   box-sizing: border-box;
   z-index: 30;
   padding: var(--space-1h);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-standard);
   border-radius: var(--radius-control);
-  background: var(--surface);
-  color: var(--text);
+  background: var(--surface-panel);
+  color: var(--text-standard);
   box-shadow: var(--shadow-sm);
-}
-:root[data-color-mode="dark"] .popup {
-  /* The dark panel already uses neutral-3. Both completion layouts need
-     a distinct fill while keyboard focus remains in the textarea. */
-  --completion-highlight: var(--neutral-5);
 }
 .list {
   max-height: 280px;
@@ -88,7 +83,7 @@
 }
 .label small {
   display: block;
-  color: var(--text-secondary);
+  color: var(--text-subtle);
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);
@@ -99,7 +94,7 @@
 .popup p {
   flex-shrink: 0;
   margin: var(--space-1) var(--space-2);
-  color: var(--text-secondary);
+  color: var(--text-subtle);
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);

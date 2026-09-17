@@ -9,6 +9,7 @@ type PanelProps<T extends ElementType> = {
  * An independently legible workspace surface.
  *
  * Panel owns only the rounded surface: its fill, border, shadow, and clipping.
+ * Its marker does not suppress host defaults for native product/plugin content.
  * It owns neither a header nor content — those are composed into it by the
  * product surface that knows what belongs there. An empty Panel is therefore a
  * complete and valid specimen of this component.
@@ -26,7 +27,7 @@ export function Panel<T extends ElementType = "section">({
 }: PanelProps<T>) {
   const Component = as ?? "section";
   return (
-    <Component {...props} data-buzz-ui="" className="panel">
+    <Component {...props} data-buzz-surface="" className="panel">
       {children}
     </Component>
   );

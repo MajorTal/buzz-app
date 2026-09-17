@@ -1,3 +1,4 @@
+import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import {
   IconArrowUpRight as ArrowUpRight,
   IconAdjustments as Settings2,
@@ -26,42 +27,25 @@ export function Home({
         A little space for everything.
       </p>
       <h1 className="mb-8 text-display">Make yourself at home.</h1>
-      <div className="overflow-hidden rounded-3xl border border-primary bg-panel shadow-surface">
+      <div className="grid gap-2 overflow-hidden rounded-3xl border border-standard bg-surface-panel p-3 shadow-surface">
         {orderPages(pages).map((page) => {
           const { label, icon: Icon } = pagePresentation(page);
           return (
-            <button
+            <NavigationItem
               key={page.key}
-              type="button"
               onClick={() => onSelect(page.key)}
-              className="flex w-full items-center gap-4 rounded-none border-0 border-b border-line bg-transparent p-6 text-left text-ink hover:bg-soft"
-            >
-              <span className="flex size-11 items-center justify-center rounded-2xl bg-shell">
-                <Icon size={21} aria-hidden="true" />
-              </span>
-              <span className="flex-1 text-label">{label}</span>
-              <ArrowUpRight
-                size={18}
-                className="text-muted"
-                aria-hidden="true"
-              />
-            </button>
+              label={label}
+              icon={<Icon size={21} aria-hidden="true" />}
+              trailing={<ArrowUpRight size={18} aria-hidden="true" />}
+            />
           );
         })}
-        <button
-          type="button"
+        <NavigationItem
           onClick={() => onSelect("settings")}
-          className="flex w-full items-center gap-4 rounded-none border-0 bg-transparent p-6 text-left text-ink hover:bg-soft"
-        >
-          <span className="flex size-11 items-center justify-center rounded-2xl bg-soft">
-            <Settings2 size={21} aria-hidden="true" />
-          </span>
-          <span className="flex-1">
-            <span className="block text-label">Make it yours</span>
-            <span className="text-body-sm text-muted">Settings</span>
-          </span>
-          <ArrowUpRight size={18} className="text-muted" aria-hidden="true" />
-        </button>
+          label="Make it yours · Settings"
+          icon={<Settings2 size={21} aria-hidden="true" />}
+          trailing={<ArrowUpRight size={18} aria-hidden="true" />}
+        />
       </div>
     </section>
   );

@@ -163,7 +163,7 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   await page.mouse.wheel(0, -10000);
   await expect(cue(page, "above")).toHaveCount(0);
   await expect(cue(page, "below")).toBeVisible();
-  await page.getByRole("textbox", { name: "Search channels" }).focus();
+  await page.getByRole("searchbox", { name: "Search channels" }).focus();
   await page.keyboard.press("Tab"); // Set keyboard modality from the visible search, not an offscreen row.
   await cue(page, "below").focus();
   await expect(cue(page, "below")).toHaveCSS("outline-width", "2px");
@@ -186,7 +186,7 @@ test("search, resizing, collapsed groups and new unread evidence update only the
 }) => {
   await open(page, app);
   await expect(row(page, "dm-090").getByRole("img")).toHaveCount(1);
-  const search = page.getByRole("textbox", { name: "Search channels" });
+  const search = page.getByRole("searchbox", { name: "Search channels" });
   await search.fill("Alpha");
   await expect(cue(page, "below")).toHaveCount(0);
   await expect(cue(page, "above")).toHaveCount(0);
@@ -328,6 +328,10 @@ test("attention badge retains its channel row color in both modes", async ({
     await page.evaluate((mode) => {
       document.documentElement.dataset.colorMode = mode;
     }, mode);
+    await expect(channel).toHaveCSS(
+      "color",
+      mode === "light" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
+    );
     const color = await channel.evaluate(
       (element) => getComputedStyle(element).color,
     );

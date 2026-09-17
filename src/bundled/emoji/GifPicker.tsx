@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { IconCircleXFilled as CircleX } from "@tabler/icons-react";
+import { SearchField } from "../../shared/design-system/ui/SearchField";
+import { Button } from "../../shared/design-system/ui/Button";
 import { fetchKlipyGifs, type KlipyGif } from "../../features/relay/gifs";
 import styles from "./Emoji.module.css";
 
@@ -102,41 +103,24 @@ export function GifPicker({
 
   return (
     <div className={styles.gifPicker}>
-      <label className={styles.gifSearch}>
-        <input
-          ref={input}
-          aria-label="Search GIFs"
-          type="search"
+      <div className={styles.gifSearch}>
+        <SearchField
+          inputRef={input}
+          label="Search GIFs"
           placeholder="Search GIFs"
           spellCheck={false}
           autoCorrect="off"
           autoCapitalize="off"
           value={query}
-          onChange={(event) => {
-            setQuery(event.target.value);
-            onQueryChange(event.target.value);
+          onValueChange={(value) => {
+            setQuery(value);
+            onQueryChange(value);
           }}
           onKeyDown={(event) => {
             if (event.key === "Enter") event.preventDefault();
           }}
         />
-        {query && (
-          <button
-            className={styles.gifClear}
-            type="button"
-            aria-label="Clear"
-            title="Clear"
-            onMouseDown={(event) => event.preventDefault()}
-            onClick={() => {
-              setQuery("");
-              onQueryChange("");
-              input.current?.focus();
-            }}
-          >
-            <CircleX size={16} aria-hidden="true" />
-          </button>
-        )}
-      </label>
+      </div>
       <div ref={results} className={styles.gifResults}>
         {!gifs && !error ? (
           <div
@@ -151,9 +135,9 @@ export function GifPicker({
         ) : error ? (
           <div className={styles.gifEmpty} role="alert">
             <p>{error}</p>
-            <button type="button" onClick={() => retry(attempt + 1)}>
+            <Button type="button" onClick={() => retry(attempt + 1)}>
               Try again
-            </button>
+            </Button>
           </div>
         ) : gifs?.length ? (
           <div className={styles.gifGrid} data-testid="klipy-gif-grid">

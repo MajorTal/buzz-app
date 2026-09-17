@@ -16,32 +16,24 @@
   --picker-inner-radius: calc(var(--picker-container-radius) - var(--space-2));
   --picker-search-radius: var(--radius-row);
   --picker-scrollbar-space: var(--space-4);
-  --picker-search-background: var(--neutral-2);
-  --picker-search-foreground: var(--text-primary);
-  --picker-search-muted: var(--text-secondary);
-  --picker-search-ring: var(--text-primary);
-  --picker-tab-foreground: var(--text-primary);
-  --picker-tab-muted: var(--text-secondary);
-  --picker-tab-selected: var(--neutral-3);
-  --picker-scrollbar-thumb: var(--neutral-7);
+  --picker-search-background: var(--surface-inset);
+  --picker-search-foreground: var(--text-standard);
+  --picker-search-muted: var(--text-subtle);
+  --picker-search-ring: var(--text-standard);
+  --picker-tab-foreground: var(--text-standard);
+  --picker-tab-muted: var(--text-subtle);
+  --picker-tab-selected: var(--affordance-selected);
+  --picker-scrollbar-thumb: var(--border-prominent);
   position: absolute;
   bottom: 42px;
   left: 0;
   z-index: 5;
   max-width: 100%;
   overflow: hidden;
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-standard);
   border-radius: var(--radius-card);
-  background: var(--surface);
+  background: var(--surface-panel);
   box-shadow: var(--elevation-card);
-}
-.emojiPopover:not([data-has-tabs]) {
-  /* Search sits inside 8px of picker padding plus its 2px margin. */
-  --picker-search-radius: max(
-    0px,
-    calc(var(--picker-container-radius) - var(--space-2) - var(--space-half))
-  );
-  --picker-search-top-space: 0px;
 }
 .sharedSearchIcon {
   position: absolute;
@@ -60,109 +52,14 @@
   left: auto;
   max-width: calc(100vw - 32px);
 }
-.reactionTrigger {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-chip);
-  background: var(--surface-control);
-  color: var(--text-muted);
-  cursor: pointer;
-}
-.reactionTrigger:hover {
-  color: var(--text);
-}
-.reactionTrigger:focus-visible {
-  outline: 2px solid var(--text);
-  outline-offset: 2px;
-}
-.emojiPopover[data-has-tabs] .sharedSearchIcon {
-  top: 67px;
-}
 @media (max-width: 900px) {
   .emojiPopover {
     --picker-container-radius: var(--radius-card-compact);
     border-radius: var(--radius-card-compact);
   }
 }
-.pickerTabs {
+.emojiMart {
   position: relative;
-  display: flex;
-  gap: var(--space-1);
-  padding: var(--space-2);
-  border-bottom: 1px solid var(--border);
-}
-.pickerTabs button {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  width: auto;
-  height: 30px;
-  align-items: center;
-  justify-content: center;
-  flex: 1;
-  border: 0;
-  border-radius: var(--radius-row);
-  background: transparent;
-  font-size: var(--text-label-sm);
-  font-weight: var(--text-label-sm--font-weight);
-  line-height: var(--text-label-sm--line-height);
-}
-.pickerTabs button:first-of-type {
-  border-top-left-radius: var(--picker-inner-radius);
-}
-.pickerTabs button:last-of-type {
-  border-top-right-radius: var(--picker-inner-radius);
-}
-@media (hover: hover) and (pointer: fine) {
-  .pickerTabs .inactiveTab:hover {
-    color: var(--picker-tab-foreground);
-  }
-}
-.pickerTabs .inactiveTab {
-  color: var(--picker-tab-muted);
-}
-.pickerTabs .activeTab {
-  background: transparent;
-  color: var(--picker-tab-foreground);
-}
-.tabIndicator {
-  --tab-indicator-x: 0;
-  --tab-indicator-scale: 1;
-  position: absolute;
-  top: 8px;
-  bottom: 8px;
-  left: 8px;
-  width: calc((100% - 20px) / 2);
-  border-radius: var(--radius-row);
-  background: var(--picker-tab-selected);
-  pointer-events: none;
-  transform: translateX(var(--tab-indicator-x))
-    scaleX(var(--tab-indicator-scale));
-  transform-origin: left center;
-}
-.pickerTabs[data-active-tab="emoji"] .tabIndicator {
-  border-top-left-radius: var(--picker-inner-radius);
-}
-.pickerTabs[data-active-tab="gifs"] .tabIndicator {
-  --tab-indicator-x: calc(100% + 4px);
-  border-top-right-radius: var(--picker-inner-radius);
-}
-.pickerTabs[data-animate] .tabIndicator {
-  transition: transform 160ms cubic-bezier(0.77, 0, 0.175, 1);
-}
-.pickerTabs[data-active-tab="emoji"][data-press-target="gifs"] .tabIndicator {
-  --tab-indicator-scale: 1.08;
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.pickerTabs[data-active-tab="gifs"][data-press-target="emoji"] .tabIndicator {
-  --tab-indicator-x: calc(92% + 4px);
-  --tab-indicator-scale: 1.08;
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .emojiMart em-emoji-picker {
   width: 100%;
@@ -173,18 +70,11 @@
 .emojiStatus {
   padding: var(--space-2);
   border-radius: var(--radius-row);
-  background: var(--surface);
+  background: var(--surface-panel);
   box-shadow: var(--elevation-card);
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);
-}
-.emojiStatus button {
-  width: auto;
-  height: auto;
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-chip);
-  margin: var(--space-2) 0;
 }
 .gifPicker {
   position: relative;
@@ -194,76 +84,7 @@
   flex-direction: column;
 }
 .gifSearch {
-  position: relative;
-  display: flex;
-  height: 48px;
-  align-items: center;
-  margin: var(--space-1) var(--space-2);
-}
-.gifSearch input {
-  width: calc(100% - 4px);
-  height: 28px;
-  padding: 0 var(--space-8);
-  margin-inline: var(--space-half);
-  border: 0;
-  border-radius: var(--picker-search-radius);
-  background: var(--picker-search-background);
-  box-shadow: 0 0 0 1px var(--picker-search-background);
-  color: var(--picker-search-foreground);
-  font-family: var(--font-legacy-sans);
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
-  letter-spacing: var(--text-body-sm--letter-spacing);
-  appearance: none;
-  transition:
-    opacity 100ms ease,
-    background 100ms ease,
-    box-shadow 100ms ease;
-}
-.gifSearch input::-webkit-search-decoration,
-.gifSearch input::-webkit-search-cancel-button,
-.gifSearch input::-webkit-search-results-button,
-.gifSearch input::-webkit-search-results-decoration {
-  appearance: none;
-}
-.gifSearch .gifClear {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  z-index: 1;
-  display: flex;
-  width: 16px;
-  height: 16px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--picker-search-muted);
-  transform: translateY(-50%);
-}
-.gifSearch .gifClear:hover {
-  background: transparent;
-}
-.gifSearch .gifClear svg {
-  width: 16px;
-  height: 16px;
-}
-.gifSearch input::placeholder {
-  color: var(--picker-search-muted);
-}
-.gifSearch input:focus {
-  outline: none;
-  box-shadow: 0 0 0 2px var(--picker-search-ring);
-}
-@media (prefers-reduced-motion: reduce) {
-  .pickerTabs[data-animate] .tabIndicator {
-    transition-duration: 0ms;
-  }
-  .pickerTabs[data-press-target] .tabIndicator {
-    --tab-indicator-scale: 1;
-    transition-duration: 0ms;
-  }
+  margin: var(--space-2);
 }
 .gifResults {
   min-height: 0;
@@ -306,7 +127,7 @@
   break-inside: avoid;
   border: 0;
   border-radius: var(--radius-row);
-  background: var(--surface-hover);
+  background: var(--affordance-subtle-hover);
 }
 .gifGrid button:hover {
   filter: brightness(1.08);
@@ -324,7 +145,7 @@
 .gifLoading span {
   height: 82px;
   border-radius: var(--radius-row);
-  background: var(--surface-hover);
+  background: var(--affordance-subtle-hover);
 }
 .gifLoading span:nth-child(4n + 1),
 .gifLoading span:nth-child(4n) {
@@ -338,18 +159,13 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-5);
-  color: var(--text-muted);
+  color: var(--text-subtle);
   text-align: center;
-}
-.gifEmpty button {
-  width: auto;
-  height: auto;
-  padding: var(--space-1) var(--space-2);
 }
 .gifAttribution {
   padding: var(--space-1h) var(--space-2);
-  border-top: 1px solid var(--border);
-  color: var(--text-muted);
+  border-top: 1px solid var(--border-standard);
+  color: var(--text-subtle);
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);

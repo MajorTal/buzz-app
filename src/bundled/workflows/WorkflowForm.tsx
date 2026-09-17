@@ -1,5 +1,6 @@
 import { useId } from "react";
-import { Input } from "@base-ui/react/input";
+import { Input } from "../../shared/design-system/ui/Input";
+import { Textarea } from "../../shared/design-system/ui/Textarea";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Select } from "../../shared/design-system/ui/Select";
 import { Switch } from "../../shared/design-system/ui/Switch";
@@ -103,7 +104,7 @@ export function WorkflowForm({
               <>
                 <div className="workflow-field">
                   <label htmlFor={`${id}-text-${step.id}`}>Message text</label>
-                  <textarea
+                  <Textarea
                     id={`${id}-text-${step.id}`}
                     value={step.text ?? ""}
                     rows={3}

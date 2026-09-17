@@ -1,11 +1,10 @@
 # Design system and appearance
 
-> **The design system going forward:** the imported system is documented in
-> [the handoff README](../src/shared/design-system/README.md) and displayed at
-> `/tests/fixtures/design-system.html`. New UI and existing surfaces moving off the
-> current styles should use it. This initial port does not migrate existing surfaces,
-> so the host styling described below still governs those callers until they move;
-> the host remains the single owner of appearance throughout the transition.
+The shared components live in `src/shared/design-system` and appear at
+`/tests/fixtures/design-system.html`. Buzz follows Block UI’s approach to semantic
+roles, controls and states, using Base UI for behavior and public fonts and assets.
+The app imports the same form and overlay styles as the component viewer.
+See [the adoption map](design-system-adoption.md) for ownership and retained adapters.
 
 The **host** owns appearance, including startup and recovery. A plugin must not be
 required to render the shell correctly. Pages still own their layout and behavior;
@@ -89,15 +88,11 @@ picker. Browser regressions cover host Settings changes through an open widget,
 opening in Dark, and no updates after disposal. Mutation probes exercise the startup
 script, Settings writes/retry, host lifetime and widget initial/update/disposal paths.
 
-The initial integration batch passed the theme/picker journeys in both browsers,
-Node/Vitest/plugin-manager tests, formatting/types, build and Clippy. The broad browser
-run was **89/90**, not green: WebKit's `initial-position.spec.mjs` reload case reported
-a localhost access-control console warning. The identical failure reproduced on
-pre-theme `742a770` (one failure, two passes); its cause is not diagnosed or suppressed.
-Native Rust test targets compile but contain zero tests. Human light/dark visual
-approval and independent source review do not replace attended packaged-app
-chrome/relaunch acceptance. Browser evidence also does not cover third-party plugins
-that hard-code their own colors.
+Run the design guards, unit tests and relevant browser journeys for a changed
+component. Native window chrome and relaunch still need an attended packaged-app
+check; browser checks do not establish native acceptance or third-party plugin
+styling. Keep full batch validation separate from an interactive preview.
+
 
 
 ## Text size and shortcuts

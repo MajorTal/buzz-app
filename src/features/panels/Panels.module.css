@@ -1,18 +1,19 @@
 /* Shared card chrome; pages choose the surrounding layout. */
+.cardLayout {
+  min-width: 0;
+  min-height: 0;
+}
 .card {
+  height: 100%;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-card);
-  box-shadow: var(--elevation-card);
   font-size: var(--text-body-sm);
   line-height: var(--text-body-sm--line-height);
   letter-spacing: var(--text-body-sm--letter-spacing);
-  color: var(--text);
+  color: var(--text-standard);
 }
 .content {
   display: flex;
@@ -56,9 +57,6 @@
   }
 }
 @media (max-width: 650px) {
-  .card {
-    border-radius: var(--radius-card-compact);
-  }
   .dock {
     width: 100%;
   }

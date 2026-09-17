@@ -1,3 +1,4 @@
+import { Button } from "../../shared/design-system/ui/Button";
 import { useEffect, useMemo, useState } from "react";
 import {
   IconExternalLink as ExternalLink,
@@ -99,9 +100,9 @@ function ObjectPanel({
       ) : typeof result === "string" ? (
         <div role="alert">
           <p>{result}</p>
-          <button type="button" onClick={retry}>
+          <Button type="button" onClick={retry}>
             Try again
-          </button>
+          </Button>
         </div>
       ) : (
         <>

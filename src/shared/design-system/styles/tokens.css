@@ -496,6 +496,8 @@
   --text-warning: var(--amber-12);
   --text-success: var(--green-12);
   --text-accent: var(--purple-12);
+  --text-link: var(--blue-12);
+  --affordance-link-hover: var(--blue-4);
   --border-standard: var(--neutral-3);
   --border-prominent: var(--neutral-8);
   --border-focus: var(--neutral-12);
@@ -536,6 +538,8 @@
   --text-warning: var(--amber-12);
   --text-success: var(--green-12);
   --text-accent: var(--purple-12);
+  --text-link: var(--blue-12);
+  --affordance-link-hover: var(--blue-4);
   --border-standard: var(--neutral-4);
   --border-prominent: var(--neutral-8);
   --border-focus: var(--neutral-12);
@@ -716,6 +720,8 @@
 @theme inline {
   --color-*: initial;
   /* Semantic utilities. Text and border stay in their own namespaces. */
+  --text-color-link: var(--text-link);
+  --color-affordance-link-hover: var(--affordance-link-hover);
   --color-surface-base: var(--surface-base);
   --color-surface-panel: var(--surface-panel);
   --color-surface-popover: var(--surface-popover);

@@ -1,3 +1,4 @@
+import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
 import {
@@ -86,19 +87,18 @@ export function ProfileButton({
         <p className="m-0 truncate px-3 py-2 text-label-sm">
           {profile.name || "Your account"}
         </p>
-        <button
+        <NavigationItem
           type="button"
           aria-current={settingsSelected ? "page" : undefined}
-          className="flex w-full items-center gap-3 border-0 px-3 py-2 text-left aria-[current=page]:bg-soft"
+          selected={settingsSelected}
+          label="Settings"
+          icon={<Settings aria-hidden="true" size={17} />}
           onClick={() => {
             setOpen(false);
             onSettings();
             document.getElementById("main-content")?.focus();
           }}
-        >
-          <Settings aria-hidden="true" size={17} />
-          Settings
-        </button>
+        />
       </nav>
     </div>
   );

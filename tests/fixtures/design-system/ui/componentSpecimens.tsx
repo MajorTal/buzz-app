@@ -1,3 +1,4 @@
+import { AlertDialog } from "../../../../src/shared/design-system/ui/AlertDialog";
 import { Dialog } from "../../../../src/shared/design-system/ui/Dialog";
 import { Tooltip } from "../../../../src/shared/design-system/ui/Tooltip";
 import { Field } from "../../../../src/shared/design-system/ui/Field";
@@ -908,7 +909,32 @@ function DialogSpecimen() {
   );
 }
 
+function AlertDialogSpecimen() {
+  const [open, setOpen] = useState(false);
+  return (
+    <SpecimenFrame>
+      <Button onClick={() => setOpen(true)}>Discard example changes</Button>
+      {open && (
+        <AlertDialog
+          title="Discard changes?"
+          description="Your unsaved example changes will be lost."
+          onClose={() => setOpen(false)}
+          actions={
+            <>
+              <Button onClick={() => setOpen(false)}>Keep editing</Button>
+              <Button variant="destructive" onClick={() => setOpen(false)}>
+                Discard
+              </Button>
+            </>
+          }
+        />
+      )}
+    </SpecimenFrame>
+  );
+}
+
 export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
+  "alert-dialog": AlertDialogSpecimen,
   dialog: DialogSpecimen,
   tooltip: () => (
     <SpecimenFrame>
@@ -947,11 +973,13 @@ export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
   ),
   "radio-group": () => (
     <SpecimenFrame>
-      <RadioGroup aria-label="Notifications" defaultValue="all">
-        <Radio value="all" label="All updates" variant="card" />
-        <Radio value="mentions" label="Mentions only" variant="card" />
-        <Radio value="none" label="Unavailable" disabled />
-      </RadioGroup>
+      <Field label="Notifications">
+        <RadioGroup defaultValue="all">
+          <Radio value="all" label="All updates" variant="card" />
+          <Radio value="mentions" label="Mentions only" variant="card" />
+          <Radio value="none" label="Unavailable" disabled />
+        </RadioGroup>
+      </Field>
     </SpecimenFrame>
   ),
   checkbox: () => (

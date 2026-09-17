@@ -19,7 +19,7 @@ for (const action of [
       name: "Subscribed channels",
     });
     // Save a nonzero position, then cold-load that community with preferences held.
-    await page.getByRole("textbox", { name: "Search channels" }).fill(" ");
+    await page.getByRole("searchbox", { name: "Search channels" }).fill(" ");
     await sidebar.evaluate((element) => {
       element.scrollTop = 900;
     });

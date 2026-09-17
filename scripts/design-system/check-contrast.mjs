@@ -89,6 +89,7 @@ const TEXT_ROLES = [
   "--text-warning",
   "--text-success",
   "--text-accent",
+  "--text-link",
   "--text-primary",
   "--text-secondary",
   "--text-tertiary",
@@ -109,6 +110,7 @@ const TEXT_ROLES = [
  * every fill it can actually sit on, and hover is one of them.
  */
 const PAIRS = [
+  ["--text-link", "--affordance-link-hover"],
   ...["subtle", "subtle-hover", "subtle-pressed"].map((state) => [
     "--text-standard",
     `--affordance-${state}`,

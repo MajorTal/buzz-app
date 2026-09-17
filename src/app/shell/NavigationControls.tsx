@@ -1,3 +1,4 @@
+import { Tooltip } from "../../shared/design-system/ui/Tooltip";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { useSyncExternalStore } from "react";
 import {
@@ -12,26 +13,28 @@ export function NavigationControls({ navigation }: { navigation: Navigation }) {
       className="mr-2 flex shrink-0 items-center gap-0.5"
       aria-label="Navigation history"
     >
-      <IconButton
-        type="button"
-        variant="chrome"
-        shape="round"
-        aria-label="Go back"
-        title="Go back"
-        disabled={!state.canGoBack}
-        onClick={navigation.back}
-        icon={<ArrowLeft size={16} aria-hidden="true" />}
-      />
-      <IconButton
-        type="button"
-        variant="chrome"
-        shape="round"
-        aria-label="Go forward"
-        title="Go forward"
-        disabled={!state.canGoForward}
-        onClick={navigation.forward}
-        icon={<ArrowRight size={16} aria-hidden="true" />}
-      />
+      <Tooltip content="Go back">
+        <IconButton
+          type="button"
+          variant="chrome"
+          shape="round"
+          aria-label="Go back"
+          disabled={!state.canGoBack}
+          onClick={navigation.back}
+          icon={<ArrowLeft size={16} aria-hidden="true" />}
+        />
+      </Tooltip>
+      <Tooltip content="Go forward">
+        <IconButton
+          type="button"
+          variant="chrome"
+          shape="round"
+          aria-label="Go forward"
+          disabled={!state.canGoForward}
+          onClick={navigation.forward}
+          icon={<ArrowRight size={16} aria-hidden="true" />}
+        />
+      </Tooltip>
     </nav>
   );
 }

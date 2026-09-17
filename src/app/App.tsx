@@ -1,3 +1,4 @@
+import { Button } from "../shared/design-system/ui/Button";
 // FOUNDATION: Startup, navigation, contributed pages, and built-in Settings.
 import { useEffect, useSyncExternalStore } from "react";
 import { registerAppShortcuts } from "./shortcuts";
@@ -88,12 +89,12 @@ export function App({ services }: { services: AppServices }) {
               ? "This target needs its original account and an already joined community."
               : "The destination is unavailable or isn’t supported yet. Your target has been kept for retry."}
           </p>
-          <button type="button" onClick={route.retry}>
+          <Button type="button" onClick={route.retry}>
             Retry navigation
-          </button>
-          <button type="button" onClick={() => select("home")}>
+          </Button>
+          <Button type="button" onClick={() => select("home")}>
             Go Home
-          </button>
+          </Button>
         </div>
       ) : settings ? (
         <Settings

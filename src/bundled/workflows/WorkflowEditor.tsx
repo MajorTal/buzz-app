@@ -1,4 +1,5 @@
-import { Input } from "@base-ui/react/input";
+import { Input } from "../../shared/design-system/ui/Input";
+import { Textarea } from "../../shared/design-system/ui/Textarea";
 import { useId, useState } from "react";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Switch } from "../../shared/design-system/ui/Switch";
@@ -141,10 +142,10 @@ export function WorkflowEditor({
       ) : (
         <div className="workflow-field">
           <label htmlFor={`${id}-yaml`}>Workflow YAML</label>
-          <textarea
+          <Textarea
             id={`${id}-yaml`}
             aria-describedby={`${id}-yaml-help`}
-            className="text-mono workflow-yaml"
+            variant="code"
             rows={18}
             spellCheck={false}
             autoCapitalize="off"

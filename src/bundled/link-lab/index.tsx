@@ -1,3 +1,4 @@
+import { Input } from "../../shared/design-system/ui/Input";
 import { useState } from "react";
 import type { PluginModule } from "../../plugins/api";
 import { targetLink } from "../../features/navigation/targets";
@@ -144,7 +145,7 @@ function LinkLab() {
           <label className={styles.label} htmlFor="link-url">
             Try a URL
           </label>
-          <input
+          <Input
             id="link-url"
             value={url}
             onChange={(event) => setUrl(event.target.value)}

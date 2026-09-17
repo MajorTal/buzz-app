@@ -5,6 +5,8 @@
 @import "../design-system/styles/typography.css";
 @import "../design-system/styles/materials.css";
 @import "../design-system/styles/components.css";
+@import "../design-system/styles/forms.css";
+@import "../design-system/styles/overlays.css";
 @import "../design-system/styles/chips.css";
 @import "./tokens.css";
 
@@ -173,24 +175,6 @@
     background: var(--surface);
     box-shadow: var(--elevation-surface);
   }
-  .ui-choice {
-    border: 1px solid var(--border-input);
-    border-radius: var(--radius-legacy-control);
-    background: var(--surface);
-    color: var(--text);
-  }
-  .ui-choice:hover {
-    background: var(--surface-hover);
-  }
-  .ui-choice:has(:checked) {
-    border-color: var(--focus);
-    background: var(--selected);
-    color: var(--on-selected);
-  }
-  .ui-choice:has(:focus-visible) {
-    outline: 2px solid var(--focus);
-    outline-offset: 3px;
-  }
   .shell-background {
     background: var(--bg-app);
   }
@@ -223,12 +207,6 @@
       justify-self: center;
       max-width: 100%;
     }
-  }
-  .shell-tab {
-    @apply flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border-0 bg-transparent px-4 py-1.5 text-label-sm text-ink hover:bg-neutral-3 hover:text-ink;
-  }
-  .shell-tab[aria-current="page"] {
-    @apply bg-surface text-ink;
   }
   .muted {
     @apply text-body-sm text-muted;
@@ -307,5 +285,5 @@
   background-color: var(--primary);
 }
 @utility bg-primary-hover {
-  background-color: var(--neutral-12);
+  background-color: var(--affordance-prominent-hover);
 }

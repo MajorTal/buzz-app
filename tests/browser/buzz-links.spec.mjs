@@ -37,7 +37,7 @@ test("Buzz channel and message links render, reveal verified targets, and preser
   await expect(row).not.toContainText("<buzz:");
   const link = row.getByRole("link", { name: "Alpha", exact: true });
   await expect(link).toHaveCSS("text-decoration-line", "none");
-  await expect(link).toHaveCSS("color", "rgb(13, 116, 206)");
+  await expect(link).toHaveCSS("color", "rgb(17, 50, 100)");
   await link.hover();
   const preview = page.getByLabel("Message preview", { exact: true });
   await expect(

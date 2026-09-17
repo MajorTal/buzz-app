@@ -70,7 +70,7 @@ for (const cold of [false, true]) {
       await expect(
         page
           .getByRole("article", { name: "Conversation" })
-          .locator("header strong"),
+          .getByRole("heading", { level: 2 }),
       ).toHaveText("Alice Fixture");
       expect(labelReads()).toHaveLength(before + 1);
     } finally {

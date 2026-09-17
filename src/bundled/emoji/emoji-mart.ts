@@ -297,7 +297,7 @@ export function mountEmojiMart({
       stroke: var(--picker-search-background);
     }
     .spacer {
-      height: var(--picker-search-top-space, 4px);
+      height: 0;
     }
     .spacer + .flex.flex-middle {
       padding-bottom: var(--space-1);

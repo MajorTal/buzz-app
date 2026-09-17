@@ -186,6 +186,9 @@
   .shell-communities {
     @apply flex min-w-0 items-center justify-start;
   }
+  .shell-communities > .navigation-item {
+    flex-shrink: 1;
+  }
   .shell-header-mac .shell-communities {
     padding-left: var(--space-16);
   }

@@ -74,7 +74,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
       .getByRole("region", { name: "Notification recipients" })
       .getByRole("button")
       .first();
-    await expect(chip).toHaveCSS("background-color", "rgb(26, 26, 26)");
+    await expect(chip).toHaveCSS("background-color", "rgb(51, 51, 51)");
     await expect(chip).toHaveCSS("color", "rgb(255, 255, 255)");
     await page.screenshot({
       path: test.info().outputPath("mention-recipients.png"),

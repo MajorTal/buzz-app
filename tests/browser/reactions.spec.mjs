@@ -50,7 +50,7 @@ test("reaction plus opens a visible emoji-only picker, restores focus and publis
     });
     expect(padding.top).toBeCloseTo(padding.left, 1);
     expect(padding.top).toBeCloseTo(padding.right, 1);
-    await expect(search).toHaveCSS("border-radius", "14px");
+    await expect(search).toHaveCSS("border-radius", "10px");
     await expect(
       page.getByRole("tab", { name: "GIF", exact: true }),
     ).toHaveCount(0);

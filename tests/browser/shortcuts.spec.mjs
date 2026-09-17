@@ -35,7 +35,11 @@ test("real Settings keys respect dialogs and modifiers, focus main, and preserve
   await page.keyboard.press(`${modifier}+,`);
   await expect(page.getByRole("dialog", { name: "Find a page" })).toBeVisible();
   await expect(
-    page.getByRole("heading", { name: "Settings", exact: true }),
+    page.getByRole("heading", {
+      name: "Settings",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toHaveCount(0);
   await page.keyboard.press("Escape");
   await composer.focus();
@@ -170,7 +174,10 @@ test("independent plugin consumes injected shortcuts; disable/re-enable and edit
   await scale(page, 1);
   await button(page, "Find a page").click();
   await page.keyboard.press(`${modifier}+Shift+k`);
-  await expect(count).toHaveText("Shortcut count: 1");
+  // Base UI hides the background from assistive technology while modal.
+  await expect(page.getByRole("status", { includeHidden: true })).toHaveText(
+    "Shortcut count: 1",
+  );
   await page.keyboard.press("Escape");
   await page.keyboard.press(`${modifier}+,`);
   await button(page, "Plugins").click();
@@ -210,7 +217,11 @@ test("a shadow-root modal blocks Settings and plugin bindings but allows text zo
   await page.keyboard.press(`${modifier}+,`);
   await expect(control).toBeFocused();
   await expect(
-    page.getByRole("heading", { name: "Settings", exact: true }),
+    page.getByRole("heading", {
+      name: "Settings",
+      exact: true,
+      includeHidden: true,
+    }),
   ).toHaveCount(0);
   await page.keyboard.press(`${modifier}+Shift+k`);
   await expect(page.getByRole("status")).toHaveText("Shortcut count: 0");

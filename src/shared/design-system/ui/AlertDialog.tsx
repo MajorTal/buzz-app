@@ -30,7 +30,11 @@ export function AlertDialog({
           data-buzz-ui=""
           className="buzz-dialog-backdrop"
         />
-        <BaseAlertDialog.Popup data-buzz-ui="" className="buzz-dialog">
+        <BaseAlertDialog.Popup
+          data-buzz-ui=""
+          className="buzz-dialog"
+          aria-modal="true"
+        >
           <BaseAlertDialog.Title className="text-heading">
             {title}
           </BaseAlertDialog.Title>

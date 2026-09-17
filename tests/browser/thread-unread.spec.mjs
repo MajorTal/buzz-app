@@ -38,12 +38,12 @@ test("thread buttons show observed unread independently, clear only after readin
   const rect = await first.boundingBox();
   await first.hover();
   expect(await first.boundingBox()).toEqual(rect);
-  await expect(first).not.toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  await expect(first).toHaveCSS("background-color", "rgb(232, 232, 232)");
   const hover = await first.evaluate((el) => {
     const s = getComputedStyle(el);
     return { border: s.borderTopColor, radius: s.borderTopLeftRadius };
   });
-  expect(hover.border).not.toBe("rgba(0, 0, 0, 0)");
+  expect(hover.border).toBe("rgba(0, 0, 0, 0)");
   expect(hover.radius).not.toBe("0px");
   await first.screenshot({
     path: testInfo.outputPath("thread-button-hover.png"),

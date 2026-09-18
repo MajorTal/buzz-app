@@ -9,7 +9,9 @@ add-existing membership, Save/recovery and all runner management are out of V1.
 ### Implemented compatibility view
 
 - The macOS live development broker reads the installed Buzz library at
-  `~/Library/Application Support/xyz.block.buzz.app/agents/managed-agents.json`.
+  `~/Library/Application Support/xyz.block.buzz.app/agents/managed-agents.json`
+  (on Linux, `$XDG_DATA_HOME/xyz.block.buzz.app/agents/managed-agents.json`,
+  defaulting to `~/.local/share`).
   It does not search/merge the separate `.dev` library, read agent keys from
   Keychain, write the file, run migrations, or call old loaders with side effects.
 - Only definition ID/name, identity public key/name/definition link, and optional

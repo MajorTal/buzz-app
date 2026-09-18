@@ -59,13 +59,28 @@ export function projectAgentLibrary(raw) {
   }
   return { definitions, identities };
 }
+/** Installed Buzz desktop's app-data directory: Tauri's per-platform location for its identifier. */
+export function installedBuzzDataDir(
+  platform = process.platform,
+  env = process.env,
+  home = homedir(),
+) {
+  if (platform === "darwin")
+    return join(home, "Library/Application Support/xyz.block.buzz.app");
+  if (platform === "linux")
+    return join(
+      env.XDG_DATA_HOME || join(home, ".local/share"),
+      "xyz.block.buzz.app",
+    );
+  if (platform === "win32" && env.APPDATA)
+    return join(env.APPDATA, "xyz.block.buzz.app");
+  return undefined;
+}
 export async function readAgentLibrary(
-  path = process.platform === "darwin"
-    ? join(
-        homedir(),
-        "Library/Application Support/xyz.block.buzz.app/agents/managed-agents.json",
-      )
-    : undefined,
+  path = (() => {
+    const dir = installedBuzzDataDir();
+    return dir ? join(dir, "agents/managed-agents.json") : undefined;
+  })(),
 ) {
   if (!path) throw failure();
   let file;

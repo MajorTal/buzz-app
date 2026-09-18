@@ -1,4 +1,11 @@
-import { verifyEvent, type VerifiedEvent } from "nostr-tools";
+import {
+  getEventHash,
+  verifyEvent,
+  verifiedSymbol,
+  type Event,
+  type VerifiedEvent,
+} from "nostr-tools";
+import { ByteLru } from "./budget.ts";
 /** A relay event whose signature has been verified at the transport boundary. */
 export type RelayEvent = VerifiedEvent;
 /** Event payload shared by locally authored intent and verified relay records.
@@ -33,6 +40,33 @@ export type ReadFilter = Readonly<{
   thread_cursor_id?: string;
 }>;
 export function eventDto(value: unknown): RelayEvent {
+  return checkedEvent(value, verifyEvent);
+}
+
+/** One HTTP connection's bounded proof memo, not an event/result cache. Only a
+ * matching content hash AND exact signature can reuse a successful verification.
+ * Retains no payload, authorization, freshness or caller-supplied proof symbols. */
+export function createEventVerifier() {
+  const proofs = new ByteLru<string>(2048, 2048 * 192);
+  return (value: unknown): RelayEvent =>
+    checkedEvent(value, (event): event is VerifiedEvent => {
+      if (
+        proofs.get(event.id) === event.sig &&
+        getEventHash(event) === event.id
+      ) {
+        event[verifiedSymbol] = true;
+        return true;
+      }
+      if (!verifyEvent(event)) return false;
+      proofs.set(event.id, event.sig, 192); // fixed ASCII id (64) + signature (128)
+      return true;
+    });
+}
+
+function checkedEvent(
+  value: unknown,
+  verify: (event: Event) => event is VerifiedEvent,
+): RelayEvent {
   const invalid = () =>
     new Error("Relay supplied a malformed or invalidly signed event");
   if (!value || typeof value !== "object" || Array.isArray(value))
@@ -73,7 +107,7 @@ export function eventDto(value: unknown): RelayEvent {
     content: raw.content,
     tags: raw.tags.map((tag: string[]) => [...tag]),
   };
-  if (!verifyEvent(owned)) throw invalid();
+  if (!verify(owned)) throw invalid();
   for (const tag of owned.tags) Object.freeze(tag);
   Object.freeze(owned.tags);
   return Object.freeze(owned);

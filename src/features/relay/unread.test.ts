@@ -7,6 +7,7 @@ import {
   type ReadStateStorage,
 } from "./read-state-storage";
 import type { RelayEvent } from "./events";
+import type { ThreadActivitySnapshot } from "./unread";
 import type { ChannelStoreOptions } from "./store";
 import type { SavedHead } from "./persistence";
 import type { ReadStateSigning } from "./read-state-host";
@@ -245,6 +246,42 @@ it("a deletion cannot use revoked unread evidence to delete an accessible target
   expect(h.snapshot().observedCount).toBe(1);
 });
 
+it("promotes mentions, broadcasts and participating-thread replies without promoting ordinary unread", () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const ordinary = message(h.alice, "room", "ordinary", 11);
+  h.emit([root, ordinary]);
+  expect(h.snapshot()).toMatchObject({ observedCount: 1, attentionCount: 0 });
+
+  const mentioned = message(h.alice, "room", "mentioned", 12, [
+    ["p", h.viewer.pubkey],
+  ]);
+  const broadcast = message(h.alice, "room", "broadcast", 13, [
+    ["e", root.id, "", "reply"],
+    ["broadcast", "1"],
+  ]);
+  const participatingReply = message(h.alice, "room", "reply", 14, [
+    ["e", root.id, "", "reply"],
+  ]);
+  const missingRootBroadcast = message(
+    h.alice,
+    "room",
+    "broadcast without retained root",
+    15,
+    [
+      ["e", "f".repeat(64), "", "reply"],
+      ["broadcast", "1"],
+    ],
+  );
+  h.emit([mentioned, broadcast, participatingReply, missingRootBroadcast]);
+  expect(h.snapshot()).toMatchObject({ observedCount: 5, attentionCount: 4 });
+  expect(h.session.unread.activity("room").items).toHaveLength(1);
+  expect(
+    h.session.unread.attention("room", missingRootBroadcast.id),
+  ).toMatchObject({ status: "unknown", unread: true });
+});
+
 it("late DM metadata updates an existing attention selector without expiring reading intent", async () => {
   const h = setup();
   h.grant("room");
@@ -336,6 +373,268 @@ it.each(["lowercase", "uppercase reply", "uppercase root", "last valid"])(
     expect(h.journal()?.state.frontiers).toEqual({ [`thread:${root.id}`]: 13 });
   },
 );
+
+it("groups unread thread activity by same-channel root and clears one item without clearing unrelated or manual unread", async () => {
+  const h = setup();
+  h.grant("room");
+  const firstRoot = message(h.viewer, "room", "first root", 10);
+  const secondRoot = message(h.viewer, "room", "second root", 11);
+  const firstReply = message(h.alice, "room", "first reply", 12, [
+    ["e", firstRoot.id, "", "reply"],
+  ]);
+  const latestFirstReply = message(h.alice, "room", "latest first reply", 14, [
+    ["e", firstReply.id, "", "reply"],
+  ]);
+  const secondReply = message(h.alice, "room", "second reply", 13, [
+    ["e", secondRoot.id, "", "reply"],
+  ]);
+  h.emit([
+    firstRoot,
+    secondRoot,
+    firstReply,
+    latestFirstReply,
+    secondReply,
+    message(h.alice, "room", "ordinary top level", 15),
+  ]);
+
+  expect(h.session.unread.activity("room")).toMatchObject({
+    channelId: "room",
+    coverage: "observed",
+    freshness: "observed",
+    items: [
+      {
+        channelId: "room",
+        rootId: firstRoot.id,
+        latestMessageId: latestFirstReply.id,
+        authorId: h.alice.pubkey,
+        createdAt: 14,
+        preview: "latest first reply",
+        unreadCount: 2,
+      },
+      {
+        channelId: "room",
+        rootId: secondRoot.id,
+        latestMessageId: secondReply.id,
+        authorId: h.alice.pubkey,
+        createdAt: 13,
+        preview: "second reply",
+        unreadCount: 1,
+      },
+    ],
+  });
+
+  await h.session.unread.markUnreadLocal(h.target);
+  await h.session.unread.markThrough(
+    { kind: "thread", channelId: "room", rootId: firstRoot.id },
+    latestFirstReply.id,
+  );
+
+  expect(h.session.unread.activity("room").items).toEqual([
+    expect.objectContaining({
+      rootId: secondRoot.id,
+      latestMessageId: secondReply.id,
+    }),
+  ]);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 2,
+    manual: "local-only",
+  });
+});
+
+it("activity previews use edited and unwrapped current message content and notify subscribers", () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "ORIGINAL", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  h.emit([root, reply]);
+  const before = h.session.unread.activity("room");
+  const changes: ThreadActivitySnapshot[] = [];
+  h.session.unread.subscribeActivity("room", () =>
+    changes.push(h.session.unread.activity("room")),
+  );
+  h.emit([
+    signed(h.alice, {
+      kind: 40003,
+      content: "EDITED",
+      tags: [["e", reply.id]],
+    }),
+  ]);
+  expect(h.session.unread.activity("room")).not.toBe(before);
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe("EDITED");
+  expect(changes.at(-1)?.items?.[0]?.preview).toBe("EDITED");
+
+  const agentReply = signed(h.alice, {
+    kind: 40002,
+    content: JSON.stringify({ content: "unwrapped hello" }),
+    tags: [
+      ["h", "room"],
+      ["e", root.id, "", "reply"],
+    ],
+    created_at: 12,
+  });
+  h.emit([agentReply]);
+  expect(h.session.unread.activity("room").items?.[0]).toMatchObject({
+    latestMessageId: agentReply.id,
+    preview: "unwrapped hello",
+  });
+});
+
+it("repair-retained reference-only edits admit a later deletion without seeding a window", async () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "ORIGINAL", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  const edit = signed(h.alice, {
+    kind: 40003,
+    content: "EDITED",
+    tags: [["e", reply.id]],
+  });
+  h.query.mockImplementation(async (filters) =>
+    filters[0]?.kinds?.includes(9) ? [root, reply, edit] : [],
+  );
+
+  await h.session.unread.ensure();
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe("EDITED");
+  const window = h.session.channels.window("room");
+  expect(window.rows).toHaveLength(0);
+  const changes: ThreadActivitySnapshot[] = [];
+  h.session.unread.subscribeActivity("room", () =>
+    changes.push(h.session.unread.activity("room")),
+  );
+
+  const deletion = (ids: readonly string[]) =>
+    signed(h.alice, {
+      kind: 5,
+      content: "",
+      tags: ids.map((id) => ["e", id]),
+    });
+  h.emit([deletion([edit.id, "f".repeat(64)])]);
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe("EDITED");
+  expect(changes).toEqual([]);
+
+  h.emit([deletion([edit.id])]);
+
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe(
+    "ORIGINAL",
+  );
+  expect(changes.map((snapshot) => snapshot.items?.[0]?.preview)).toEqual([
+    "ORIGINAL",
+  ]);
+  expect(h.session.channels.window("room")).toBe(window);
+});
+
+it("activity subscribers restore original content when a reference-only edit is deleted", () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "ORIGINAL", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  const edit = signed(h.alice, {
+    kind: 40003,
+    content: "EDITED",
+    tags: [["e", reply.id]],
+  });
+  const deletion = signed(h.alice, {
+    kind: 5,
+    content: "",
+    tags: [["e", edit.id]],
+  });
+  h.emit([root, reply]);
+  const changes: ThreadActivitySnapshot[] = [];
+  h.session.unread.subscribeActivity("room", () =>
+    changes.push(h.session.unread.activity("room")),
+  );
+
+  h.emit([edit]);
+  expect(changes.at(-1)?.items?.[0]?.preview).toBe("EDITED");
+  h.emit([deletion]);
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe(
+    "ORIGINAL",
+  );
+  expect(changes.map((snapshot) => snapshot.items?.[0]?.preview)).toEqual([
+    "EDITED",
+    "ORIGINAL",
+  ]);
+});
+
+it("deletion-before-edit batches retain authorized ancestry without a transient activity change", () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "ORIGINAL", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  const edit = signed(h.alice, {
+    kind: 40003,
+    content: "EDITED",
+    tags: [["e", reply.id]],
+  });
+  const deletion = signed(h.alice, {
+    kind: 5,
+    content: "",
+    tags: [["e", edit.id]],
+  });
+  h.emit([root, reply]);
+  const before = h.session.unread.activity("room");
+  const changed = vi.fn();
+  h.session.unread.subscribeActivity("room", changed);
+
+  h.emit([deletion, edit]);
+  expect(h.session.unread.activity("room")).toBe(before);
+  expect(h.session.unread.activity("room").items?.[0]?.preview).toBe(
+    "ORIGINAL",
+  );
+  expect(changed).not.toHaveBeenCalled();
+});
+
+it("resolves every activity item through its own channel hierarchy", () => {
+  const h = setup();
+  h.grant("room");
+  h.grant("other");
+  const roomRoot = message(h.viewer, "room", "room root", 10);
+  const otherRoot = message(h.viewer, "other", "other root", 10);
+  const valid = message(h.alice, "room", "room reply", 12, [
+    ["e", roomRoot.id, "", "reply"],
+  ]);
+  const foreign = message(h.alice, "room", "foreign ancestry", 13, [
+    ["e", otherRoot.id, "", "reply"],
+  ]);
+  h.emit([roomRoot, otherRoot, valid, foreign]);
+
+  expect(h.session.unread.activity("room").items).toEqual([
+    expect.objectContaining({
+      rootId: roomRoot.id,
+      latestMessageId: valid.id,
+    }),
+  ]);
+  expect(h.session.unread.activity("other").items).toEqual([]);
+});
+
+it("distinguishes unknown thread-activity evidence from observed evidence", () => {
+  const h = setup();
+  h.grant("room");
+  expect(h.session.unread.activity("room")).toMatchObject({
+    channelId: "room",
+    items: null,
+    coverage: "unknown",
+    freshness: "unknown",
+  });
+  const root = message(h.viewer, "room", "root", 10);
+  const reply = message(h.alice, "room", "retained reply", 11, [
+    ["e", root.id, "", "reply"],
+  ]);
+  h.emit([root, reply]);
+  expect(h.session.unread.activity("room")).toMatchObject({
+    items: [expect.objectContaining({ latestMessageId: reply.id })],
+    coverage: "observed",
+    freshness: "observed",
+  });
+});
 
 it("canonical unread ancestry still requires retained same-channel content", async () => {
   const h = setup();

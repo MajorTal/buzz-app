@@ -12,13 +12,21 @@ const sidebar = (page) =>
 const list = (page) =>
   page.getByRole("navigation", { name: "Subscribed channels" });
 const cue = (page, edge) =>
-  sidebar(page).getByRole("button", { name: `Unread ${edge}`, exact: true });
+  sidebar(page).locator(`button[data-edge="${edge}"]`);
 const row = (page, id) =>
   list(page).locator(`button[data-channel-id="${id.toLowerCase()}"]`);
 const scroll = (page, top) =>
   list(page).evaluate((el, top) => {
     el.scrollTop = top;
   }, top);
+const scrollRowAbove = (page, id) =>
+  row(page, id).evaluate((el) => {
+    const viewport = el.closest("nav");
+    if (!viewport) throw new Error("Channel row is outside the channel list");
+    const rowRect = el.getBoundingClientRect();
+    const viewportRect = viewport.getBoundingClientRect();
+    viewport.scrollTop += rowRect.bottom - viewportRect.top + 1;
+  });
 const inView = (page, id) =>
   row(page, id).evaluate((el) => {
     const rect = el.getBoundingClientRect();
@@ -111,9 +119,58 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   } finally {
     app.relay.releaseEose("alpha");
   }
+  const ordinary = row(page, "alpha");
+  const ordinaryState = ordinary.locator("[data-channel-unread]");
+  const directed = row(page, "dm-090").locator("[data-channel-priority]");
+  await expect(ordinaryState).toHaveAttribute("data-priority", "false");
+  await expect(ordinaryState).toHaveAttribute(
+    "aria-label",
+    /observed unread messages/,
+  );
+  await expect(ordinary.locator("[data-channel-priority]")).toHaveCount(0);
+  await expect(ordinary.locator("span").first()).toHaveCSS(
+    "font-weight",
+    "500",
+  );
+  await expect(directed).toBeVisible();
+  await expect(directed).toHaveCSS("width", "6px");
+  await expect(
+    row(page, "dm-090").locator("[data-channel-unread]"),
+  ).toHaveAttribute("data-priority", "true");
+  await expect(
+    row(page, "dm-090").locator("[data-channel-dm-avatar]"),
+  ).toHaveCount(0);
   await expect(row(page, "dm-090").getByRole("img")).toHaveCount(1);
+  await page.evaluate(() => {
+    document.documentElement.dataset.colorMode = "dark";
+  });
+  await sidebar(page).screenshot({
+    path: info.outputPath("sidebar-unread-hierarchy.png"),
+  });
   await expect(cue(page, "below")).toBeVisible();
+  await expect(cue(page, "below")).toHaveText("Unread");
+  await expect(cue(page, "below")).toHaveAccessibleName("Unread below");
+  await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
+  const transitionProperties = await cue(page, "below").evaluate((el) =>
+    getComputedStyle(el).transitionProperty.split(", "),
+  );
+  expect(transitionProperties).toEqual([
+    "background-color",
+    "color",
+    "border-color",
+  ]);
   await expect(cue(page, "above")).toHaveCount(0);
+  // Keep actionable DMs below while moving only ordinary unread above: priority
+  // is derived from the destinations on each edge, not from the whole roster.
+  await scrollRowAbove(page, "alpha");
+  await expect.poll(() => inView(page, "alpha")).toBe(false);
+  await expect(cue(page, "above")).toBeVisible();
+  await expect(cue(page, "above")).toHaveText("Unread");
+  await expect(cue(page, "above")).toHaveAccessibleName("Unread above");
+  await expect(cue(page, "above")).toHaveAttribute("data-attention", "false");
+  await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
+  await scroll(page, 0);
+  await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
   await scroll(page, 1800);
   await expect(cue(page, "above")).toBeVisible();
   await expect(cue(page, "below")).toBeVisible();
@@ -300,38 +357,36 @@ test("session changes discard the previous sidebar targets and manual unread sti
     await cue(page, "above").click();
     await expect.poll(() => inView(page, "alpha")).toBe(true);
     await expect(
-      row(page, "alpha").getByRole("img", {
-        name: "Marked unread on this device only",
-        exact: true,
-      }),
-    ).toBeVisible();
+      row(page, "alpha").locator(
+        '[data-channel-unread][data-priority="false"]',
+      ),
+    ).toBeAttached();
   } finally {
     release();
     await page.unroute("**/api/relay/secondary/sidebar-preferences");
   }
 });
 
-test("attention badge retains its channel row color in both modes", async ({
+test("priority dots use semantic primary color in both modes", async ({
   page,
   app,
 }) => {
   await open(page, app);
-  const channel = row(page, "dm-030");
-  const badge = channel.locator("[data-channel-unread]");
-  await expect(badge).toBeAttached();
-  // Use the actual rendered badge and its production CSS; only select the
-  // attention presentation state, independently of mention admission behavior.
-  await badge.evaluate((element) => {
-    element.dataset.attention = "true";
-  });
+  const dot = row(page, "dm-030").locator("[data-channel-priority]");
+  await expect(dot).toBeAttached();
   for (const mode of ["light", "dark"]) {
     await page.evaluate((mode) => {
       document.documentElement.dataset.colorMode = mode;
     }, mode);
-    const color = await channel.evaluate(
-      (element) => getComputedStyle(element).color,
-    );
-    await expect(badge).toHaveCSS("color", color);
-    await expect(badge).toHaveCSS("outline-color", color);
+    const primary = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = root.getPropertyValue("--primary");
+      document.body.append(probe);
+      const color = getComputedStyle(probe).backgroundColor;
+      probe.remove();
+      return color;
+    });
+    await expect(dot).toHaveCSS("background-color", primary);
   }
 });

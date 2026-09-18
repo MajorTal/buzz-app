@@ -27,6 +27,7 @@ export const test = base.extend({
   productionBroker: [false, { option: true }],
   readState: [false, { option: true }],
   threadUnread: [false, { option: true }],
+  threadUnreadMentions: [false, { option: true }],
   exactMessages: [false, { option: true }],
   sidebarUnread: [false, { option: true }],
   savedSidebar: [false, { option: true }],
@@ -48,6 +49,7 @@ export const test = base.extend({
       productionBroker,
       readState,
       threadUnread,
+      threadUnreadMentions,
       exactMessages,
       sidebarUnread,
       savedSidebar,
@@ -257,6 +259,7 @@ export const test = base.extend({
             [
               ["h", "alpha"],
               ["e", root.id.toUpperCase(), "", "reply"],
+              ...(threadUnreadMentions && index === 1 ? [["p", viewer]] : []),
             ],
             `Unread reply ${index}`,
             peerKey,

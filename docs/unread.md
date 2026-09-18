@@ -72,20 +72,34 @@ could hide unseen siblings. Oversized rows that never fit fully are not auto-rea
   and retries pending publication. `ReadMutationResult.durability === "saved"`
   means the local transaction committed, not that the relay accepted it.
 
-The sidebar displays observed badges with accessible non-exact wording. A local
-manual-unread mark replaces the count with a dot and local-only label; the
-underlying observed count and attention styling remain available. Conversation
-options exposes explicit actions and Unread status/retry. Unknown and observed-zero both omit a badge; the API preserves
-the distinction. There is no notification, feed, or exact-count service here.
+The sidebar separates ordinary unread from directed attention. Any unread state,
+including activity that exists only in a relevant thread, strengthens the channel
+label. Ordinary unread renders no row marker. DMs, mentions, broadcasts, and
+relevant thread replies add one accent dot; non-DM row numerals are omitted and DM
+avatars are reserved for promoted offscreen cues. Thread activity reuses that dot:
+its hover/focus/click popover groups unread replies by canonical thread root and
+opens the existing thread panel, so overlapping priority and thread activity never
+produce duplicate dots. Merely revealing the popover does not acknowledge a reply.
+A local manual-unread mark strengthens the label without fabricating priority; the
+underlying observed count remains available.
+Conversation options exposes explicit actions and Unread status/retry. Unknown and
+observed-zero both omit unread styling; the API preserves the distinction. There is
+no notification, feed, or exact-count service here.
 
-When unread rows are outside the sidebar's scroll viewport, floating “Unread
-above/below” buttons reveal the nearest one in that direction. They measure the
-existing rendered badges—no extra unread subscriptions or relay reads just to
-show the pills. Search-filtered rows do not participate. Collapsed sections use
-the summary's position and expand when revealed. A partly visible row is not
-outside the fold. Activation scrolls and focuses the row, retaining its ordinary
-focus preparation; it does not select the channel or acknowledge any messages.
-The pills use presence, not a potentially misleading aggregate message total.
+When unread rows are outside the sidebar's scroll viewport, floating “Unread”
+buttons reveal the nearest destination in that direction without exposing a count.
+The internal directional set is still deduplicated by destination for geometry and
+priority: ordinary destinations use a quiet treatment; any DM, mention, broadcast,
+or relevant thread destination promotes the same composition to primary. Thread-only
+rows participate, and DMs remain promoted even when their only evidence is thread
+activity. The controls measure existing rendered badges/dots—no extra unread
+subscriptions or relay reads just to show them. Search-filtered rows do not
+participate. Collapsed sections use the summary's position and expand when revealed.
+A partly visible row is not outside the fold. Activation scrolls and focuses the
+row, retaining its ordinary focus preparation; it does not select the channel or
+acknowledge any messages. The count is destinations, not a potentially misleading
+aggregate message total. Directional destination counts remain internal and are
+not rendered or announced by the control.
 
 Thread buttons keep the summary's total reply count and add a dot when the shared
 thread selector has observed unread replies or explicit thread-unread intent.
@@ -174,10 +188,11 @@ durable account-owned intent survives without exposing revoked context projectio
 - `MessageRow.test.tsx`, `tests/browser/thread-unread.spec.mjs`: thread selector
   presentation, unchanged summary counts, hover/keyboard-focus treatment, independent
   thread reading, own/peer live arrivals and reload through the production broker.
-- `tests/browser/sidebar-unread.spec.mjs`: above/below geometry, no layout shift,
-  resize/search/collapse, keyboard continuation, manual intent, evidence refresh,
-  session retargeting, and no reading/selection from reveal. Focus retains existing
-  channel preparation; merely showing the indicators does not fetch channels.
+- `tests/browser/sidebar-unread.spec.mjs`: above/below destination counts and
+  priority, activity-only rows, no layout shift, resize/search/collapse, keyboard
+  continuation, manual intent, evidence refresh, session retargeting, and no
+  reading/selection from reveal. Focus retains existing channel preparation;
+  merely showing the indicators does not fetch channels.
 - `tests/browser/unread.spec.mjs`: production build/React/session/IndexedDB/broker,
   observed sidebar → focused dwell → encrypted publication/readback, reload,
   cancellation and explicit local-unread clearing with network content held.

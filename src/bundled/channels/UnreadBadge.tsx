@@ -5,9 +5,11 @@ import styles from "./Channels.module.css";
 export function UnreadBadge({
   session,
   channelId,
+  dm = false,
 }: {
   session: RelaySession;
   channelId: string;
+  dm?: boolean;
 }) {
   const target = useMemo(
     () => ({ kind: "channel" as const, channelId }),
@@ -21,24 +23,60 @@ export function UnreadBadge({
     () => session.unread.snapshot(target),
     [session, target],
   );
+  const subscribeActivity = useCallback(
+    (listener: () => void) =>
+      session.unread.subscribeActivity(channelId, listener),
+    [session, channelId],
+  );
+  const getActivity = useCallback(
+    () => session.unread.activity(channelId),
+    [session, channelId],
+  );
   const snapshot = useSyncExternalStore(subscribe, get, get);
+  const activity = useSyncExternalStore(
+    subscribeActivity,
+    getActivity,
+    getActivity,
+  );
   const count = snapshot.observedCount;
   const manual = snapshot.manual !== "none";
-  if (!manual && !count) return null;
+  const unread = manual || (count ?? 0) > 0;
+  const threadCount = activity.items?.length ?? 0;
+  if (!unread && !threadCount) return null;
+  const priority = dm || (snapshot.attentionCount ?? 0) > 0;
+  const showUnreadDot = priority && threadCount === 0;
   const label = manual
     ? `Marked unread${snapshot.manual === "local-only" ? " on this device only" : ""}`
     : `${count} observed unread messages${snapshot.freshness === "stale" ? "; may be out of date" : ""}. Not an exact total.`;
+  const threadLabel = `${threadCount} unread ${threadCount === 1 ? "thread" : "threads"}${activity.freshness === "stale" ? "; may be out of date" : ""}`;
   return (
-    <span
-      className={styles.unreadBadge}
-      data-channel-unread=""
-      role="img"
-      aria-label={label}
-      title={label}
-      data-attention={!!snapshot.attentionCount}
-    >
-      {manual ? "•" : (count ?? 0) > 99 ? "99+" : count}
-    </span>
+    <>
+      {unread && (
+        <span
+          className={styles.unreadState}
+          data-channel-unread=""
+          data-priority={priority}
+          role="img"
+          aria-label={label}
+        />
+      )}
+      {showUnreadDot && (
+        <span
+          className={styles.priorityDot}
+          data-channel-priority=""
+          aria-hidden="true"
+        />
+      )}
+      {threadCount > 0 && (
+        <span
+          className={styles.threadActivityDot}
+          data-channel-activity=""
+          role="img"
+          aria-label={threadLabel}
+          title={threadLabel}
+        />
+      )}
+    </>
   );
 }
 export function UnreadOptions({

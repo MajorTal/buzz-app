@@ -3,7 +3,32 @@ import { expect, it } from "vitest";
 import { mkdtemp, writeFile, readFile, rm, symlink } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { projectAgentLibrary, readAgentLibrary } from "./agent-library.mjs";
+import {
+  installedBuzzDataDir,
+  projectAgentLibrary,
+  readAgentLibrary,
+} from "./agent-library.mjs";
+
+it("locates the installed Buzz data directory per platform and refuses to guess elsewhere", () => {
+  expect(installedBuzzDataDir("darwin", {}, "/Users/t")).toBe(
+    "/Users/t/Library/Application Support/xyz.block.buzz.app",
+  );
+  expect(installedBuzzDataDir("linux", {}, "/home/t")).toBe(
+    "/home/t/.local/share/xyz.block.buzz.app",
+  );
+  expect(
+    installedBuzzDataDir("linux", { XDG_DATA_HOME: "/data" }, "/home/t"),
+  ).toBe("/data/xyz.block.buzz.app");
+  // Tauri's dirs crate ignores a relative XDG_DATA_HOME; so must this reader,
+  // or it would look where the installed app never writes.
+  for (const XDG_DATA_HOME of ["relative", "./data", ""])
+    expect(
+      installedBuzzDataDir("linux", { XDG_DATA_HOME }, "/home/t"),
+      JSON.stringify(XDG_DATA_HOME),
+    ).toBe("/home/t/.local/share/xyz.block.buzz.app");
+  expect(installedBuzzDataDir("win32", {}, "/home/t")).toBeUndefined();
+  expect(installedBuzzDataDir("freebsd", {}, "/home/t")).toBeUndefined();
+});
 const key = "a".repeat(64);
 const rows = [
   {

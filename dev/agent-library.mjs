@@ -5,7 +5,7 @@ import { avatarSource } from "../src/shared/avatar-source.ts";
 import { constants } from "node:fs";
 import { open } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_ROWS = 2000;
@@ -59,13 +59,32 @@ export function projectAgentLibrary(raw) {
   }
   return { definitions, identities };
 }
+/**
+ * Installed Buzz desktop's app-data directory, resolved the way Tauri does it
+ * (the `dirs` crate): `Library/Application Support` on macOS; on Linux
+ * `XDG_DATA_HOME` only when it is an absolute path, otherwise `~/.local/share`.
+ * Other platforms return nothing: the live broker refuses them before this
+ * reader could run, so guessing a path here would only mislead.
+ */
+export function installedBuzzDataDir(
+  platform = process.platform,
+  env = process.env,
+  home = homedir(),
+) {
+  if (platform === "darwin")
+    return join(home, "Library/Application Support/xyz.block.buzz.app");
+  if (platform === "linux") {
+    const xdg = env.XDG_DATA_HOME;
+    const base = xdg && isAbsolute(xdg) ? xdg : join(home, ".local/share");
+    return join(base, "xyz.block.buzz.app");
+  }
+  return undefined;
+}
 export async function readAgentLibrary(
-  path = process.platform === "darwin"
-    ? join(
-        homedir(),
-        "Library/Application Support/xyz.block.buzz.app/agents/managed-agents.json",
-      )
-    : undefined,
+  path = (() => {
+    const dir = installedBuzzDataDir();
+    return dir ? join(dir, "agents/managed-agents.json") : undefined;
+  })(),
 ) {
   if (!path) throw failure();
   let file;

@@ -218,8 +218,9 @@ local macOS bundle with embedded frontend assets: `pnpm tauri build --debug --bu
 ### Agents compatibility preview
 
 In live development mode, Agents reads the **installed Buzz** library on this
-Mac (`~/Library/Application Support/xyz.block.buzz.app/agents/managed-agents.json`)
-without changing it. The separate Buzz development-build library is not merged.
+machine (`~/Library/Application Support/xyz.block.buzz.app/agents/managed-agents.json`
+on macOS, `$XDG_DATA_HOME/xyz.block.buzz.app/agents/managed-agents.json` on Linux,
+defaulting to `~/.local/share`) without changing it. The separate Buzz development-build library is not merged.
 It shows selected definitions and linked public identities; Refresh reads changes
 made in Buzz. No creation, configuration, migration, member addition or runtime
 controls are included. Keep Buzz running for existing agents to answer selected

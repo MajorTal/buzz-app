@@ -15,6 +15,7 @@ import { useReading } from "./use-reading";
 import { useMessageReveal } from "./use-message-reveal";
 import type { PageNavigation } from "../navigation/service";
 import { messageViewKey } from "./view-key";
+import { useKnownAgentPubkeys } from "../agents/use-known";
 
 const EDGE_HEIGHT = 56;
 type ReadingPosition = {
@@ -107,6 +108,7 @@ function Timeline({
   const restoredAnchor = useRef<string | undefined>(undefined);
   const rows = useMemo(() => membershipRows(window.rows), [window.rows]);
   const profiles = useRowProfiles(queries.profiles, window.rows);
+  const agentPubkeys = useKnownAgentPubkeys(queries, profiles);
   const geometry = useMemo(() => geometryFor(queries.channels), [queries]);
   const signature = useMemo(
     () => geometrySignature(window.rows, profiles),
@@ -481,6 +483,7 @@ function Timeline({
                 profiles={profiles}
                 viewer={viewer}
                 media={queries.media}
+                agentPubkeys={agentPubkeys}
                 day={day}
               />
             ) : (
@@ -493,6 +496,7 @@ function Timeline({
                 extensions={extensions}
                 profile={profiles.get(row.authorId)}
                 participantProfiles={profiles}
+                agentPubkeys={agentPubkeys}
                 media={queries.media}
                 onOpenLink={onOpenLink}
                 canOpenLink={canOpenLink}

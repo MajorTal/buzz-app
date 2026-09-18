@@ -10,6 +10,7 @@ import {
   type ReactNode,
 } from "react";
 import { ThreadPanel } from "./ThreadPanel";
+import { createAgentLibrary } from "../agents/library";
 import { MessageRow } from "./MessageRow";
 import { MessageMarkdown } from "./MessageMarkdown";
 import { MessageComposer } from "./MessageComposer";
@@ -148,6 +149,7 @@ function setup() {
   const session = {
     thread,
     profiles: { ensure },
+    agentLibrary: createAgentLibrary(undefined).queries,
     messages: { retry: vi.fn() },
     // Geometry fixtures are read-only; reading behavior has its own boundary tests.
     unread: { sync: () => ({ capability: "unsupported" }) },

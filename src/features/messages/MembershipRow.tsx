@@ -1,3 +1,4 @@
+import "../../shared/design-system/styles/avatar-shape.css";
 import { memo } from "react";
 import type { Profile } from "../relay/contracts";
 import { membershipDescription, type TimelineRow } from "./membership-rows";
@@ -9,12 +10,14 @@ export const MembershipRow = memo(function MembershipRow({
   profiles,
   viewer,
   media,
+  agentPubkeys,
   day,
 }: {
   row: TimelineRow;
   profiles: ReadonlyMap<string, Profile>;
   viewer?: string | undefined;
   media(url: string, size?: "small"): string | undefined;
+  agentPubkeys?: ReadonlySet<string> | undefined;
   day: boolean;
 }) {
   const { targets, text, title } = membershipDescription(
@@ -44,25 +47,38 @@ export const MembershipRow = memo(function MembershipRow({
               ? media(profile.picture, "small")
               : undefined;
             return (
-              <span className={styles.membershipAvatar} key={id}>
-                {name.slice(0, 2).toUpperCase()}
-                {picture && (
-                  <img
-                    key={picture}
-                    src={picture}
-                    alt=""
-                    loading="lazy"
-                    onError={(event) => {
-                      event.currentTarget.hidden = true;
-                    }}
-                  />
-                )}
+              <span
+                className={styles.membershipAvatar}
+                data-avatar-shape={
+                  agentPubkeys?.has(id) ? "squircle" : "circle"
+                }
+                key={id}
+              >
+                <span className={styles.insetAvatarArtwork}>
+                  {name.slice(0, 2).toUpperCase()}
+                  {picture && (
+                    <img
+                      key={picture}
+                      src={picture}
+                      alt=""
+                      loading="lazy"
+                      onError={(event) => {
+                        event.currentTarget.hidden = true;
+                      }}
+                    />
+                  )}
+                </span>
               </span>
             );
           })}
           {targets.length > 3 && (
-            <span className={styles.membershipAvatar}>
-              +{targets.length - 3}
+            <span
+              className={styles.membershipAvatar}
+              data-avatar-shape="circle"
+            >
+              <span className={styles.insetAvatarArtwork}>
+                +{targets.length - 3}
+              </span>
             </span>
           )}
         </span>

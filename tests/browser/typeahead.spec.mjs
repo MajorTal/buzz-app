@@ -4,6 +4,85 @@ const open = async (page) => {
   await page.goto("/tests/fixtures/mentions.html");
   return page.getByRole("textbox", { name: "Message #General" });
 };
+const expectAvatarShape = async (target, shape) => {
+  await expect(target.locator("[data-avatar-shape]")).toHaveAttribute(
+    "data-avatar-shape",
+    shape,
+  );
+};
+test("mention completion distinguishes exact agent identity without reshaping a namesake human", async ({
+  page,
+}) => {
+  const input = await open(page);
+  const keys = await page.evaluate(() => ({
+    human: window.mentionFixture.first,
+    agent: window.mentionFixture.second,
+  }));
+  await input.fill("@Ho");
+  await expectAvatarShape(
+    page.getByRole("option", { name: `Honey ${keys.human}`, exact: true }),
+    "circle",
+  );
+  await expectAvatarShape(
+    page.getByRole("option", { name: `Honey ${keys.agent}`, exact: true }),
+    "squircle",
+  );
+  await input.fill("");
+  await page
+    .getByRole("button", { name: "Mention a member", exact: true })
+    .click();
+  const picker = page.getByRole("region", { name: "Mention a channel member" });
+  await expectAvatarShape(
+    picker.getByRole("button", { name: `Honey ${keys.human}`, exact: true }),
+    "circle",
+  );
+  await expectAvatarShape(
+    picker.getByRole("button", { name: `Honey ${keys.agent}`, exact: true }),
+    "squircle",
+  );
+});
+test("open completion republishes library-only display hints without changing the query", async ({
+  page,
+}) => {
+  const input = await open(page);
+  const keys = await page.evaluate(() => ({
+    first: window.mentionFixture.first,
+    second: window.mentionFixture.second,
+  }));
+  await input.fill("@Ho");
+  const first = page.getByRole("option", {
+    name: `Honey ${keys.first}`,
+    exact: true,
+  });
+  const second = page.getByRole("option", {
+    name: `Honey ${keys.second}`,
+    exact: true,
+  });
+  await expectAvatarShape(first, "circle");
+  await expectAvatarShape(second, "squircle");
+  // Opening completion subscribes to the library; it must not load it.
+  expect(await page.evaluate(() => window.mentionFixture.libraryReads())).toBe(
+    0,
+  );
+
+  for (const [included, reads] of [
+    [true, 1],
+    [false, 2],
+  ]) {
+    await page.evaluate(
+      (included) => window.mentionFixture.setLibraryAgent(included),
+      included,
+    );
+    await expectAvatarShape(first, included ? "squircle" : "circle");
+    await expectAvatarShape(second, "squircle");
+    await expect(input).toHaveText("@Ho");
+    await expect(input).toBeFocused();
+    await expect(page.getByRole("listbox")).toBeVisible();
+    expect(
+      await page.evaluate(() => window.mentionFixture.libraryReads()),
+    ).toBe(reads);
+  }
+});
 
 for (const mode of ["light", "dark"]) {
   for (const kind of ["mention", "emoji"]) {

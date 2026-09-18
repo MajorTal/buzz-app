@@ -3,7 +3,7 @@
 The bundled `buzz.profiles` plugin supplies a minimal, read-only panel for any
 public identity, human or agent. It uses the current session's shared profile
 directory. Agents retains agent-specific configuration/operations; this slice
-adds no ownership/running badge, editor, agent-library lookup or execution API.
+adds no ownership/running badge, editor, agent-library read or execution API.
 When Agent Activity is enabled and the host supplies conversation context, **View
 activity** opens its raw panel for this exact identity and originating channel.
 This action is offered for any public identity: it does not infer that the identity
@@ -45,10 +45,29 @@ Button use the host-loaded styles directly. The profile content marks its
 owns layout, not component overrides. No new theme owner, second global reset or
 shell migration. Designers own later refinement.
 
+Agent hints change avatar shape, not authority:
+
+- Profiles, mentions, participants and membership avatars use squircles for
+  self-declared `is_agent`/`isAgent` metadata or exact keys in the loaded session
+  library; otherwise they use circles. My Agents cards always use squircles.
+- Message authors also use these hints. An original kind-40002 envelope is enough
+  on its own and keeps that treatment through edits.
+- Library hints are lazy: opening or refreshing Agents loads them; clearing the
+  library removes that fallback. Avatars never fetch the library or scan telemetry.
+
+None of these hints proves ownership or running state. One bundled SVG mask scales
+across sizes and clips only artwork, leaving the profile button's focus ring intact.
+
 Use the normal `bin/just desktop` or `bin/just web` workflow in the feature worktree
 with the existing public live-mode pin; run only one dev target at a time.
 
 ## Evidence and remaining checks
+
+`avatar-shapes.spec.mjs` covers painted pixels and focus across sizes, themes and
+viewports in Chromium/WebKit, including the artwork inside participant/membership
+overlap borders (pictures and initials). Shape attributes alone do not prove that
+inset artwork is clipped. Completion tests cover loaded-library changes without
+another keystroke; profile-directory tests cover marker-only updates.
 
 `tests/browser/profiles.spec.mjs` runs real React/ChannelsPage, thread reading,
 profile directory, panel registry and plugin lifecycle against a synthetic

@@ -196,7 +196,13 @@ function AgentCard({
   return (
     <article className="flex min-w-0 flex-col rounded-2xl border border-primary p-4">
       <div className="flex min-h-36 flex-1 items-center justify-center py-5">
-        <Avatar alt={name} fallback={name} src={picture ?? null} size="large" />
+        <Avatar
+          alt={name}
+          fallback={name}
+          src={picture ?? null}
+          size="large"
+          shape="squircle"
+        />
       </div>
       <h3 className="m-0 truncate text-label" title={name}>
         {name}

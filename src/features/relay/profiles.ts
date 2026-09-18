@@ -20,6 +20,8 @@ export function foldProfiles(
         name?: unknown;
         picture?: unknown;
         about?: unknown;
+        is_agent?: unknown;
+        isAgent?: unknown;
       };
       const name = [body.display_name, body.name].find(
         (value): value is string =>
@@ -36,6 +38,9 @@ export function foldProfiles(
           ...(picture ? { picture } : {}),
           ...(typeof body.about === "string" && body.about.trim()
             ? { about: body.about.trim() }
+            : {}),
+          ...(body.is_agent === true || body.isAgent === true
+            ? { isAgent: true as const }
             : {}),
         }),
       );

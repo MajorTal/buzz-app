@@ -19,6 +19,8 @@ export type Profile = Readonly<{
   name: string;
   picture?: string;
   about?: string;
+  /** Self-declared display hint, not proof of ownership, membership or authority. */
+  isAgent?: true;
 }>;
 export type Attachment = Readonly<{
   url: string;
@@ -42,6 +44,8 @@ export type ChannelMessage = Readonly<{
   /** Unix seconds from the signed event. Ordering is (createdAt asc, id desc); no clock inference. */
   createdAt: number;
   content: string;
+  /** Original kind 40002, regardless of edits; self-declared display evidence, not authority. */
+  agentEnvelope?: true;
   membership?: MembershipChange;
   /** Current body came from a replacement edit; original recipients do not bind its prose. */
   edited?: true;

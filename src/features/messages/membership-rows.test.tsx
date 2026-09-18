@@ -1,4 +1,4 @@
-import { assert, expect, it } from "vitest";
+import { assert, expect, it, vi } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import type { ChannelMessage, MembershipChange } from "../relay/contracts";
 import { membershipRows, membershipDescription } from "./membership-rows";
@@ -181,6 +181,28 @@ it("caps visible names/avatars with an overflow count, retaining all names in th
   expect(html).toContain("data-membership-row");
   expect(html).toContain("dddddddddd");
 });
+it.each([false, true])(
+  "keeps small membership media requests with agent hint %s",
+  (agent) => {
+    const picture = "https://image.test/member.png";
+    const media = vi.fn((url: string) => url);
+    const html = renderToStaticMarkup(
+      <MembershipRow
+        row={row("join", joined(pinky, pinky))}
+        profiles={new Map([[pinky, { name: "Pinky", picture }]])}
+        agentPubkeys={new Set(agent ? [pinky] : [])}
+        media={media}
+        day={false}
+      />,
+    );
+    expect(media).toHaveBeenCalledWith(picture, "small");
+    expect(html).toContain(
+      `data-avatar-shape="${agent ? "squircle" : "circle"}"`,
+    );
+    expect(html).toContain('aria-hidden="true"');
+    expect(html).not.toContain("button");
+  },
+);
 it("actor/subject profile enrichment invalidates cached system-row geometry", () => {
   const rows = [row("a", joined(wes, pinky))];
   const original = geometrySignature(rows, profiles);

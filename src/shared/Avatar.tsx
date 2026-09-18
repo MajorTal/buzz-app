@@ -1,3 +1,4 @@
+import "./design-system/styles/avatar-shape.css";
 import { useState } from "react";
 
 /** Caller resolves private relay media through the current session. */
@@ -5,10 +6,12 @@ export function Avatar({
   name,
   src,
   className = "",
+  shape = "circle",
 }: {
   name: string;
   src?: string | undefined;
   className?: string;
+  shape?: "circle" | "squircle";
 }) {
   const [failed, setFailed] = useState<string>();
   const initials =
@@ -21,6 +24,7 @@ export function Avatar({
       .toUpperCase() || "?";
   return (
     <span
+      data-avatar-shape={shape}
       className={`relative inline-grid shrink-0 place-items-center overflow-hidden rounded-2xl bg-neutral-3 font-semibold text-secondary ${className}`}
       aria-hidden="true"
     >

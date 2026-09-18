@@ -1,4 +1,5 @@
 import { Avatar } from "../../shared/Avatar";
+import { useKnownAgentPubkeys } from "../../features/agents/use-known";
 import { AtSign } from "lucide-react";
 import {
   useEffect,
@@ -39,6 +40,7 @@ export function MentionPicker({
     session.profiles.snapshot,
     session.profiles.snapshot,
   );
+  const agentPubkeys = useKnownAgentPubkeys(session, profiles);
   const channel = list.channels.find((item) => item.id === channelId);
   const memberKey = channel?.members?.join(":") ?? "";
   useEffect(() => {
@@ -141,6 +143,9 @@ export function MentionPicker({
                     "small",
                   )}
                   className="size-8 rounded-lg text-caption"
+                  shape={
+                    agentPubkeys.has(recipient.pubkey) ? "squircle" : "circle"
+                  }
                 />
                 <span className={styles.mentionLabel}>
                   <span>{recipient.name}</span>

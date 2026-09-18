@@ -21,16 +21,51 @@ const viewer = getPublicKey(fixture);
 const credential = JSON.stringify({ identity: nip19.nsecEncode(fixture) });
 const servers: ReturnType<typeof createServer>[] = [];
 
+// The broker picks its credential reader from process.platform at call time.
+// Every case pins the platform explicitly so the suite proves the same thing
+// on the Ubuntu CI runner as on a developer's Mac.
+const realPlatform = process.platform;
+function onPlatform(platform: NodeJS.Platform) {
+  Object.defineProperty(process, "platform", {
+    value: platform,
+    writable: false,
+    enumerable: true,
+    configurable: true,
+  });
+}
+const readers = {
+  darwin: {
+    command: "/usr/bin/security",
+    args: [
+      "find-generic-password",
+      "-s",
+      "buzz-desktop",
+      "-a",
+      "secrets",
+      "-w",
+    ],
+    failure: "Keychain read unavailable or declined; no credential fallback",
+  },
+  linux: {
+    command: "secret-tool",
+    args: ["lookup", "service", "buzz-desktop", "username", "secrets"],
+    failure: "Secret service read unavailable",
+  },
+} as const;
+const platforms = Object.keys(readers) as (keyof typeof readers)[];
+
 beforeEach(() => {
   vi.stubEnv("BUZZ_RELAY_URL", "");
   vi.stubEnv("BUZZ_COMMUNITY_ALIASES", "");
   vi.stubEnv("BUZZ_DEV_VIEWER", "");
+  onPlatform("darwin");
   readCredential.mockReset();
   readCredential.mockReturnValue(Buffer.from(credential));
 });
 afterEach(() => {
   for (const server of servers.splice(0)) server.emit("close");
   vi.unstubAllEnvs();
+  onPlatform(realPlatform);
 });
 
 async function startup(command: "serve" | "build" = "serve") {
@@ -96,15 +131,22 @@ it.each([
   },
 );
 
-it.each([viewer, nip19.npubEncode(viewer), ` ${viewer.toUpperCase()} `])(
-  "uses the explicit matching public identity through Vite startup (%#)",
-  async (configured) => {
+it.each(
+  platforms.flatMap((platform) =>
+    [viewer, nip19.npubEncode(viewer), ` ${viewer.toUpperCase()} `].map(
+      (configured) => [platform, configured] as const,
+    ),
+  ),
+)(
+  "uses the explicit matching public identity through Vite startup on %s (%#)",
+  async (platform, configured) => {
+    onPlatform(platform);
     vi.stubEnv("BUZZ_DEV_VIEWER", configured);
     const app = await startup();
     await app.start();
     expect(readCredential).toHaveBeenCalledExactlyOnceWith(
-      "/usr/bin/security",
-      ["find-generic-password", "-s", "buzz-desktop", "-a", "secrets", "-w"],
+      readers[platform].command,
+      readers[platform].args,
       { stdio: ["ignore", "pipe", "pipe"], timeout: 120000 },
     );
     expect(app.use).toHaveBeenCalledOnce();
@@ -116,6 +158,21 @@ it.each([viewer, nip19.npubEncode(viewer), ` ${viewer.toUpperCase()} `])(
       "BUZZ_DEV_VIEWER",
     );
     expect(JSON.stringify(app.info.mock.calls)).not.toContain(credential);
+  },
+);
+
+it.each(["win32", "freebsd"] as const)(
+  "refuses an unsupported platform before touching any credential reader (%s)",
+  async (platform) => {
+    onPlatform(platform);
+    vi.stubEnv("BUZZ_DEV_VIEWER", viewer);
+    const app = await startup();
+    await expect(app.start()).rejects.toThrow(
+      `macOS or Linux only (this is ${platform}); no credential fallback`,
+    );
+    expect(readCredential).not.toHaveBeenCalled();
+    expect(app.use).not.toHaveBeenCalled();
+    expect(app.info).not.toHaveBeenCalled();
   },
 );
 
@@ -134,18 +191,37 @@ it("rejects a different Keychain identity instead of adopting it", async () => {
   expect(app.info).not.toHaveBeenCalled();
 });
 
-it("fails closed when Keychain access is denied without leaking command output", async () => {
-  vi.stubEnv("BUZZ_DEV_VIEWER", viewer);
-  readCredential.mockImplementation(() => {
-    throw new Error(credential);
-  });
-  const app = await startup();
-  await expect(app.start()).rejects.toThrow(
-    "Keychain read unavailable or declined; no credential fallback",
-  );
-  expect(app.use).not.toHaveBeenCalled();
-  expect(app.info).not.toHaveBeenCalled();
-});
+it.each(platforms)(
+  "fails closed when the %s credential read is denied, without leaking command output",
+  async (platform) => {
+    onPlatform(platform);
+    vi.stubEnv("BUZZ_DEV_VIEWER", viewer);
+    readCredential.mockImplementation(() => {
+      throw new Error(credential);
+    });
+    const app = await startup();
+    const failure = await app.start().then(
+      () => assert.fail("startup must fail"),
+      (error: unknown) => String(error),
+    );
+    expect(failure).toContain(readers[platform].failure);
+    expect(failure).not.toContain(credential);
+    expect(app.use).not.toHaveBeenCalled();
+    expect(app.info).not.toHaveBeenCalled();
+  },
+);
+
+it.each(platforms)(
+  "treats an empty %s credential read as unavailable instead of parsing nothing",
+  async (platform) => {
+    onPlatform(platform);
+    vi.stubEnv("BUZZ_DEV_VIEWER", viewer);
+    readCredential.mockReturnValue(Buffer.from("\n"));
+    const app = await startup();
+    await expect(app.start()).rejects.toThrow(readers[platform].failure);
+    expect(app.use).not.toHaveBeenCalled();
+  },
+);
 
 it.each([
   "not-json",

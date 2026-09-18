@@ -24,7 +24,8 @@ Settings independently enables/disables Channels and GitHub. Disabling GitHub
 removes its link handler and open panel; shared channel data remains available.
 Disabling Channels removes its page while the app-owned data survives.
 
-The broker uses the existing authorized Buzz identity in the macOS Keychain and
+The broker uses the existing authorized Buzz identity in the OS secret store (macOS
+Keychain, Linux secret service) and
 signs authenticated reads and channel messages in Node. No private key reaches browser JavaScript; there is
 a bounded message-signing and publishing endpoint. The broker is restricted to loopback hosts, same-origin
 POSTs, valid Nostr kinds/event IDs, and bounded filters. Without a configured `BUZZ_DEV_VIEWER` pin, the shell and Messages empty state remain available, while the live identity/join flow explains that it needs the development broker. Packaged builds do not include the development broker.

@@ -146,20 +146,48 @@ function loadIdentity(authorizedViewer) {
     throw new Error(
       "Set BUZZ_DEV_VIEWER in .env.local to your existing Buzz public key (hex or npub, never nsec). See README.md#relay-channels.",
     );
+  // The installed Buzz desktop keeps its secrets blob in the OS credential
+  // store under service `buzz-desktop`, username `secrets`: the macOS Keychain,
+  // or the freedesktop secret service on Linux (read through libsecret's
+  // `secret-tool`). Both reads are the OS's own tools; there is no file or
+  // environment fallback on any platform.
+  const readers = {
+    darwin: {
+      command: "/usr/bin/security",
+      args: [
+        "find-generic-password",
+        "-s",
+        "buzz-desktop",
+        "-a",
+        "secrets",
+        "-w",
+      ],
+      failure: "Keychain read unavailable or declined; no credential fallback",
+    },
+    linux: {
+      command: "secret-tool",
+      args: ["lookup", "service", "buzz-desktop", "username", "secrets"],
+      failure:
+        "Secret service read unavailable (needs libsecret-tools, an unlocked keyring in this desktop session, and Buzz desktop signed in); no credential fallback",
+    },
+  };
+  const reader = readers[process.platform];
+  if (!reader)
+    throw new Error(
+      `Live identity is read from the OS credential store on macOS or Linux only (this is ${process.platform}); no credential fallback`,
+    );
   let raw;
   try {
-    raw = execFileSync(
-      "/usr/bin/security",
-      ["find-generic-password", "-s", "buzz-desktop", "-a", "secrets", "-w"],
-      { stdio: ["ignore", "pipe", "pipe"], timeout: 120000 },
-    )
+    raw = execFileSync(reader.command, reader.args, {
+      stdio: ["ignore", "pipe", "pipe"],
+      timeout: 120000,
+    })
       .toString()
       .trim();
   } catch {
-    throw new Error(
-      "Keychain read unavailable or declined; no credential fallback",
-    );
+    throw new Error(reader.failure);
   }
+  if (!raw) throw new Error(reader.failure);
   let decoded;
   try {
     decoded = nip19.decode(JSON.parse(raw).identity);

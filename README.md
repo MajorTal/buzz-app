@@ -34,8 +34,10 @@ Install the fast staged-file pre-commit and related-test pre-push hooks once per
 
 ## Relay channels
 
-Live development currently requires **macOS and an existing Buzz account in the
-`buzz-desktop` / `secrets` Keychain entry**. This development broker is not native
+Live development currently requires **an existing Buzz account in the OS credential
+store**: the `buzz-desktop` / `secrets` Keychain entry on macOS, or the same entry in
+the freedesktop secret service on Linux (read with libsecret's `secret-tool`, so
+install `libsecret-tools` and run inside an unlocked desktop session). This development broker is not native
 sign-in and is not included in packaged builds. `just web` and `just desktop` run
 it automatically once `BUZZ_DEV_VIEWER` is configured; without that pin they start
 in the non-live shell/fixture state.

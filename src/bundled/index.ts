@@ -39,6 +39,8 @@ import sessionsManifest from "./sessions/manifest.json";
 import * as sessions from "./sessions";
 import moderationManifest from "./moderation/manifest.json";
 import * as moderation from "./moderation";
+import run402Manifest from "./run402/manifest.json";
+import * as run402 from "./run402";
 
 export const bundledPlugins: readonly BundledPlugin[] = [
   { manifest: { ...feedbackManifest, apiVersion: 1 }, module: feedback },
@@ -62,6 +64,7 @@ export const bundledPlugins: readonly BundledPlugin[] = [
   { manifest: { ...emojiManifest, apiVersion: 1 }, module: emoji },
   { manifest: { ...channelsManifest, apiVersion: 1 }, module: channels },
   { manifest: { ...githubManifest, apiVersion: 1 }, module: github },
+  { manifest: { ...run402Manifest, apiVersion: 1 }, module: run402 },
   { manifest: { ...bestieManifest, apiVersion: 1 }, module: bestie },
   { manifest: { ...projectsManifest, apiVersion: 1 }, module: projects },
   { manifest: { ...agentsManifest, apiVersion: 1 }, module: agents },

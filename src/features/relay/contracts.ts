@@ -28,6 +28,8 @@ export type Attachment = Readonly<{
   dimensions?: Readonly<{ width: number; height: number }>;
   /** Validated message-carried BlurHash; decoded locally only for presentation. */
   blurhash?: string;
+  /** Signed video poster or media thumbnail URL. */
+  previewUrl?: string;
 }>;
 /** Relay-authored membership activity, not a membership grant or user message. */
 export type MembershipChange = Readonly<{

@@ -1,6 +1,8 @@
 import { memo, useCallback, useSyncExternalStore } from "react";
 import type { RelaySession } from "../relay/session";
 import type { UnreadCapability } from "../relay/unread";
+import { MediaAttachment, type MediaPlayback } from "./MediaAttachment";
+import { parseMediaTimeReply } from "./media-timecode";
 import { profileTarget } from "../profiles/target";
 import { InlineText } from "../conversation/InlineText";
 import type { ConversationExtensions } from "../conversation/contracts";
@@ -38,6 +40,16 @@ export type MessageRowProps = {
   onOpenThread?:
     | ((messageId: string, threadRootId: string) => void)
     | undefined;
+  mediaMode?: "inline" | "thread";
+  mediaSeekTo?: number;
+  mediaSeekRequest?: number;
+  onMediaPlayback?: (playback: MediaPlayback) => void;
+  onMediaTime?: (seconds: number) => void;
+  onOpenMediaReview?: (
+    messageId: string,
+    attachment: ChannelMessage["attachments"][number],
+    seconds: number,
+  ) => void;
 };
 
 export const MessageRow = memo(function MessageRow({
@@ -54,6 +66,12 @@ export const MessageRow = memo(function MessageRow({
   retry,
   onOpenThread,
   participantProfiles,
+  mediaMode = "inline",
+  mediaSeekTo,
+  mediaSeekRequest,
+  onMediaPlayback,
+  onMediaTime,
+  onOpenMediaReview,
   agentPubkeys,
 }: MessageRowProps) {
   const directory = useReferenceDirectory(session, row.mentions.length > 0);
@@ -82,7 +100,10 @@ export const MessageRow = memo(function MessageRow({
   const target = profileTarget(row.authorId);
   const clickable = target && canOpenLink?.(target);
   const AvatarTag = clickable ? "button" : "div";
-  const emojiOnly = usesLargeEmojiPresentation(row.content, row.emoji);
+  const timeReply = parseMediaTimeReply(row.content);
+  const replaceTime = !!timeReply && !!onMediaTime;
+  const displayRow = replaceTime ? { ...row, content: timeReply.content } : row;
+  const emojiOnly = usesLargeEmojiPresentation(displayRow.content, row.emoji);
   const canReact = !!(
     extensions &&
     session &&
@@ -143,11 +164,20 @@ export const MessageRow = memo(function MessageRow({
               })}
             </time>
           </div>
+          {timeReply && onMediaTime && (
+            <button
+              type="button"
+              className={styles.mediaTimeLink}
+              onClick={() => onMediaTime(timeReply.anchor.seconds)}
+            >
+              {timeReply.label}
+            </button>
+          )}
           <MessageMarkdown
             directory={directory}
             session={session}
             scope={scope}
-            row={row}
+            row={displayRow}
             extensions={extensions}
             media={media}
             onOpenLink={onOpenLink}
@@ -160,23 +190,43 @@ export const MessageRow = memo(function MessageRow({
             const url = safeMessageUrl(attachment.url);
             if (!url) return null;
             const source = media(url);
-            return attachment.video || !source ? (
-              <a
-                className={styles.attachment}
+            if (!attachment.video && source)
+              return (
+                <AttachmentImage
+                  key={url}
+                  attachment={{ ...attachment, url }}
+                  url={url}
+                  source={source}
+                  onOpenLink={onOpenLink}
+                  {...(onOpenMediaReview
+                    ? {
+                        onOpenReview: (item, seconds) =>
+                          onOpenMediaReview(row.id, item, seconds),
+                      }
+                    : {})}
+                />
+              );
+            return (
+              <MediaAttachment
                 key={url}
-                href={url}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {attachment.video ? "Video attachment" : "Image attachment"} ↗
-              </a>
-            ) : (
-              <AttachmentImage
-                key={url}
-                attachment={attachment}
-                url={url}
-                source={source}
-                onOpenLink={onOpenLink}
+                attachment={{ ...attachment, url }}
+                media={media}
+                mode={mediaMode}
+                {...(attachment.video && mediaSeekTo !== undefined
+                  ? {
+                      seekTo: mediaSeekTo,
+                      ...(mediaSeekRequest !== undefined
+                        ? { seekRequest: mediaSeekRequest }
+                        : {}),
+                    }
+                  : {})}
+                {...(onMediaPlayback ? { onPlayback: onMediaPlayback } : {})}
+                {...(onOpenMediaReview
+                  ? {
+                      onOpenReview: (item, seconds) =>
+                        onOpenMediaReview(row.id, item, seconds),
+                    }
+                  : {})}
               />
             );
           })}

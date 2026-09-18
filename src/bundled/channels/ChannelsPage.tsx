@@ -44,6 +44,8 @@ import { LiveStatus } from "./LiveStatus";
 import { MessageComposer } from "../../features/messages/MessageComposer";
 import { ChannelTimeline } from "../../features/messages/ChannelTimeline";
 import { ThreadPanel } from "../../features/messages/ThreadPanel";
+import { MediaReviewViewer } from "../../features/messages/MediaReviewViewer";
+import type { Attachment } from "../../features/relay/contracts";
 import { readView, writeView } from "../../shared/view-state";
 import { useChannelLabels } from "./useChannelLabels";
 import { useSidebarPreferences } from "./useSidebarPreferences";
@@ -355,6 +357,53 @@ function ChannelWorkspace({
     },
     [currentId, navigator, viewer, scope, open],
   );
+  const mediaReviewTrigger = useRef<HTMLElement | null>(null);
+  const [mediaReview, setMediaReview] = useState<{
+    channelId: string;
+    channelName: string;
+    messageId: string;
+    attachment: Attachment;
+    initialTime: number;
+    entryId?: string | undefined;
+  }>();
+  const showingMediaReview = mediaReviewForDestination(
+    mediaReview,
+    current?.id,
+    navigation?.entryId,
+  );
+  useEffect(() => {
+    if (mediaReview && !showingMediaReview) setMediaReview(undefined);
+  }, [mediaReview, showingMediaReview]);
+  const openMediaReview = useCallback(
+    (messageId: string, attachment: Attachment, initialTime: number) => {
+      if (!current) return;
+      mediaReviewTrigger.current =
+        document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null;
+      setThread(undefined);
+      setMediaReview({
+        channelId: current.id,
+        channelName: current.name,
+        messageId,
+        attachment,
+        initialTime,
+        ...(navigation ? { entryId: navigation.entryId } : {}),
+      });
+    },
+    [current, navigation],
+  );
+  useEffect(() => {
+    if (
+      mediaReview &&
+      list.status === "ready" &&
+      list.coverage !== "partial" &&
+      !list.channels.some(
+        (channel) => channel.id === mediaReview.channelId && !channel.archived,
+      )
+    )
+      setMediaReview(undefined);
+  }, [mediaReview, list]);
   const openActivityThread = useCallback(
     (channelId: string, rootId: string) => {
       threadTrigger.current =
@@ -704,6 +753,7 @@ function ChannelWorkspace({
             onOpenLink={openLink}
             canOpenLink={canOpenLink}
             onOpenThread={openThread}
+            onOpenMediaReview={openMediaReview}
             revealMessageId={
               sent?.channelId === current.id ? sent.id : undefined
             }
@@ -724,7 +774,21 @@ function ChannelWorkspace({
         )}
         {drawer.content}
       </article>
-      {(panel || showingThread || companion) && (
+      {showingMediaReview && (
+        <MediaReviewViewer
+          extensions={extensions}
+          attachment={showingMediaReview.attachment}
+          session={queries}
+          scope={scope}
+          channelId={showingMediaReview.channelId}
+          channelName={showingMediaReview.channelName}
+          messageId={showingMediaReview.messageId}
+          initialTime={showingMediaReview.initialTime}
+          restoreFocus={mediaReviewTrigger}
+          close={() => setMediaReview(undefined)}
+        />
+      )}
+      {!showingMediaReview && (panel || showingThread || companion) && (
         <div className={styles.panelStack}>
           {showingThread && (
             <ThreadPanel
@@ -737,6 +801,7 @@ function ChannelWorkspace({
               navigation={showingThread.navigation}
               close={closeThread}
               onOpenLink={openLink}
+              onOpenMediaReview={openMediaReview}
               canOpenLink={canOpenLink}
             />
           )}
@@ -762,6 +827,20 @@ function ChannelWorkspace({
   );
 }
 
+export function mediaReviewForDestination<
+  T extends { channelId: string; entryId?: string | undefined },
+>(
+  review: T | undefined,
+  channelId: string | undefined,
+  entryId: string | undefined,
+): T | undefined {
+  return review &&
+    review.channelId === channelId &&
+    (review.entryId === undefined || review.entryId === entryId)
+    ? review
+    : undefined;
+}
+
 const ChannelBody = memo(function ChannelBody({
   viewer,
   extensions,
@@ -772,6 +851,7 @@ const ChannelBody = memo(function ChannelBody({
   canOpenLink,
   revealMessageId,
   onOpenThread,
+  onOpenMediaReview,
   navigation,
 }: {
   extensions?: ConversationExtensions | undefined;
@@ -784,6 +864,11 @@ const ChannelBody = memo(function ChannelBody({
   canOpenLink?: ((target: string) => boolean) | undefined;
   revealMessageId?: string | undefined;
   onOpenThread(messageId: string, threadRootId: string): void;
+  onOpenMediaReview(
+    messageId: string,
+    attachment: Attachment,
+    seconds: number,
+  ): void;
 }) {
   const window = useChannelWindow(queries.channels, channelId);
   useEffect(() => {
@@ -827,6 +912,7 @@ const ChannelBody = memo(function ChannelBody({
       onOpenLink={onOpenLink}
       canOpenLink={canOpenLink}
       onOpenThread={onOpenThread}
+      onOpenMediaReview={onOpenMediaReview}
       revealMessageId={revealMessageId}
       navigation={navigation}
     />

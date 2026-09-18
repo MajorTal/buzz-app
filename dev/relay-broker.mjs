@@ -51,6 +51,7 @@ import {
 } from "../src/features/relay/http-admission.ts";
 import { execFileSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
+import { Readable } from "node:stream";
 import dc from "node:diagnostics_channel";
 import { finalizeEvent, getPublicKey, nip19, verifyEvent } from "nostr-tools";
 import { Agent, fetch as upstreamHttp, interceptors } from "undici";
@@ -724,11 +725,18 @@ export function relayBrokerPlugin({
               },
               key,
             );
+            const range = req.headers.range;
+            if (
+              range !== undefined &&
+              (typeof range !== "string" || !/^bytes=\d+-\d*$/.test(range))
+            )
+              return json(res, 416, { error: "Media range rejected" });
             const upstream = await fetchUpstream(target, {
               headers: {
                 Authorization:
                   "Nostr " +
                   Buffer.from(JSON.stringify(auth)).toString("base64url"),
+                ...(range ? { Range: range } : {}),
               },
               redirect: "error",
               signal: AbortSignal.timeout(UPSTREAM_TIMEOUT_MS),
@@ -737,21 +745,51 @@ export function relayBrokerPlugin({
             if (!upstream.ok)
               return json(res, upstream.status, { error: "Media read failed" });
             const type = upstream.headers.get("content-type") ?? "";
-            if (!type.startsWith("image/"))
-              return json(res, 415, {
-                error: "Only image previews are proxied",
-              });
-            const bytes = Buffer.from(await upstream.arrayBuffer());
-            if (bytes.length > MAX_MEDIA_BYTES)
+            const image = type.startsWith("image/");
+            const video = type.startsWith("video/");
+            if (!image && !video)
+              return json(res, 415, { error: "Media type rejected" });
+            const length = Number(upstream.headers.get("content-length"));
+            if (
+              Number.isFinite(length) &&
+              length > MAX_MEDIA_BYTES &&
+              !(video && upstream.status === 206)
+            )
               return json(res, 413, { error: "Media budget exceeded" });
-            server.config.logger.info(
-              `[relay-broker] media ${target.pathname} ${bytes.length}B ${type} (${Date.now() - startedAt}ms)`,
-            );
-            res.writeHead(200, {
+            const headers = {
               "Content-Type": type,
               "Cache-Control": "private, max-age=3600",
               "X-Content-Type-Options": "nosniff",
-            });
+              ...(upstream.headers.get("content-length")
+                ? { "Content-Length": upstream.headers.get("content-length") }
+                : {}),
+              ...(upstream.headers.get("content-range")
+                ? { "Content-Range": upstream.headers.get("content-range") }
+                : {}),
+              ...(video
+                ? {
+                    "Accept-Ranges":
+                      upstream.headers.get("accept-ranges") ?? "bytes",
+                  }
+                : {}),
+            };
+            if (video) {
+              res.writeHead(upstream.status, headers);
+              if (!upstream.body) return res.end();
+              const stream = Readable.fromWeb(upstream.body);
+              // A range request may time out or be cancelled after headers. A
+              // piped Readable has no automatic error consumer; without this,
+              // Node treats the upstream abort as an uncaught process error and
+              // kills the live broker along with unrelated message traffic.
+              stream.once("error", () => res.destroy());
+              res.once("close", () => stream.destroy());
+              stream.pipe(res);
+              return;
+            }
+            const bytes = Buffer.from(await upstream.arrayBuffer());
+            if (bytes.length > MAX_MEDIA_BYTES)
+              return json(res, 413, { error: "Media budget exceeded" });
+            res.writeHead(200, headers);
             return res.end(bytes);
           }
           if (

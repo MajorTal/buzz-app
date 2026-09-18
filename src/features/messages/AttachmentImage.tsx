@@ -9,11 +9,13 @@ export function AttachmentImage({
   url,
   source,
   onOpenLink,
+  onOpenReview,
 }: {
   attachment: Attachment;
   url: string;
   source: string;
   onOpenLink(url: string): boolean;
+  onOpenReview?: (attachment: Attachment, seconds: number) => void;
 }) {
   return (
     <a
@@ -36,13 +38,11 @@ export function AttachmentImage({
       rel="noreferrer"
       aria-label="Open image attachment"
       onClick={(event) => {
-        if (
-          !event.metaKey &&
-          !event.ctrlKey &&
-          !event.shiftKey &&
-          onOpenLink(url)
-        )
+        if (event.metaKey || event.ctrlKey || event.shiftKey) return;
+        if (onOpenReview) {
           event.preventDefault();
+          onOpenReview(attachment, 0);
+        } else if (onOpenLink(url)) event.preventDefault();
       }}
     >
       {/* Retargeting retires both the DOM pixels and all pending callbacks before

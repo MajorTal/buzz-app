@@ -9,10 +9,11 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react";
-import { ThreadPanel } from "./ThreadPanel";
+import { ThreadPanel, type ThreadPanelProps } from "./ThreadPanel";
 import { createAgentLibrary } from "../agents/library";
 import { MessageRow } from "./MessageRow";
 import { MessageMarkdown } from "./MessageMarkdown";
+import { MediaAttachment } from "./MediaAttachment";
 import { MessageComposer } from "./MessageComposer";
 import type { RelaySession } from "../relay/session";
 import type { ThreadSnapshot, ThreadView } from "../relay/threads";
@@ -128,7 +129,7 @@ const row: ChannelMessage = {
   reactions: [],
   replyCount: 2,
 };
-function setup() {
+function setup(onOpenMediaReview?: ThreadPanelProps["onOpenMediaReview"]) {
   const snapshot: ThreadSnapshot = {
     status: "ready",
     root: row,
@@ -166,6 +167,7 @@ function setup() {
       messageId: row.id,
       close,
       onOpenLink: () => false,
+      ...(onOpenMediaReview ? { onOpenMediaReview } : {}),
     });
     const children = Children.map(scoped.props.children, (child) => {
       if (!isValidElement(child) || typeof child.type !== "function")
@@ -360,12 +362,48 @@ it("the actual message row rejects attachment URLs outside the shared safe-link 
     day: false,
     retry: undefined,
   });
-  const links = elements(tree).filter((element) => element.type === "a");
-  expect(links).toHaveLength(1);
-  expect(links[0]?.props).toMatchObject({
-    href: "https://safe.test/a.png",
-    rel: "noreferrer",
+  const attachments = elements(tree).filter(
+    (element) => element.type === MediaAttachment,
+  );
+  expect(attachments).toHaveLength(1);
+  expect(attachments[0]?.props.attachment).toEqual({
+    url: "https://safe.test/a.png",
+    video: false,
   });
+});
+
+it("seeks the media timecode while passing the stripped body to Markdown", () => {
+  const seek = vi.fn();
+  const tree = MessageRow({
+    row: { ...row, content: "⏱ 0:42 — **Change** the title" },
+    profile: undefined,
+    media: () => undefined,
+    onOpenLink: () => false,
+    onMediaTime: seek,
+    day: false,
+    retry: undefined,
+  });
+  (button(tree, "0:42").props.onClick as () => void)();
+  expect(seek).toHaveBeenCalledExactlyOnceWith(42);
+  const markdown = elements(tree).find(
+    (element) => element.type === MessageMarkdown,
+  );
+  expect(markdown?.props.row).toEqual({
+    ...row,
+    content: "**Change** the title",
+  });
+});
+
+it("preserves a media timecode as compatible text when no player can seek", () => {
+  const tree = MessageRow({
+    row: { ...row, content: "⏱ 0:42 — Change the title" },
+    profile: undefined,
+    media: () => undefined,
+    onOpenLink: () => false,
+    day: false,
+    retry: undefined,
+  });
+  expect(JSON.stringify(tree)).toContain("⏱ 0:42 — Change the title");
 });
 
 it("the actual message reply button opens its selected message and canonical thread root while retaining the trigger focus target", () => {
@@ -405,8 +443,10 @@ it("the actual message reply button opens its selected message and canonical thr
   expect(open).toHaveBeenLastCalledWith("b".repeat(64), row.id);
 });
 
-function messagesHarness() {
-  const h = setup();
+function messagesHarness(
+  onOpenMediaReview?: ThreadPanelProps["onOpenMediaReview"],
+) {
+  const h = setup(onOpenMediaReview);
   h.render();
   h.effects();
   const child = elements(h.render()).find(
@@ -526,6 +566,27 @@ it("preserves reading above the bottom through live updates and refresh, then re
   h.effects();
   expect(h.element.scrollTop).toBe(4900);
 });
+it("routes media in replies through the resolved root review workspace", () => {
+  const open = vi.fn();
+  const h = messagesHarness(open);
+  const root = { ...row, id: "resolved-root" };
+  const attachment = { url: "https://safe/image.png", video: false };
+  h.snapshot.root = root;
+  h.snapshot.replies = [{ ...row, id: "reply", attachments: [attachment] }];
+  h.render();
+  h.effects();
+  const reply = elements(h.tree()).find(
+    (e) =>
+      e.type === MessageRow && (e.props.row as ChannelMessage).id === "reply",
+  );
+  const handler = reply?.props.onOpenMediaReview as
+    | ((rowId: string, item: typeof attachment, seconds: number) => void)
+    | undefined;
+  expect(handler).toBeDefined();
+  handler?.("reply", attachment, 0);
+  expect(open).toHaveBeenCalledExactlyOnceWith("reply", attachment, 0);
+});
+
 it("uses the resolved root with the shared composer and reveals an own send even while reading above", () => {
   const h = messagesHarness();
   h.snapshot.root = { ...row, id: "resolved-root" };

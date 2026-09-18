@@ -371,7 +371,7 @@ it("does not bypass the session media resolver to paint an inaccessible attachme
     />,
   );
   expect(media).toHaveBeenCalledWith("https://image.test/original.png");
-  expect(html).toContain("Image attachment");
+  expect(html).toContain("Image unavailable");
   expect(html).not.toContain("<canvas");
   expect(html).not.toContain("<img");
 });

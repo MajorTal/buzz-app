@@ -247,7 +247,13 @@ describe("message fold", () => {
       created_at: 10,
       tags: [
         ["h", channel],
-        ["imeta", "url https://x.test/c.jpg", "m image/jpeg"],
+        [
+          "imeta",
+          "url https://x.test/c.jpg",
+          "m image/jpeg",
+          "dim 1280x720",
+          "image https://x.test/c-poster.jpg",
+        ],
         ["imeta", "url http://insecure.test/d.jpg"],
         ["imeta", "url https://user:secret@x.test/e.jpg"],
       ],
@@ -260,7 +266,12 @@ describe("message fold", () => {
 
 [image]: https://x.test/reference.jpg`);
     expect(row.attachments).toEqual([
-      { url: "https://x.test/c.jpg", video: false },
+      {
+        url: "https://x.test/c.jpg",
+        video: false,
+        dimensions: { width: 1280, height: 720 },
+        previewUrl: "https://x.test/c-poster.jpg",
+      },
       { url: "https://x.test/a.png", video: false },
       { url: "https://x.test/b.mp4", video: true },
       { url: "https://x.test/reference.jpg", video: false },
@@ -405,6 +416,7 @@ it.each([
       url: "https://x.test/original.png",
       video: false,
       ...(valid ? { blurhash: hash } : {}),
+      previewUrl: "https://x.test/thumbnail.png",
     },
     { url: "https://x.test/legacy.png", video: false },
   ]);

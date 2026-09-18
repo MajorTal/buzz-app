@@ -6,7 +6,7 @@ import type { RelaySession } from "../relay/session";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Virtualizer, type VirtualizerHandle } from "virtua";
 import { MessageRow } from "./MessageRow";
-import type { ChannelWindow } from "../relay/contracts";
+import type { Attachment, ChannelWindow } from "../relay/contracts";
 import { useRowProfiles } from "../relay/react";
 import { geometryFor, geometrySignature } from "./geometry";
 import { readView, writeView } from "../../shared/view-state";
@@ -77,6 +77,11 @@ export type ChannelTimelineProps = {
   revealMessageId?: string | undefined;
   navigation?: PageNavigation | undefined;
   onOpenThread?(messageId: string, threadRootId: string): void;
+  onOpenMediaReview?(
+    messageId: string,
+    attachment: Attachment,
+    seconds: number,
+  ): void;
 };
 
 /** Safe to retarget through ordinary props; callers do not own internal remount keys. */
@@ -100,6 +105,7 @@ function Timeline({
   revealMessageId,
   navigation,
   onOpenThread,
+  onOpenMediaReview,
 }: ChannelTimelineProps) {
   const [initialPosition] = useState(() =>
     readView<ReadingPosition | null>(scope, `scroll:${channelId}`, null),
@@ -501,6 +507,7 @@ function Timeline({
                 onOpenLink={onOpenLink}
                 canOpenLink={canOpenLink}
                 onOpenThread={onOpenThread}
+                {...(onOpenMediaReview ? { onOpenMediaReview } : {})}
                 retry={queries.outbox?.retry}
                 day={day}
               />

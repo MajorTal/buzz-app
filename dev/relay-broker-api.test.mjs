@@ -2,6 +2,7 @@ import { fixtureRelayUrl, fixtureAliases } from "../tests/relay-config.ts";
 import { createRelayReader } from "../src/features/relay/reader.ts";
 import { createServer } from "node:http";
 import { createHash } from "node:crypto";
+import { ReadableStream } from "node:stream/web";
 import { setTimeout as delay } from "node:timers/promises";
 import { test, expect, vi, beforeEach, afterEach } from "vitest";
 import { finalizeEvent, getPublicKey, verifyEvent } from "nostr-tools";
@@ -52,6 +53,7 @@ async function harness(respond) {
         url: upstreamUrl,
         body: init?.body ? JSON.parse(init.body) : undefined,
         signal: init?.signal,
+        headers: init?.headers,
         auth,
         at: performance.now(),
       };
@@ -193,6 +195,84 @@ test("GIF search follows the relay-advertised KLIPY path with signed, bounded in
     const rejected = await h.post("gifs", { ...body, query: "x".repeat(101) });
     expect(rejected.status).toBe(400);
     expect(h.calls).toHaveLength(2);
+  } finally {
+    await h.close();
+  }
+});
+
+test("media proxy streams authenticated video ranges and preserves seek headers", async () => {
+  const bytes = Buffer.from("video-range");
+  const h = await harness((call) => {
+    expect(call.url).toBe(`${fixtureRelayUrl}/media/clip.mp4`);
+    expect(call.headers.Range).toBe("bytes=100-");
+    return new Response(bytes, {
+      status: 206,
+      headers: {
+        "Content-Type": "video/mp4",
+        "Content-Length": String(bytes.length),
+        "Content-Range": "bytes 100-110/1000",
+        "Accept-Ranges": "bytes",
+      },
+    });
+  });
+  try {
+    const response = await fetch(
+      `${h.base}/api/relay/media?url=${encodeURIComponent(`${fixtureRelayUrl}/media/clip.mp4`)}`,
+      { headers: { Range: "bytes=100-" } },
+    );
+    expect(response.status).toBe(206);
+    expect(response.headers.get("content-type")).toBe("video/mp4");
+    expect(response.headers.get("content-range")).toBe("bytes 100-110/1000");
+    expect(response.headers.get("accept-ranges")).toBe("bytes");
+    expect(Buffer.from(await response.arrayBuffer())).toEqual(bytes);
+    expect(h.calls).toHaveLength(1);
+  } finally {
+    await h.close();
+  }
+});
+
+test("an upstream video stream error closes only that response, not the broker", async () => {
+  const h = await harness(() => {
+    let controller;
+    const body = new ReadableStream({
+      start(value) {
+        controller = value;
+        value.enqueue(new Uint8Array([1, 2, 3]));
+      },
+    });
+    queueMicrotask(() =>
+      controller.error(new DOMException("timed out", "TimeoutError")),
+    );
+    return new Response(body, {
+      status: 206,
+      headers: { "Content-Type": "video/mp4", "Content-Range": "bytes 0-2/10" },
+    });
+  });
+  try {
+    await fetch(
+      `${h.base}/api/relay/media?url=${encodeURIComponent(`${fixtureRelayUrl}/media/clip.mp4`)}`,
+      { headers: { Range: "bytes=0-" } },
+    )
+      .then((response) => response.arrayBuffer())
+      .catch(() => {});
+    const session = await fetch(`${h.base}/api/relay/session`);
+    expect(session.status).toBe(200);
+  } finally {
+    await h.close();
+  }
+});
+
+test("media proxy rejects malformed ranges before upstream I/O", async () => {
+  const h = await harness(() => {
+    throw new Error("unexpected upstream call");
+  });
+  try {
+    const response = await fetch(
+      `${h.base}/api/relay/media?url=${encodeURIComponent(`${fixtureRelayUrl}/media/clip.mp4`)}`,
+      { headers: { Range: "items=0-1" } },
+    );
+    expect(response.status).toBe(416);
+    expect(h.calls).toHaveLength(0);
   } finally {
     await h.close();
   }

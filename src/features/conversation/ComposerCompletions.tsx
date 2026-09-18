@@ -340,7 +340,10 @@ function OwnedCompletion({
             </div>
             {status && <p role="status">{status}</p>}
           </section>,
-          input.current.ownerDocument.body,
+          // A body sibling would sit behind a fullscreen modal and outside its
+          // accessibility boundary. Ordinary composers keep the body portal.
+          input.current.closest('[role="dialog"][aria-modal="true"]') ??
+            input.current.ownerDocument.body,
         )}
     </>
   );

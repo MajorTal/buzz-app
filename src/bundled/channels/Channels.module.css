@@ -522,3 +522,11 @@
   border-top: 1px solid var(--border);
   overflow: hidden;
 }
+
+.working {
+  width: 6px;
+  height: 6px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: var(--purple-9);
+}

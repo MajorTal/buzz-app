@@ -1,0 +1,66 @@
+.root {
+  min-width: 0;
+  flex-shrink: 0;
+  /* Leave 4px before the composer's 12px top margin. */
+  margin: var(--space-3) var(--space-4) calc(-1 * var(--space-2));
+  background: var(--bg-panel);
+}
+.agents {
+  display: flex;
+  flex-direction: column;
+  max-height: 132px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+}
+.agents > button {
+  width: 100%;
+  min-width: 0;
+  flex-shrink: 0;
+  justify-content: flex-start;
+  padding-left: 0;
+  gap: var(--space-2);
+  text-align: left;
+}
+.name {
+  max-width: 40%;
+  font-weight: var(--type-weight-medium);
+}
+.name,
+.status {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.status {
+  color: var(--text-secondary);
+}
+.indicator {
+  margin-left: auto;
+  flex-shrink: 0;
+  color: var(--purple-9);
+}
+@keyframes working-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .indicator[data-working] {
+    animation: working-pulse 1.4s ease-in-out infinite;
+  }
+}
+.summary {
+  max-width: min(320px, calc(100vw - 32px));
+  padding: var(--space-3);
+  border-radius: var(--radius-control);
+  background: var(--bg-panel);
+  border: 1px solid var(--border-primary);
+  color: var(--text-primary);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 650px) {
+  .root {
+    /* The narrow composer has an 8px top margin. */
+    margin: var(--space-2) var(--space-3) calc(-1 * var(--space-1));
+  }
+}

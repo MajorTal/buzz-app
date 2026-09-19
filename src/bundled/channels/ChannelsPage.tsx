@@ -147,6 +147,19 @@ function ChannelWorkspace({
   panels: Panels;
 }) {
   const list = useChannelList(queries.channels);
+  const activity = useSyncExternalStore(
+    queries.agentActivity.subscribe,
+    queries.agentActivity.snapshot,
+    queries.agentActivity.snapshot,
+  );
+  const workingChannels = new Set([
+    ...activity.turns
+      .filter((turn) => turn.state === "working")
+      .map((turn) => turn.channelId),
+    ...activity.typing
+      .filter((entry) => !entry.threadRootId)
+      .map((entry) => entry.channelId),
+  ]);
   const preferences = useSidebarPreferences(queries.sidebarPreferences);
   useEffect(() => {
     if (list.status === "ready") void queries.unread.ensure();
@@ -467,22 +480,33 @@ function ChannelWorkspace({
   }, [currentId, showingThread?.navigation]);
   const openLink = useCallback(
     (url: string) => {
-      if (isBuzzLink(url)) {
-        if (!navigator || !viewer) return false;
+      const connection = relay.snapshot();
+      if (
+        !mounted.current ||
+        channel.current !== current?.id ||
+        connection.status !== "ready" ||
+        connection.session !== queries ||
+        navigation?.signal.aborted
+      )
+        return false;
+      if (isBuzzLink(url) && navigator && viewer) {
         const target = buzzLinkTarget(url, {
           viewer,
           communityOrigin: scope.slice(0, -(viewer.length + 1)),
         });
-        if (!target) return false;
-        if (target.kind === "conversation" && target.messageId)
-          threadTrigger.current =
-            document.activeElement instanceof HTMLElement
-              ? document.activeElement
-              : null;
-        setThread(undefined);
-        open(undefined);
-        void navigator.open(target);
-        return true;
+        // Internal panel targets also use buzz:. Only routable links belong
+        // to the navigator; registered panels handle the remaining targets.
+        if (target) {
+          if (target.kind === "conversation" && target.messageId)
+            threadTrigger.current =
+              document.activeElement instanceof HTMLElement
+                ? document.activeElement
+                : null;
+          setThread(undefined);
+          open(undefined);
+          void navigator.open(target);
+          return true;
+        }
       }
       const candidate = panels.resolve(url);
       const context = linkContext.current;
@@ -502,7 +526,18 @@ function ChannelWorkspace({
       }
       return false;
     },
-    [panels, open, select, navigator, viewer, scope],
+    [
+      panels,
+      current,
+      open,
+      relay,
+      queries,
+      navigation,
+      select,
+      navigator,
+      viewer,
+      scope,
+    ],
   );
   const panelActive = () => {
     const connection = relay.snapshot();
@@ -623,6 +658,14 @@ function ChannelWorkspace({
                         <span className={styles.channelLabel}>
                           {channel.name}
                         </span>
+                        {workingChannels.has(channel.id) && (
+                          <span
+                            className={styles.working}
+                            role="img"
+                            aria-label="Agent working"
+                            title="Agent working in this channel"
+                          />
+                        )}
                         <UnreadBadge
                           session={queries}
                           channelId={channel.id}
@@ -769,6 +812,8 @@ function ChannelWorkspace({
             scope={scope}
             channelId={current.id}
             channelName={current.name}
+            onOpenLink={openLink}
+            canOpenLink={canOpenLink}
             onSend={(id) => setSent({ channelId: current.id, id })}
           />
         )}

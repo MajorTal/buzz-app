@@ -459,6 +459,8 @@ function ThreadMessages({
           channelId={channelId}
           channelName={channelName}
           threadRootId={snapshot.root.id}
+          onOpenLink={onOpenLink}
+          canOpenLink={canOpenLink}
           {...(videoAttachment && mediaCommentTime !== undefined
             ? { mediaTimeSeconds: mediaCommentTime }
             : {})}

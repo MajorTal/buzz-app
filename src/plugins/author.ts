@@ -18,6 +18,8 @@ export type {
   CompletionResult,
   ComposerCompletionProps,
   ComposerCompletion,
+  ComposerAccessory,
+  ComposerAccessoryProps,
   ComposerToolProps,
   ComposerTool,
   InlineContent,

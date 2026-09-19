@@ -184,14 +184,22 @@ changes, source deletions, or a missing base run the full Vitest suite instead.
 The selector explicitly includes theme tests for their directly read CSS/bootstrap
 inputs, and the app composition test for source edits that its Vite loader hides
 from the import graph.
-It never fetches, installs dependencies, formats, builds Rust, or starts browsers.
-Install dependencies when switching branches, not during a push.
+A separate **design-system** job runs `design:typecheck` and `design:check` in
+parallel with types/unit tests. Source CSS/JS/TS, design viewer/guard files, shared
+configuration/dependencies and hook-runner changes select this job; a missing base
+runs it conservatively. Its selection is independent of the unit-test skip, so
+CSS-only and viewer-only errors still block a push. Documentation-only and
+native-only pushes skip both jobs. Both selected jobs must pass.
+Neither job fetches, installs dependencies, formats, builds Rust, or starts browsers.
+The design job disables pnpm dependency auto-repair. Install dependencies when
+switching branches, not during a push.
 
 This is advisory coverage of the current working tree, not a replacement for CI:
 uncommitted edits can affect results, dynamic dependencies may not be selected,
-and non-HEAD refs are explicitly left to CI. Type errors and test failures block
-the push. TypeScript uses the root `tsconfig.json`; it does not typecheck plain
-JavaScript browser tests or prove runtime service provisioning.
+and non-HEAD refs are explicitly left to CI. Type errors, design violations and test
+failures block the push. The type checks use `tsconfig.json` and
+`tsconfig.design.json`; they do not typecheck plain JavaScript browser tests or
+prove runtime service provisioning.
 Do not edit files concurrently with hooks. First-use Hermit tool downloads can
 add setup time; normal warm hooks use the pinned tools already installed.
 

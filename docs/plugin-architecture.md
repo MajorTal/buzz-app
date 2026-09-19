@@ -99,6 +99,24 @@ pull request, issue, and commit URLs and loads public object details on demand.
 Unsupported URLs retain ordinary link behavior. Private GitHub connections and
 agent operations remain future shared capabilities.
 
+### Composer accessories
+
+`ctx.conversation.registerAccessory({ id, title, order?, component })` contributes
+read-only contextual UI above the shared composer. The host passes
+`{ session, scope, channelId, threadRootId?, canOpen, open }`: no editor commands,
+new socket, or implied access grant. Channels supplies target resolution and panel
+placement; other composer consumers can omit navigation and return unavailable.
+The shared renderer owns deterministic order, error isolation and command
+revocation on removal/unmount. Composer destination keys fence session/channel/
+thread changes. The accessory remains usable on read-only connections.
+
+Agent Activity is the first consumer. Plugin activation owns its telemetry lease;
+multiple composers subscribe to the same session capability. No global selected
+channel or activity-specific dependency is added to reusable message components.
+Channels reads the same session activity snapshot for its quiet sidebar marker;
+it owns that page presentation, not capture or an additional activity lease.
+This is a host-matched preview addition, not cross-version capability negotiation.
+
 ### Channel-header launchers
 
 A panel may additionally contribute `channelLauncher: ComponentType<ChannelLauncherProps>`.

@@ -9,6 +9,7 @@ import {
 import { MessageRow, type MessageRowProps } from "../messages/MessageRow";
 import type {
   ComposerTool,
+  ComposerAccessory,
   ComposerCompletion,
   InlineRenderer,
   LinkRenderer,
@@ -16,6 +17,8 @@ import type {
 } from "./contracts";
 
 export type Conversation = {
+  accessories: ContributionReader<ComposerAccessory>;
+  registerAccessory(accessory: ComposerAccessory): void;
   tools: ContributionReader<ComposerTool>;
   registerTool(tool: ComposerTool): void;
   completions: ContributionReader<ComposerCompletion>;
@@ -35,7 +38,12 @@ declare module "@deepseek-ai/cordis" {
   }
 }
 function validate(
-  value: ComposerTool | InlineRenderer | ComposerCompletion | LinkRenderer,
+  value:
+    | ComposerTool
+    | InlineRenderer
+    | ComposerCompletion
+    | ComposerAccessory
+    | LinkRenderer,
 ) {
   if (
     !value ||
@@ -50,6 +58,8 @@ function validate(
 }
 export class ConversationService extends Service implements Conversation {
   readonly tools;
+  readonly accessories;
+  private readonly accessoryEntries;
   readonly completions;
   private readonly completionEntries;
   readonly inline;
@@ -59,6 +69,12 @@ export class ConversationService extends Service implements Conversation {
   private readonly linkEntries;
   constructor(ctx: Context) {
     super(ctx, "conversation");
+    const accessories = createContributions<ComposerAccessory>(ctx);
+    this.accessoryEntries = accessories;
+    this.accessories = {
+      snapshot: accessories.snapshot,
+      subscribe: accessories.subscribe,
+    };
     const tools = createContributions<ComposerTool>(ctx);
     const completions = createContributions<ComposerCompletion>(ctx);
     this.completionEntries = completions;
@@ -74,6 +90,10 @@ export class ConversationService extends Service implements Conversation {
     const links = createContributions<LinkRenderer>(ctx);
     this.linkEntries = links;
     this.links = { snapshot: links.snapshot, subscribe: links.subscribe };
+  }
+  registerAccessory(value: ComposerAccessory) {
+    validate(value);
+    this.accessoryEntries.register(this.ctx, value);
   }
   registerTool(value: ComposerTool) {
     validate(value);

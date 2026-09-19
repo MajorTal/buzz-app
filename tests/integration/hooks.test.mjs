@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
   cpSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
@@ -27,8 +28,12 @@ env.GIT_CONFIG_GLOBAL = "/dev/null";
 function fixture(t) {
   const dir = mkdtempSync(path.join(tmpdir(), "buzz-hook-"));
   t.after(() => rmSync(dir, { recursive: true, force: true }));
-  const run = (cmd, args) =>
-    spawnSync(cmd, args, { cwd: dir, env, encoding: "utf8" });
+  const run = (cmd, args, overrides = {}) =>
+    spawnSync(cmd, args, {
+      cwd: dir,
+      env: { ...env, ...overrides },
+      encoding: "utf8",
+    });
   const git = (...args) => {
     const result = run("git", args);
     assert.equal(result.status, 0, result.stdout + result.stderr);
@@ -314,6 +319,19 @@ test("untracked nested formatter overrides fail before any source writes", (t) =
 
 function pushFixture(t, changes) {
   const f = fixture(t);
+  // Run the real design guards against the real palette, not fake success scripts.
+  const tokens = "src/shared/design-system/styles/tokens.css";
+  f.write(tokens, readFileSync(path.join(root, tokens), "utf8"));
+  f.write("tests/fixtures/design-system/probe.ts", "export const value = 1;\n");
+  f.write(
+    "tsconfig.design.json",
+    JSON.stringify({
+      compilerOptions: { types: [], skipLibCheck: true },
+      include: ["tests/fixtures/design-system"],
+    }),
+  );
+  f.git("add", "src", "tests", "tsconfig.design.json");
+  f.git("-c", "core.hooksPath=/dev/null", "commit", "-qm", "design baseline");
   f.git("update-ref", "refs/remotes/origin/main", "HEAD");
   for (const [file, content] of Object.entries(changes)) f.write(file, content);
   f.git("add", "--", ...Object.keys(changes));
@@ -367,20 +385,37 @@ test("installed pre-push forwards stdin and runs related tests with literal path
   assert.equal(f.git("stash", "list"), "");
 });
 
-test("documentation-only push does not start a test runner", (t) => {
-  const f = pushFixture(t, { "notes.md": "# notes\n" });
-  const result = f.push();
-  assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout + result.stderr, /No JS unit-test inputs changed/);
-  assert.throws(() => f.args(), /ENOENT/);
-});
+for (const [file, content] of [
+  ["notes.md", "# notes\n"],
+  ["crates/probe.rs", "fn main() {}\n"],
+]) {
+  test(`${file}-only push skips both validation jobs`, (t) => {
+    const f = pushFixture(t, { [file]: content });
+    f.write("src/bad.css", ".root { gap: 8px; }\n");
+    const result = f.push();
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+    assert.match(
+      result.stdout + result.stderr,
+      /No JS unit-test inputs changed/,
+    );
+    assert.match(
+      result.stdout + result.stderr,
+      /No design-system inputs changed/,
+    );
+    assert.throws(() => f.args(), /ENOENT/);
+  });
+}
 
 test("shared config and unknown base conservatively run all JS unit tests", (t) => {
   const f = pushFixture(t, { "vitest.config.ts": "export default {};\n" });
-  assert.equal(f.push().status, 0);
+  const shared = f.push();
+  assert.equal(shared.status, 0, shared.stdout + shared.stderr);
+  assert.match(shared.stdout + shared.stderr, /App foundations: no private/);
   assert.deepEqual(f.args(), ["run"]);
   f.git("update-ref", "-d", "refs/remotes/origin/main");
-  assert.equal(f.push("HEAD:refs/heads/without-base").status, 0);
+  const missing = f.push("HEAD:refs/heads/without-base");
+  assert.equal(missing.status, 0, missing.stdout + missing.stderr);
+  assert.match(missing.stdout + missing.stderr, /App foundations: no private/);
   assert.deepEqual(f.args(), ["run"]);
 });
 
@@ -422,6 +457,7 @@ test("failing related tests block the actual Git push", (t) => {
 
 test("non-HEAD and deletion pushes do not pretend to test another commit", (t) => {
   const f = pushFixture(t, { "src/value.ts": "export const value = 1;\n" });
+  f.write("src/bad.css", ".root { gap: 8px; }\n");
   const other = f.push("HEAD^:refs/heads/old");
   assert.equal(other.status, 0, other.stdout + other.stderr);
   assert.match(other.stdout + other.stderr, /Non-HEAD refs rely on PR CI/);
@@ -469,4 +505,136 @@ test("a subdirectory push with multiple refs still tests HEAD", (t) => {
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout + result.stderr, /Non-HEAD refs rely on PR CI/);
   assert.equal(f.args()[0], "related");
+  assert.match(result.stdout + result.stderr, /App foundations: no private/);
+  f.write("src/bad.css", ".root { gap: 8px; }\n");
+  const blocked = f.run("git", [
+    "-C",
+    "src",
+    "push",
+    path.join(f.dir, "remote.git"),
+    "HEAD^:refs/heads/old-again",
+    "HEAD:refs/heads/current-again",
+  ]);
+  assert.notEqual(blocked.status, 0, blocked.stdout + blocked.stderr);
+  assert.match(blocked.stdout + blocked.stderr, /custom spacing/);
+});
+
+test("raw activity CSS blocks an actual push; shared tokens pass without hook writes", (t) => {
+  const file = "src/bundled/agent-activity/ActivityAccessory.module.css";
+  const bad = ".root { margin: 12px 16px -8px; font-weight: 600; }\n";
+  const f = pushFixture(t, { [file]: bad });
+  const index = f.git("write-tree");
+  const result = f.push();
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /custom spacing/);
+  assert.match(result.stdout + result.stderr, /custom font weight/);
+  assert.equal(f.read(file), bad);
+  assert.equal(f.git("write-tree"), index);
+  // Unit tests may finish independently; a design failure still blocks the push.
+  assert.notEqual(
+    f.run("git", ["--git-dir=remote.git", "rev-parse", "refs/heads/probe"])
+      .status,
+    0,
+  );
+  f.write(
+    file,
+    ".root { margin: var(--space-3) var(--space-4) calc(-1 * var(--space-2)); font-weight: var(--type-weight-medium); }\n",
+  );
+  f.git("add", file);
+  f.git("-c", "core.hooksPath=/dev/null", "commit", "-qm", "use tokens");
+  const fixed = f.push();
+  assert.equal(fixed.status, 0, fixed.stdout + fixed.stderr);
+  assert.match(fixed.stdout + fixed.stderr, /App foundations: no private/);
+});
+
+for (const file of [
+  "tests/fixtures/design-system/probe.ts",
+  "scripts/design-system/check-app-foundations.mjs",
+  ".githooks/pre-push",
+]) {
+  test(`design-only change to ${file} runs guards before the unit-test skip`, (t) => {
+    const content = file.endsWith(".ts")
+      ? ""
+      : readFileSync(path.join(root, file), "utf8");
+    const f = pushFixture(t, {
+      [file]: file.endsWith(".ts")
+        ? "export const value = 2;\n"
+        : `${content}\n${file.startsWith(".githooks/") ? "#" : "//"} guard probe\n`,
+    });
+    // Pre-push has the same documented working-tree scope as types and Vitest.
+    f.write("src/bad.css", ".root { gap: 8px; }\n");
+    const blocked = f.push();
+    assert.notEqual(blocked.status, 0, blocked.stdout + blocked.stderr);
+    assert.match(blocked.stdout + blocked.stderr, /custom spacing/);
+    rmSync(path.join(f.dir, "src/bad.css"));
+    const passed = f.push();
+    assert.equal(passed.status, 0, passed.stdout + passed.stderr);
+    assert.match(passed.stdout + passed.stderr, /App foundations: no private/);
+    assert.throws(() => f.args(), /ENOENT/);
+  });
+}
+
+test("the design tsconfig rejects viewer type errors before a design-only push", (t) => {
+  const f = pushFixture(t, {
+    "tests/fixtures/design-system/probe.ts":
+      'export const value: number = "wrong";\n',
+  });
+  const result = f.push();
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /TS2322/);
+  assert.throws(() => f.args(), /ENOENT/);
+});
+
+test("a missing design config blocks pushing without dependency repair", (t) => {
+  const f = pushFixture(t, {
+    "src/probe.css": ".root { gap: var(--space-2); }\n",
+  });
+  rmSync(path.join(f.dir, "tsconfig.design.json"));
+  const result = f.push();
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /TS5058/);
+  assert.doesNotMatch(
+    result.stdout + result.stderr,
+    /Already up to date|Progress: resolved/,
+  );
+});
+
+test("missing design TypeScript fails closed without recreating dependencies", (t) => {
+  const f = pushFixture(t, {
+    "tests/fixtures/design-system/probe.ts": "export const value = 2;\n",
+  });
+  rmSync(path.join(f.dir, "node_modules/typescript"));
+  const result = f.run(
+    "git",
+    ["push", "./remote.git", "HEAD:refs/heads/probe"],
+    {
+      pnpm_config_verify_deps_before_run: "true",
+    },
+  );
+  assert.notEqual(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /MODULE_NOT_FOUND/);
+  assert.equal(existsSync(path.join(f.dir, "node_modules/typescript")), false);
+  assert.throws(() => f.args(), /ENOENT/);
+});
+
+test("the design lane disables dependency auto-repair even when inherited as true", (t) => {
+  const f = pushFixture(t, {
+    "tests/fixtures/design-system/probe.ts": "export const value = 2;\n",
+  });
+  // This fixture intentionally lacks most package.json dependencies. Without the
+  // production flag pnpm would attempt to repair it before running the guards.
+  const result = f.run(
+    "git",
+    ["push", "./remote.git", "HEAD:refs/heads/probe"],
+    {
+      pnpm_config_verify_deps_before_run: "true",
+    },
+  );
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /App foundations: no private/);
+  assert.equal(existsSync(path.join(f.dir, "node_modules/react")), false);
+  assert.doesNotMatch(
+    result.stdout + result.stderr,
+    /Already up to date|Progress: resolved/,
+  );
 });

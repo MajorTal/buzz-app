@@ -84,7 +84,7 @@ it("uses independent explicit channel routes and self-p globals; equal interests
       limit: 500,
     },
     {
-      kinds: expect.arrayContaining([9, 40003, 7, 39002, 40099]),
+      kinds: expect.arrayContaining([20002, 9, 40003, 7, 39002, 40099]),
       "#h": ["a"],
       since: expect.any(Number),
       limit: 500,

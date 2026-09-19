@@ -9,6 +9,7 @@ import {
   activitySelection,
   type ActivitySelection,
 } from "../../features/agents/activity-target";
+import { activityRecords } from "../../features/agents/activity-records";
 import { Accordion } from "../../shared/design-system/ui/Accordion";
 import { Select } from "../../shared/design-system/ui/Select";
 import { Button } from "../../shared/design-system/ui/Button";
@@ -80,8 +81,9 @@ export function ActivityDetails({
   const agent = selected || agents[0] || "";
   const [expanded, expand] = useState<string[]>([]);
   const agentRecords = snapshot.records.filter((row) => row.agent === agent);
-  const records = agentRecords.filter(
-    (row) => !channelId || row.channelIds.includes(channelId),
+  const records = useMemo(
+    () => activityRecords(snapshot.records, agent, channelId),
+    [snapshot.records, agent, channelId],
   );
   const channelChoices = [
     ...new Set([
@@ -95,13 +97,13 @@ export function ActivityDetails({
   }, []);
   // Keep expansion intent as bounded as the underlying RAM journal.
   useEffect(() => {
-    const ids = new Set(snapshot.records.map((row) => row.id));
+    const ids = new Set(records.map((row) => row.id));
     expand((previous) =>
       previous.every((id) => ids.has(id))
         ? previous
         : previous.filter((id) => ids.has(id)),
     );
-  }, [snapshot.records]);
+  }, [records]);
   const turns = snapshot.turns.filter(
     (turn) =>
       turn.agent === agent && (!channelId || turn.channelId === channelId),
@@ -188,8 +190,8 @@ export function ActivityDetails({
               />
               {channelId && (
                 <p className="text-body-sm text-secondary">
-                  Channel-wide, not thread-specific. Matching envelopes are
-                  shown intact; a batch may also contain other contexts.
+                  Channel-wide, including threads. Batches show only matching
+                  channel entries; unscoped entries are omitted.
                 </p>
               )}
               <p role="status">
@@ -220,7 +222,7 @@ export function ActivityDetails({
                   content: (
                     <div className="min-w-0">
                       <p className="break-all text-body-sm text-secondary">
-                        Event {row.id}
+                        Event {row.envelopeId}
                       </p>
                       <pre className="max-h-96 overflow-auto bg-inset p-3 font-mono text-mono">
                         <code>{row.plaintext}</code>

@@ -261,3 +261,48 @@ it.each([emoji, mentions])(
     );
   },
 );
+
+it("owns accessories through disable, replacement and failed activation", async () => {
+  const h = harness({
+    inject: ["conversation"],
+    apply(ctx) {
+      ctx.conversation.registerAccessory({
+        id: "status",
+        title: "Status",
+        component: Component,
+      });
+    },
+  });
+  h.runtime.reconcile([h.plugin]);
+  await vi.waitFor(() =>
+    expect(h.service.accessories.snapshot()).toHaveLength(1),
+  );
+  const first = h.service.accessories.snapshot()[0];
+  h.runtime.reconcile([]);
+  await vi.waitFor(() =>
+    expect(h.service.accessories.snapshot()).toHaveLength(0),
+  );
+  h.runtime.reconcile([h.plugin]);
+  await vi.waitFor(() =>
+    expect(h.service.accessories.snapshot()).toHaveLength(1),
+  );
+  expect(h.service.accessories.snapshot()[0]).not.toBe(first);
+  const broken = harness({
+    inject: ["conversation"],
+    apply(ctx) {
+      ctx.conversation.registerAccessory({
+        id: "status",
+        title: "Status",
+        component: Component,
+      });
+      throw new Error("failed after registration");
+    },
+  });
+  broken.runtime.reconcile([broken.plugin]);
+  await vi.waitFor(() =>
+    expect(broken.runtime.snapshot()[broken.plugin.manifest.id]?.status).toBe(
+      "failed",
+    ),
+  );
+  expect(broken.service.accessories.snapshot()).toHaveLength(0);
+});

@@ -63,7 +63,24 @@ export type ContributionReader<T> = Readonly<{
   snapshot(): readonly Contribution<T>[];
   subscribe(listener: () => void): () => void;
 }>;
+export type ComposerAccessoryProps = Readonly<{
+  session: RelaySession;
+  scope: string;
+  channelId: string;
+  threadRootId?: string | undefined;
+  /** Presentation only; the host re-resolves targets. No editor or access grant. */
+  canOpen(target: string): boolean;
+  /** False after contribution removal or the originating composer retires. */
+  open(target: string): boolean;
+}>;
+export type ComposerAccessory = Readonly<{
+  id: string;
+  title: string;
+  order?: number;
+  component: ComponentType<ComposerAccessoryProps>;
+}>;
 export type ConversationExtensions = Readonly<{
+  accessories?: ContributionReader<ComposerAccessory>;
   tools: ContributionReader<ComposerTool>;
   inline: ContributionReader<InlineRenderer>;
   completions?: ContributionReader<ComposerCompletion>;

@@ -7,7 +7,11 @@ check-staged:
     - name: format-and-lint
       run: bin/node scripts/check-staged.mjs
 check-push:
+  parallel: true
   jobs:
     - name: types-and-related-unit-tests
       use_stdin: true
       run: bin/node scripts/check-push.mjs
+    - name: design-system
+      use_stdin: true
+      run: bin/node scripts/check-push.mjs --design

@@ -215,3 +215,143 @@ it("indexes every recognized channel in a raw batch without rewriting or assigni
   expect(f.snapshot().records[1]?.channelIds).toEqual([]);
   f.activity.dispose();
 });
+
+const typingEvent = (root?: string, extra = {}) => ({
+  id: "e".repeat(64),
+  pubkey: agent,
+  kind: 20002,
+  content: "",
+  created_at: Math.floor(Date.now() / 1000),
+  tags: [
+    ["h", "a"],
+    ...(root
+      ? [
+          ["e", root, "", "root"],
+          ["e", root, "", "reply"],
+        ]
+      : []),
+  ],
+  ...extra,
+});
+it("typing requires observer recognition, retains exact scopes, and expires on its own clock", async () => {
+  const f = fixture();
+  const root = "b".repeat(64),
+    sibling = "c".repeat(64);
+  f.activity.channelEvents([typingEvent(root)]);
+  expect(f.snapshot().typing).toEqual([]);
+  f.send(f.item("turn_completed")); // Recognition is not the turn's working state.
+  f.activity.channelEvents([
+    typingEvent(root),
+    typingEvent(sibling),
+    typingEvent(),
+  ]);
+  expect(f.snapshot().typing.map((entry) => entry.threadRootId)).toEqual([
+    root,
+    sibling,
+    undefined,
+  ]);
+  const before = f.snapshot();
+  await vi.advanceTimersByTimeAsync(4000);
+  f.activity.channelEvents([
+    typingEvent(root, { created_at: Date.now() / 1000 - 5 }),
+  ]);
+  expect(f.snapshot()).toBe(before); // Older typing cannot shorten or refresh evidence.
+  f.send(f.item("turn_liveness", "new"));
+  await vi.advanceTimersByTimeAsync(4000);
+  expect(f.snapshot().typing).toEqual([]); // Observer did not refresh the typing clock.
+  expect(before.typing).toHaveLength(3);
+  f.activity.dispose();
+});
+it("messages clear only their typing scope and suppress delayed typing, while fresh work can resume", async () => {
+  const f = fixture();
+  const root = "b".repeat(64),
+    sibling = "c".repeat(64);
+  f.send(f.item("turn_liveness"));
+  const first = typingEvent(root);
+  f.activity.channelEvents([first, typingEvent(sibling)]);
+  f.activity.channelEvents([{ ...first, kind: 9 }]);
+  f.activity.channelEvents([first]);
+  expect(f.snapshot().typing.map((entry) => entry.threadRootId)).toEqual([
+    sibling,
+  ]);
+  await vi.advanceTimersByTimeAsync(3000);
+  f.activity.channelEvents([typingEvent(root)]);
+  expect(f.snapshot().typing).toHaveLength(2);
+  f.activity.dispose();
+});
+it("invalid, stale, unknown-agent and ambiguous channel/thread typing cannot create a channel fallback", () => {
+  const f = fixture();
+  f.send(f.item("turn_liveness"));
+  f.activity.channelEvents([
+    typingEvent(undefined, { pubkey: "d".repeat(64) }),
+    typingEvent(undefined, { created_at: Date.now() / 1000 - 8 }),
+    typingEvent(undefined, { created_at: Date.now() / 1000 + 6 }),
+    typingEvent(undefined, {
+      tags: [
+        ["h", "a"],
+        ["h", "b"],
+      ],
+    }),
+    typingEvent(undefined, {
+      tags: [
+        ["h", "a"],
+        ["e", "bogus", "", "reply"],
+      ],
+    }),
+    typingEvent(undefined, { tags: [] }),
+  ]);
+  expect(f.snapshot().typing).toEqual([]);
+  f.activity.dispose();
+});
+it("typing clears on route failure, disconnect, disable, access reset and disposal without reconnect resurrection", () => {
+  const f = fixture();
+  f.send(f.item("turn_liveness"));
+  const send = () => f.activity.channelEvents([typingEvent("b".repeat(64))]);
+  send();
+  f.activity.state({
+    ...connected,
+    routes: [
+      ...connected.routes,
+      { id: "channel:a", channelId: "a", status: "error", replay: "unknown" },
+    ],
+  });
+  expect(f.snapshot().typing).toEqual([]);
+  f.activity.state(connected);
+  send();
+  f.activity.state({ status: "retrying", routes: [] });
+  send();
+  f.activity.state(connected);
+  expect(f.snapshot().typing).toEqual([]);
+  send();
+  f.deny();
+  f.activity.state(connected);
+  send();
+  expect(f.snapshot().typing).toEqual([]);
+  f.release();
+  send();
+  expect(f.snapshot().typing).toEqual([]);
+  f.activity.dispose();
+});
+it("typing state is bounded by the existing activity budget", () => {
+  const f = fixture();
+  f.send(f.item("turn_liveness"));
+  f.activity.channelEvents(
+    Array.from({ length: ACTIVITY_TURN_LIMIT + 20 }, (_, i) =>
+      typingEvent(i.toString(16).padStart(64, "0")),
+    ),
+  );
+  expect(f.snapshot().typing).toHaveLength(ACTIVITY_TURN_LIMIT);
+  f.activity.dispose();
+});
+
+it("accepted future clock skew cannot extend typing beyond eight seconds from receipt", async () => {
+  const f = fixture();
+  f.send(f.item("turn_liveness"));
+  f.activity.channelEvents([
+    typingEvent(undefined, { created_at: Date.now() / 1000 + 5 }),
+  ]);
+  expect(f.snapshot().typing).toHaveLength(1);
+  await vi.advanceTimersByTimeAsync(8000);
+  expect(f.snapshot().typing).toEqual([]);
+  f.activity.dispose();
+});

@@ -165,22 +165,47 @@ feedback on them. Broader agent architecture proposals are outside the V1 scope.
 
 ## Raw Agent Activity plugin
 
-**Agent Activity** is an independently toggleable bundled panel with a top-bar
-launcher. It shows the exact JSON plaintext received from owner-only kind-24200
-telemetry, in keyboard-accessible code disclosures. An agent enters the selector
-after its first retained frame; exact public keys distinguish namesakes. A profile
-**View activity** action can preselect an exact identity and originating channel
-before any frames arrive. Profile names are optional shared lookups, never ownership
-evidence. The action is not an agent/ownership badge and may show a waiting state
-for identities with no published owner-visible telemetry.
+**Agent Activity** is an independently toggleable bundled plugin. Compact
+avatar/name/status rows sit below messages and above the channel and thread
+composers. Hover/focus shows an owner-only summary; click, tap, Enter or Space
+opens that exact agent's **channel activity** in the right panel, including work
+in other threads. Optional names and avatars reuse shared background profile
+queries; key fragments distinguish identities without profiles.
 
-The **Channel** selector filters both raw envelopes and working-turn counts, or
-shows all channels including unscoped records. Envelope and batch-child channel
-metadata are indexed without rewriting the raw JSON: a matching envelope is shown
-whole and may contain other contexts. Channel scope is not thread scope. No
-additional relay directory scan, activity subscription, or thread inference is used.
-Channels owns the contextual right-hand slot and closes it on channel/session or
-contribution changes; close returns focus to the original conversation control.
+Thread indicators consume the existing kind-20002 typing signal with the resolved
+NIP-10 root, not inferred observer turn IDs. The existing per-channel live route
+carries it; typing bypasses ordinary history, unread and persistent caches.
+Only identities already present in retained owner-visible observer records are
+recognized. Typing before that first frame, or without telemetry publication,
+is deliberately omitted; public typing alone does not establish ownership.
+
+Typing expires eight seconds after its signed timestamp (future clock skew is
+capped at receipt), swept by the existing one-second activity timer. Messages
+clear only the matching agent/channel/thread scope and suppress delayed typing
+for two seconds. Disconnect, channel-route failure, disable, access/cache clear
+and disposal drop typing evidence. A fresh observer frame does not refresh it.
+
+The sidebar shows a quiet working dot from fresh channel observer turns or
+channel-scoped typing. Thread-only typing never becomes a channel fallback.
+Observer records have no thread identity, so details remain explicitly
+channel-wide. No harness change, new subscription, directory or timer is added.
+The development broker loads subscription filters at startup: restart the
+existing dev server once to receive typing; frontend HMR alone is insufficient.
+
+A profile **View activity** action remains available before the first frame or
+after a working chip disappears. It preselects the exact identity and originating
+channel, not a thread. This action is not an agent/ownership badge and may show a
+waiting state for identities with no published owner-visible telemetry. Shared
+agents and new activity-view permissions are out of scope.
+
+The **Channel** selector filters raw entries and working-turn counts, or shows all
+channels including unscoped records. For a selected channel, batches are projected
+as individual matching children, with the original envelope ID retained; displayed
+child JSON is reserialized, not claimed byte-identical to the envelope. Unscoped
+children are omitted rather than inheriting the enclosing batch's channel. The
+all-channels diagnostic retains the exact raw envelope. Raw capture is unchanged.
+Channels owns contextual panel placement and closes it on channel/session or
+contribution changes; close returns focus to the originating control if retained.
 
 The plugin's activation leases `session.agentActivity`; closing the panel does
 not stop capture. Disabling it releases demand and clears RAM. The shared live
@@ -213,20 +238,20 @@ There is no agent-global sequence gate: producer sequences reset, skip and inter
 
 Use the [README's public-pin/Keychain setup](../README.md#relay-channels) and run
 `bin/just web` (or `bin/just desktop`). Open the printed Local URL, choose
-the agent's community and click **Agent Activity**. Keep the existing Buzz runner
+the agent's community and open a channel. Keep the existing Buzz runner
 active, with telemetry publication enabled on the agent, then give it work. This
 app does not start agents or turn publishing on. No records may mean publishing
 is off, no new traffic, or an interrupted feed—not that an agent is idle.
 
 For a contextual view, click the identity's avatar/mention in the channel, then
 **View activity**. It preselects that exact key and channel; **Channel → All channels**
-broadens the view. The global heartbeat launcher still opens an unscoped selector.
-Select an observed agent, expand raw frames, close/reopen the panel, and toggle
+broadens the view. Alternatively, select an active agent above the channel or thread composer.
+Expand raw entries, close/reopen the panel, and toggle
 **Your profile → Settings → Plugins → Agent Activity** off/on. Re-enable starts
 empty. The feed is live-only, best-effort telemetry: the producer coalesces/batches
 and may elide oversized content. It is not a complete ACP transcript or archive.
 The development broker supports this slice; packaged/native signed transport
-without that broker reports unavailable. No composer indicator, runtime controller,
+without that broker reports unavailable. No runtime controller,
 recording export or old transcript renderer is included.
 
 ### Evidence and remaining acceptance
@@ -255,3 +280,50 @@ Silicon fixture measurements, not a live-network SLA.
 Packaged/native activity without the development broker remains unsupported;
 attended native/package acceptance and cross-platform CI are separate from these
 local results.
+
+### Composer-entry feedback rounds
+
+The first channel-only pass added a generic plugin accessory below the composer.
+On the uncommitted tree based on `d5877002e2e58a601e1f46dd67697356e665164d`,
+TypeScript, changed-file Biome, all 1,121 root Vitest tests and eight focused
+Chromium/WebKit activity journeys passed. This is historical feedback evidence,
+not validation of the current snapshot.
+
+The 2026-09-16 round moves compact activity rows above both composers, adds
+exact-thread typing indicators and a quiet sidebar working dot, and preserves
+plugin-owned capture and revoked target-opening callbacks. Multiple turns are
+grouped by exact agent key. Stale observer evidence shows status unknown, not
+completed; expired typing and ended turns leave the rows. Profile access remains.
+
+On the uncommitted tree based on `a67102aa1201adfa47a03be7d668a62ac748c152`,
+TypeScript, changed-file Biome, all 1,128 root Vitest tests (116 files), and all ten
+Chromium/WebKit activity journeys passed. The Chromium cold/warm channel-opening
+check also passed. Browser coverage includes exact-thread/sibling/channel
+isolation, sidebar semantics, channel-detail navigation, above-composer geometry,
+and light/dark 1280/390px layouts. Screenshots were inspected. Independent
+changed-path source review found no ownership, routing or lifecycle blocker;
+the subsequent future-timestamp expiry cap has a passing regression test.
+
+Wes reported the live local workflow working and approved the tightened layout
+on 2026-09-18. Activity rows are borderless, avatars align with the composer's
+left edge, and the last row sits 4px above it. Working dots gently pulse unless
+reduced motion is requested; unknown status remains static. Browser regressions
+cover these presentation contracts in both engines.
+
+The 2026-09-18 integration incorporates main `125b5ca` while retaining its rich
+composer, routed-thread navigation, sidebar activity popover and public typing
+indicator. Public typing and owner-only activity remain independent projections;
+an owner's typing agent can appear in both. The receive path rechecks session
+access/generation after shared typing subscribers run, before admitting activity.
+
+On `65213eb` plus the resolved main integration, all 1,576 Vitest tests (150 files)
+passed. Both engines passed the shared typing/layout cases (22), then the activity,
+Buzz-link and thread-history cases (20) after fixing internal activity targets
+being swallowed by the broader `buzz:` navigation classifier. Existing activity
+cases failed before that fix in both engines. Accessory lifetime coverage now
+mounts real React in StrictMode rather than mocking hooks.
+
+These are targeted integration checks, not a completed `just scan`. The earlier
+scan was interrupted during browser tests; broader hosted CI, DCO and required
+review remain separate gates. Packaged native activity without the development
+broker remains unsupported.

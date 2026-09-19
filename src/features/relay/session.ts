@@ -1044,6 +1044,15 @@ export function createRelaySession(
           true,
         );
       if (
+        !closed &&
+        epoch === accessEpoch &&
+        generation === liveGeneration &&
+        liveSnapshot.status === "connected"
+      )
+        activity.channelEvents(
+          events.filter((event) => event.pubkey !== transport.viewer),
+        );
+      if (
         closed ||
         epoch !== accessEpoch ||
         !candidates.size ||

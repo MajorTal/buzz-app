@@ -1,3 +1,5 @@
+import type { EventData } from "../relay/events";
+import { threadReference } from "../relay/thread-reference";
 import type { LiveSnapshot } from "../relay/live";
 import { observerFrame, type ObserverFrame } from "./observer";
 
@@ -19,6 +21,15 @@ export type ActivityTurn = Readonly<{
   timestamp: number;
   state: "working" | "unknown" | "ended";
 }>;
+type Typing = Readonly<{
+  agent: string;
+  channelId: string;
+  threadRootId: string | undefined;
+  timestamp: number;
+  working: boolean;
+  expiresAt: number;
+}>;
+const TYPING_FRESH_MS = 8000;
 type Snapshot = Readonly<{
   status:
     | "unavailable"
@@ -28,6 +39,7 @@ type Snapshot = Readonly<{
     | "interrupted";
   records: readonly RawRecord[];
   turns: readonly ActivityTurn[];
+  typing: readonly Typing[];
   trimmed: number;
 }>;
 type Turn = Omit<ActivityTurn, "state"> & { ended: boolean; epoch: number };
@@ -64,15 +76,21 @@ export function createAgentActivity(
     evidenceFloor = 0;
   let timer: ReturnType<typeof setInterval> | undefined;
   const turns = new Map<string, Turn>();
+  const typing = new Map<string, Typing>();
   const listeners = new Set<() => void>();
   let snapshot: Snapshot = Object.freeze({
     status,
     records: [],
     turns: [],
+    typing: [],
     trimmed,
   });
   function publish() {
     const now = Date.now();
+    const known = new Set(records.map((record) => record.agent));
+    for (const [key, entry] of typing)
+      if (now >= entry.expiresAt || !known.has(entry.agent)) typing.delete(key);
+    const typers = [...typing.values()].filter((entry) => entry.working);
     const visible = [...turns.values()].map(
       (turn): ActivityTurn =>
         Object.freeze({
@@ -94,13 +112,15 @@ export function createAgentActivity(
       snapshot.status === status &&
       snapshot.records === records &&
       snapshot.trimmed === trimmed &&
-      JSON.stringify(snapshot.turns) === JSON.stringify(visible)
+      JSON.stringify(snapshot.turns) === JSON.stringify(visible) &&
+      JSON.stringify(snapshot.typing) === JSON.stringify(typers)
     )
       return;
     snapshot = Object.freeze({
       status,
       records: Object.freeze(records),
       turns: Object.freeze(visible),
+      typing: Object.freeze(typers),
       trimmed,
     });
     for (const listener of listeners) notify(listener);
@@ -111,6 +131,7 @@ export function createAgentActivity(
     trimmed = 0;
     evidenceFloor = 0;
     turns.clear();
+    typing.clear();
     epoch++;
   }
   function restart() {
@@ -245,6 +266,59 @@ export function createAgentActivity(
       }
       publish();
     },
+    /** Public typing is scope/freshness evidence only, never ownership evidence. */
+    channelEvents(events: readonly EventData[]) {
+      if (closed || !leases || status !== "listening") return;
+      const known = new Set(records.map((record) => record.agent));
+      const now = Date.now();
+      for (const event of events) {
+        if (![9, 20002].includes(event.kind) || !known.has(event.pubkey))
+          continue;
+        const channels = event.tags.filter(([name]) => name === "h");
+        const channelId = channels[0]?.[1];
+        const timestamp = event.created_at * 1000;
+        if (
+          channels.length !== 1 ||
+          !text(channelId) ||
+          !canAccess(channelId) ||
+          !Number.isSafeInteger(event.created_at) ||
+          event.created_at * 1000 > now + 5000 ||
+          now - timestamp >= TYPING_FRESH_MS
+        )
+          continue;
+        const reference = threadReference(event);
+        // Malformed thread tags must not become channel-wide working evidence.
+        if (event.tags.some(([name]) => name === "e") && !reference) continue;
+        const threadRootId = reference?.rootId;
+        const key = JSON.stringify([event.pubkey, channelId, threadRootId]);
+        const previous = typing.get(key);
+        if (
+          previous &&
+          (timestamp < previous.timestamp ||
+            (event.kind === 20002 &&
+              !previous.working &&
+              timestamp <= previous.timestamp + 2000))
+        )
+          continue;
+        typing.delete(key);
+        typing.set(
+          key,
+          Object.freeze({
+            agent: event.pubkey,
+            channelId,
+            threadRootId,
+            timestamp,
+            working: event.kind === 20002,
+            expiresAt: Math.min(timestamp, now) + TYPING_FRESH_MS,
+          }),
+        );
+        if (typing.size > ACTIVITY_TURN_LIMIT) {
+          const oldest = typing.keys().next().value;
+          if (oldest) typing.delete(oldest);
+        }
+      }
+      publish();
+    },
     state(live: LiveSnapshot) {
       if (closed || !available || !leases) return;
       const route = live.routes.find((route) => route.id === "observer");
@@ -257,6 +331,14 @@ export function createAgentActivity(
             ? "interrupted"
             : "connecting";
       if (status === "listening" && next !== status) epoch++;
+      if (next !== "listening") typing.clear();
+      else
+        for (const [key, entry] of typing) {
+          const route = live.routes.find(
+            (route) => route.channelId === entry.channelId,
+          );
+          if (route && route.status !== "live") typing.delete(key);
+        }
       status = next;
       publish();
     },

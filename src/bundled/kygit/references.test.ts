@@ -18,6 +18,13 @@ const accepted = [
     "v1.0 · docs/a b/c.md",
   ],
   [
+    // The viewer generates file links with a trailing slash (its host's SPA fallback).
+    "https://git.run402.com/acme/api/blob/main/src/index.ts/",
+    "file",
+    "acme/api",
+    "main · src/index.ts",
+  ],
+  [
     "https://git.run402.com/acme/api/commit/9F3C1A2B",
     "commit",
     "acme/api",

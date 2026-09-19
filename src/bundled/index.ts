@@ -41,6 +41,8 @@ import moderationManifest from "./moderation/manifest.json";
 import * as moderation from "./moderation";
 import run402Manifest from "./run402/manifest.json";
 import * as run402 from "./run402";
+import kygitManifest from "./kygit/manifest.json";
+import * as kygit from "./kygit";
 
 export const bundledPlugins: readonly BundledPlugin[] = [
   { manifest: { ...feedbackManifest, apiVersion: 1 }, module: feedback },
@@ -65,6 +67,7 @@ export const bundledPlugins: readonly BundledPlugin[] = [
   { manifest: { ...channelsManifest, apiVersion: 1 }, module: channels },
   { manifest: { ...githubManifest, apiVersion: 1 }, module: github },
   { manifest: { ...run402Manifest, apiVersion: 1 }, module: run402 },
+  { manifest: { ...kygitManifest, apiVersion: 1 }, module: kygit },
   { manifest: { ...bestieManifest, apiVersion: 1 }, module: bestie },
   { manifest: { ...projectsManifest, apiVersion: 1 }, module: projects },
   { manifest: { ...agentsManifest, apiVersion: 1 }, module: agents },

@@ -53,6 +53,7 @@ export const test = base.extend({
   tallMessages: [false, { option: true }],
   membershipActivity: [false, { option: true }],
   historyCounts: [{ alpha: 1, beta: 1 }, { option: true }],
+  channelIds: [channels, { option: true }],
   developmentReact: [false, { option: true, scope: "worker" }],
   pluginFixtures: [false, { option: true, scope: "worker" }],
   compiledApp: [buildApp, { scope: "worker" }],
@@ -89,6 +90,7 @@ export const test = base.extend({
       tallMessages,
       membershipActivity,
       historyCounts,
+      channelIds: channels,
       pluginFixtures,
       developmentReact,
       compiledApp,
@@ -1505,6 +1507,29 @@ export const test = base.extend({
           : undefined,
         pending,
         histories,
+        // Signed device-cache input for the startup scale journey; same modeled
+        // wire responses as a real roster/head read, without visiting every row.
+        startupCache() {
+          return {
+            discovery: [
+              ...answer("primary", { kinds: [39002] }),
+              ...answer("primary", { kinds: [39000] }),
+            ],
+            heads: rosterIds.map((channelId) => ({
+              channelId,
+              savedAt: Date.now(),
+              profiles: [],
+              events: answer("primary", {
+                kinds: [9, 40002, 40008],
+                "#h": [channelId],
+                limit: 20,
+                top_level: true,
+                include_aux: true,
+                include_summaries: true,
+              }),
+            })),
+          };
+        },
         presenceThread,
         exact,
         searchTarget,
@@ -1706,7 +1731,7 @@ export const test = base.extend({
         observerFailures.splice(match, 1);
         return true;
       };
-      // Sidebar recovery journeys inject specific failed host requests. Match
+      // Recovery journeys inject specific failed host requests. Match
       // each exact URL once, not every 502 or every console error in the test.
       const sidebarFailures = [
         ...(report.sidebarSortFailures ?? []),
@@ -1715,6 +1740,7 @@ export const test = base.extend({
         ...(report.sidebarStarFailures ?? []),
         ...(report.sidebarAssignmentFailures ?? []),
         ...(report.sidebarPreferenceFailures ?? []),
+        ...(report.startupFailures ?? []),
       ];
       const injectedSidebarFailure = (message, index) => {
         if (

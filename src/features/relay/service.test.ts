@@ -71,6 +71,7 @@ it("keeps app startup demand-driven while retaining hover preparation and cached
   expect(channels.list().channels).toHaveLength(70);
   expect(h.pending).toHaveLength(0);
   channels.refreshList?.();
+  await vi.waitFor(() => expect(h.pending).toHaveLength(1));
   h.next().respond(discovery);
   await flush();
   expect(h.pending).toHaveLength(0);

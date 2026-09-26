@@ -143,6 +143,7 @@ export function createUnread({
   let closed = false,
     epoch = 0;
   let requested = false;
+  let repairAgain = false;
   let freshness: UnreadSnapshot["freshness"] = "unknown";
   let error: string | undefined;
   let refresh: Promise<void> | undefined;
@@ -165,7 +166,10 @@ export function createUnread({
     channels
       .list()
       .channels.some(
-        (channel) => channel.id === id && channel.members?.includes(viewer),
+        (channel) =>
+          channel.id === id &&
+          !channel.cached &&
+          channel.members?.includes(viewer),
       );
   const keyFor = (target: ReadTarget) =>
     `${target.channelId}:${targetKey(target)}`;
@@ -586,42 +590,65 @@ export function createUnread({
   }
   // Names/previews do not affect unread. Read membership once, without a
   // roster scan for every channel, and retain only the invalidation inputs.
-  const types = () =>
+  const types = (list: ReturnType<ChannelQueries["list"]>) =>
     new Map(
-      channels
-        .list()
-        .channels.filter((channel) => channel.members?.includes(viewer))
+      list.channels
+        .filter(
+          (channel) => !channel.cached && channel.members?.includes(viewer),
+        )
         .map((channel) => [channel.id, channel.channelType]),
     );
-  let channelTypes = types();
+  const cachedIds = (list: ReturnType<ChannelQueries["list"]>) =>
+    new Set(
+      list.channels
+        .filter((channel) => channel.cached)
+        .map((channel) => channel.id),
+    );
+  const initialList = channels.list();
+  let cachedChannels = cachedIds(initialList);
+  let channelTypes = types(initialList);
   let accessKey = [...channelTypes.keys()].sort().join(",");
   const stopChannels = channels.subscribeList(() => {
-    const nextTypes = types();
+    const list = channels.list();
+    const nextTypes = types(list);
     const next = [...nextTypes.keys()].sort().join(",");
     const changed = new Set(
       [...nextTypes].flatMap(([id, type]) =>
         channelTypes.get(id) !== type ? [id] : [],
       ),
     );
+    const confirmed = [...nextTypes.keys()].some((id) =>
+      cachedChannels.has(id),
+    );
+    cachedChannels = cachedIds(list);
     channelTypes = nextTypes;
     if (next === accessKey) {
       if (changed.size) publish(changed);
     } else {
       accessKey = next;
       purge();
+      // An initial observation made against a display-only roster still owes
+      // evidence when membership becomes fresh, including during an active repair.
+      if (requested && confirmed) {
+        repairAgain = true;
+        if (!refresh) void repair();
+      }
     }
   });
   async function repair(priority: Priority = "foreground") {
     requested = true;
     if (closed) return;
     if (refresh) return refresh;
+    repairAgain = false;
     const generation = epoch;
     refresh = (async () => {
       await reads.ensure();
       if (closed || generation !== epoch) return;
       const ids = channels
         .list()
-        .channels.filter((channel) => channel.members?.includes(viewer))
+        .channels.filter(
+          (channel) => !channel.cached && channel.members?.includes(viewer),
+        )
         .map((channel) => channel.id);
       if (!ids.length) return;
       try {
@@ -660,6 +687,7 @@ export function createUnread({
       }
     })().finally(() => {
       refresh = undefined;
+      if (!closed && repairAgain) void repair();
     });
     return refresh;
   }
@@ -907,6 +935,7 @@ export function createUnread({
     },
     clear() {
       epoch++;
+      repairAgain = false;
       indexed = false;
       events.clear();
       known.clear();

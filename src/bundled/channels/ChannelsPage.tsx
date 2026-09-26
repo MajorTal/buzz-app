@@ -37,6 +37,7 @@ import {
   useCallback,
   useEffect,
   useLayoutEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -110,12 +111,12 @@ export function ChannelsPage({
     if (!navigation || !sessionNavigation) return;
     if (session.status === "disconnected" && navigation.target.kind === "page")
       sessionNavigation.complete({ status: "opened" });
-    else if (session.status === "error")
+    else if (session.status === "error" && !session.cached)
       sessionNavigation.complete({ status: "failed", reason: "unavailable" });
-  }, [navigation, sessionNavigation, session.status]);
+  }, [navigation, sessionNavigation, session.status, session.cached]);
   return (
     <section className={styles.root} aria-label="Channels">
-      {session.status !== "ready" ? (
+      {session.status !== "ready" && !session.cached ? (
         <PanelFrame companion={companion}>
           <div className={styles.connect}>
             <div className={styles.connectIcon}>
@@ -136,6 +137,7 @@ export function ChannelsPage({
           extensions={extensions}
           key={`${session.scope ?? "disconnected"}:${session.generation}`}
           scope={session.scope ?? "disconnected"}
+          cached={!!session.cached}
           queries={session.session}
           relay={relay}
           navigation={sessionNavigation}
@@ -155,6 +157,7 @@ function ChannelWorkspace({
   providers,
   extensions,
   queries,
+  cached,
   relay,
   panels,
   sessionsEnabled,
@@ -173,6 +176,7 @@ function ChannelWorkspace({
   navigator?: Navigation | undefined;
   viewer?: string | undefined;
   queries: RelaySession;
+  cached: boolean;
   relay: RelayData;
   panels: Panels;
   sessionsEnabled: boolean;
@@ -285,6 +289,7 @@ function ChannelWorkspace({
     // A premature exact lookup publishes a one-channel list and starts readers
     // that the completing full roster then invalidates.
     if (
+      cached ||
       !requestedChannel ||
       !navigation ||
       joinedRequest ||
@@ -310,7 +315,14 @@ function ChannelWorkspace({
         }
       });
     return () => controller.abort();
-  }, [requestedChannel, navigation, joinedRequest, queries, list.status]);
+  }, [
+    cached,
+    requestedChannel,
+    navigation,
+    joinedRequest,
+    queries,
+    list.status,
+  ]);
   const resolving =
     !!requestedChannel &&
     !joinedRequest &&
@@ -344,7 +356,13 @@ function ChannelWorkspace({
       navigation?.complete({ status: "opened" });
       return;
     }
-    if (requestedChannel && !resolving && list.status === "ready" && !current)
+    if (
+      !cached &&
+      requestedChannel &&
+      !resolving &&
+      list.status === "ready" &&
+      !current
+    )
       navigation?.complete({ status: "failed", reason: "unavailable" });
     if (!requestedChannel && !current && list.status === "ready")
       navigation?.complete({ status: "opened" });
@@ -361,6 +379,7 @@ function ChannelWorkspace({
       });
     }
   }, [
+    cached,
     composingMessage,
     placeholder,
     requestedChannel,
@@ -411,9 +430,14 @@ function ChannelWorkspace({
   useEffect(() => {
     if (drafting && navigation?.target.kind === "page")
       navigation.complete({ status: "opened" });
-    if (draftParent && (!sessionsEnabled || (current && !canStartSession)))
+    if (
+      !cached &&
+      draftParent &&
+      (!sessionsEnabled || (current && !canStartSession))
+    )
       navigation?.complete({ status: "failed", reason: "unavailable" });
   }, [
+    cached,
     drafting,
     navigation,
     draftParent,
@@ -434,6 +458,8 @@ function ChannelWorkspace({
   }>();
   useEffect(() => {
     if (
+      cached ||
+      current?.cached ||
       !navigation ||
       !requestedMessage ||
       (!flatSession && requestedThread === requestedMessage) ||
@@ -465,6 +491,8 @@ function ChannelWorkspace({
     choose();
     return stop;
   }, [
+    cached,
+    current?.cached,
     navigation,
     requestedMessage,
     requestedThread,
@@ -472,28 +500,33 @@ function ChannelWorkspace({
     queries,
     flatSession,
   ]);
+  // A live connection can still be confirming its restored membership. Keep
+  // the pending intent; an exact reader cannot use display-only authority.
   const exact =
-    !flatSession &&
-    navigation &&
-    requestedMessage &&
-    requestedThread === requestedMessage
-      ? { request: navigation, inTimeline: false }
-      : exactOpening?.request === navigation
-        ? exactOpening
-        : undefined;
+    cached || current?.cached
+      ? undefined
+      : !flatSession &&
+          navigation &&
+          requestedMessage &&
+          requestedThread === requestedMessage
+        ? { request: navigation, inTimeline: false }
+        : exactOpening?.request === navigation
+          ? exactOpening
+          : undefined;
   type ShowingThread = {
     channelId: string;
     messageId: string;
     navigation?: PageNavigation | undefined;
   };
   const priorRoutedThread = useRef<ShowingThread | undefined>(undefined);
-  let showingThread: ShowingThread | undefined = requestedMessage
-    ? exact && !exact.inTimeline && current
-      ? { channelId: current.id, messageId: requestedMessage, navigation }
-      : undefined
-    : thread && thread.channelId === current?.id
-      ? { ...thread, navigation: undefined }
-      : undefined;
+  let showingThread: ShowingThread | undefined =
+    !cached && requestedMessage
+      ? exact && !exact.inTimeline && current
+        ? { channelId: current.id, messageId: requestedMessage, navigation }
+        : undefined
+      : thread && thread.channelId === current?.id
+        ? { ...thread, navigation: undefined }
+        : undefined;
   if (flatSession) {
     showingThread = undefined;
     priorRoutedThread.current = undefined;
@@ -936,11 +969,13 @@ function ChannelWorkspace({
                 />
               )}
               <SessionColumn enabled={flatSession}>
-                <LiveStatus
-                  live={queries.live}
-                  channelId={current?.id}
-                  partialRoster={list.coverage === "partial"}
-                />
+                {!cached && (
+                  <LiveStatus
+                    live={queries.live}
+                    channelId={current?.id}
+                    partialRoster={list.coverage === "partial"}
+                  />
+                )}
                 {flatSession &&
                 current &&
                 navigation &&
@@ -970,6 +1005,7 @@ function ChannelWorkspace({
                     queries={queries}
                     scope={scope}
                     channelId={current.id}
+                    cached={cached}
                     navigation={
                       flatSession || !requestedMessage || exact?.inTimeline
                         ? navigation
@@ -990,7 +1026,7 @@ function ChannelWorkspace({
                       : "Select a channel to read it."}
                   </div>
                 )}
-                {current?.readOnly && (
+                {current?.readOnly && !current.cached && (
                   <p className="px-4 py-2 text-body-sm text-subtle">
                     Read-only preview · You haven’t joined this conversation.
                   </p>
@@ -1225,6 +1261,7 @@ export function mediaReviewForDestination<
 }
 
 const ChannelBody = memo(function ChannelBody({
+  cached,
   viewer,
   extensions,
   scope,
@@ -1240,6 +1277,7 @@ const ChannelBody = memo(function ChannelBody({
   extensions?: ConversationExtensions | undefined;
   scope: string;
   queries: RelaySession;
+  cached: boolean;
   viewer?: string | undefined;
   channelId: string;
   navigation?: PageNavigation | undefined;
@@ -1255,6 +1293,8 @@ const ChannelBody = memo(function ChannelBody({
     seconds: number,
   ): void;
 }) {
+  // ChannelWorkspace already keys this lifetime by viewer/scope/generation.
+  const continuityKey = useId();
   const window = useChannelWindow(queries.channels, channelId);
   useEffect(() => {
     // Only the normalized conversation attempt can acknowledge its channel.
@@ -1265,9 +1305,9 @@ const ChannelBody = memo(function ChannelBody({
     )
       return;
     if (window.status === "ready") navigation?.complete({ status: "opened" });
-    else if (window.status === "error")
+    else if (!cached && window.status === "error")
       navigation?.complete({ status: "failed", reason: "unavailable" });
-  }, [navigation, window.status]);
+  }, [cached, navigation, window.status]);
   if (window.status === "error" && !window.rows.length)
     return (
       <div className={styles.empty} role="alert">
@@ -1288,6 +1328,7 @@ const ChannelBody = memo(function ChannelBody({
     );
   return (
     <ChannelTimeline
+      continuityKey={continuityKey}
       viewer={viewer}
       extensions={extensions}
       scope={scope}

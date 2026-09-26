@@ -278,7 +278,8 @@ test("saved dark document paints before the application module is allowed to exe
       "background-color",
       "rgb(0, 0, 0)",
     );
-    expect(await page.locator("#root").innerHTML()).toBe("");
+    await expect(page.locator("#root > .buzz-launch")).toBeVisible();
+    await expect(page.locator(".buzz-launch img")).toBeVisible();
     // Observe the painted document for two frames with the entire React bundle still withheld.
     await page.evaluate(
       () =>

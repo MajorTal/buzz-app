@@ -35,9 +35,15 @@ test("launch opens Messages without exposing Home across responsive navigation, 
         page.evaluate(() => window.fixtureNavigation.snapshot().entry.target),
       )
       .toMatchObject({
-        kind: "page",
-        pluginId: "buzz.channels",
-        pageId: "channels",
+        // Local bootstrap now defers mounting ChannelsPage; the old initial
+        // disconnected mount could complete this visit before default resolution.
+        // The existing resolver keeps the conversation in that same visit.
+        kind: "conversation",
+        channelId: "alpha",
+        scope: {
+          viewer: app.viewer,
+          communityOrigin: "https://primary.example",
+        },
       });
     await expect(messages(page)).toBeVisible();
     const choices = await pageChoices(page);

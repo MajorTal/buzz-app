@@ -464,6 +464,69 @@ it.each([
   },
 );
 
+it.each([undefined, { width: 640, height: 400 }])(
+  "keeps cached images silent and unfetched, but explains a live unavailable source (%j)",
+  (dimensions) => {
+    const media = vi.fn(() => undefined);
+    const imageRow: ChannelMessage = {
+      ...row,
+      attachments: [
+        {
+          url: "https://image.test/unavailable.png",
+          kind: "image",
+          ...(dimensions ? { dimensions } : {}),
+        },
+      ],
+    };
+    const show = (cached: boolean) => {
+      const list = {
+        status: "ready",
+        channels: [{ id: row.channelId, cached }],
+      };
+      const session = {
+        messages: {},
+        channels: { list: () => list, subscribeList: () => () => {} },
+      } as unknown as RelaySession;
+      return (
+        <MessageRow
+          row={imageRow}
+          session={session}
+          profile={undefined}
+          media={media}
+          onOpenLink={() => false}
+          day={false}
+          retry={undefined}
+        />
+      );
+    };
+    const view = renderDom(show(true));
+    try {
+      const placeholder = view.container.querySelector(
+        '[class*="attachmentImage"][aria-hidden="true"]',
+      );
+      expect(placeholder).not.toBeNull();
+      expect(placeholder).toBeEmptyDOMElement();
+      if (dimensions)
+        expect(placeholder).toHaveStyle({
+          width: "360px",
+          aspectRatio: "640 / 400",
+        });
+      else expect(placeholder).not.toHaveAttribute("style"); // Existing CSS owns fallback geometry.
+      expect(view.container.querySelector("img, canvas, a[href]")).toBeNull();
+      expect(screen.queryByText("Image unavailable")).not.toBeInTheDocument();
+      view.rerender(show(false));
+      expect(screen.getByRole("status")).toHaveTextContent("Image unavailable");
+      expect(
+        view.container.querySelector('[class*="attachmentImage"]'),
+      ).toBeNull();
+      expect(view.container.querySelector("img, canvas, a[href]")).toBeNull();
+      expect(media).toHaveBeenCalledWith("https://image.test/unavailable.png");
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
 it("does not bypass the session media resolver to paint an inaccessible attachment", () => {
   const media = vi.fn(() => undefined);
   const html = renderToStaticMarkup(

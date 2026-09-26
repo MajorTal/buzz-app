@@ -93,6 +93,8 @@ test("DM hide control removes a row and a new message restores it", async ({
   await expect(row(page, "dm-031")).toBeVisible();
   await expect(dm).toHaveCount(0);
 
+  // Cached paint is intentionally earlier than fresh live subscription ownership.
+  await expect.poll(() => app.relay.hasRoute("primary", "dm-030")).toBe(true);
   app.append("primary", "dm-030", "A new live DM", true, false);
   await expect(dm).toBeVisible();
   await dm.hover();

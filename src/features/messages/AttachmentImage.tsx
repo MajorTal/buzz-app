@@ -8,31 +8,43 @@ export function AttachmentImage({
   attachment,
   url,
   source,
+  cached = false,
   onOpenLink,
   onOpenReview,
 }: {
   attachment: Attachment;
   url: string;
-  source: string;
+  source: string | undefined;
+  cached?: boolean;
   onOpenLink(url: string): boolean;
   onOpenReview?: (attachment: Attachment, seconds: number) => void;
 }) {
+  const style = attachment.dimensions
+    ? {
+        width: Math.min(
+          360,
+          attachment.dimensions.width,
+          (320 * attachment.dimensions.width) / attachment.dimensions.height,
+        ),
+        aspectRatio: `${attachment.dimensions.width} / ${attachment.dimensions.height}`,
+      }
+    : undefined;
+  if (!source)
+    return cached ? (
+      <span
+        className={`${styles.attachmentImage} ${styles.mediaPlaceholder}`}
+        style={style}
+        aria-hidden="true"
+      />
+    ) : (
+      <span className={styles.attachmentUnavailable} role="status">
+        Image unavailable
+      </span>
+    );
   return (
     <a
       className={styles.attachmentImage}
-      style={
-        attachment.dimensions
-          ? {
-              width: Math.min(
-                360,
-                attachment.dimensions.width,
-                (320 * attachment.dimensions.width) /
-                  attachment.dimensions.height,
-              ),
-              aspectRatio: `${attachment.dimensions.width} / ${attachment.dimensions.height}`,
-            }
-          : undefined
-      }
+      style={style}
       href={url}
       target="_blank"
       rel="noreferrer"

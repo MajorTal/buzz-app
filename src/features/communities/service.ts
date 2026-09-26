@@ -89,7 +89,7 @@ export function createCommunities(
     for (const fn of listeners) fn();
     emitRelay();
   };
-  const acquire = (id: string) => {
+  const acquire = (id: string, viewer = state.viewer) => {
     // Native identity alone is not a broker: never pair it with the dev signer.
     if (!live) return disconnected;
     let session = sessions.get(id);
@@ -100,6 +100,7 @@ export function createCommunities(
         presenceActivity,
         identityNames,
         agentChoices,
+        viewer ? { viewer, scope: communityDestination(id).url } : undefined,
       );
       sessions.set(id, session);
       session.subscribe(() => {
@@ -223,7 +224,7 @@ export function createCommunities(
         if (!saved.memberships.some((m) => m.id === saved.selected))
           saved.selected = null;
         presenceActivity.setViewer(viewer);
-        if (saved.selected) acquire(saved.selected);
+        if (saved.selected) acquire(saved.selected, viewer);
         // A seeded record is saved once so later configuration changes cannot revoke it.
         update({ ...saved, viewer, status: "ready" }, seeded);
       })

@@ -114,6 +114,20 @@ readingTest(
         "value",
         cycle ? "B draft" : "",
       );
+      // A warm geometry cache can mask a lost anchor until cold reload. Check
+      // the real unmount write, not only today's coincidentally matching offset.
+      const persisted = await page.evaluate(() => {
+        const key = Object.keys(localStorage).find((key) => {
+          if (!key.startsWith("buzz-view.v1:")) return false;
+          const [scope, view] = JSON.parse(key.slice("buzz-view.v1:".length));
+          return (
+            scope.startsWith("https://primary.example:") &&
+            view === "scroll:alpha"
+          );
+        });
+        return key ? JSON.parse(localStorage.getItem(key)) : null;
+      });
+      expect(persisted?.anchor?.id).toBe(saved.id);
       await composer(page, "Alpha").fill("B draft");
       await button(page, "Switch to Primary").click();
       await expect(composer(page, "Alpha")).toHaveJSProperty(

@@ -443,7 +443,8 @@ it("late persisted heads/profiles cannot repopulate after revoke and regrant", a
   expect(h.session.channels.window("a").rows).toEqual([]);
   expect(h.session.profiles.snapshot().size).toBe(0);
   expect(h.session.observe(filters).snapshot().events).toEqual([]);
-  expect(disk.clear).toHaveBeenCalled();
+  expect(disk.retain).toHaveBeenCalledWith([]);
+  expect(disk.clear).not.toHaveBeenCalled();
 });
 
 it("an ambiguous multi-channel read failure does not revoke unrelated evidence", async () => {

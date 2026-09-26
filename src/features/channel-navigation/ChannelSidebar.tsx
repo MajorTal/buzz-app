@@ -94,10 +94,12 @@ export function ChannelSidebar(props: Props) {
       key={`${connection.scope}:${connection.generation}`}
       fallback={navigation}
     >
-      {connection.status === "ready" ? (
+      {connection.status === "ready" || connection.cached ? (
         <ReadySidebar
           {...props}
           key={`${connection.scope}:${connection.generation}`}
+          cached={!!connection.cached}
+          connectionError={connection.error}
           queries={connection.session}
           scope={connection.scope ?? "disconnected"}
           viewer={connection.viewer}
@@ -252,10 +254,14 @@ function ReadySidebar({
   sessionsEnabled,
   agentsEnabled,
   queries,
+  cached,
+  connectionError,
   scope,
   viewer,
 }: Props & {
   queries: RelaySession;
+  cached: boolean;
+  connectionError?: string | undefined;
   scope: string;
   viewer?: string | undefined;
 }) {
@@ -299,7 +305,7 @@ function ReadySidebar({
     scope,
     startup.ready &&
       list.status === "ready" &&
-      preferences.status !== "loading",
+      (preferences.status !== "loading" || !!preferences.cached),
   );
   const { channels, profiles: dmProfiles } = useChannelLabels(
     list.channels,
@@ -961,7 +967,7 @@ function ReadySidebar({
                 )}
               </div>
             )}
-            {dmVisibility.status === "error" && (
+            {!cached && dmVisibility.status === "error" && (
               <div role="alert">
                 Hidden conversations could not be refreshed.{" "}
                 <Button onClick={() => void lifecycle.refreshVisibility()}>
@@ -1113,10 +1119,21 @@ function ReadySidebar({
                 <p className={styles.empty}>No channels yet.</p>
               )}
             </SidebarUnread>
-            {startup.updating && (
+            {cached ? (
               <p className={styles.preferenceNotice} role="status">
-                Updating sidebar details…
+                {connectionError
+                  ? "Offline · Showing saved conversations."
+                  : "Reconnecting…"}
+                {connectionError && (
+                  <Button onClick={relay.retry}>Retry connection</Button>
+                )}
               </p>
+            ) : (
+              startup.updating && (
+                <p className={styles.preferenceNotice} role="status">
+                  Updating sidebar details…
+                </p>
+              )
             )}
             {preferences.sortErrors?.map(({ group, mode, error }) => (
               <div key={group} className={styles.preferenceNotice} role="alert">
@@ -1221,7 +1238,7 @@ function ReadySidebar({
                   </button>
                 </div>
               ))}
-            {startup.ready && preferences.status === "error" ? (
+            {!cached && startup.ready && preferences.status === "error" ? (
               <ToastNotice
                 title="Saved sidebar preferences couldn’t refresh"
                 description="Your conversations are still available."
@@ -1231,7 +1248,9 @@ function ReadySidebar({
                   Retry
                 </Button>
               </ToastNotice>
-            ) : startup.ready && preferences.status === "unsupported" ? (
+            ) : !cached &&
+              startup.ready &&
+              preferences.status === "unsupported" ? (
               <p className={styles.preferenceNotice} role="status">
                 Saved groups and stars aren’t supported by this host yet.
               </p>

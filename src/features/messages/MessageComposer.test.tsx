@@ -36,7 +36,7 @@ import { createRelaySession, type RelaySession } from "../relay/session";
 import { keypair, metadata, roster, signed } from "../relay/testing";
 import type { EventTemplate } from "nostr-tools";
 import type { ChannelMessage, Profile } from "../relay/contracts";
-import { readView } from "../../shared/view-state";
+import { readView, writeView } from "../../shared/view-state";
 import { emojiMatches, type CustomEmoji } from "../relay/emoji";
 import { CustomEmoji as CustomEmojiImage } from "../../bundled/emoji/CustomEmoji";
 import type { ComposerInputElement } from "./composer-dom";
@@ -378,6 +378,72 @@ function mount(
     },
   };
 }
+
+it("shows a local draft in the cached composer without completion, typing or transport reads", async () => {
+  const viewer = keypair(),
+    relay = keypair();
+  const query = vi.fn(async () => []);
+  const owner = createRelaySession(
+    {
+      viewer: viewer.pubkey,
+      relayAuthor: relay.pubkey,
+      query,
+      media: () => undefined,
+    },
+    {
+      cachedOnly: true,
+      prepared: true,
+      persistence: {
+        readStartup: async () => ({
+          discovery: {
+            savedAt: Date.now(),
+            relayAuthor: relay.pubkey,
+            events: [
+              roster(relay, "channel", [viewer.pubkey]),
+              metadata(relay, "channel", "General"),
+            ],
+          },
+        }),
+        read: async () => [],
+        write: async () => {},
+        remove: async () => {},
+        retain: async () => {},
+        clear: async () => {},
+        close() {},
+      },
+    },
+  );
+  await owner.restore();
+  writeView("cached-composer", "draft:channel", "!Saved draft");
+  const typing = vi.fn(owner.session.typing.subscribe);
+  const h = mount({
+    session: {
+      ...owner.session,
+      typing: { ...owner.session.typing, subscribe: typing },
+    },
+    scope: "cached-composer",
+  });
+  try {
+    expect(h.input()).toHaveValue("!Saved draft");
+    expect(h.input()).toHaveAttribute("aria-disabled", "true");
+    expect(
+      screen.queryByText(/does not support sending/),
+    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    fireEvent.focus(h.input());
+    fireEvent(document, new Event("selectionchange"));
+    h.submit();
+    await act(async () => {}); // Flush mounted effects before the negative assertions.
+    expect(h.completionRequests).toEqual([]);
+    expect(typing).not.toHaveBeenCalled();
+    expect(query).not.toHaveBeenCalled();
+    expect(h.input()).toHaveValue("!Saved draft");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  } finally {
+    h.unmount();
+    owner.dispose();
+  }
+});
 
 it("autofocuses each selected conversation once without stealing focus on updates", () => {
   const h = mount({ autoFocus: true });

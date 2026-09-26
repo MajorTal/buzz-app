@@ -15,8 +15,12 @@ return <Feature key={`${connection.scope}:${connection.generation}`} session={co
 ```
 
 Scope includes community and viewer; generation distinguishes replacement sessions
-within that scope. Both belong in the remount key. Persist drafts/navigation under
-scope alone so reconnecting does not lose local intent.
+within that scope. Both belong in the remount key. A local-first cached session
+and its live successor intentionally share that generation: this is one startup,
+not a reconnect reset. The channel timeline retains its parent-bound presentation
+lifetime while rebinding readers; other session-owned controls still reset. Persist
+drafts/navigation under scope alone so reconnecting does not lose local intent.
+See [local-first launch](channels.md#local-first-launch) for cache authority rules.
 
 Inside a feature bound to the current session:
 

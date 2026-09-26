@@ -1,6 +1,17 @@
 import { byteSize } from "./budget";
-/** Signed wire records only. The owner re-verifies and folds these after fresh roster authorization.
- * A cache hit is never authority for membership or freshness. No keys/tokens are persisted. */
+import type { SidebarPreferences } from "./sidebar-preferences";
+/** Device-local resume data, never proof of current access or permission to write. */
+export type SavedStartup = {
+  discovery?: {
+    savedAt: number;
+    relayAuthor: string;
+    events: unknown[];
+    profiles?: unknown[];
+  };
+  preferences?: { savedAt: number; data: SidebarPreferences };
+};
+/** Signed wire records only. The owner re-verifies before displaying cached history.
+ * A cache hit is never authority for current membership or freshness. No keys/tokens are persisted. */
 export type SavedHead = {
   channelId: string;
   savedAt: number;
@@ -9,6 +20,8 @@ export type SavedHead = {
 };
 export interface HeadPersistence {
   read(): Promise<SavedHead[]>;
+  readStartup?(): Promise<SavedStartup | undefined>;
+  writeStartup?(patch: SavedStartup): Promise<void>;
   write(head: SavedHead): Promise<void>;
   remove(channelId: string): Promise<void>;
   retain(channelIds: readonly string[]): Promise<void>;
@@ -17,6 +30,7 @@ export interface HeadPersistence {
 }
 const DB = "buzz-channel-heads-v1";
 const STORE = "heads";
+const STARTUP = "startup";
 const MAX_BYTES = 8 * 1024 * 1024;
 const MAX_HEADS = 64;
 const MAX_AGE = 24 * 60 * 60 * 1000;
@@ -33,14 +47,17 @@ export function createHeadPersistence(
     if (closed || typeof indexedDB === "undefined")
       return Promise.reject(new Error("Cache unavailable"));
     opening ??= new Promise<IDBDatabase>((resolve, reject) => {
-      const request = indexedDB.open(DB, 1);
+      const request = indexedDB.open(DB, 2);
       let expired = false;
       const timeout = setTimeout(() => {
         expired = true;
         reject(new Error("Cache open timed out"));
       }, 1500);
-      request.onupgradeneeded = () =>
-        request.result.createObjectStore(STORE, { keyPath: "key" });
+      request.onupgradeneeded = () => {
+        for (const name of [STORE, STARTUP])
+          if (!request.result.objectStoreNames.contains(name))
+            request.result.createObjectStore(name, { keyPath: "key" });
+      };
       request.onerror = () => {
         clearTimeout(timeout);
         reject(request.error);
@@ -66,11 +83,12 @@ export function createHeadPersistence(
   async function transact<T>(
     mode: IDBTransactionMode,
     work: (store: IDBObjectStore, done: (value: T) => void) => void,
+    name = STORE,
   ): Promise<T> {
     const db = await database();
     if (closed) throw new Error("Cache closed");
     return new Promise<T>((resolve, reject) => {
-      const tx = db.transaction(STORE, mode);
+      const tx = db.transaction(name, mode);
       let result: T;
       const timeout = setTimeout(() => {
         tx.abort();
@@ -83,12 +101,47 @@ export function createHeadPersistence(
         clearTimeout(timeout);
         reject(tx.error ?? new Error("Cache transaction aborted"));
       };
-      work(tx.objectStore(STORE), (value) => {
+      work(tx.objectStore(name), (value) => {
         result = value;
       });
     });
   }
   return {
+    readStartup: () =>
+      transact(
+        "readonly",
+        (store, done) => {
+          const request = store.get(scope);
+          request.onsuccess = () => done(request.result?.data);
+        },
+        STARTUP,
+      ),
+    writeStartup: (patch) =>
+      transact(
+        "readwrite",
+        (store, done) => {
+          const request = store.get(scope);
+          request.onsuccess = () => {
+            const data = { ...request.result?.data, ...patch };
+            const bytes = byteSize(data);
+            if (bytes <= MAX_BYTES) {
+              store.put({ key: scope, data, bytes, savedAt: Date.now() });
+              const all = store.getAll();
+              all.onsuccess = () => {
+                let total = 0;
+                for (const row of all.result.sort(
+                  (a, b) => b.savedAt - a.savedAt,
+                )) {
+                  total += row.bytes;
+                  if (total > MAX_BYTES) store.delete(row.key);
+                }
+              };
+            }
+            done(undefined);
+          };
+        },
+        STARTUP,
+      ),
     read: () =>
       transact("readonly", (store, done) => {
         const request = store.getAll();
@@ -153,15 +206,24 @@ export function createHeadPersistence(
           done(undefined);
         };
       }),
-    clear: () =>
-      transact("readwrite", (store, done) => {
+    clear: async () => {
+      await transact(
+        "readwrite",
+        (store, done) => {
+          store.delete(scope);
+          done(undefined);
+        },
+        STARTUP,
+      );
+      await transact("readwrite", (store, done) => {
         const request = store.getAll();
         request.onsuccess = () => {
           for (const row of request.result as Record[])
             if (row.scope === scope) store.delete(row.key);
           done(undefined);
         };
-      }),
+      });
+    },
     close() {
       closed = true;
       void opening?.then(

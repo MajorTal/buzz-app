@@ -175,7 +175,11 @@ function Composer({
   const readOnly =
     !submission &&
     !!session.channels?.get &&
-    !list.channels.some((channel) => channel.id === channelId);
+    !list.channels.some(
+      (channel) => channel.id === channelId && !channel.readOnly,
+    );
+  const cached = !!list.channels.find((channel) => channel.id === channelId)
+    ?.cached;
   const disabled = requestedDisabled || readOnly;
   const [sending, setSending] = useState(false);
   const sendAttempt = useRef<AbortController | null>(null);
@@ -701,7 +705,7 @@ function Composer({
       )}
     </>
   );
-  if (!outbox?.supports(9))
+  if (!outbox?.supports(9) && !cached)
     return (
       <>
         {accessories}

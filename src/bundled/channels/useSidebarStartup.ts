@@ -73,7 +73,9 @@ export function useSidebarStartup(
     list.activityStatus === "error" ||
     list.activityStatus === "unavailable";
   const settled = preferencesReady && namesReady && activityReady && unreadDone;
-  const ready = revealed || (rosterAvailable && (expired || settled));
+  const restored = list.channels.some((channel) => channel.cached);
+  const ready =
+    revealed || restored || (rosterAvailable && (expired || settled));
   useEffect(() => {
     if (!ready || revealed) return;
     retained.revealed = true;

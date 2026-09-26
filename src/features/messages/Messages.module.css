@@ -368,6 +368,9 @@
   border-radius: var(--radius-row);
   background: var(--affordance-subtle-hover);
 }
+.attachmentImage.mediaPlaceholder {
+  background: var(--surface-inset);
+}
 .attachmentImage canvas,
 .attachmentImage img {
   position: absolute;

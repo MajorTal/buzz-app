@@ -36,6 +36,15 @@ function ConnectedApp({ services }: { services: AppServices }) {
   const startup = useSyncExternalStore(plugins.subscribe, plugins.startup);
   const route = useAppNavigation(services);
   const launcher = usePanelLauncher(services.panels, startup === "ready");
+  const client = useSyncExternalStore(
+    services.communities.subscribe,
+    services.communities.snapshot,
+  );
+  const connection = useSyncExternalStore(
+    services.relay.subscribe,
+    services.relay.snapshot,
+  );
+  const restoring = client.status === "loading" || !!connection.restoring;
   const settings = route.target.kind === "settings";
   const select = route.select;
   useEffect(
@@ -67,6 +76,13 @@ function ConnectedApp({ services }: { services: AppServices }) {
     />
   );
   const pageOwnsCompanion = !!route.page?.companion;
+  // Keep the parser launch surface through local bootstrap, not network refresh.
+  if (!settings && restoring)
+    return (
+      <div className="buzz-launch" role="status" aria-label="Opening Buzz">
+        <img src="/buzz-mark.svg" alt="Buzz" width="72" height="72" />
+      </div>
+    );
   return (
     <ToastProvider>
       <ChannelNavigationProvider relay={services.relay}>

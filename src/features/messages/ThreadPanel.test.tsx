@@ -17,7 +17,7 @@ import { ThreadPanel, type ThreadPanelProps } from "./ThreadPanel";
 import { createAgentLibrary } from "../agents/library";
 import { MessageRow } from "./MessageRow";
 import { MessageMarkdown } from "./MessageMarkdown";
-import { MediaAttachment } from "./MediaAttachment";
+import { AttachmentImage } from "./AttachmentImage";
 import { MessageComposer } from "./MessageComposer";
 import type { RelaySession } from "../relay/session";
 import type { PageNavigation } from "../navigation/service";
@@ -407,7 +407,7 @@ it("the actual message row rejects attachment URLs outside the shared safe-link 
     retry: undefined,
   });
   const attachments = elements(tree).filter(
-    (element) => element.type === MediaAttachment,
+    (element) => element.type === AttachmentImage,
   );
   expect(attachments).toHaveLength(1);
   expect(attachments[0]?.props.attachment).toEqual({

@@ -1,3 +1,5 @@
+import type { HeadPersistence } from "./persistence";
+import { projectSidebarPreferences } from "./sidebar-preferences";
 import type {
   SidebarAssignmentMutator,
   SidebarAssignmentIntent,
@@ -27,6 +29,7 @@ type Snapshot = Readonly<{
   status: "idle" | "loading" | "ready" | "error" | "unsupported";
   data?: SidebarPreferences;
   error?: string;
+  cached?: true;
   sortErrors?: readonly SortFailure[];
   moves?: readonly (MoveIntent & { pending: boolean; error?: string })[];
 }>;
@@ -40,6 +43,7 @@ export function createSidebarPreferencesStore(
   notify = (listener: () => void) => listener(),
   writeMute?: SidebarMuteMutator,
   writeSort?: SidebarSortMutator,
+  persistence?: HeadPersistence,
 ) {
   const listeners = new Set<() => void>();
   const empty = (): Snapshot =>
@@ -152,6 +156,11 @@ export function createSidebarPreferencesStore(
   // replaces its own fields; mute stays confirmed-only for notification policy.
   const project = () => {
     if (!confirmed) return;
+    void persistence
+      ?.writeStartup?.({
+        preferences: { savedAt: Date.now(), data: confirmed },
+      })
+      .catch(() => {});
     publish({
       // A field-only confirmation cannot recover a failed full read. Any
       // concurrent read made stale by a write must leave recovery available.
@@ -214,6 +223,7 @@ export function createSidebarPreferencesStore(
     });
     publish({
       status: "loading",
+      ...(snapshot.cached ? { cached: true as const } : {}),
       ...(snapshot.data ? { data: snapshot.data } : {}),
     });
     return job.promise;
@@ -317,21 +327,69 @@ export function createSidebarPreferencesStore(
     project();
     return run;
   }
+  const restoreGeneration = generation;
+  const ready = persistence
+    ?.readStartup?.()
+    .then((saved) => {
+      if (
+        closed ||
+        generation !== restoreGeneration ||
+        confirmed ||
+        snapshot.status === "ready"
+      )
+        return;
+      const value = saved?.preferences;
+      if (
+        !value ||
+        !Number.isFinite(value.savedAt) ||
+        value.savedAt > Date.now() ||
+        Date.now() - value.savedAt > 86_400_000
+      )
+        return;
+      const data = value.data;
+      const rows = (ids: readonly string[], flag: string) => ({
+        version: 1,
+        channels: Object.fromEntries(
+          ids.map((id) => [id, { [flag]: true, updatedAt: 0 }]),
+        ),
+      });
+      const parsed = projectSidebarPreferences(
+        { version: 1, sections: data.sections, assignments: data.assignments },
+        rows(data.starred, "starred"),
+        rows(data.muted, "muted"),
+        { version: 1, groups: data.sort ?? {} },
+      );
+      // Display-only: do not initialize the confirmed mutation base from disk.
+      publish({
+        ...snapshot,
+        cached: true,
+        data: retained({
+          ...parsed,
+          ...(data.groupSource === "personal"
+            ? { groupSource: "personal" as const }
+            : {}),
+        }),
+      });
+    })
+    .catch(() => {});
   return {
+    ready,
     queries: Object.freeze({
       available,
       dismissSortError(group: string) {
         failedSorts.delete(group);
         publish(snapshot);
       },
-      sortWritable: !!writeSort,
+      get sortWritable() {
+        return !!writeSort && !snapshot.cached;
+      },
       setSort(
         group: string,
         mode: SidebarSortMode,
         sectionIds: readonly string[],
         signal?: AbortSignal,
       ) {
-        if (closed || !writeSort || !snapshot.data)
+        if (closed || !writeSort || !snapshot.data || snapshot.cached)
           return Promise.reject(
             new Error("Sidebar sorting is read-only in this host"),
           );
@@ -396,9 +454,11 @@ export function createSidebarPreferencesStore(
         );
         return run;
       },
-      muteWritable: !!writeMute,
+      get muteWritable() {
+        return !!writeMute && !snapshot.cached;
+      },
       setMute(channelId: string, muted: boolean, signal?: AbortSignal) {
-        if (closed || !writeMute || !snapshot.data)
+        if (closed || !writeMute || !snapshot.data || snapshot.cached)
           return Promise.reject(
             new Error("Sidebar mutes are unavailable in this host"),
           );

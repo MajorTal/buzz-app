@@ -127,6 +127,9 @@ export const MessageRow = memo(function MessageRow({
     session?.channels.list ?? emptyChannelList,
     session?.channels.list ?? emptyChannelList,
   );
+  const cached = channelList.channels.some(
+    (channel) => channel.id === row.channelId && channel.cached,
+  );
   const unreadLabel =
     threadUnread?.manual === "local-only"
       ? "Thread marked unread on this device only"
@@ -433,13 +436,14 @@ export const MessageRow = memo(function MessageRow({
                 />
               );
             }
-            if (attachment.kind === "image" && source)
+            if (attachment.kind === "image")
               return (
                 <AttachmentImage
                   key={url}
                   attachment={{ ...attachment, url }}
                   url={url}
                   source={source}
+                  cached={cached}
                   onOpenLink={onOpenLink}
                   {...(onOpenMediaReview
                     ? {

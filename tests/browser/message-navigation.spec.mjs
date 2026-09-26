@@ -409,54 +409,102 @@ test("superseding a held exact read cancels it; a late response cannot steal foc
   await expect.poll(() => status(page)).toBe("opened");
 });
 
-test("same-scope replacement withdraws a held old session and reopens the exact row", async ({
-  page,
-  app,
-}) => {
-  await open(page, app);
-  let release;
-  let intercepted;
-  const seen = new Promise((resolve) => {
-    intercepted = resolve;
+for (const selected of ["reply", "root"]) {
+  test(`same-scope replacement waits for fresh membership before reopening the exact ${selected}`, async ({
+    page,
+    app,
+  }) => {
+    await open(page, app);
+    const id = selected === "root" ? app.exact.root.id : app.exact.target.id;
+    const destination = {
+      ...target(app, id),
+      ...(selected === "root" ? { threadRootId: id } : {}),
+    };
+    let release;
+    let intercepted;
+    const seen = new Promise((resolve) => {
+      intercepted = resolve;
+    });
+    const held = new Promise((resolve) => {
+      release = resolve;
+    });
+    let releaseRoster;
+    const roster = new Promise((resolve) => {
+      releaseRoster = resolve;
+    });
+    let reconnecting = false;
+    let rosterRequested = false;
+    let exactReads = 0;
+    await page.route("**/api/relay/**/query", async (route) => {
+      const filters = route.request().postDataJSON();
+      if (
+        reconnecting &&
+        filters?.some((filter) => filter.kinds?.includes(39002))
+      ) {
+        rosterRequested = true;
+        await roster;
+        return route.continue();
+      }
+      if (!filters?.some((filter) => filter.ids?.includes(id)))
+        return route.continue();
+      exactReads++;
+      if (exactReads !== 1) return route.continue();
+      intercepted();
+      await held;
+      await route
+        .fulfill({
+          json: [selected === "root" ? app.exact.root : app.exact.target],
+        })
+        .catch(() => {});
+    });
+    try {
+      await page.evaluate((value) => {
+        window.exactResult = window.fixtureNavigation.open(value);
+      }, destination);
+      await seen;
+      const generation = await page.evaluate(() => {
+        const generation = window.fixtureRelay.snapshot().generation;
+        window.fixtureRelay.disconnect();
+        return generation;
+      });
+      await expect(thread(page)).toHaveCount(0);
+      reconnecting = true;
+      await page.evaluate(() => window.fixtureRelay.retry());
+      release();
+      await expect.poll(() => rosterRequested).toBe(true);
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const connection = window.fixtureRelay.snapshot();
+            return (
+              connection.status === "ready" &&
+              connection.session.channels.get("alpha")?.cached === true
+            );
+          }),
+        )
+        .toBe(true);
+      await settle(page);
+      expect(await status(page)).toBe("opening");
+      await expect(thread(page)).toHaveCount(0);
+      expect(exactReads).toBe(1);
+      releaseRoster();
+      const row = thread(page).locator(`[data-message-id="${id}"]`);
+      // Opening a root is ordinary thread navigation (bottom-follow), not an
+      // exact-row reveal. Replies must still receive exact-message focus.
+      if (selected === "root") await expect(row).toBeAttached();
+      else await expect(row).toBeFocused();
+      expect(
+        await page.evaluate(() => window.fixtureRelay.snapshot().generation),
+      ).toBeGreaterThan(generation);
+      expect(await page.evaluate(() => window.exactResult)).toEqual({
+        status: "opened",
+      });
+    } finally {
+      release();
+      releaseRoster();
+    }
   });
-  const held = new Promise((resolve) => {
-    release = resolve;
-  });
-  let first = true;
-  await page.route("**/api/relay/**/query", async (route) => {
-    const filters = route.request().postDataJSON();
-    if (
-      !first ||
-      !filters?.some((filter) => filter.ids?.includes(app.exact.target.id))
-    )
-      return route.continue();
-    first = false;
-    intercepted();
-    await held;
-    await route.fulfill({ json: [app.exact.target] }).catch(() => {});
-  });
-  await page.evaluate((value) => {
-    window.exactResult = window.fixtureNavigation.open(value);
-  }, target(app));
-  await seen;
-  const generation = await page.evaluate(() => {
-    const generation = window.fixtureRelay.snapshot().generation;
-    window.fixtureRelay.disconnect();
-    return generation;
-  });
-  await expect(thread(page)).toHaveCount(0);
-  await page.evaluate(() => window.fixtureRelay.retry());
-  release();
-  await expect(
-    thread(page).locator(`[data-message-id="${app.exact.target.id}"]`),
-  ).toBeFocused();
-  expect(
-    await page.evaluate(() => window.fixtureRelay.snapshot().generation),
-  ).toBeGreaterThan(generation);
-  expect(await page.evaluate(() => window.exactResult)).toEqual({
-    status: "opened",
-  });
-});
+}
 
 test("post-success membership loss removes the thread and live updates do not snap it back to the target", async ({
   page,

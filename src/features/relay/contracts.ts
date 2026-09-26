@@ -20,6 +20,8 @@ export type ChannelSummary = Readonly<{
   lastActivityAt?: number | undefined;
   /** Readable public nonmember channel; not part of the joined roster. */
   readOnly?: true;
+  /** Downloaded membership is display-only pending current relay confirmation. */
+  cached?: true;
   /** Members-only channel omitted from directories (NIP-29 `hidden`), such as a DM. */
   hidden?: true;
   /** Relay-authored metadata; absent while metadata is unavailable. */

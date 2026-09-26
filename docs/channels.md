@@ -83,7 +83,8 @@ good snapshot through loading/errors. Page exits neither restart nor cancel that
 read. Cache clearing and session disposal cancel it and discard decoded data;
 late completion cannot repopulate a retired snapshot. These are account-owned
 preferences, not channel access grants: sidebar sections still intersect the
-authorized roster. There is no new disk cache or automatic cross-device sync.
+authorized roster. Local-first launch also restores a display-only copy from the
+existing account/relay-scoped device store; this does not add automatic cross-device sync.
 
 The browser/development host exposes one narrow **Mute/Unmute** command. It
 re-reads the viewer's signed encrypted `channel-mutes` coordinate, changes only the
@@ -334,8 +335,9 @@ The port retains the prepared-store implementation and its behavior tests:
   deduplication. Hover/focus prepares at most one speculative head at a time;
   superseded hints do not form a backlog. That shared head keeps foreground
   priority so selection cannot inherit a host-side background wait. Discovery
-  restores authorized disk heads immediately after roster authorization, without
-  waiting for optional channel names, and does not fetch heads across the roster.
+  restores reverified disk heads against saved, display-only membership before
+  network authorization, without waiting for optional channel names, and does not
+  fetch heads across the roster.
   Verified heads save before optional profile enrichment; changed profiles can
   enrich the disk record afterward. Network reads belong to intent, selection and
   retained-window live catch-up. Optional profile enrichment stays background.
@@ -345,7 +347,9 @@ The port retains the prepared-store implementation and its behavior tests:
   and request-warmed avatars (fetched and decoded, nothing retained; disabled
   under the Save-Data preference). Signature verification yields in batches.
 - Account/relay-scoped IndexedDB: 64 records / 8 MiB global disk budget, 24-hour
-  expiry. Cached events are reverified only after fresh roster authorization.
+  expiry. Signed cached events are reverified before display. The same database
+  stores account/relay-scoped startup discovery and sidebar organization (a separate
+  8 MiB global budget); old version-1 head records survive the version-2 upgrade.
 - A 60-second head freshness lease; warm revisits reuse heads without new reads.
   Partial discovery never treats an omitted channel as a membership revocation.
   Explicit denial or signed membership removal invalidates private cached views.
@@ -355,6 +359,36 @@ The port retains the prepared-store implementation and its behavior tests:
 Connection generations and store epochs reject late results after disconnect,
 replacement, disposal, or access revocation. The data service outlives plugin
 components; it is disposed with the app runtime.
+
+## Local-first launch
+
+The selected community and conversation reuse the existing device view-state.
+The relay service restores a read-only session from the account/relay-scoped cache
+concurrently with the real connection handshake. Saved groups, stars and channel
+names are display data, not a confirmed preference mutation base. No cache means
+the ordinary cold connection flow; unavailable/corrupt storage never grants access.
+
+A cached roster can display previously downloaded, reverified history for up to
+24 hours. It cannot authorize head/history reads, unread evidence, typing or
+publishing. Unconfirmed membership is not resaved with a fresh lease. An identical
+or newer fresh signed roster promotes it; a complete roster omission or explicit
+denial purges both the view and the next-launch record. Partial roster reads do
+not prove absence. The live transport's relay identity remains authoritative.
+
+A failed or timed-out handshake retains usable saved content with Retry; browser
+online/visibility signals retry the connection. The successor restores its local
+read models and materializes retained windows before replacing the cached owner.
+The workspace generation stays stable for that promotion, so selection, the
+channel timeline DOM and its reading state survive. Ordinary reconnect, account
+or community changes still reset presentation lifetimes. Drafts remain scope-keyed.
+Cache clearing/disconnect/disposal fence pending restoration and connection results.
+
+`index.html` shows a centered Buzz mark on the synchronously selected light/dark
+background before React loads. This is a document launch surface, not a native
+pre-webview splash; the native window's initial paint remains separate.
+`tests/browser/startup.spec.mjs` exercises IndexedDB reload, held/failed handshake,
+in-place recovery, denial-by-omission and both document themes in Chromium/WebKit.
+`features/relay/startup.test.ts` covers signed-cache admission and authority boundaries.
 
 ## DM label recovery invariant
 

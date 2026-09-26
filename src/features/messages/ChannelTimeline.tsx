@@ -73,6 +73,8 @@ export type ChannelTimelineProps = {
   scope: string;
   viewer?: string | undefined;
   queries: RelaySession;
+  /** A parent keyed by connection generation can preserve its timeline on cache promotion. */
+  continuityKey?: string | undefined;
   window: ChannelWindow;
   onOpenLink(url: string): boolean;
   canOpenLink?: ((target: string) => boolean) | undefined;
@@ -94,7 +96,11 @@ export type ChannelTimelineProps = {
 export function ChannelTimeline(props: ChannelTimelineProps) {
   return (
     <Timeline
-      key={messageViewKey(props.queries, props.scope, props.channelId)}
+      key={
+        props.continuityKey
+          ? JSON.stringify([props.continuityKey, props.scope, props.channelId])
+          : messageViewKey(props.queries, props.scope, props.channelId)
+      }
       {...props}
     />
   );
@@ -122,7 +128,7 @@ function Timeline({
   const resolveName = useChannelIdentityNames(queries, channelId);
   const profiles = useRowProfiles(queries.profiles, window.rows);
   const agentPubkeys = useKnownAgentPubkeys(queries, profiles);
-  const geometry = useMemo(() => geometryFor(queries.channels), [queries]);
+  const [geometry] = useState(() => geometryFor(queries.channels));
   const signature = useMemo(
     () => geometrySignature(window.rows, profiles, resolveName),
     [window.rows, profiles, resolveName],
@@ -180,6 +186,10 @@ function Timeline({
           )?.id
         : undefined;
       const position = positionAt(element, renderedAnchor);
+      // Virtua can emit the restoration scroll before mounting its visible
+      // range. An anchorless observation must not erase the saved reading intent.
+      // A reader gesture clears restoredAnchor before recording a new position.
+      if (anchor && !position.anchor) return;
       const previous = measuredPosition.current;
       // List shrinkage can clamp scrollTop upward without reader movement. An
       // upward offset beyond that clamp is input, including later events from
@@ -291,7 +301,9 @@ function Timeline({
         ? savedPosition.current
         : null;
     let observer: MutationObserver | undefined;
+    let correctionPending = false;
     const restorePosition = () => {
+      correctionPending = false;
       if (intent.current !== scheduledIntent || !handle.current) return;
       if (restore) {
         const anchor = restore.anchor;
@@ -337,6 +349,7 @@ function Timeline({
             if (list.style.height === height) return;
             height = list.style.height;
             cancelAnimationFrame(frame);
+            correctionPending = true;
             frame = requestAnimationFrame(restorePosition);
           });
           observer.observe(list, {
@@ -350,6 +363,17 @@ function Timeline({
     return () => {
       cancelAnimationFrame(frame);
       observer?.disconnect();
+      // A row refresh can cancel the late measurement correction. Carry the
+      // original restoration across it; only newer reader input may retire it.
+      if (
+        correctionPending &&
+        restore &&
+        !follow.current &&
+        intent.current === scheduledIntent
+      ) {
+        savedPosition.current = restore;
+        settled.current = false;
+      }
     };
   }, [
     rows,
@@ -374,6 +398,7 @@ function Timeline({
     // Wait for the optimistic row and virtualizer to mount before revealing it.
     const frame = requestAnimationFrame(() => {
       if (!handle.current) return;
+      if (!follow.current) intent.current++;
       follow.current = true;
       restoredAnchor.current = undefined;
       userScrolled.current = false;

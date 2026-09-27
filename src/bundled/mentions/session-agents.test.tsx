@@ -42,7 +42,10 @@ import { createMessages } from "../../features/relay/messages";
 import type { Outbox } from "../../features/relay/outbox";
 import { MessageMarkdown } from "../../features/messages/MessageMarkdown";
 import { profileTarget } from "../../features/profiles/target";
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
 function setup(parent: boolean | null = true, archived = false) {
   const key = "b".repeat(64),
     member = "a".repeat(64);
@@ -1036,6 +1039,7 @@ it.each(["dm", "session"] as const)(
 );
 
 it("shows local rows before the directory, appends outside rows, and reuses settled pages", async () => {
+  vi.useFakeTimers();
   const t = setup();
   const lara = { pubkey: "e".repeat(64), name: "Lara" };
   const larry = { pubkey: "f".repeat(64), name: "Larry Outside" };
@@ -1073,9 +1077,10 @@ it("shows local rows before the directory, appends outside rows, and reuses sett
     <MentionCompletion {...props} query={{ start: 0, end: 3, query: "La" }} />,
   );
   // The member is usable before the network search starts or settles.
-  await waitFor(() => expect(labels()).toEqual(["Larkin"]));
+  expect(labels()).toEqual(["Larkin"]);
   expect(last()?.status).toBe("Searching community…");
-  await waitFor(() => expect(people).toHaveBeenCalledTimes(1));
+  await act(() => vi.advanceTimersByTimeAsync(200));
+  expect(people).toHaveBeenCalledTimes(1);
   await act(async () =>
     pages.get("La")?.({ people: [lara, larry], hasMore: false }),
   );
@@ -1088,9 +1093,10 @@ it("shows local rows before the directory, appends outside rows, and reuses sett
       query={{ start: 0, end: 4, query: "Larr" }}
     />,
   );
-  await waitFor(() => expect(labels()).toEqual(["Larry Outside"]));
+  expect(labels()).toEqual(["Larry Outside"]);
   expect(last()?.status).toBe("Searching community…");
-  await waitFor(() => expect(people).toHaveBeenCalledTimes(2));
+  await act(() => vi.advanceTimersByTimeAsync(200));
+  expect(people).toHaveBeenCalledTimes(2);
   const newer = { pubkey: "d".repeat(64), name: "Larry Newer" };
   await act(async () =>
     pages.get("Larr")?.({ people: [newer, larry], hasMore: false }),
@@ -1103,7 +1109,7 @@ it("shows local rows before the directory, appends outside rows, and reuses sett
   );
   expect(labels()).toEqual(["Larkin", "Lara", "Larry Outside"]);
   expect(last()?.status).toBeUndefined();
-  await new Promise((resolve) => setTimeout(resolve, 300));
+  await act(() => vi.advanceTimersByTimeAsync(200));
   expect(people).toHaveBeenCalledTimes(2);
 });
 

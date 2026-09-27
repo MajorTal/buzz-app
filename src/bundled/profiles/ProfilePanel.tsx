@@ -1,3 +1,4 @@
+import { useAgentControlRefresh } from "../../features/agents/control-react";
 import { UserStatusDisplay } from "../../features/user-status/StatusDisplay";
 import {
   ProfilePublicMetadata,
@@ -66,11 +67,14 @@ export function ProfilePanel({
   control,
   instanceId,
   close,
+  refreshControl = true,
 }: PanelProps & {
   relay: RelayData;
   navigation?: Navigation;
   control?: AgentControl;
   instanceId?: string | undefined;
+  /** An enclosing exact-instance panel already owns status refresh. */
+  refreshControl?: boolean;
 }) {
   const connection = useRelayConnection(relay);
   const pubkey = profileKey(target);
@@ -80,6 +84,7 @@ export function ProfilePanel({
   return (
     <ProfileDetails
       key={`${connection.scope}:${connection.generation}:${pubkey}:${instanceId ?? ""}`}
+      refreshControl={refreshControl}
       session={connection.session}
       pubkey={pubkey}
       instanceId={instanceId}
@@ -103,6 +108,7 @@ export function ProfilePanel({
 }
 function ProfileDetails({
   children,
+  refreshControl,
   session,
   pubkey,
   context,
@@ -114,6 +120,7 @@ function ProfileDetails({
   close,
 }: {
   instanceId?: string | undefined;
+  refreshControl: boolean;
   children?: ReactNode;
   session: RelaySession;
   pubkey: string;
@@ -124,6 +131,7 @@ function ProfileDetails({
   viewer: string | undefined;
   close(): void;
 }) {
+  useAgentControlRefresh(refreshControl ? control : undefined);
   const selection = useMemo(
     () => selectProfiles(session.profiles, [pubkey]),
     [session.profiles, pubkey],

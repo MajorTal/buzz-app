@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useRelayConnection } from "../../features/relay/react";
 import type { RelayData } from "../../features/relay/service";
 import type { AgentControl } from "../../features/agents/control";
-import { useAgentControl } from "../../features/agents/control-react";
+import {
+  useAgentControl,
+  useAgentControlRefresh,
+} from "../../features/agents/control-react";
 import type { Navigation } from "../../features/navigation/controller";
 import type { PanelProps } from "../../features/panels/service";
 import {
@@ -55,6 +58,7 @@ function InstanceDetails(
     connection.session,
     props.instance.pubkey,
   );
+  useAgentControlRefresh(props.control);
   const state = useAgentControl(props.control);
   const target = profileTarget(props.instance.pubkey) ?? "";
   const agent = connection.scope
@@ -83,7 +87,12 @@ function InstanceDetails(
       {ownership.status === "ready" &&
       ownership.owner === connection.viewer &&
       agent ? (
-        <ProfilePanel {...props} target={target} instanceId={agent.id} />
+        <ProfilePanel
+          {...props}
+          target={target}
+          instanceId={agent.id}
+          refreshControl={false}
+        />
       ) : (
         <>
           <p role={loading ? "status" : "alert"}>

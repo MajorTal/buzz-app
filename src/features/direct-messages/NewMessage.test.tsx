@@ -809,18 +809,29 @@ it("distinguishes namesake options and chips without pictures", async () => {
     ).toBeVisible();
 });
 
-it("restarts an epoch-stale directory read without displaying a load error", async () => {
+it("surfaces exhausted directory cancellation without a UI retry loop", async () => {
   const t = setup();
   t.directMessages.people.mockRejectedValueOnce(
     new DOMException("Stale directory read", "AbortError"),
   );
-  t.mount();
-  await screen.findByRole("option", { name: "Person 1" });
-  expect(t.directMessages.people).toHaveBeenCalledTimes(2);
-  expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-  expect(
-    screen.queryByRole("status", { name: "Loading people" }),
-  ).not.toBeInTheDocument();
+  vi.useFakeTimers();
+  const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    t.mount();
+    await act(() => vi.advanceTimersByTimeAsync(0));
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not load people.",
+    );
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+    expect(t.directMessages.people).toHaveBeenCalledTimes(1);
+    expect(
+      screen.queryByRole("status", { name: "Loading people" }),
+    ).not.toBeInTheDocument();
+  } finally {
+    cleanup();
+    warning.mockRestore();
+    vi.useRealTimers();
+  }
 });
 
 it("revalidates an unchanged definitively failed agent send before retry", async () => {

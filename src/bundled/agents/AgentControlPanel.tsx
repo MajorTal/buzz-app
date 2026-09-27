@@ -1,5 +1,8 @@
 import type { useIdentityNames } from "../../features/identity-names/react";
-import { useAgentControl } from "../../features/agents/control-react";
+import {
+  useAgentControl,
+  useAgentControlRefresh,
+} from "../../features/agents/control-react";
 import { sameCommunityAgents } from "../../features/agents/choices";
 import type { PageNavigation } from "../../features/navigation/service";
 import { useEffect, useState, type ReactNode } from "react";
@@ -68,6 +71,7 @@ export function AgentControlPanel({
       source: agent,
     });
   const remove = (agent: AgentView) => setDeleting(agent.id);
+  useAgentControlRefresh(control);
   const state = useAgentControl(control);
   useEffect(() => {
     if (

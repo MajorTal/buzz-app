@@ -256,26 +256,34 @@ it("allows recovery Stop during a pending Start and ignores its late failure", a
   );
 });
 
-it("recovers an initial read failure without inferring ownership and stops polling errors", async () => {
-  const h = setup();
-  const read = vi
-    .spyOn(h.host, "snapshot")
-    .mockRejectedValueOnce("No host status");
-  const user = userEvent.setup();
-  render(h.panel());
-  await screen.findByRole("button", { name: "Retry status" });
-  expect(
-    screen.queryByRole("button", { name: "Stop" }),
-  ).not.toBeInTheDocument();
-  vi.useFakeTimers();
-  await act(() => vi.advanceTimersByTimeAsync(15000));
-  expect(read).toHaveBeenCalledTimes(1);
-  vi.useRealTimers();
-  await user.click(screen.getByRole("button", { name: "Retry status" }));
-  expect(
-    await screen.findByRole("button", { name: "Stop" }),
-  ).not.toHaveAttribute("aria-disabled", "true");
-});
+it.each(["periodic", "explicit"])(
+  "recovers an initial read failure through %s read-only refresh",
+  async (recovery) => {
+    vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+    const h = setup();
+    const read = vi
+      .spyOn(h.host, "snapshot")
+      .mockRejectedValueOnce("No host status");
+    const user = userEvent.setup();
+    render(h.panel());
+    await screen.findByRole("button", { name: "Retry status" });
+    expect(
+      screen.queryByRole("button", { name: "Stop" }),
+    ).not.toBeInTheDocument();
+    await act(() => vi.advanceTimersByTimeAsync(4999));
+    expect(read).toHaveBeenCalledTimes(1);
+    if (recovery === "periodic") {
+      await act(() => vi.advanceTimersByTimeAsync(1));
+    } else {
+      await user.click(screen.getByRole("button", { name: "Retry status" }));
+    }
+    expect(
+      await screen.findByRole("button", { name: "Stop" }),
+    ).not.toHaveAttribute("aria-disabled", "true");
+    expect(read).toHaveBeenCalledTimes(2);
+    expect(h.calls.every((call) => call.action === "snapshot")).toBe(true);
+  },
+);
 
 it("fences retired relay clicks and tracks profile, community, reconnect and disconnect changes", async () => {
   const h = setup();
@@ -317,6 +325,7 @@ it("fences retired relay clicks and tracks profile, community, reconnect and dis
 });
 
 it("does not leak late completion into a replacement identity or dispose native execution on unmount", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
   const h = setup();
   const pending = deferred<ControlSnapshot>();
   vi.spyOn(h.host, "action").mockImplementationOnce(() => pending.promise);
@@ -338,7 +347,6 @@ it("does not leak late completion into a replacement identity or dispose native 
   ).not.toBeInTheDocument();
   view.unmount();
   const reads = read.mock.calls.length;
-  vi.useFakeTimers();
   await act(() => vi.advanceTimersByTimeAsync(15000));
   expect(read).toHaveBeenCalledTimes(reads);
   expect(dispose).not.toHaveBeenCalled();

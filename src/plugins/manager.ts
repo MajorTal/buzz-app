@@ -50,6 +50,7 @@ export function createPluginManager(
   );
   let configuration: ConfigurationState = { status: "loading" };
   let busy = false;
+  let catalogPending = false;
   let error: string | null = null;
   let refreshError: string | null = null;
   let closed = false;
@@ -87,12 +88,22 @@ export function createPluginManager(
     runtime.reconcile(desired);
     publish();
   }
+  async function getCatalog() {
+    if (catalogPending)
+      throw new Error("Plugin catalog read is still in progress");
+    catalogPending = true;
+    try {
+      return await storage.getCatalog();
+    } finally {
+      catalogPending = false;
+    }
+  }
   async function refresh() {
     const before = changes;
     try {
-      if (busy) return;
+      if (busy || catalogPending) return;
       const next = await withTimeout(
-        storage.getCatalog(),
+        getCatalog(),
         "Plugin storage did not respond within 10 seconds",
       );
       if (!closed && before === changes) accept(next);
@@ -121,21 +132,37 @@ export function createPluginManager(
     changes++;
     error = null;
     publish();
+    // A watchdog ends the caller's wait, not the underlying native operation.
+    let settled = false;
+    const pending = (async () => {
+      try {
+        return await operation();
+      } finally {
+        settled = true;
+      }
+    })();
+    const finish = () => {
+      changes++;
+      busy = false;
+      publish();
+    };
     try {
       const next = await withTimeout(
-        operation(),
+        pending,
         `Plugin storage did not respond within ${timeoutMs / 1000} seconds`,
         timeoutMs,
       );
       if (!closed) accept(next);
       return !closed;
     } catch (reason) {
-      if (!closed) error = String(reason);
+      if (!closed) {
+        error = String(reason);
+        publish();
+      }
       return false;
     } finally {
-      changes++;
-      busy = false;
-      publish();
+      if (settled) finish();
+      else void pending.then(finish, finish);
     }
   }
   void refresh();
@@ -158,7 +185,7 @@ export function createPluginManager(
     change: (action: ManagementAction, id: string) =>
       update(() => storage.changePlugin(action, id)),
     reload: (id: string) => update(() => storage.reloadPlugin(id), 120_000),
-    retry: () => update(storage.getCatalog),
+    retry: () => update(getCatalog),
     recover: () => update(storage.recoverSettings),
     dismissError: () => {
       error = null;

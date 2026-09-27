@@ -18,8 +18,8 @@ drift and diagnostics. Instructions are no longer displayed in the read-only
 summary; the verified owner opens the existing native editor in place with
 **Agent instructions**, without leaving the profile. Environment keys and
 arguments are not shown. Opening the Info tab requests a status read; concurrent
-requests coalesce. This summary adds no polling and observes the profile actions'
-existing refresh. A failed read keeps the last evidence.
+requests coalesce. This summary adds no polling and observes the profile panel's
+periodic refresh. A failed read keeps the last evidence.
 The host error, runtime-unavailable reason, unconfirmed-status notice and Retry
 are shown once, by the profile actions. Browser/unavailable hosts, loading/error
 without evidence, unknown keys and records saved for another community render
@@ -340,9 +340,13 @@ when native ownership is unknown.
 It matches the exact public key and canonical active-community scope to one native
 ID; namesakes, other-community identities, ambiguous matches and browser-only
 profiles get no runtime actions. It adds no controller, relay scan or agent editor.
-Profiles and Agents share `useAgentControl` for observation. While mounted it
-refreshes host evidence every five seconds when visible/ready; errors stop polling and expose explicit Retry status. Unmount
-releases observation, never native execution.
+Profiles and Agents use `useAgentControl` only to subscribe. One mounted panel
+owns `useAgentControlRefresh`; an exact-instance panel owns it for its nested
+profile too. Child Actions/Delete/Runtime controls do not install intervals.
+The panel refreshes host evidence every five seconds while visible, including
+after errors, matching Agents' read-only recovery policy. Explicit Retry status
+remains available; no poll starts, stops or restarts a process. Unmount releases
+observation and its refresh timer, never native execution.
 
 Start/Restart require ready host evidence, an available runtime and no pending
 operation or process transition. Stop uses the controller's existing recovery

@@ -5,6 +5,7 @@ import { open, settle } from "./timeline.mjs";
 test.use({
   productionBroker: true,
   readState: true,
+  pluginFixtures: true, // Existing read-only session exposure for owner barriers.
   historyCounts: { alpha: 640, beta: 20 },
 });
 const history = (page) =>
@@ -113,6 +114,7 @@ test("built sidebar → visible dwell → durable journal → encrypted broker p
   page,
   app,
 }) => {
+  await page.clock.install();
   await open(page, app);
   await expect
     .poll(() =>
@@ -125,7 +127,8 @@ test("built sidebar → visible dwell → durable journal → encrypted broker p
     /^500 observed unread messages/,
   );
   await composer(page).focus();
-  await page.waitForTimeout(900); // Negative dwell control: opening and composer focus are not reading.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  await page.clock.runFor(900); // Composer focus is not reading, even past dwell.
   expect((await journal(page)).state.frontiers).toEqual({});
   expect(app.report.readPublications).toEqual([]);
   const ids = await visible(page);
@@ -136,8 +139,9 @@ test("built sidebar → visible dwell → durable journal → encrypted broker p
     )[0],
   );
   await history(page).focus();
-  await page.waitForTimeout(300);
+  await page.clock.runFor(300);
   expect((await journal(page)).state.frontiers).toEqual({});
+  await page.clock.runFor(750);
   await expect
     .poll(async () => Object.keys((await journal(page)).state.frontiers).sort())
     .toEqual(ids.map((id) => `msg:${id}`).sort());
@@ -145,6 +149,7 @@ test("built sidebar → visible dwell → durable journal → encrypted broker p
     "aria-label",
     new RegExp(`^${before - ids.length} observed unread messages`),
   );
+  await page.clock.resume();
   const stored = await journal(page);
   expect(stored.state.frontiers.alpha).toBeUndefined();
   // The normal debounce, signing, NIP-44, NIP-98 and publication/readback all run.
@@ -174,16 +179,79 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
   page,
   app,
 }) => {
-  await open(page, app);
-  await history(page).focus();
-  await page.waitForTimeout(300);
+  await page.clock.install();
+  let release;
+  const gate = new Promise((resolve) => {
+    release = resolve;
+  });
+  const markerRequested = page.waitForRequest(
+    (request) =>
+      request.url().endsWith("/query") &&
+      request.postDataJSON().some((filter) => filter.read_state_snapshot === 1),
+  );
+  await page.route("**/query", async (route) => {
+    if (
+      route
+        .request()
+        .postDataJSON()
+        .some((filter) => filter.read_state_snapshot === 1)
+    )
+      await gate;
+    await route.continue();
+  });
+  try {
+    await open(page, app);
+    await markerRequested;
+    // Mounted history is not proof that the serial durable owner is ready.
+    expect(
+      await page.evaluate(
+        () => window.fixtureRelay.snapshot().session.unread.sync().completeness,
+      ),
+    ).toBe("unknown");
+  } finally {
+    release();
+  }
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const sync = window.fixtureRelay.snapshot().session.unread.sync();
+        return { status: sync.status, completeness: sync.completeness };
+      }),
+    )
+    .toEqual({ status: "reconciled", completeness: "snapshot" });
   await composer(page).focus();
-  await page.waitForTimeout(900);
-  expect((await journal(page)).state.frontiers).toEqual({});
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  await history(page).focus();
+  const ids = await visible(page);
+  expect(ids.length).toBeGreaterThan(0);
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (ids) =>
+          ids.every(
+            (id) =>
+              window.fixtureRelay
+                .snapshot()
+                .session.unread.attention("alpha", id).viewing,
+          ),
+        ids,
+      ),
+    )
+    .toBe(true);
+  await page.clock.runFor(300);
+  await composer(page).focus();
+  await page.clock.runFor(900);
+  await page.clock.resume();
   await options(page);
   await page
     .getByRole("button", { name: "Mark unread on this device", exact: true })
     .click();
+  // This durable action is ordered behind any erroneous dwell mutation in the
+  // same read-state queue; a separate IndexedDB read alone is not a barrier.
+  await expect
+    .poll(async () => (await journal(page)).localUnread.alpha)
+    .toBeGreaterThan(0);
+  expect((await journal(page)).state.frontiers).toEqual({});
   await options(page);
   await expect(
     alpha(page).getByRole("img", {
@@ -191,8 +259,10 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
       exact: true,
     }),
   ).toBeVisible();
+  await composer(page).focus();
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await history(page).focus();
-  await page.waitForTimeout(1000);
+  await page.clock.runFor(1000);
   expect((await journal(page)).localUnread.alpha).toBeGreaterThan(0);
   await expect(
     alpha(page).getByRole("img", {
@@ -200,6 +270,7 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
       exact: true,
     }),
   ).toBeVisible();
+  await page.clock.resume();
   app.relay.holdContent(); // Reload must use verified disk evidence, not wait for network repair.
   await page.reload();
   await openPage(page, "Messages");

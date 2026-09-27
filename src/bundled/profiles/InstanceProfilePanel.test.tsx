@@ -43,6 +43,7 @@ afterEach(() => {
   cleanup();
   verify.mockReset();
   for (const owner of disposables.splice(0)) owner.dispose();
+  vi.useRealTimers();
 });
 function fixture({
   owner = viewer,
@@ -563,4 +564,33 @@ it("withholds private detail until a new same-owner head is verified", async () 
   expect(
     screen.getByRole("heading", { name: "Updated identity" }),
   ).toBeVisible();
+});
+
+it("owns one read-only refresh cadence across nested instance controls and tab changes", async () => {
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  const f = fixture({ holdOwner: true });
+  try {
+    await act(() => f.control.refresh());
+    // Offset child mounting from the outer interval. Simultaneous timers can
+    // coalesce in the controller and conceal duplicate refresh ownership.
+    await act(() => vi.advanceTimersByTimeAsync(1000));
+  } finally {
+    f.releaseOwner();
+  }
+  await screen.findByRole("button", { name: /^Start$/ });
+  const count = () =>
+    f.native.calls.filter((call) => call.action === "snapshot").length;
+  const initial = count();
+  await act(() => vi.advanceTimersByTimeAsync(15_000));
+  expect(count() - initial).toBe(3);
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("tab", { name: "Runtime" }));
+  const runtime = count();
+  await act(() => vi.advanceTimersByTimeAsync(10_000));
+  expect(count() - runtime).toBe(2);
+  expect(f.native.calls.every((call) => call.action === "snapshot")).toBe(true);
+  cleanup();
+  const stopped = count();
+  await act(() => vi.advanceTimersByTimeAsync(15_000));
+  expect(count()).toBe(stopped);
 });

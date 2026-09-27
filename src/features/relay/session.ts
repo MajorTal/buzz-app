@@ -1359,15 +1359,36 @@ export function createRelaySession(
       lifetime.signal,
       {
         async read(filters, settings) {
-          const epoch = accessEpoch;
           const cleared = cacheClearEpoch;
-          // Browsing still uses verified, scheduled reads, but must not evict
-          // conversation profiles by admitting the whole directory into shared views.
-          const events = await requests.reader.read(filters, settings);
-          settings?.signal?.throwIfAborted();
-          if (closed || epoch !== accessEpoch || cleared !== cacheClearEpoch)
-            throw new DOMException("Stale directory read", "AbortError");
-          return events;
+          const generation = liveGeneration;
+          // Directory reads bypass shared profile admission. Retry one access
+          // invalidation here, where caller/cache/connection lifetimes are known.
+          for (let attempt = 0; ; attempt++) {
+            const epoch = accessEpoch;
+            try {
+              const events = await requests.reader.read(filters, settings);
+              settings?.signal?.throwIfAborted();
+              if (
+                closed ||
+                epoch !== accessEpoch ||
+                cleared !== cacheClearEpoch ||
+                generation !== liveGeneration
+              )
+                throw new DOMException("Stale directory read", "AbortError");
+              return events;
+            } catch (error) {
+              if (
+                attempt > 0 ||
+                readErrorKind(error) !== "cancelled" ||
+                closed ||
+                settings?.signal?.aborted ||
+                epoch === accessEpoch ||
+                cleared !== cacheClearEpoch ||
+                generation !== liveGeneration
+              )
+                throw error;
+            }
+          }
         },
       },
     ),

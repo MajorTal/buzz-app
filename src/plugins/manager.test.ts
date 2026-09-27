@@ -70,10 +70,12 @@ function harness(overrides: Partial<PluginStorage> = {}, fail = false) {
 }
 function deferred() {
   let resolve!: (result: StorageResult) => void;
-  const promise = new Promise<StorageResult>((done) => {
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<StorageResult>((done, fail) => {
     resolve = done;
+    reject = fail;
   });
-  return { promise, resolve };
+  return { promise, resolve, reject };
 }
 
 it("activates and observes CLI changes without any React subscribers", async () => {
@@ -137,6 +139,93 @@ it("prevents overlapping edits and exposes their failure without dropping config
   expect(plugins.snapshot().busy).toBe(false);
   plugins.dismissError();
   expect(plugins.snapshot().error).toBeNull();
+});
+it.each(["resolve", "reject"] as const)(
+  "does not replace a timed-out catalog read until it actually %ss",
+  async (settlement) => {
+    const pending = deferred();
+    const getCatalog = vi
+      .fn()
+      .mockReturnValueOnce(pending.promise)
+      .mockResolvedValue(ready());
+    const { plugins } = harness({ getCatalog });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(plugins.startup()).toBe("recovery");
+    await vi.advanceTimersByTimeAsync(33_000);
+    expect(await plugins.retry()).toBe(false);
+    expect(plugins.snapshot().error).toContain("still in progress");
+    expect(getCatalog).toHaveBeenCalledTimes(1);
+    if (settlement === "resolve") pending.resolve(ready(false));
+    else pending.reject(new Error("Late native failure"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(plugins.startup()).toBe("recovery");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(getCatalog).toHaveBeenCalledTimes(2);
+    expect(plugins.snapshot().configuration).toEqual(ready());
+  },
+);
+it.each(["resolve", "reject"] as const)(
+  "keeps a timed-out edit busy until it actually %ss, then refreshes",
+  async (settlement) => {
+    const pending = deferred();
+    const changePlugin = vi.fn(() => pending.promise);
+    const { plugins, installation } = harness({ changePlugin });
+    await vi.advanceTimersByTimeAsync(0);
+    const update = plugins.change("disable", "example");
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(await update).toBe(false);
+    expect(plugins.snapshot().error).toContain("10 seconds");
+    expect(plugins.snapshot().busy).toBe(true);
+    expect(await plugins.change("enable", "example")).toBe(false);
+    expect(await plugins.recover()).toBe(false);
+    await vi.advanceTimersByTimeAsync(33_000);
+    expect(changePlugin).toHaveBeenCalledTimes(1);
+    expect(installation.recoverSettings).not.toHaveBeenCalled();
+    expect(installation.getCatalog).toHaveBeenCalledTimes(1);
+    if (settlement === "resolve") pending.resolve(ready(false));
+    else pending.reject(new Error("Late write failure"));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(plugins.snapshot().busy).toBe(false);
+    // Neither late success nor failure may replace the displayed configuration.
+    expect(plugins.snapshot().configuration).toEqual(ready());
+    vi.mocked(installation.getCatalog).mockResolvedValue(ready(false));
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(plugins.snapshot().configuration).toEqual(ready(false));
+    expect(installation.getCatalog).toHaveBeenCalledTimes(2);
+  },
+);
+it("does not publish a timed-out edit's settlement after disposal", async () => {
+  const pending = deferred();
+  const { plugins, installation } = harness({
+    changePlugin: () => pending.promise,
+  });
+  await vi.advanceTimersByTimeAsync(0);
+  const update = plugins.change("disable", "example");
+  await vi.advanceTimersByTimeAsync(10_000);
+  expect(await update).toBe(false);
+  const listener = vi.fn();
+  plugins.subscribe(listener);
+  await plugins.dispose();
+  pending.reject(new Error("Late write failure"));
+  await vi.advanceTimersByTimeAsync(33_000);
+  expect(listener).not.toHaveBeenCalled();
+  expect(installation.getCatalog).toHaveBeenCalledTimes(1);
+});
+it("keeps an edit busy through configuration publication", async () => {
+  const { plugins, installation } = harness();
+  await vi.advanceTimersByTimeAsync(0);
+  let reentered = false;
+  plugins.subscribe(() => {
+    if (!plugins.snapshot().busy && !reentered) {
+      reentered = true;
+      expect(plugins.snapshot().configuration).toEqual(ready(false));
+      void plugins.change("enable", "example");
+    }
+  });
+  expect(await plugins.change("disable", "example")).toBe(true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(reentered).toBe(true);
+  expect(installation.changePlugin).toHaveBeenCalledTimes(2);
 });
 it("keeps safe-mode configuration enabled while skipping external activation", async () => {
   const { plugins, pages } = harness({

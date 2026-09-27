@@ -295,7 +295,12 @@ metadata completion cannot replay the older membership snapshot.
 
 The session cancels all pending reads on revocation, because broad/ID/reference
 filters cannot establish event ownership before results arrive. Completion epochs
-also fence already-resolved requests. The session defers subscription callbacks
+also fence already-resolved requests. Directory browsing/searching retries one
+access-epoch invalidation through the same verified scheduler, without admitting
+its results into shared conversation profiles. Caller cancellation, cache clear,
+disconnect and disposal stop that recovery; a second invalidation surfaces an error
+for explicit Retry, rather than starting a UI retry timer. Channel-content reads do
+not inherit this directory-specific retry. The session defers subscription callbacks
 until every owned projection and the final channel list have been purged; a callback
 reading another view cannot observe its pre-revocation snapshot. Unrelated retained
 channel content survives, but in-flight reads may need refresh. A newer signed roster can regrant access;
@@ -441,8 +446,9 @@ spans show elapsed time. **Export timings** downloads JSON for comparison.
 `pnpm exec vitest run src/features/relay/traffic.integration.test.ts --silent=false`
 exercises first-versus-subsequent send latency, 2,400 retained rows, echo-before-ACK,
 stale-read races, edit rejection, automatic retirement, restart, and asynchronous
-storage disposal. It asserts exact fold work and unaffected identities, plus a
-50 ms synchronous-send regression guard; elapsed measurements are machine dependent.
+storage disposal. It asserts exact fold work, subscriber counts and unaffected
+identities. Synchronous-send time is diagnostic, not an enforced latency guarantee;
+elapsed measurements are machine dependent.
 `live.test.ts` exercises authenticated subscriptions, signature rejection, reconnect
 and disposal. These tests use ephemeral keys and local transports; no live messages
 are posted by validation.

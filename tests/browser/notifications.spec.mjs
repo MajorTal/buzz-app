@@ -105,20 +105,38 @@ async function observed(page, id) {
       ),
     )
     .toBe("eligible");
-  // Bounded delivery is after two rendering frames, with a 100ms background cap.
-  await page.waitForTimeout(150);
+  // Fresh attention is installed in the same synchronous receive turn as
+  // notification admission. Run the actual presentation deadline and its
+  // immediate browser-permission continuation, rather than sleeping on wall time.
+  await page.clock.runFor(100);
 }
 
 test("real live traffic alerts once; replay/reload stay quiet and choices persist", async ({
   page,
   app,
 }) => {
+  await page.clock.install();
   await ready(page, app);
   expect(await systemCount(page)).toBe(0);
   const row = liveMessage(app, "Fresh mention");
   await expect.poll(() => systemCount(page)).toBe(1);
   app.relay.publish("primary", row);
-  await observed(page, row.id);
+  // The replay already has attention, so that alone is not a receive barrier.
+  // A later fresh row on the same ordered stream proves replay consumption.
+  const sentinel = liveMessage(app, "Replay consumption sentinel", {
+    mentioned: false,
+  });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        (id) =>
+          window.fixtureRelay.snapshot().session.unread.attention("beta", id)
+            .status,
+        sentinel.id,
+      ),
+    )
+    .toBe("ineligible");
+  await page.clock.runFor(100);
   expect(await systemCount(page)).toBe(1);
   await page.getByRole("switch", { name: "Mentions", exact: true }).uncheck();
   const muted = liveMessage(app, "Muted mention");
@@ -140,6 +158,7 @@ test("explicit Allow releases the first fresh alert; master off preserves catego
   page,
   app,
 }) => {
+  await page.clock.install();
   await ready(page, app);
   await page.evaluate(() => {
     window.Notification.permission = "default";
@@ -174,6 +193,7 @@ test("a fully visible incoming row stays quiet without publishing read intent", 
   page,
   app,
 }) => {
+  await page.clock.install();
   const following = finalizeEvent(
     {
       kind: 9,
@@ -216,11 +236,14 @@ test("a fully visible incoming row stays quiet without publishing read intent", 
       ),
     )
     .toBe(true);
+  // Controlled policy/dwell ordering, not evidence about native frame scheduling.
+  // Exact-row navigation and reflow journeys below retain native rAF.
+  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   const row = liveMessage(app, "Visible mention");
+  await observed(page, row.id);
   await expect(history.locator(`[data-message-id="${row.id}"]`)).toBeInViewport(
     { ratio: 1 },
   );
-  await observed(page, row.id);
   expect(await systemCount(page)).toBe(0);
   expect(
     await page.evaluate(
@@ -230,6 +253,7 @@ test("a fully visible incoming row stays quiet without publishing read intent", 
       row.id,
     ),
   ).toBe(true);
+  await page.clock.resume();
   await settings(page);
   await page
     .getByRole("switch", { name: "Notify while viewing", exact: true })
@@ -412,6 +436,7 @@ test("asynchronous browser display failure reaches Settings once without redeliv
   page,
   app,
 }) => {
+  await page.clock.install();
   await ready(page, app);
   liveMessage(app, "Browser display error");
   await expect.poll(() => systemCount(page)).toBe(1);
@@ -436,6 +461,6 @@ test("asynchronous browser display failure reaches Settings once without redeliv
   await page
     .getByRole("button", { name: "Check permission", exact: true })
     .click();
-  await page.waitForTimeout(150);
+  await page.clock.runFor(100);
   expect(await systemCount(page)).toBe(1);
 });

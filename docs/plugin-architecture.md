@@ -410,6 +410,15 @@ has not finished; it does not claim that arbitrary plugin code has stopped. Plug
 replacement still waits for the predecessor's actual cleanup, even after a timeout.
 React owns only subscriptions and presentation state.
 
+Catalog polling observes external `buzzodz` writes once per second. Its ten-second
+watchdog bounds the caller's wait, not native lock acquisition: one pending catalog
+read retains ownership until it actually settles. Retry cannot launch a replacement
+while that read is pending. Recovery remains available, but is a separate management
+operation and still needs the native registry lock. A timed-out management operation
+keeps controls busy until actual settlement; late results are not applied. A fresh
+poll reconciles the eventual stored state. Disposal stops polling/publication, not
+an already-running native operation.
+
 Relay consumers use `session.channels` for channel views,
 `session.profiles` for shared identities, and `session.read` for
 finite filtered event reads, and `session.unread` for shared observed badges and

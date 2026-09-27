@@ -279,8 +279,9 @@ GC and instrumentation affect the measurements themselves.
 Collect repeated baselines on a stable, otherwise idle runner with the same OS,
 engine version, viewport and build. Compare distributions before choosing timing
 or heap thresholds; do not use these first samples as a universal 60 FPS promise.
-The existing 2,400-row data-path test still separately guards synchronous send
-under 50ms and deterministic fold/notification counts.
+The existing 2,400-row data-path test enforces deterministic fold/notification
+counts and unaffected identities. It logs synchronous send time for comparison;
+it does not impose a runner-dependent latency threshold or guarantee latency.
 
 ## Reading-position contract
 

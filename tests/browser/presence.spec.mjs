@@ -419,7 +419,7 @@ test("presence becomes usable during held HTTP work and unfinished subscription 
 
 // Real account controls -> shared activity -> retained session -> production
 // broker -> authenticated socket; real localStorage survives app reconstruction.
-test("profile trigger retains shared hover, press, and open feedback", async ({
+test("profile trigger stays transparent through hover, press, and open menu", async ({
   page,
   app,
 }) => {
@@ -428,21 +428,18 @@ test("profile trigger retains shared hover, press, and open feedback", async ({
     name: "Your profile",
     exact: true,
   });
-  for (const [mode, hover, pressed] of [
-    ["light", "rgba(255, 255, 255, 0.62)", "rgb(218, 218, 218)"],
-    ["dark", "rgba(28, 28, 28, 0.66)", "rgb(89, 89, 89)"],
-  ]) {
+  for (const mode of ["light", "dark"]) {
     await page.evaluate((value) => {
       document.documentElement.dataset.colorMode = value;
     }, mode);
     await trigger.hover();
-    await expect(trigger).toHaveCSS("background-color", hover);
+    await expect(trigger).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await page.mouse.down();
-    await expect(trigger).toHaveCSS("background-color", pressed);
+    await expect(trigger).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await page.mouse.up();
     await page.mouse.move(1, 1);
     await expect(trigger).toHaveAttribute("aria-expanded", "true");
-    await expect(trigger).toHaveCSS("background-color", pressed);
+    await expect(trigger).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await page.keyboard.press("Escape");
     await expect(trigger).toHaveAttribute("aria-expanded", "false");
   }

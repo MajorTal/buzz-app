@@ -84,7 +84,8 @@
     text-underline-offset: var(--space-1);
   }
 
-  /* Only pointer devices get hover; keyboard focus remains the host's signal. */
+  /* Avatar controls keep the backdrop visible through their artwork cutouts.
+     Only pointer devices get hover; keyboard focus remains the host's signal. */
   @media (hover: hover) and (pointer: fine) {
     .buzz-button[data-variant="prominent"]:hover:not([data-disabled]) {
       background: var(--affordance-prominent-hover);
@@ -94,7 +95,11 @@
         [data-variant="outline"],
         [data-variant="ghost"],
         [data-variant="inverted"]
-      ):hover:not([data-disabled], [data-icon-variant="chrome"]) {
+      ):hover:not(
+        [data-disabled],
+        [data-icon-variant="chrome"],
+        [data-icon-variant="avatar"]
+      ) {
       background: var(--affordance-subtle-hover);
     }
     .buzz-button[data-variant="destructive"]:hover:not([data-disabled]) {
@@ -115,7 +120,10 @@
     [data-variant="outline"],
     [data-variant="ghost"],
     [data-variant="inverted"]
-  ):is(:active, [aria-expanded="true"]):not([data-disabled]) {
+  ):is(:active, [aria-expanded="true"]):not(
+    [data-disabled],
+    [data-icon-variant="avatar"]
+  ) {
     background: var(--affordance-subtle-pressed);
   }
   .buzz-button[data-variant="destructive"]:is(

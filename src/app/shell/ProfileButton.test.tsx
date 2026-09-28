@@ -54,7 +54,7 @@ it("keeps the header cutout and menu status in sync with presence", () => {
     />,
   );
   const button = screen.getByRole("button", { name: "Your profile" });
-  expect(button).toHaveAttribute("data-icon-variant", "chrome");
+  expect(button).toHaveAttribute("data-icon-variant", "avatar");
   expect(button.querySelector(".buzz-avatar svg")).toBeInTheDocument();
   expect(button.querySelector(".buzz-avatar")).not.toHaveTextContent("?");
   expect(button.querySelector(".buzz-avatar-status")).toHaveAttribute(

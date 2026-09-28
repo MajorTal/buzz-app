@@ -175,7 +175,7 @@ export function ProfileButton({
               aria-label="Your profile"
               ref={profileTrigger}
               title={name}
-              variant="chrome"
+              variant="avatar"
               shape="round"
               icon={
                 <span

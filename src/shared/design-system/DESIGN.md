@@ -57,6 +57,9 @@ Avatar `shape="circle"` or `shape="squircle"`; the shape carries identity meanin
 not density or emphasis. The caller supplies identity type from domain data,
 never a name or picture heuristic. `size="fill"` fills the owning layout’s
 available space. Shape clips the artwork, never the interactive focus target.
+Avatar-only controls use `IconButton variant="avatar"` so the surrounding backdrop
+shows through their cutouts at rest, hover, press, and while a menu is open. The
+button retains its unmasked keyboard focus ring.
 Circular and squircle avatars can add `statusBadge="online" | "away" | "offline"`. The dot
 uses a semantic green, yellow, or grey role with light and dark values. Its inset
 cutout and dot scale with the existing avatar size; the dot is separate from the

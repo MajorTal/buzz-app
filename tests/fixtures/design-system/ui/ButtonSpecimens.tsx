@@ -4,6 +4,13 @@ import {
   PlusIcon,
   GearIcon,
 } from "../../../../src/shared/design-system/icons";
+import { Avatar } from "../../../../src/shared/design-system/ui/Avatar";
+import {
+  MenuRoot,
+  MenuTrigger,
+  MenuPopup,
+  MenuItem,
+} from "../../../../src/shared/design-system/ui/Menu";
 import { Button } from "../../../../src/shared/design-system/ui/Button";
 import { IconButton } from "../../../../src/shared/design-system/ui/IconButton";
 
@@ -228,6 +235,59 @@ export function IconButtonSpecimen() {
               shape="control"
               aria-label="Control shape"
               icon={<GearIcon aria-hidden="true" />}
+            />
+          </div>
+        </div>
+      </section>
+      <section
+        className="component-specimen-group"
+        aria-label="Avatar icon treatments"
+      >
+        <h2 className="text-body-sm text-tertiary">
+          Avatar · Transparent cutouts
+        </h2>
+        <p className="text-body-sm text-subtle">
+          Hover, press, or open the menu: the backdrop stays visible through the
+          avatar cutout. Tab to the enabled control to inspect keyboard focus.
+        </p>
+        <div
+          className="component-specimen-frame"
+          style={{ background: "var(--bg-app)" }}
+        >
+          <div className="component-specimen-row">
+            <MenuRoot>
+              <MenuTrigger
+                render={
+                  <IconButton
+                    variant="avatar"
+                    aria-label="Avatar profile menu"
+                    icon={
+                      <Avatar
+                        alt="Alex Morgan"
+                        fallback="A"
+                        size="fill"
+                        statusBadge="online"
+                      />
+                    }
+                  />
+                }
+              />
+              <MenuPopup size="compact">
+                <MenuItem>View profile</MenuItem>
+              </MenuPopup>
+            </MenuRoot>
+            <IconButton
+              variant="avatar"
+              disabled
+              aria-label="Disabled avatar profile"
+              icon={
+                <Avatar
+                  alt="Sam Rivera"
+                  fallback="S"
+                  size="fill"
+                  statusBadge="away"
+                />
+              }
             />
           </div>
         </div>

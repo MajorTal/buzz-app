@@ -185,7 +185,7 @@
   }
 
   .shell-header {
-    @apply flex h-14 shrink-0 items-center justify-between gap-3 px-4;
+    @apply flex h-14 shrink-0 items-center justify-between gap-3 pl-4 pr-2 sm:pr-4;
   }
   .shell-communities {
     @apply flex min-w-0 items-center justify-start;
@@ -231,7 +231,7 @@
   }
   @media (max-width: 700px) {
     .shell-header {
-      @apply gap-2 px-2;
+      @apply gap-2 pl-2;
     }
   }
   @media (max-width: 650px) {

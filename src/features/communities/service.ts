@@ -4,7 +4,7 @@ import type { IdentityNames } from "../identity-names/service";
 import { createPresenceActivity } from "../presence/activity";
 import { Context } from "@deepseek-ai/cordis";
 import { provideRelay, type RelayData } from "../relay/service";
-import { connectBrokerTransport } from "../relay/transport";
+import { connectBrokerTransport, type ReadTransport } from "../relay/transport";
 import { communityDestination, isCommunityAlias } from "./destination";
 
 export const PROFILE_ABOUT_MAX_LENGTH = 500;
@@ -34,11 +34,18 @@ export function createCommunities(
   openRelay = "",
   agentChoices?: Pick<AgentControl, "snapshot" | "subscribe" | "refresh">,
   identityReady?: Promise<string>,
+  nativeConnect?: (id: string, signal: AbortSignal) => Promise<ReadTransport>,
 ) {
+  const connect = live
+    ? (id: string, signal: AbortSignal) =>
+        connectBrokerTransport("", signal, id)
+    : identityReady
+      ? nativeConnect
+      : undefined;
   let state: ClientSnapshot = {
     ...empty(),
     status: live || identityReady ? "loading" : "unavailable",
-    relayAvailable: live,
+    relayAvailable: !!connect,
   };
   // Retain temporarily unresolvable deployment aliases in storage, not active UI/sessions.
   const unresolvedMemberships: Membership[] = [];
@@ -68,10 +75,15 @@ export function createCommunities(
   const emitRelay = () => {
     for (const fn of relayListeners) fn();
   };
-  const update = (patch: Partial<ClientSnapshot>, persist = true) => {
+  const update = (
+    patch: Partial<ClientSnapshot>,
+    persist = true,
+    required = false,
+  ) => {
     const next = { ...state, ...patch };
-    // A deliberate selection supersedes an unavailable saved selection; profile edits do not.
-    if (persist && Object.hasOwn(patch, "selected")) unresolvedSelection = null;
+    // Commit a deliberate selection only after required persistence succeeds.
+    const selection =
+      persist && Object.hasOwn(patch, "selected") ? null : unresolvedSelection;
     try {
       if (persist && next.viewer)
         localStorage.setItem(
@@ -79,24 +91,28 @@ export function createCommunities(
           JSON.stringify({
             profile: next.profile,
             memberships: [...next.memberships, ...unresolvedMemberships],
-            selected: next.selected ?? unresolvedSelection,
+            selected: next.selected ?? selection,
           }),
         );
     } catch {
+      if (required)
+        throw new Error(
+          "Could not save this community on this device. Try again.",
+        );
       // Preferences are best effort; storage failure must not strand a remote join.
     }
+    unresolvedSelection = selection;
     state = next;
     for (const fn of listeners) fn();
     emitRelay();
   };
   const acquire = (id: string, viewer = state.viewer) => {
-    // Native identity alone is not a broker: never pair it with the dev signer.
-    if (!live) return disconnected;
+    if (!connect) return disconnected;
     let session = sessions.get(id);
     if (!session) {
       session = provideRelay(
         newScope(),
-        (signal) => connectBrokerTransport("", signal, id),
+        (signal) => connect(id, signal),
         presenceActivity,
         identityNames,
         agentChoices,
@@ -265,14 +281,18 @@ export function createCommunities(
         ...membership,
         id: communityDestination(membership.id).id,
       };
-      update({
-        memberships: [
-          ...state.memberships.filter((m) => m.id !== membership.id),
-          membership,
-        ],
-        profile: state.profile.name ? state.profile : profile,
-        selected: membership.id,
-      });
+      update(
+        {
+          memberships: [
+            ...state.memberships.filter((m) => m.id !== membership.id),
+            membership,
+          ],
+          profile: state.profile.name ? state.profile : profile,
+          selected: membership.id,
+        },
+        true,
+        !!nativeConnect && !live,
+      );
       if (sessions.has(membership.id)) sessions.get(membership.id)?.retry();
       else acquire(membership.id);
       emitRelay();

@@ -32,11 +32,17 @@ afterEach(() => {
 });
 
 it("publishes a description-only edit to an existing community profile", async () => {
-  api.inspectProfile.mockResolvedValueOnce({
-    exists: true,
-    existing: { name: "Fixture", about: "Before" },
-    profile: { name: "Fixture", picture: "", about: "Before" },
-  });
+  api.inspectProfile
+    .mockResolvedValueOnce({
+      exists: true,
+      existing: { name: "Fixture", about: "Before" },
+      profile: { name: "Fixture", picture: "", about: "Before" },
+    })
+    .mockResolvedValueOnce({
+      exists: true,
+      existing: { name: "Fixture", about: "After" },
+      profile: { name: "Fixture", picture: "", about: "After" },
+    });
   const user = userEvent.setup();
   vi.stubGlobal(
     "fetch",
@@ -73,6 +79,7 @@ it("publishes a description-only edit to an existing community profile", async (
     { name: "Fixture", picture: "", about: "After" },
     { name: "Fixture", about: "Before" },
   );
+  await waitFor(() => expect(communities.joined).toHaveBeenCalledOnce());
 });
 
 it("opens with an unchanged over-limit profile and blocks publishing it", async () => {
@@ -223,11 +230,21 @@ it.each([
 
 it("explains an inherited invalid avatar when editing at join and recovers on replacement", async () => {
   const picture = "http://images.example/avatar.png";
-  api.inspectProfile.mockResolvedValueOnce({
-    exists: true,
-    existing: { name: "Fixture", picture },
-    profile: { name: "Fixture", picture, about: "" },
-  });
+  api.inspectProfile
+    .mockResolvedValueOnce({
+      exists: true,
+      existing: { name: "Fixture", picture },
+      profile: { name: "Fixture", picture, about: "" },
+    })
+    .mockResolvedValueOnce({
+      exists: true,
+      existing: {},
+      profile: {
+        name: "Fixture changed",
+        picture: "https://images.example/new.png",
+        about: "",
+      },
+    });
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -274,6 +291,7 @@ it("explains an inherited invalid avatar when editing at join and recovers on re
     },
     { name: "Fixture", picture },
   );
+  await waitFor(() => expect(communities.joined).toHaveBeenCalledOnce());
 });
 
 it("keeps join unavailable after native identity hydration, but still saves a local profile", async () => {

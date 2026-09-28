@@ -49,7 +49,7 @@ copied here.
 
 | OG/release input | Why it is not implemented here |
 | --- | --- |
-| `BUZZ_DESKTOP_BUILD_RELAY_URL`; packaged auto-connect | Packaged human signing/relay host capability is not implemented. Baking a URL cannot provide it. The existing dev broker and saved agent destinations remain separate. |
+| `BUZZ_DESKTOP_BUILD_RELAY_URL`; packaged auto-connect | No packaged default or auto-join is configured. Native macOS uses its persisted identity and restores only the selected saved community; new admission uses Add a community. The dev broker and saved agent destinations remain separate. See [packaged identity](identity.md). |
 | `BUZZ_BUILD_RELAY_RECONNECT_CMD` | No reconnect-command feature; arbitrary deployment command execution is not added. |
 | `BUZZ_UPDATER_ENDPOINT`, `BUZZ_UPDATER_PUBLIC_KEY` and helper fallback aliases | No updater feature. Public verification configuration belongs with that future feature; private signing keys never belong in app defaults. |
 | `--features mesh-llm` | No mesh/provider integration in this local controller; unsupported imported mesh/team/remote agents still fail closed. |

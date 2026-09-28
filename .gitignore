@@ -10,6 +10,7 @@ target/
 test-results/
 playwright-report/
 blob-report/
+artifacts/native-recovery/
 coverage/
 .pnpm-store/
 .vite/

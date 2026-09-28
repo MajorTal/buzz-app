@@ -64,6 +64,8 @@ fn native_command_permissions_allow_only_main_webview() {
         "identity_import",
         "identity_create",
         "identity_export",
+        "relay_sign",
+        "relay_http",
         "plugin_import_folder",
         "plugin_import_git",
         "plugin_import_install",

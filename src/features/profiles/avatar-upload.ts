@@ -1,5 +1,7 @@
 import { prepareAttachment } from "../messages/prepare-attachment";
-import { connectBrokerTransport, mediaUrl } from "../relay/transport";
+import { mediaUrl } from "../relay/transport";
+import { nativeIdentityEnabled } from "../identity/service";
+import { connectCommunityTransport } from "../communities/connection";
 import { communityDestination } from "../communities/destination";
 import { avatarSource } from "../../shared/avatar-source";
 
@@ -20,6 +22,7 @@ export function avatarPreview(
   const source = avatarSource(value);
   if (!source || !community || source.startsWith("data:")) return source;
   const { id, url } = communityDestination(community);
+  if (nativeIdentityEnabled()) return mediaUrl(source, undefined, url);
   return mediaUrl(
     source,
     (target) =>
@@ -38,10 +41,9 @@ export async function uploadAvatar(
     throw new Error("Choose a PNG, JPEG, GIF, WebP or HEIC image.");
   if (!file.size || file.size > 50 * 1024 * 1024)
     throw new Error("Choose an image smaller than 50 MiB.");
-  const transport = await connectBrokerTransport(
-    "",
-    signal,
+  const transport = await connectCommunityTransport(
     communityDestination(community).id,
+    signal,
   );
   if (!transport.uploadAttachment)
     throw new Error("Image uploads are unavailable on this connection.");

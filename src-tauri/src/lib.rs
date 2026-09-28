@@ -13,7 +13,9 @@ mod host_command;
 mod host_request;
 mod identity;
 mod notifications;
+mod relay;
 use identity::{identity_create, identity_export, identity_import, identity_restore, IdentityHost};
+use relay::{relay_http, relay_sign};
 mod terminal;
 use agent_models::{agent_models_begin, agent_models_cancel, agent_models_run, ModelHost};
 mod goose_models;
@@ -347,6 +349,8 @@ fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         identity_import,
         identity_create,
         identity_export,
+        relay_sign,
+        relay_http,
         plugin_import_folder,
         plugin_import_git,
         plugin_import_install,

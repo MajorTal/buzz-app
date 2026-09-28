@@ -7,6 +7,8 @@
     "allow-identity-import",
     "allow-identity-create",
     "allow-identity-export",
+    "allow-relay-sign",
+    "allow-relay-http",
     "allow-plugin-import-folder",
     "allow-plugin-import-git",
     "allow-plugin-import-install",

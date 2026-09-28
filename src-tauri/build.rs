@@ -20,6 +20,8 @@ fn main() {
             "identity_import",
             "identity_create",
             "identity_export",
+            "relay_sign",
+            "relay_http",
             "plugin_import_folder",
             "plugin_import_git",
             "plugin_import_install",

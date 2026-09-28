@@ -1,4 +1,4 @@
-# Packaged human identity — first slice
+# Packaged human identity and relay access
 
 Native macOS without the live development broker asks the user to **Use an existing
 key** or **Create a new identity**. These are alternatives. Import accepts an nsec,
@@ -44,15 +44,38 @@ principals; plugin JavaScript can invoke `identity_export` directly. Not registe
 a plugin key service is an API ownership choice, not a sandbox. The main-webview
 command permission is not proof of a human gesture.
 
-## Deliberately not live-ready
+## Packaged connection
 
 A public native viewer hydrates the existing public-key-scoped local profile and
-memberships. Native sessions do **not** fall through to the dev broker signer.
-Packaged authenticated relay/HTTP/media transport is not implemented here. Identity
-readiness is separate from `relayAvailable`: join and community profile editing
-show unavailable states, and saved-community icon discovery makes no broker call.
-Local profile editing and identity backup remain available. Remote profile
-publishing and messaging are not established by this slice.
+memberships. On macOS, app composition supplies the native relay adapter after
+identity restoration. Only the selected saved community opens on restart; Personal
+space stays disconnected. Discovery failure leaves the community retryable.
+Native sessions do **not** fall through to the dev broker signer.
+
+The native identity owner signs event templates and authenticates HTTP with
+NIP-98, including the exact request URL, method, body hash and a fresh nonce for
+each attempt. Native networking permits only the discovery, join-policy, invite
+acceptance/claim, query and event routes on HTTPS origins, with bounded bodies,
+timeouts and no redirects. JavaScript never obtains the private key for transport.
+NIP-11 `self` establishes relay authority; the operator-contact `pubkey` is not
+a substitute. The existing live owner handles WSS/NIP-42 authentication and
+signature verification. IPC permissions remain limited to the main WebView.
+
+Community admission, kind-0 profile reads/publication and the adapter's advertised
+message/event writes use this identity. [Join recovery](communities.md#packaged-admission-and-recovery)
+records public progress before remote changes. The existing durable outbox retains
+uncertain delivery across restart; retry uses the same signed event with fresh HTTP
+authentication. Events older than 15 minutes get a strong ID readback instead of
+being republished or silently re-dated. Missing/failed readback retains uncertainty;
+the user must inspect the conversation before explicitly sending a new message.
+
+Optional capabilities are absent until implemented: protected media/upload,
+workflow commands/history, repository HTTP, lifecycle and other broker-only
+helpers are not claimed by this adapter. Public HTTPS avatars/icons can display;
+protected media does not gain access from the image CSP allowance. NIP-FI assertion
+acquisition is not implemented, so deployments enforcing it are outside acceptance.
+Windows/Linux custody, credential migration and release-signing acceptance remain
+separate limitations.
 
 Development with `VITE_BUZZ_LIVE=1` continues to use its pinned legacy broker
 identity, and does not offer native private-key controls. Creating/importing the

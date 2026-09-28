@@ -20,6 +20,8 @@ export type ReadFilter = Readonly<{
   [tag: `#${string}`]: readonly string[] | undefined;
   limit: number;
   authors?: readonly string[];
+  /** Read from the writer when resolving uncertain publication or admission. */
+  consistency?: "strong";
   until?: number;
   since?: number;
   "#h"?: readonly string[];

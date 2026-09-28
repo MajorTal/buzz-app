@@ -23,6 +23,7 @@ import { createShortcutBindings } from "../features/shortcuts/preferences";
 import { ConversationService } from "../features/conversation/service";
 import { createAppearance } from "../shared/theme/service";
 import { createCommunities } from "../features/communities/service";
+import { connectNativeTransport } from "../features/relay/native";
 import { PanelsService } from "../features/panels/service";
 import { Context } from "@deepseek-ai/cordis";
 import { BrowserService } from "../features/browser/service";
@@ -59,6 +60,7 @@ export function createServices() {
     import.meta.env.VITE_BUZZ_OPEN_RELAY ?? "",
     agentControl,
     identity?.ready,
+    identity ? connectNativeTransport : undefined,
   );
   const relay = communities.relay;
   ctx.effect(() => bindAgentMentions(agentControl, communities));

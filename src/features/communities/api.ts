@@ -1,4 +1,6 @@
-import { connectBrokerTransport } from "../relay/transport";
+import { nativeIdentityEnabled } from "../identity/service";
+import { nativeCommunityRequest } from "./native-api";
+import { connectCommunityTransport } from "./connection";
 import type { RelaySession } from "../relay/session";
 import type { PersonalProfile } from "./service";
 export type CommunityInfo = {
@@ -16,6 +18,8 @@ export async function communityRequest<T>(
   route: string,
   body?: unknown,
 ): Promise<T> {
+  if (nativeIdentityEnabled())
+    return nativeCommunityRequest(id, route, body) as Promise<T>;
   const response = await fetch(
     `/api/relay/${encodeURIComponent(id)}/${route}`,
     {
@@ -38,12 +42,19 @@ export async function communityRequest<T>(
 }
 export async function inspectProfile(id: string, session?: RelaySession) {
   // Existing-community editors use the captured session so confirmed reads also
-  // update its shared profile directory. Joining still uses the broker directly.
+  // update its shared profile directory. Joining uses the selected host adapter.
   const transport =
     session ??
-    (await connectBrokerTransport("", AbortSignal.timeout(12000), id));
+    (await connectCommunityTransport(id, AbortSignal.timeout(12000)));
   if (!transport.viewer) throw new Error("Profile identity is unavailable");
-  const filters = [{ kinds: [0], authors: [transport.viewer], limit: 5 }];
+  const filters = [
+    {
+      kinds: [0],
+      authors: [transport.viewer],
+      limit: 5,
+      ...(nativeIdentityEnabled() ? { consistency: "strong" as const } : {}),
+    },
+  ];
   const events =
     "read" in transport
       ? await transport.read(filters, {

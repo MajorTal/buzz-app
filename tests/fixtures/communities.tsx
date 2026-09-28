@@ -5,9 +5,16 @@ import { CommunityDialog } from "../../src/features/communities/CommunityDialog"
 import { createCommunities } from "../../src/features/communities/service";
 import { communityDestination } from "../../src/features/communities/destination";
 import { Context } from "@deepseek-ai/cordis";
+import {
+  keypair,
+  profile as profileEvent,
+} from "../../src/features/relay/testing";
+import type { RelayEvent } from "../../src/features/relay/events";
 import { useState, useSyncExternalStore } from "react";
 import "../../src/shared/styles/globals.css";
-const viewer = "f".repeat(64);
+const identity = keypair();
+const viewer = identity.pubkey;
+const profiles = new Map<string, RelayEvent>();
 const admitted = new Set<string>();
 let rejectProfile = true;
 const calls: string[] = [];
@@ -49,10 +56,20 @@ window.fetch = async (input, init) => {
     admitted.add(id);
     return Response.json({ status: "joined" });
   }
-  if (route === "query")
-    return admitted.has(id)
-      ? Response.json([])
-      : Response.json({ error: "Invite required" }, { status: 403 });
+  if (route === "query") {
+    if (!admitted.has(id))
+      return Response.json({ error: "Invite required" }, { status: 403 });
+    const filters = JSON.parse(String(init?.body));
+    const saved = profiles.get(id);
+    return Response.json(
+      saved &&
+        filters.some((filter: { kinds?: number[] }) =>
+          filter.kinds?.includes(0),
+        )
+        ? [saved]
+        : [],
+    );
+  }
   if (route === "profile") {
     if (rejectProfile) {
       rejectProfile = false;
@@ -63,7 +80,14 @@ window.fetch = async (input, init) => {
     }
     const body = JSON.parse(String(init?.body));
     calls.push(`published ${id}: ${body.name}`);
-    return Response.json({ accepted: true, event_id: "fixture-event" });
+    const saved = profileEvent(identity, {
+      ...body.existing,
+      name: body.name,
+      picture: body.picture,
+      about: body.about,
+    });
+    profiles.set(id, saved);
+    return Response.json({ accepted: true, event_id: saved.id });
   }
   throw new Error(`Unexpected fixture request: ${url}`);
 };

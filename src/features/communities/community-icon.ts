@@ -1,4 +1,6 @@
 import { registerBrokerCommunity } from "../relay/transport";
+import { nativeIdentityEnabled } from "../identity/service";
+import { nativeRelayInfo } from "../relay/native";
 
 /** Keep untrusted relay metadata out of executable URL schemes and huge data URLs. */
 export function communityIcon(value: unknown): string | undefined {
@@ -48,6 +50,8 @@ export function communityIcon(value: unknown): string | undefined {
 /** NIP-11 icon comes through the existing same-origin broker, without a relay session. */
 export async function fetchCommunityIcon(id: string, signal: AbortSignal) {
   const bounded = AbortSignal.any([signal, AbortSignal.timeout(12_000)]);
+  if (nativeIdentityEnabled())
+    return communityIcon((await nativeRelayInfo(id, bounded)).icon);
   await registerBrokerCommunity(id, bounded);
   const response = await fetch(
     `/api/relay/${encodeURIComponent(id)}/icon-info`,

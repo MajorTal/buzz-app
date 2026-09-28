@@ -35,9 +35,10 @@ membership locally without publishing. New setup shows the relay's join policy,
 optional invite code, then a profile prefilled from the local default. Invite
 admission uses the relay's policy receipt and signed claim endpoints. Profile
 publication uses a signed kind:0 event and requires a matching accepted receipt
-before the client saves the completed membership. Rejected setup retains input
-and does not replace the currently selected community. An admitted invite is a
-remote side effect and is not undone if later profile setup fails or is cancelled.
+and current profile readback before the client saves the completed membership.
+Rejected setup retains input and does not replace the currently selected community.
+An admitted invite is a remote side effect and is not undone if later profile
+setup fails or is cancelled.
 
 Profile editing preserves existing fields that this editor does not expose.
 After a confirmed Settings save, the profile also becomes the device-local
@@ -94,15 +95,44 @@ JavaScript; local preferences contain the public viewer ID only. The app-owned
 [native identity UI](identity.md) has deliberate import/reveal/copy interactions,
 not a plugin key service.
 
-This is the development integration, not a native identity/join implementation.
 Packaged builds do not include the broker. Native macOS [identity import/create](identity.md)
-is available as a separate first slice, without packaged relay transport. Community
-creation/removal and background connection eviction are not implemented. Native
-agent enrollment has its own [local control contract](agent-control.md). Avatar
-uploads reuse the development media host; packaged human-profile publication is
-not established by this frontend slice. Agents have local
+and the native relay adapter provide discovery, admission, profile publication,
+authenticated reads and supported event writes. Community creation/removal and
+background connection eviction are not implemented. Native agent enrollment has
+its own [local control contract](agent-control.md). Avatar uploads still require
+the development media host. Agents have local
 configuration plus separately scoped participation; selecting a community must
 not become a deployment or enrollment command.
+
+## Packaged admission and recovery
+
+The native dialog journals an unfinished join before policy/claim dispatch and a
+submitted profile before publication. Records are partitioned by public viewer
+and canonical HTTPS origin, independent of configured aliases. Existing alias
+records normalize to origins when their mapping is available and are persisted
+on the next journal write. Unresolved legacy aliases are retained independently:
+they do not block other joins or recovery, and become available again after
+restoring their original mapping. Records contain only a transaction ID,
+destination and optional profile draft, never invite codes, policy receipts or
+private keys.
+Storage failure blocks the remote operation. Completing a native join requires
+successful local membership persistence before clearing its recovery record.
+
+After closing or restarting, open **Add a community** to resume the most recent
+unfinished destination. Continue makes a fresh authenticated profile read, with
+strong consistency. Successful access resumes profile setup even if the profile
+does not exist yet; it never requires reusing an expired invite after admission.
+Network failure retains the record for retry. Confirmed access denial returns to
+the policy/invite step, where the user can supply a valid code and current consent.
+Profile readback avoids repeating a publication whose receipt was lost. An accepted
+publication also requires a fresh matching profile read before saving membership
+and clearing the journal. Failed reads, missing profiles and superseded writes
+retain the submitted draft for explicit retry, including after restart. Late
+completions cannot advance an unmounted dialog or a replaced transaction.
+
+Saved memberships are restored through the existing session owner. Uncertain
+message delivery stays in the existing endpoint/viewer-scoped IndexedDB outbox,
+with no automatic resend on restart. See the [native transport limits](identity.md#packaged-connection).
 
 ## Development broker boundary
 
@@ -161,7 +191,49 @@ rejection; `broker-url.test.ts` exercises the real middleware with isolated sign
 keys and upstream fixtures, including registration, cross-origin guards, all route
 sinks and captured sends. Service tests cover arbitrary membership persistence,
 selected-only restore, retry registration and equivalent-URL selection. Existing relay tests cover connection generations,
-late responses, delivery and revocation. Run `just scan` for the full checks.
+late responses, delivery and revocation.
+
+`native-join.test.tsx` mounts the real dialog, community service and native adapter
+with fixture IPC to cover claim/profile response loss, acknowledged but superseded
+or missing profiles, read and persistence failures, interrupted setup, alias
+recovery and selected-only restart. `join-journal.test.ts` covers alias addition,
+removal and unresolved legacy records across restarts. `native-api.test.ts`
+and `relay/native.test.ts` cover routing, verification, live auth, capacity,
+receipt correlation and expired-event readback. `app/services.test.ts` exercises
+native composition, failure/retry and development precedence. Rust tests cover
+actual IPC signing, exact-byte HTTP authentication and redirect rejection without
+touching Keychain.
+
+One browser case is added, with none removed: `tests/browser/mocked-native-ipc.spec.mjs`
+proves page reload and real localStorage/IndexedDB recovery in Chromium and WebKit.
+It preserves one identity across an uncertain claim, joins, loses a message
+receipt, reloads, then explicitly retries the identical signed message. The IPC
+endpoint is mocked by Playwright; it does not establish Keychain consent, a full native
+process restart, production TLS, deployed relay interoperability or notarized
+release acceptance.
+
+The paired `tests/fixtures/mocked-native-ipc.html` and `.tsx` files mount the real
+community dialog, identity/community services and JavaScript native transport
+adapter. Playwright supplies the identity, signing and HTTP responses and stubs
+WebSocket; browser storage and reload are real. The page requires the test's IPC
+endpoint, so it is not a standalone manual diagnostic.
+
+This regression fixture originated in `78d986c0`, independently of the recording
+toolkit added in `f68926da` and removed in `0a9ff77f`. It remains automated test
+coverage, not a native-app recording. Any retained local recordings from that
+removed toolkit used a simulated host; their source revision must be established
+from capture metadata, not the gallery's hard-coded revision label.
+
+Regression evidence: restoring the original unfiltered signing payload makes
+both browser engines fail at message delivery (`failed` instead of `unknown`),
+because the IPC fixture enforces Rust's strict template shape. Restoring the
+four-field projection passes the journey.
+
+Run it with:
+
+```sh
+bin/pnpm test:browser tests/browser/mocked-native-ipc.spec.mjs --project chromium --project webkit --no-deps
+```
 
 Open `/tests/fixtures/communities.html` for a browser-only fixture of the actual dialog.
 It intercepts all broker requests and uses a separate fixture identity. Save a

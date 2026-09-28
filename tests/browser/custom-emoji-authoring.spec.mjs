@@ -5,6 +5,7 @@ import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { finalizeEvent, generateSecretKey, getPublicKey } from "nostr-tools";
 import { verifyEvent } from "nostr-tools/pure";
+import { watchPageErrors } from "./page-errors.mjs";
 import { relayBrokerPlugin } from "../../dev/relay-broker.mjs";
 import { fixtureAliases, fixtureRelayUrl } from "../relay-config.ts";
 
@@ -224,8 +225,7 @@ test("adds custom emoji through the production broker, then uses, replaces, retr
       ],
     });
     await server.listen();
-    const errors = [];
-    page.on("pageerror", (error) => errors.push(String(error)));
+    const errors = watchPageErrors(page);
     const origin = `http://127.0.0.1:${server.httpServer.address().port}`;
     await page.goto(`${origin}/tests/fixtures/custom-emoji.html`);
     const primary = "https://primary.example";
@@ -458,7 +458,7 @@ test("adds custom emoji through the production broker, then uses, replaces, retr
       ),
       contentType: "application/json",
     });
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server?.close();
   }

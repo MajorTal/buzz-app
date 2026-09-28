@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import { watchPageErrors } from "./page-errors.mjs";
 
 test("real xterm retains output across detach, handles input and resize, and does not reserve absent shortcuts", async ({
   page,
@@ -14,8 +15,7 @@ test("real xterm retains output across detach, handles input and resize, and doe
     plugins: [react()],
     server: { host: "127.0.0.1", port: 0 },
   });
-  const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
+  const errors = watchPageErrors(page);
   try {
     await server.listen();
     await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
@@ -224,7 +224,7 @@ test("real xterm retains output across detach, handles input and resize, and doe
     await button("Toggle mount").click();
     await expect(splash).toHaveCount(0);
     await page.clock.resume();
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }
@@ -241,8 +241,7 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     plugins: [react()],
     server: { host: "127.0.0.1", port: 0 },
   });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   try {
     await server.listen();
     await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
@@ -426,7 +425,7 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     await page.screenshot({
       path: test.info().outputPath("terminal-short-200.png"),
     });
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }
@@ -442,8 +441,7 @@ test("real xterm replies survive scope switches while stale input and retired wr
     plugins: [react()],
     server: { host: "127.0.0.1", port: 0 },
   });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   try {
     await server.listen();
     const url = `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/terminal-session.html`;
@@ -538,7 +536,7 @@ test("real xterm replies survive scope switches while stale input and retired wr
       if (operation === "end")
         await page.evaluate(() => window.terminalSession.dispose());
     }
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }
@@ -563,8 +561,7 @@ test("focused terminal follows rebind, restore and reset without swallowing the 
     plugins: [react()],
     server: { host: "127.0.0.1", port: 0 },
   });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   try {
     await server.listen();
     await page.goto(
@@ -656,7 +653,7 @@ test("focused terminal follows rebind, restore and reset without swallowing the 
     expect(await page.evaluate(() => window.terminalPanel.toggles())).toBe(2);
     expect(await page.evaluate(() => window.terminalPanel.written())).toBe("");
     await page.evaluate(() => window.terminalPanel.dispose());
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

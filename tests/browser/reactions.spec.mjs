@@ -3,6 +3,7 @@ import { test as sourceTest } from "./source-fixture.mjs";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import { watchPageErrors } from "./page-errors.mjs";
 
 test("native reaction emoji fit inside compact pills", async ({ page }) => {
   const server = await createServer({
@@ -47,8 +48,7 @@ test("reaction plus opens a visible emoji-only picker, restores focus and publis
     server: { host: "127.0.0.1", port: 0 },
   });
   try {
-    const errors = [];
-    page.on("pageerror", (error) => errors.push(String(error)));
+    const errors = watchPageErrors(page);
     await page.route("**/emoji-media/**", (route) =>
       route.fulfill({
         contentType: "image/svg+xml",
@@ -307,7 +307,7 @@ test("reaction plus opens a visible emoji-only picker, restores focus and publis
     await sole.press("Enter");
     await expect(sole).toHaveCount(0);
     await expect(stableAction).toBeFocused();
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

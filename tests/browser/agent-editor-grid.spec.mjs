@@ -1,6 +1,7 @@
 import { test, expect } from "@playwright/test";
 import { createServer } from "./vite-server.mjs";
 import config from "../fixtures/agent-control.vite.mjs";
+import { watchPageErrors } from "./page-errors.mjs";
 
 test("existing grid opens the focused editor, selects a model and saves/reopens", async ({
   page,
@@ -12,8 +13,7 @@ test("existing grid opens the focused editor, selects a model and saves/reopens"
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
   await server.listen();
-  const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
+  const errors = watchPageErrors(page);
   try {
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/agent-control.html`,
@@ -312,7 +312,7 @@ test("existing grid opens the focused editor, selects a model and saves/reopens"
       .getByRole("textbox", { name: "Name", exact: true })
       .press("Escape");
     await expect(dialog).toHaveCount(0); // clean Escape still closes
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

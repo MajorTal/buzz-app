@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import { watchPageErrors } from "./page-errors.mjs";
 
 const fixtureImage = `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#666"/></svg>`;
 
@@ -262,8 +263,7 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
   page,
 }, testInfo) => {
   const server = await createMessagesServer();
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   try {
     await server.listen();
     const address = server.httpServer.address();
@@ -578,7 +578,7 @@ test("shared thread UI auto-loads, follows live replies, retries and isolates re
       await expect(literal).toBeVisible();
       await expect(literal).toHaveCSS("white-space", "pre-wrap");
     }
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

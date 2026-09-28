@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import { watchPageErrors } from "./page-errors.mjs";
 
 test("statuses edit, synchronize, clear, reject stale traffic and retain failed drafts", async ({
   page,
@@ -15,8 +16,7 @@ test("statuses edit, synchronize, clear, reject stale traffic and retain failed 
     server: { host: "127.0.0.1", port: 0, open: false },
     preview: { open: false },
   });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   try {
     await page.route("https://emoji.test/**", (route) =>
       route.fulfill({
@@ -261,7 +261,7 @@ test("statuses edit, synchronize, clear, reject stale traffic and retain failed 
         /linear-gradient/,
       );
     }
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

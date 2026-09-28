@@ -3,6 +3,7 @@ import { npubEncode } from "nostr-tools/nip19";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import { watchPageErrors } from "./page-errors.mjs";
 
 test("Old Buzz library reads the existing library with exact linked keys and session-safe retries", async ({
   page,
@@ -15,8 +16,7 @@ test("Old Buzz library reads the existing library with exact linked keys and ses
     logLevel: "error",
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   try {
     await server.listen();
     await page.goto(
@@ -247,7 +247,7 @@ test("Old Buzz library reads the existing library with exact linked keys and ses
       .click();
     await expect(page.getByRole("status")).toContainText("Library cleared");
     await expect(page.getByRole("article")).toHaveCount(0);
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

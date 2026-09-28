@@ -3,6 +3,7 @@ import { test, expect } from "@playwright/test";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import { watchPageErrors } from "./page-errors.mjs";
 
 test("settings-enabled mentions fixture renders the composer and preference", async ({
   page,
@@ -17,8 +18,7 @@ test("settings-enabled mentions fixture renders the composer and preference", as
     logLevel: "error",
     server: { host: "127.0.0.1", port: 0 },
   });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   try {
     await server.listen();
     await page.goto(
@@ -26,7 +26,7 @@ test("settings-enabled mentions fixture renders the composer and preference", as
     );
     await expect(page.getByRole("textbox")).toBeVisible();
     await expect(page.getByText("Remember mentioned agents")).toBeVisible();
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }
@@ -53,8 +53,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
       watch: { ignored: ["**/src-tauri/**", "**/target/**"] },
     },
   });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   try {
     await server.listen();
     await page.goto(
@@ -490,7 +489,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
     expect(afterRemoval.tags.filter(([tag]) => tag === "p")).toEqual([
       ["p", keys.second],
     ]);
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

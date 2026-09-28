@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import { watchPageErrors } from "./page-errors.mjs";
 
 // Real table geometry/scroll containment, modal portal/focus return and theme
 // rendering need a browser. Patch matrices and plugin failures stay in Vitest.
@@ -25,8 +26,7 @@ test("diff preview expands in both layouts and keeps focus and scroll containmen
   });
   try {
     await server.listen();
-    const errors = [];
-    page.on("pageerror", (error) => errors.push(String(error)));
+    const errors = watchPageErrors(page);
     await page.goto(
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/diffs.html`,
     );
@@ -166,7 +166,7 @@ test("diff preview expands in both layouts and keeps focus and scroll containmen
     } finally {
       await page.keyboard.up("ArrowRight");
     }
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

@@ -1,12 +1,12 @@
 import { chromium, expect } from "@playwright/test";
+import { watchPageErrors } from "../../browser/page-errors.mjs";
 import { execFileSync } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
 const out = process.env.DEMO_OUTPUT ?? "test-results/identity-names-demo";
 await mkdir(out, { recursive: true });
 const b = await chromium.launch();
 const p = await b.newPage({ viewport: { width: 1440, height: 1000 } });
-const errors = [];
-p.on("pageerror", (e) => errors.push(e.message));
+const pageErrors = watchPageErrors(p);
 await p.addInitScript(() => {
   window.demoNotifications = [];
   window.Notification = class {
@@ -375,7 +375,7 @@ await shot(
   "surface-library-custom",
   "Custom library identity cards with key qualifiers; template names are not identity names",
 );
-expect(errors).toEqual([]);
+expect(pageErrors.unexplained()).toEqual([]);
 await writeFile(
   `${out}/SURFACE_CAPTURES.json`,
   JSON.stringify(
@@ -386,7 +386,7 @@ await writeFile(
       dirty: execFileSync("git", ["status", "--short"], { encoding: "utf8" }),
       browser: b.version(),
       shots,
-      errors,
+      errors: pageErrors.errors,
     },
     null,
     2,

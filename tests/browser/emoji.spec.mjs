@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { watchPageErrors } from "./page-errors.mjs";
 
 test("community picker uses keyboard, proxy thumbnails, event-local history and scoped send/reply tags", async ({
   browserName,
@@ -24,8 +25,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       logLevel: "error",
       server: { host: "127.0.0.1", port: 0, strictPort: false },
     });
-    const errors = [];
-    page.on("pageerror", (error) => errors.push(String(error)));
+    const errors = watchPageErrors(page);
     await page.route("**/emoji-media/**", async (route) => {
       if (route.request().url().includes("broken.png"))
         return route.fulfill({ status: 404, body: "missing" });
@@ -1029,7 +1029,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
         () => window.emojiFixture.report.publications.at(-1).event.content,
       ),
     ).toBe("😀 🙏 👏 hello");
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     try {
       await server?.close();

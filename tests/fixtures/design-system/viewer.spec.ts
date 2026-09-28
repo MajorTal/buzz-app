@@ -1,4 +1,5 @@
 import { expect, test, type Locator } from "@playwright/test";
+import { watchPageErrors } from "../../browser/page-errors.mjs";
 import { COMPONENTS } from "../../../src/shared/design-system/ui/registry";
 import { PHOSPHOR_ICONS } from "../../../src/shared/design-system/icons/inventory";
 
@@ -258,7 +259,7 @@ test("built viewer loads every specimen and foundation without app connections",
 }) => {
   const failures: string[] = [];
   const sockets: string[] = [];
-  page.on("pageerror", (e) => failures.push(e.message));
+  const pageErrors = watchPageErrors(page);
   page.on("response", (r) => {
     if (r.status() >= 400) failures.push(`${r.status()} ${r.url()}`);
   });
@@ -333,7 +334,7 @@ test("built viewer loads every specimen and foundation without app connections",
   await expect(
     nav.getByRole("link", { name: /Conversation|Agent work/ }),
   ).toHaveCount(0);
-  expect(failures).toEqual([]);
+  expect([...pageErrors.unexplained(), ...failures]).toEqual([]);
   expect(sockets).toEqual([]);
 });
 
@@ -773,7 +774,7 @@ test("a stale or renamed link explains itself instead of rendering blank", async
   page,
 }) => {
   const failures: string[] = [];
-  page.on("pageerror", (e) => failures.push(e.message));
+  const pageErrors = watchPageErrors(page);
   for (const hash of [
     "#/design/components/renamed-away",
     "#/design/colours",
@@ -791,7 +792,7 @@ test("a stale or renamed link explains itself instead of rendering blank", async
       page.getByRole("heading", { name: "Buzz Design System", exact: true }),
     ).toBeVisible();
   }
-  expect(failures).toEqual([]);
+  expect([...pageErrors.unexplained(), ...failures]).toEqual([]);
 });
 
 test("switch labels activate the control and busy switches preserve focus", async ({
@@ -1497,7 +1498,7 @@ test("built Messages gallery renders isolated product states and follows viewer 
 }) => {
   const failures: string[] = [];
   const sockets: string[] = [];
-  page.on("pageerror", (error) => failures.push(error.message));
+  const pageErrors = watchPageErrors(page);
   page.on("response", (response) => {
     if (response.status() >= 400)
       failures.push(`${response.status()} ${response.url()}`);
@@ -1589,7 +1590,7 @@ test("built Messages gallery renders isolated product states and follows viewer 
   ).toBeVisible();
   await page.reload();
   await expect(gallery.locator(".message-gallery-example")).toHaveCount(33);
-  expect(failures).toEqual([]);
+  expect([...pageErrors.unexplained(), ...failures]).toEqual([]);
   expect(sockets).toEqual([]);
 });
 

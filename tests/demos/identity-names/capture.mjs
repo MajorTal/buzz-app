@@ -1,4 +1,5 @@
 import { chromium, expect } from "@playwright/test";
+import { watchPageErrors } from "../../browser/page-errors.mjs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 const out = process.env.DEMO_OUTPUT ?? "test-results/identity-names-demo";
@@ -7,8 +8,7 @@ const b = await chromium.launch();
 const page = await b.newPage();
 const data = await (await fetch("http://127.0.0.1:1435/demo/data")).json();
 await page.setViewportSize({ width: 1440, height: 1000 });
-const errors = [];
-page.on("pageerror", (e) => errors.push(e.message));
+const pageErrors = watchPageErrors(page);
 await page.goto("http://127.0.0.1:1435");
 await page
   .getByRole("navigation", { name: "Pages", exact: true })
@@ -113,12 +113,12 @@ await writeFile(
       browser: b.version(),
       data,
       shots,
-      errors,
+      errors: pageErrors.errors,
     },
     null,
     2,
   ),
 );
-expect(errors).toEqual([]);
-console.log(JSON.stringify({ shots, errors }, null, 2));
+expect(pageErrors.unexplained()).toEqual([]);
+console.log(JSON.stringify({ shots, errors: pageErrors.errors }, null, 2));
 await b.close();

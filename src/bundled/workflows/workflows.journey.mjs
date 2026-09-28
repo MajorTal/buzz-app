@@ -3,6 +3,7 @@ import { createServer } from "../../../tests/browser/vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { parse as parseYaml } from "yaml";
+import { watchPageErrors } from "../../../tests/browser/page-errors.mjs";
 
 let server;
 let url;
@@ -98,8 +99,7 @@ function editorControls(page) {
 test("workflow editor preserves YAML, resolves exact saves, retains conflicts and purges access", async ({
   page,
 }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   await page.goto(url);
   const editor = editorControls(page);
   const { button, yaml, tab } = editor;
@@ -230,7 +230,7 @@ test("workflow editor preserves YAML, resolves exact saves, retains conflicts an
       page.evaluate(() => window.workflowFixture.definitions.disposed()),
     )
     .toBe(true);
-  expect(errors).toEqual([]);
+  expect(errors.unexplained()).toEqual([]);
 });
 
 // Real layout and native menu focus cannot be established by jsdom.
@@ -301,10 +301,10 @@ test("keyboard switches feed enabled-save confirmation and disabled readback", a
   page,
   browserName,
 }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
+  const consoleErrors = [];
   page.on("console", (message) => {
-    if (message.type() === "error") errors.push(message.text());
+    if (message.type() === "error") consoleErrors.push(message.text());
   });
   // Wide layout: the inspector sits beside the flow, so its controls and the
   // footer share one keyboard layer.
@@ -442,7 +442,7 @@ test("keyboard switches feed enabled-save confirmation and disabled readback", a
   await expect(dialog).toContainText("It will run for every new message");
   expect(await saves()).toBe(3);
   await page.keyboard.press("Escape");
-  expect(errors).toEqual([]);
+  expect([...errors.unexplained(), ...consoleErrors]).toEqual([]);
 });
 
 test("history stays lazy and paged; acknowledging an unknown run never repeats it", async ({
@@ -509,8 +509,7 @@ test("history stays lazy and paged; acknowledging an unknown run never repeats i
 test("real session page under StrictMode fences community changes, warns before discarding a dirty draft and purges access", async ({
   page,
 }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   await page.goto(url.replace("/fixture.html", "/session-fixture.html"));
   const editor = editorControls(page);
   const { button } = editor;
@@ -583,14 +582,13 @@ test("real session page under StrictMode fences community changes, warns before 
   expect(await page.locator("body").innerText()).not.toContain(
     "Revoked private text",
   );
-  expect(errors).toEqual([]);
+  expect(errors.unexplained()).toEqual([]);
 });
 
 test("landing batches 129 channels into two workflow reads", async ({
   page,
 }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   await page.goto(url.replace("/fixture.html", "/session-fixture.html?many"));
   await expect(
     page.getByRole("button", { name: "Open Fixture A helper", exact: true }),
@@ -600,7 +598,7 @@ test("landing batches 129 channels into two workflow reads", async ({
       page.evaluate(() => window.workflowSessionFixture.definitionQueries()),
     )
     .toBe(2);
-  expect(errors).toEqual([]);
+  expect(errors.unexplained()).toEqual([]);
 });
 
 test("landing scan survives channel presentation churn without restarting", async ({
@@ -1234,8 +1232,7 @@ test("invalid timeout text stays in the draft and blocks saves in both editor mo
 test("schedule presets round-trip into YAML and warn before enabling a frequent one", async ({
   page,
 }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   // Wide layout keeps the trigger inspector beside the footer tabs.
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(url);
@@ -1351,14 +1348,13 @@ test("schedule presets round-trip into YAML and warn before enabling a frequent 
     parseYaml(await page.evaluate(() => window.workflowFixture.input().yaml))
       .trigger,
   ).toEqual({ on: "schedule", interval: "1h" });
-  expect(errors).toEqual([]);
+  expect(errors.unexplained()).toEqual([]);
 });
 
 test("a webhook save shows its one-time secret once and asks before leaving it behind", async ({
   page,
 }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   await page.addInitScript(() => {
     window.__copied = [];
     Object.defineProperty(navigator, "clipboard", {
@@ -1467,7 +1463,7 @@ test("a webhook save shows its one-time secret once and asks before leaving it b
     ),
   ).toBeUndefined();
   await expect(button("Save changes")).toBeEnabled();
-  expect(errors).toEqual([]);
+  expect(errors.unexplained()).toEqual([]);
 });
 
 // Browser boundary: the routed page must deliver a real session's late receipt
@@ -1690,8 +1686,7 @@ test("generic Outbox offers message retry but no workflow replay", async ({
 test("a created workflow saves, reads back exactly and reopens unchanged", async ({
   page,
 }) => {
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto(url);
   const editor = editorControls(page);
@@ -1759,7 +1754,7 @@ test("a created workflow saves, reads back exactly and reopens unchanged", async
   await tab("YAML").click();
   await expect(yaml).toHaveValue(submitted);
   expect(await saves()).toBe(1);
-  expect(errors).toEqual([]);
+  expect(errors.unexplained()).toEqual([]);
 });
 
 // Browser-only boundary: nested modal hit testing, focus guards and return

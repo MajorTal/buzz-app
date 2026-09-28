@@ -305,7 +305,7 @@ test("a surviving window publishes a closed window's durable read intent", async
   await open(page, app);
   await composer(page).focus();
   const survivor = await context.newPage();
-  survivor.on("pageerror", (error) => app.report.errors.push(error.message));
+  app.watchPageErrors(survivor);
   survivor.on("console", (message) => {
     if (message.type() === "error")
       app.report.consoleErrors.push(message.text());

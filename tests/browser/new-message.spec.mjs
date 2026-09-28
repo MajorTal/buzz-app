@@ -6,6 +6,7 @@ import { relayBrokerPlugin } from "../../dev/relay-broker.mjs";
 import { brokerSocket } from "../broker-socket.mjs";
 import { fixtureAliases, fixtureRelayUrl } from "../relay-config.ts";
 import { buildApp } from "./build.mjs";
+import { watchPageErrors } from "./page-errors.mjs";
 
 // Actual app, composer, session and broker; only the upstream relay is modeled.
 // Ephemeral identities and a network fence prevent any live message or profile write.
@@ -51,8 +52,7 @@ const test = base.extend({
       ...people,
     ];
     const commands = [],
-      reads = [],
-      errors = [];
+      reads = [];
     let failOpen = false,
       hold = false,
       release = () => {};
@@ -187,7 +187,7 @@ const test = base.extend({
         : route.abort(),
     );
     await context.routeWebSocket("**/*", (socket) => socket.close());
-    page.on("pageerror", (error) => errors.push(error.message));
+    const errors = watchPageErrors(page);
     await page.addInitScript(
       ({ viewer }) => {
         const key = `buzz-client.v1:${viewer}`;
@@ -641,7 +641,7 @@ test("empty compose, keyboard selection, pagination, removal effects, retry, the
     page.locator("[data-message-id]", { hasText: "Another message" }),
   ).toBeVisible();
   await expect(sidebarDm).toHaveAttribute("aria-current", "page");
-  expect(app.errors).toEqual([]);
+  expect(app.errors.unexplained()).toEqual([]);
 });
 
 test("profile Message opens a fresh DM and restores a hidden one", async ({
@@ -696,5 +696,5 @@ test("profile Message opens a fresh DM and restores a hidden one", async ({
   await page.reload();
   await expect(sidebarDm).toBeVisible();
   expect(app.commands).toHaveLength(2);
-  expect(app.errors).toEqual([]);
+  expect(app.errors.unexplained()).toEqual([]);
 });

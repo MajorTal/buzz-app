@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
+import { watchPageErrors } from "./page-errors.mjs";
 import {
   finalizeEvent,
   generateSecretKey,
@@ -26,11 +27,10 @@ test("mocked native IPC admission and uncertain delivery survive page reload wit
   const viewer = getPublicKey(key);
   const community = "https://packaged-fixture.test";
   const calls = [],
-    messages = [],
-    errors = [];
+    messages = [];
   let admitted = false,
     profile;
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   await page.addInitScript(() => {
     window.isTauri = true;
     Object.defineProperty(navigator, "platform", { value: "MacIntel" });
@@ -163,7 +163,7 @@ test("mocked native IPC admission and uncertain delivery survive page reload wit
     expect(calls.filter((path) => path === "/api/invites/claim")).toHaveLength(
       1,
     );
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
     await page.screenshot({
       path: test.info().outputPath("mocked-native-ipc-recovery.png"),
     });

@@ -1,5 +1,6 @@
 import { test, expect } from "./source-fixture.mjs";
 import { readFile } from "node:fs/promises";
+import { watchPageErrors } from "./page-errors.mjs";
 
 // Browser boundary: nested overlay hit-testing/focus, canvas image preparation,
 // lazy shadow-DOM emoji picker, and narrow viewport geometry in both engines.
@@ -9,8 +10,7 @@ test("shared human and agent avatar upload, scoped save, publication retry and n
   const artwork = await readFile(
     new URL("../fixtures/design-system/assets/avatar.png", import.meta.url),
   );
-  const errors = [];
-  page.on("pageerror", (e) => errors.push(e.message));
+  const errors = watchPageErrors(page);
   await page.route("**/api/relay/**", (route) => route.abort());
   await page.goto("/tests/fixtures/agent-control.html?avatars");
   await page
@@ -156,5 +156,5 @@ test("shared human and agent avatar upload, scoped save, publication retry and n
     "profile",
   ]);
   expect(result.actions[0].payload.edit.picture).toBe(result.agent.picture);
-  expect(errors).toEqual([]);
+  expect(errors.unexplained()).toEqual([]);
 });

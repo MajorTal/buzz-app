@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import { npubEncode } from "nostr-tools/nip19";
 import { createServer } from "./vite-server.mjs";
 import config from "../fixtures/agent-control.vite.mjs";
+import { watchPageErrors } from "./page-errors.mjs";
 
 async function closeEditor(page) {
   const dialog = page.getByRole("dialog", { name: "Edit agent", exact: true });
@@ -48,8 +49,7 @@ test("local controls preserve drafts, confirm operations and distinguish disable
     logLevel: "error",
     server: { host: "127.0.0.1", port: 0, strictPort: false },
   });
-  const errors = [];
-  page.on("pageerror", (error) => errors.push(String(error)));
+  const errors = watchPageErrors(page);
   await server.listen();
   try {
     await page.goto(
@@ -234,7 +234,7 @@ test("local controls preserve drafts, confirm operations and distinguish disable
     await expect(
       libraryCard.getByRole("button", { name: /Actions|Start|Edit/ }),
     ).toHaveCount(0);
-    expect(errors).toEqual([]);
+    expect(errors.unexplained()).toEqual([]);
   } finally {
     await server.close();
   }

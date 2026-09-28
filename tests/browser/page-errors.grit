@@ -1,0 +1,17 @@
+language js
+
+// Page errors have one collector, watchPageErrors in page-errors.mjs, so every
+// test applies the same reviewed engine rules. See AGENTS.md "Deterministic tests".
+`$page.$method($event, $handler)` where {
+  $method <: or {
+    `on`,
+    `once`,
+    `addListener`,
+    `prependListener`
+  },
+  $event <: or {
+    `"pageerror"`,
+    `'pageerror'`
+  },
+  register_diagnostic(span=$event, message="Collect page errors with watchPageErrors from tests/browser/page-errors.mjs.", severity="error")
+}

@@ -1,4 +1,5 @@
 import { test, expect } from "./source-fixture.mjs";
+import { watchPageErrors } from "./page-errors.mjs";
 
 const open = async (page) => {
   await page.goto("/tests/fixtures/mentions.html?test-controls");
@@ -180,8 +181,7 @@ for (const mode of ["light", "dark"]) {
 test("typeahead replaces only the query and publishes selected namesake identity, including replies", async ({
   page,
 }) => {
-  const errors = [];
-  page.on("pageerror", (e) => errors.push(String(e)));
+  const errors = watchPageErrors(page);
   const input = await open(page);
   const keys = await page.evaluate(() => ({
     first: window.mentionFixture.first,
@@ -229,7 +229,7 @@ test("typeahead replaces only the query and publishes selected namesake identity
   const sent = await page.evaluate(() => window.mentionFixture.publications[1]);
   expect(sent.tags).toContainEqual(["e", "a".repeat(64), "", "reply"]);
   expect(sent.tags.filter(([tag]) => tag === "p")).toEqual([["p", keys.first]]);
-  expect(errors).toEqual([]);
+  expect(errors.unexplained()).toEqual([]);
 });
 test("emoji keyboard, Escape, selected text, blur, IME and plugin disable preserve ordinary editing", async ({
   page,

@@ -293,8 +293,8 @@ test("real same-origin windows queue one publisher and transfer its Web Lock on 
     .toBe(1);
   const owner = (await presenceLocks(page)).held[0];
   const second = await context.newPage();
+  const pageErrors = app.watchPageErrors(second);
   const errors = [];
-  second.on("pageerror", (error) => errors.push(error.message));
   second.on("console", (message) => {
     if (message.type() === "error") errors.push(message.text());
   });
@@ -340,7 +340,7 @@ test("real same-origin windows queue one publisher and transfer its Web Lock on 
     expect(app.report.presencePublications.at(-1).event.content).toBe(
       "offline",
     );
-    expect(errors).toEqual([]);
+    expect([...pageErrors.unexplained(), ...errors]).toEqual([]);
     app.report.measurements.push({
       publisherLockHandoff: { owner: owner.clientId, successor },
     });

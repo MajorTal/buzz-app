@@ -1,9 +1,9 @@
 // Development probe: how long live coverage of a channel roster takes to set up
 // under different subscription strategies, against a real relay. Each run uses a
-// fresh authenticated socket. `client:K` drives the app's own subscriber with K
-// setups outstanding (the app uses SETUP_CONCURRENCY); the other strategies send
-// raw REQs the app does not send today. A canary REQ sent right after the burst
-// measures how long other socket work waits behind setup.
+// fresh authenticated socket. `client:K` drives the app's own joined-channel
+// batching with K wire setups outstanding (the app uses SETUP_CONCURRENCY).
+// The other strategies send raw REQs without the app's setup scheduler. A canary
+// REQ sent right after the burst measures how long other socket work waits behind setup.
 import process from "node:process";
 import { readFile, writeFile } from "node:fs/promises";
 import { finalizeEvent, getPublicKey, nip19 } from "nostr-tools";
@@ -272,7 +272,8 @@ export function runStrategy({
       undefined,
       strategy.size === Number.POSITIVE_INFINITY ? 1024 : strategy.size,
     );
-    owner.update(channels);
+    // This roster represents joined channels, matching the app's batchable scope.
+    owner.update(channels, channels);
   } else {
     connect(url);
     socket.onmessage = async ({ data }) => {

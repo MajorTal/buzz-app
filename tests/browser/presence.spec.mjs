@@ -81,7 +81,9 @@ test("profile snapshot and same-socket renewal coexist with real chat while opti
       .poll(() => app.report.presencePublications.length, { timeout: 75000 })
       .toBeGreaterThan(0);
     expect(
-      app.relay.requests.some(({ filter }) => filter.kinds.includes(20001)),
+      app.relay.requests.some(({ filters }) =>
+        filters.some((filter) => filter.kinds.includes(20001)),
+      ),
     ).toBe(false);
     await profile.screenshot({
       path: test.info().outputPath("presence-profile.png"),
@@ -266,7 +268,9 @@ test.describe("human message bylines show known presence", () => {
       profile.getByRole("img", { name: "Alice Fixture avatar, online" }),
     ).toHaveCount(0);
     expect(
-      app.relay.requests.some(({ filter }) => filter.kinds.includes(20001)),
+      app.relay.requests.some(({ filters }) =>
+        filters.some((filter) => filter.kinds.includes(20001)),
+      ),
     ).toBe(false);
   });
 });
@@ -387,7 +391,7 @@ test("presence becomes usable during held HTTP work and unfinished subscription 
         ([kind, id]) =>
           kind === "EOSE" &&
           app.relay.requests.some(
-            (req) => req.id === id && req.route === "alpha",
+            (req) => req.id === id && req.routes.includes("alpha"),
           ),
       ),
     ).toBe(false);

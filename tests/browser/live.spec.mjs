@@ -53,8 +53,8 @@ test("production WS → broker → mounted UI delivers messages and retries a pa
     .getByRole("textbox", { name: "Message #Alpha", exact: true })
     .fill("Keep my draft");
   const socketCount = app.relay.sockets.length;
-  const globalRequests = app.relay.requests.filter(
-    ({ filter }) => !filter["#h"],
+  const globalRequests = app.relay.requests.filter(({ filters }) =>
+    filters.every((filter) => !filter["#h"]),
   ).length;
   app.relay.failRoute("primary", "alpha");
   const missed = app.append(
@@ -98,9 +98,11 @@ test("production WS → broker → mounted UI delivers messages and retries a pa
   await retry(page).click();
   expect(heads(app, "alpha")).toHaveLength(calls);
   expect(app.relay.sockets).toHaveLength(socketCount);
-  expect(app.relay.requests.filter(({ filter }) => !filter["#h"])).toHaveLength(
-    globalRequests,
-  );
+  expect(
+    app.relay.requests.filter(({ filters }) =>
+      filters.every((filter) => !filter["#h"]),
+    ),
+  ).toHaveLength(globalRequests);
   await expectAnchor(page, reading);
   await crossCooldown(page, app);
   await retry(page).click();
@@ -184,11 +186,13 @@ test("Live retry recovers an empty paused roster without restarting healthy glob
     page.getByRole("button", { name: "Alpha", exact: true }),
   ).toHaveCount(0);
   const globals = () =>
-    app.relay.requests.filter(
-      ({ filter }) => !filter["#h"] && !filter.kinds.includes(24200),
+    app.relay.requests.filter(({ filters }) =>
+      filters.every((filter) => !filter["#h"] && !filter.kinds.includes(24200)),
     );
   const observer = () =>
-    app.relay.requests.filter(({ filter }) => filter.kinds.includes(24200));
+    app.relay.requests.filter(({ filters }) =>
+      filters.some((filter) => filter.kinds.includes(24200)),
+    );
   await expect.poll(() => globals().length).toBe(2);
   await expect.poll(() => observer().length).toBe(1);
   const sockets = app.relay.sockets.length;
@@ -210,7 +214,7 @@ test("Live retry recovers an empty paused roster without restarting healthy glob
   // The first authoritative (empty) roster resets activity's access generation.
   // Only its live-only route is renewed; healthy chat globals stay untouched.
   await expect.poll(() => observer().length).toBe(2);
-  expect(observer()[1].filter.since).toBeGreaterThanOrEqual(
-    observer()[0].filter.since,
+  expect(observer()[1].filters[0].since).toBeGreaterThanOrEqual(
+    observer()[0].filters[0].since,
   );
 });

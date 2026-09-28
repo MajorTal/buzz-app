@@ -82,6 +82,7 @@ import {
 // Scoped writes support basic messages, profile setup and invite admission; signing remains here.
 import {
   liveChannels,
+  liveJoined,
   subscribeRelayTraffic,
 } from "../src/features/relay/live.ts";
 import {
@@ -1452,7 +1453,7 @@ export function relayBrokerPlugin({
               raw += part;
               if (
                 Buffer.byteLength(raw) >
-                (updating ? 300000 : prioritizing ? 9000 : 256)
+                (updating ? 450000 : prioritizing ? 9000 : 256)
               )
                 return json(res, 413, { error: "Live control too large" });
             }
@@ -1461,6 +1462,7 @@ export function relayBrokerPlugin({
               observer,
               status,
               interests,
+              joined,
               removed,
               interestRevision;
             try {
@@ -1478,6 +1480,7 @@ export function relayBrokerPlugin({
               if (observing) observer = observerGeneration(body.observer);
               if (updating) {
                 interests = liveChannels(body.channels);
+                joined = liveJoined(interests, body.joined ?? []);
                 removed = liveChannels(body.removed ?? []);
                 interestRevision = body.interestRevision;
                 if (
@@ -1530,11 +1533,13 @@ export function relayBrokerPlugin({
               if (removed.length) {
                 stream.traffic.update(
                   stream.channels.filter((id) => !removed.includes(id)),
+                  stream.joined.filter((id) => !removed.includes(id)),
                 );
               }
               stream.interestRevision = interestRevision;
               stream.channels = interests;
-              stream.traffic.update(interests);
+              stream.joined = joined;
+              stream.traffic.update(interests, joined);
             } else if (prioritizing) stream.traffic.prioritize(priority);
             else if (observing) stream.traffic.observe(observer);
             else stream.traffic.retry();
@@ -1544,13 +1549,14 @@ export function relayBrokerPlugin({
             let raw = "";
             for await (const part of req) {
               raw += part;
-              if (Buffer.byteLength(raw) > 150000)
+              if (Buffer.byteLength(raw) > 300000)
                 return json(res, 413, { error: "Live interests too large" });
             }
-            let channels, priority, observer, interestRevision;
+            let channels, joined, priority, observer, interestRevision;
             try {
               const body = JSON.parse(raw);
               channels = liveChannels(body.channels);
+              joined = liveJoined(channels, body.joined ?? []);
               interestRevision = body.interestRevision ?? 0;
               if (
                 !Number.isSafeInteger(interestRevision) ||
@@ -1634,6 +1640,7 @@ export function relayBrokerPlugin({
             const stream = {
               relay,
               channels,
+              joined,
               interestRevision,
               traffic: undefined,
               close: undefined,
@@ -1669,9 +1676,12 @@ export function relayBrokerPlugin({
                   }),
                 established: (channelId) =>
                   write("established", {
-                    channelId,
+                    ...(Array.isArray(channelId)
+                      ? { channels: channelId }
+                      : { channelId }),
                     interestRevision: stream.interestRevision,
                   }),
+                recover: () => write("recover", {}),
                 denied: (channelId, reason) =>
                   write("denied", {
                     channelId,
@@ -1685,7 +1695,7 @@ export function relayBrokerPlugin({
             principal.streams++;
             traffic.observe(observer);
             traffic.prioritize(priority);
-            traffic.update(channels);
+            traffic.update(channels, joined);
             const keepAlive = setInterval(
               () => res.write(": keepalive\n\n"),
               15000,

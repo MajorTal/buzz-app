@@ -1,6 +1,6 @@
 // Regression controls contributed by Brain; see WS_RETRY_REVIEW_2026_09_09.
 import { assert, afterEach, expect, it, vi } from "vitest";
-import { keypair, message } from "./testing";
+import { keypair, message, signed } from "./testing";
 import { connectBrokerTransport } from "./transport";
 function required<T>(value: T | undefined): T {
   assert.exists(value);
@@ -344,6 +344,71 @@ it("in-place interests fence removed/readded channel frames but retain unchanged
     });
     await tick();
     expect(f.callbacks.receive).toHaveBeenCalledTimes(2);
+    expect(f.headers).toHaveLength(1);
+  } finally {
+    owner.dispose();
+  }
+});
+
+it("atomically carries joined classification and fences h-less traffic while the update is held", async () => {
+  const f = fixture();
+  const established = vi.fn();
+  const t = await connectBrokerTransport();
+  const owner = required(t.subscribe)({ ...f.callbacks, established });
+  try {
+    owner.update(["a", "b"], ["a", "b"]);
+    f.accept(0);
+    await tick();
+    const bodies = () =>
+      vi
+        .mocked(fetch)
+        .mock.calls.filter(([url]) => String(url).endsWith("/stream-interests"))
+        .map(([, init]) => JSON.parse(String(init?.body)));
+    expect(bodies()[0]).toMatchObject({
+      channels: ["a", "b"],
+      joined: ["a", "b"],
+      interestRevision: 1,
+    });
+    required(f.interests[0]).resolve(new Response(null, { status: 200 }));
+    await tick();
+    const event = signed(keypair(), {
+      kind: 5,
+      tags: [["e", "f".repeat(64)]],
+      content: "",
+    });
+    const traffic = {
+      event,
+      provenance: { phase: "live", sourceChannels: ["a", "b"] },
+      interestRevision: 1,
+    };
+    f.frame("traffic", traffic);
+    await tick();
+    expect(f.callbacks.receive).toHaveBeenCalledTimes(1);
+    // Same interest IDs, changed a's membership class. Keep this HTTP update
+    // pending while old SSE traffic and establishment arrive.
+    owner.update(["a", "b"], ["b"]);
+    expect(bodies()[1]).toMatchObject({
+      channels: ["a", "b"],
+      joined: ["b"],
+      removed: ["a"],
+      interestRevision: 2,
+    });
+    f.frame("traffic", traffic);
+    f.frame("established", { channels: ["a", "b"], interestRevision: 1 });
+    await tick();
+    expect(f.callbacks.receive).toHaveBeenCalledTimes(1);
+    expect(established).toHaveBeenCalledExactlyOnceWith(["b"]);
+    required(f.interests[1]).resolve(new Response(null, { status: 200 }));
+    await tick();
+    f.frame("traffic", {
+      ...traffic,
+      provenance: { phase: "live", channelId: "a" },
+      interestRevision: 2,
+    });
+    f.frame("established", { channelId: "a", interestRevision: 2 });
+    await tick();
+    expect(f.callbacks.receive).toHaveBeenCalledTimes(2);
+    expect(established).toHaveBeenLastCalledWith("a");
     expect(f.headers).toHaveLength(1);
   } finally {
     owner.dispose();

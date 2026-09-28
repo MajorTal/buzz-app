@@ -116,7 +116,7 @@ for (const target of ["alpha", "profiles"]) {
     app.relay.holdEose(target);
     const requests = () =>
       app.relay.requests.filter(
-        (r) => r.community === "primary" && r.route === target,
+        (r) => r.community === "primary" && r.routes.includes(target),
       );
     const streams = () =>
       app.report.brokerRequests.filter((r) => r.url.endsWith("/stream")).length;

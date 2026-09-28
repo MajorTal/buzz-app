@@ -71,10 +71,8 @@ it("measures coverage for the app's subscriber and for raw batch shapes", async 
   const four = await run("client:4", channels);
   const packed = await run("filters:10", channels);
   const single = await run("multi-h:all", channels);
-  // The app also sets up its profile and membership routes.
-  expect([one.reqs, four.reqs, packed.reqs, single.reqs]).toEqual([
-    22, 22, 2, 1,
-  ]);
+  // Two ten-channel batches, plus the app's profile and membership routes.
+  expect([one.reqs, four.reqs, packed.reqs, single.reqs]).toEqual([4, 4, 2, 1]);
   for (const result of [one, four, packed, single])
     expect(result).toMatchObject({
       channels: 20,
@@ -83,9 +81,9 @@ it("measures coverage for the app's subscriber and for raw batch shapes", async 
       canaryMs: expect.any(Number),
       sockets: 1,
     });
-  // One round trip per outstanding slot: 22 serial, ceil(22 / 4) = 6, then 1.
-  expect(one.coverageMs).toBe(22 * 40);
-  expect(four.coverageMs).toBe(6 * 40);
+  // Four serial wire setups at K=1; all four fit in one round trip at K=4.
+  expect(one.coverageMs).toBe(4 * 40);
+  expect(four.coverageMs).toBe(40);
   expect(packed.coverageMs).toBe(40);
   expect(single.reqMs).toEqual([40]);
 });
@@ -207,11 +205,12 @@ it("times channel coverage by channel EOSE only", async () => {
   expect(result).toMatchObject({ failed: 0, coverageMs: 40, canaryMs: 5000 });
 });
 
-it("keeps a timed-out route failed when its EOSE arrives after CLOSE", async () => {
+it("keeps a timed-out batch failed when its EOSE arrives after CLOSE", async () => {
   vi.useFakeTimers();
   let first = true;
-  // The first channel REQ answers 30 ms after the subscriber's 10 s deadline.
-  const result = await run("client:1", channels.slice(0, 2), undefined, {
+  // The first batch answers 30 ms after its 10 s deadline, before the second
+  // batch completes 40 ms after that deadline. Late EOSE must not erase failure.
+  const result = await run("client:1", channels, undefined, {
     delay: (_id, channel) => {
       if (!channel) return 40;
       const late = first;
@@ -219,7 +218,7 @@ it("keeps a timed-out route failed when its EOSE arrives after CLOSE", async () 
       return late ? 10030 : 40;
     },
   });
-  expect(result).toMatchObject({ failed: 1 });
+  expect(result).toMatchObject({ reqs: 4, failed: 10 });
   expect(result.coverageMs).toBeUndefined();
   expect(result.error).toBeUndefined();
 });

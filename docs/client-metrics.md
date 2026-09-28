@@ -53,7 +53,7 @@ BUZZ_PRIVATE_KEY=nsec1… BUZZ_RELAY_URL=wss://relay.example pnpm probe:live \
 
 | Strategy | What it sends |
 |---|---|
-| `client:K` | The app's own subscriber ([`live.ts`](../src/features/relay/live.ts)) with K setups outstanding. The app uses 4. It includes the profile and membership routes. |
+| `client:K` | The app's own subscriber ([`live.ts`](../src/features/relay/live.ts)), treating the roster as joined channels: up to ten singleton channel filters per REQ, with K wire setups outstanding. The app uses 4. It includes the profile and membership routes. |
 | `filters:F` | All channels at once, F per REQ, one `#h` channel per filter. The relay allows at most 10 filters per REQ. |
 | `multi-h:M` | All channels at once, M channels in one filter's `#h` per REQ. |
 | `idle` | Nothing, which gives a baseline for the canary. |

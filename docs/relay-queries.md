@@ -600,16 +600,52 @@ for outstanding work. These manual fixtures are not part of `pnpm test`; see
 
 The session's `live` capability exposes connection/route state independently from
 finite-read readiness. A connected socket is not proof that every route is live.
-Global profile and self-scoped membership-hint routes are separate from explicit
-channel subscriptions. One socket supports at most 1,022 channels plus those two
-globals; omitted routes and partial roster coverage remain visible.
+Global profile and self-scoped membership-hint routes are separate from channel
+traffic. The logical interest capacity remains 1,022 channels plus those two globals
+(one fewer channel while agent observation is enabled); omitted routes and partial
+roster coverage remain visible. Joined background channels share stable wires of
+at most 10 channels. Initial replay uses singleton channel filters, matching the
+relay's per-REQ filter cap; live-only replacements use one equivalent filter.
+Public previews and foreground interests admitted as singletons remain separate;
+navigation prioritizes pending work without rebuilding healthy wires. Joined
+versus preview classification travels atomically with interests.
 
+Initial replay is opportunistic and capped at 500 events **per channel filter**,
+preserving the previous singleton replay allowance. A busy channel cannot consume
+another channel's sample. This reduces REQ frames and route-state publications,
+not historical database queries. Aggregate replay status stays conservative:
+500 received events can mark a batch limited but never prove any channel complete.
 EOSE establishes streaming, **not complete historical replay**. Retained channel
 windows get finite, signed-bounds head catch-up after establishment/reconnect;
 unopened channels defer it until demand. `live.snapshot().heads` distinguishes
 pending, verified, deferred and failed obligations. Verification covers the
 bounded current head, not all history or every event missed while disconnected.
 Catch-up merges into paged readers without resetting older pages or their cursor.
+
+Removing a batch member rebuilds only that batch's survivor scope. One established
+source overlaps its zero-replay replacement until EOSE; another removal supersedes
+the pending replacement, not that established source. Removed IDs are fenced
+immediately, including after re-addition. Original source scopes stay immutable;
+ambiguous auxiliary events never gain invented alert attribution. Replacements
+use fresh wire IDs, preserve `since`, and request `limit: 0`, so their events are
+live even before EOSE. Pending setup alone does not prove continuity. Narrowed-scope
+failure, denial, invalid traffic and disposal release both sources. For an
+unchanged scope, a renewal timeout or transient relay error retires only the
+replacement and retains the established source, with the error visible until
+fresh EOSE. The existing minute timer retries that renewal; quota failures retain
+the same source but obey the existing cooldown and three-retry limit. Exhausted
+or unsupported quota retries require manual Retry, not a reset each minute.
+
+One 60-second recovery timer renews established joined batches and hints the
+existing roster and unread owners to repair finite evidence. It does not renew
+singleton previews, add per-channel background history reads or reset the socket.
+This repairs silent pruning and missed hints; 60 seconds is an interval, not a
+convergence deadline under throttling, suspension or failure. Each live-only
+replacement consolidates its unchanged kinds, `since` and channel scope into one
+`limit: 0` filter: no historical sample is shared, and live matching is equivalent.
+The relay still executes one historical query per renewed wire; this reduces
+filter-query invocations, not REQs, HTTP repair or local SSE state publications.
+Finite repairs stay quiet and do not generate retrospective incoming alerts.
 
 `live.snapshot().roster` reports the finite channel-list refresh obligation,
 including failures when no channel is selected. The store owns that obligation,
@@ -633,7 +669,7 @@ its slot). The broker's existing six-request guard additionally covers response
 bodies. Available slots start immediately; completion frees capacity without a timer. These concurrency bounds do not
 reserve relay quota: large startup bursts can still receive quota refusals.
 Explicit server cooldowns, reconnect backoff and operation deadlines remain;
-there is no proactive rate timer or token bucket. Browser POST replacement does
+there is no proactive admission pacing or token bucket. Browser POST replacement does
 not reset learned pauses; signed
 requests enter HTTP admission after asynchronous authentication, at actual fetch
 dispatch. Read/write priority and cancellation cross the reader/transport boundary.
@@ -646,10 +682,10 @@ The browser broker streams SSE over POST with bounded interests and owner-scoped
 retry/priority/interest controls. Retry and interest changes preserve the upstream
 socket and healthy unchanged routes, so they do not interrupt pending publications.
 Interest updates coalesce through `/stream-interests`; origin, community, owner and
-body limits apply (1,024 IDs each for final interests and pending removals, 300 KB
-combined control body). Pending removals preserve retirement of old wires even
-when coalescing hides an intermediate empty interest set. Local interest revisions
-fence delayed channel events, denials
+body limits apply (1,024 IDs each for final interests, joined scope and pending
+removals, 450 KB combined control body). Pending removals preserve retirement of
+old wires even when coalescing hides an intermediate empty interest set. Local
+interest revisions fence delayed channel events, denials
 and establishment across remove/re-add, including changes during stream startup.
 This is local IPC metadata, not a new Nostr extension. An uncertain control outcome
 uses bounded reconnect with current interests; publications are not replayed.

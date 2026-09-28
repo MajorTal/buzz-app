@@ -68,13 +68,14 @@ async function harness(
       const socket = {
         readyState: 1,
         send(text) {
-          const [kind, id, filter] = JSON.parse(text);
+          const [kind, id, ...filters] = JSON.parse(text);
+          const filter = filters[0];
           frames.push({ kind, id, at: performance.now(), socket });
           if (kind === "AUTH" && !options.holdAuth)
             queueMicrotask(() => this.receive(["OK", id.id, true]));
           if (kind === "EVENT") publications.push({ event: id, socket });
           if (kind !== "REQ") return;
-          requests.push({ at: performance.now(), id, filter, socket });
+          requests.push({ at: performance.now(), id, filter, filters, socket });
           const refused = requests.length === refuseAt;
           if (!options.holdSetup)
             queueMicrotask(() =>
@@ -1306,6 +1307,88 @@ test.each([
     }
   },
 );
+
+test("joined batches survive the real HTTP boundary and retirement only rebuilds the affected scope", async () => {
+  const h = await harness();
+  let traffic;
+  try {
+    const fetcher = browserFetch(h.base);
+    const transport = await connectBrokerTransport(h.base);
+    const established = vi.fn(),
+      receive = vi.fn();
+    traffic = transport.subscribe({ ...callbacks, established, receive });
+    const joined = Array.from(
+      { length: 256 },
+      (_, i) => `c${String(i).padStart(3, "0")}`,
+    );
+    traffic.update([...joined, "preview"], joined);
+    await until(() => established.mock.calls.length === 29);
+    expect(h.requests).toHaveLength(29);
+    const batches = h.requests.filter(
+      (r) => r.filter["#h"] && r.filters.length > 1,
+    );
+    expect(batches.map((r) => r.filters.length)).toEqual([
+      ...Array(25).fill(10),
+      6,
+    ]);
+    for (const r of batches)
+      for (const f of r.filters) {
+        expect(f["#h"]).toHaveLength(1);
+        expect(f.limit).toBe(500);
+      }
+    expect(
+      established.mock.calls
+        .filter(([ids]) => Array.isArray(ids))
+        .map(([ids]) => ids.length),
+    ).toEqual([...Array(25).fill(10), 6]);
+    const old = batches[0];
+    // Host rejects mismatched joined scope before changing any live routes.
+    const malformed = await fetcher(`${h.base}/api/relay/stream-interests`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        streamId: traffic.identity(),
+        channels: ["preview"],
+        joined: ["not-present"],
+        interestRevision: 2,
+      }),
+    });
+    expect(malformed.status).toBe(400);
+    await malformed.text();
+    expect(h.requests).toHaveLength(29);
+    const retained = joined.slice(1);
+    traffic.update([...retained, "preview"], retained);
+    await until(() => established.mock.calls.length === 30);
+    expect(h.requests).toHaveLength(30);
+    expect(h.frames.filter((f) => f.kind === "CLOSE").map((f) => f.id)).toEqual(
+      [old.id],
+    );
+    expect(h.requests.at(-1).filters.flatMap((f) => f["#h"])).toEqual(
+      joined.slice(1, 10),
+    );
+    const event = finalizeEvent(
+      {
+        kind: 5,
+        content: "",
+        tags: [["e", "f".repeat(64)]],
+        created_at: 1700000000,
+      },
+      h.key,
+    );
+    await h.sockets[0].receive(["EVENT", old.id, event]);
+    await h.sockets[0].receive(["EVENT", h.requests.at(-1).id, event]);
+    await until(() => receive.mock.calls.length === 1);
+    expect(receive).toHaveBeenCalledExactlyOnceWith([event], {
+      phase: "live",
+      sourceChannels: joined.slice(1, 10),
+    });
+    expect(h.sockets).toHaveLength(1);
+  } finally {
+    traffic?.dispose();
+    vi.unstubAllGlobals();
+    await h.close();
+  }
+});
 
 test("startup response ABA retires an old wire before applying the latest interests", async () => {
   const h = await harness();

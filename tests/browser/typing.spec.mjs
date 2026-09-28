@@ -14,7 +14,9 @@ test("Messages receives scoped typing through authenticated live traffic and exp
   await open(page, app);
   await expect
     .poll(() =>
-      app.report.liveRequests.some((r) => r.filter?.["#h"]?.includes("alpha")),
+      app.report.liveRequests.some((r) =>
+        r.filters.some((filter) => filter["#h"]?.includes("alpha")),
+      ),
     )
     .toBe(true);
   const indicator = page.getByRole("status", { name: "Typing activity" });
@@ -72,7 +74,7 @@ for (const scope of ["channel", "thread"]) {
     await expect
       .poll(() =>
         app.report.liveRequests.some((r) =>
-          r.filter?.["#h"]?.includes("alpha"),
+          r.filters.some((filter) => filter["#h"]?.includes("alpha")),
         ),
       )
       .toBe(true);

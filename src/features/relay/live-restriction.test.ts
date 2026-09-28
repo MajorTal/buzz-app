@@ -38,7 +38,7 @@ class Socket {
 afterEach(() => vi.useRealTimers());
 const settle = () => vi.advanceTimersByTimeAsync(0);
 
-async function setup() {
+async function setup(singletons = false) {
   vi.useFakeTimers();
   const viewer = keypair();
   const relay = keypair();
@@ -49,13 +49,21 @@ async function setup() {
     ...wire.transport,
     subscribe(callbacks) {
       live = callbacks;
-      return subscribeRelayTraffic(
+      const traffic = subscribeRelayTraffic(
         "wss://relay.test",
         async (event) => signed(viewer, event),
         viewer.pubkey,
         callbacks,
         () => socket as unknown as WebSocket,
       );
+      // Cases asserting independent CLOSED scopes keep explicit singleton inputs;
+      // all other session cases exercise production joined batching.
+      return singletons
+        ? {
+            ...traffic,
+            update: (ids: readonly string[]) => traffic.update(ids),
+          }
+        : traffic;
     },
   });
   const memberships = ["a", "b"].map((id) =>
@@ -204,7 +212,7 @@ it.each(["roster", "metadata"])(
 );
 
 it("ignores unrelated route failures and repeated aggregate restriction snapshots", async () => {
-  const h = await setup();
+  const h = await setup(true);
   try {
     const b = h.socket
       .requests()
@@ -256,7 +264,7 @@ it.each(["queued", "pending"])(
 );
 
 it("coalesces two restricted channels into one authoritative refresh", async () => {
-  const h = await setup();
+  const h = await setup(true);
   try {
     const b = h.socket
       .requests()
@@ -282,7 +290,7 @@ it("coalesces two restricted channels into one authoritative refresh", async () 
 });
 
 it("preserves the existing immediate explicit non-member denial", async () => {
-  const h = await setup();
+  const h = await setup(true);
   try {
     await h.close("restricted: not a channel member");
     await settle();

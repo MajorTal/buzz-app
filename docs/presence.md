@@ -82,6 +82,10 @@ or imply confirmed delivery. There is no durable invisible policy on the relay.
 - Initial/new demand coalesces for 100ms, waiting at least five seconds after the
   previous read settles so transit cannot race the broker’s start gate. Successful
   views refresh after 60–65 seconds. Evidence expires 75 seconds after request start.
+  An owner may request an earlier read that keeps current evidence and still
+  waits for the start gate; managed agent cards do so every five seconds, for up
+  to thirty seconds, while native process status and the badge disagree (for
+  example, just after start or stop).
   Empty demand makes no request; removed authors lose their evidence. Hidden views,
   disconnect, access/cache invalidation and disposal invalidate observations.
 - One bounded complete snapshot is validated before any status changes. The

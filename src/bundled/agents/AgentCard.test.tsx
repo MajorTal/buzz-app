@@ -8,9 +8,11 @@ import {
   render,
   screen,
 } from "@testing-library/react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { RelaySession } from "../../features/relay/session";
 import type { PresenceStatus } from "../../features/presence/presence";
+import type { AgentView } from "../../features/agents/control";
+import { controlFixture } from "../../features/agents/control-testing";
 import { AgentCard } from "./AgentCard";
 
 afterEach(cleanup);
@@ -64,6 +66,67 @@ it("badges a single agent only while live presence is known", () => {
     } else {
       expect(badge).toHaveAttribute("data-status", next);
     }
+  }
+});
+
+it("re-reads presence after native start or stop until the badge agrees, within a bound", () => {
+  vi.useFakeTimers();
+  try {
+    const agent = controlFixture().agent;
+    let status: PresenceStatus = "offline";
+    let changed = () => {};
+    const refresh = vi.fn();
+    const session = {
+      presence: {
+        status: () => status,
+        limited: () => false,
+        refresh,
+        subscribe: (_key: string, listener: () => void) => {
+          changed = listener;
+          return () => {};
+        },
+      },
+    } as unknown as RelaySession;
+    const card = (next: AgentView) => (
+      <AgentCard
+        name="Agent"
+        identities={[next]}
+        editable={[next]}
+        session={session}
+        onEdit={() => {}}
+      >
+        <p>{next.status}</p>
+      </AgentCard>
+    );
+    const view = render(card({ ...agent, status: "stopped" }));
+    expect(refresh).not.toHaveBeenCalled();
+    view.rerender(card({ ...agent, status: "running" }));
+    expect(refresh).toHaveBeenCalledOnce();
+    act(() => vi.advanceTimersByTime(30000));
+    expect(refresh).toHaveBeenCalledTimes(7);
+    act(() => vi.advanceTimersByTime(60000));
+    expect(refresh).toHaveBeenCalledTimes(7);
+
+    view.rerender(card({ ...agent, status: "stopped" }));
+    view.rerender(card({ ...agent, status: "running" }));
+    expect(refresh).toHaveBeenCalledTimes(8);
+    act(() => {
+      status = "online";
+      changed();
+    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(refresh).toHaveBeenCalledTimes(8);
+
+    view.rerender(card({ ...agent, status: "stopped" }));
+    expect(refresh).toHaveBeenCalledTimes(9);
+    act(() => {
+      status = "offline";
+      changed();
+    });
+    act(() => vi.advanceTimersByTime(30000));
+    expect(refresh).toHaveBeenCalledTimes(9);
+  } finally {
+    vi.useRealTimers();
   }
 });
 

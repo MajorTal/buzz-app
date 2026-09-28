@@ -29,12 +29,13 @@ remain available when the old library is disconnected, unavailable or archived.
 
 **Add agent** shares the Edit fields and model browser. In the development desktop,
 Create generates a native key, obtains the captured viewer's owner authorization,
-and saves the agent stopped before publishing its profile. Failed profile publication
-has a Retry action on the same saved card; it never creates another identity.
-During a Create/profile wait, **Close** leaves the native operation running and
-exposes the existing cards' recovery Stop. Closing before creation returns skips
-automatic profile publication; refresh status and retry on the saved card. Late
-completion never closes a subsequently opened dialog.
+saves the agent, starts it, then publishes its profile. A failed Start or profile
+publication retains the saved identity and offers a retry for that step; it never
+creates another identity. A native Start response can confirm a saved agent while
+reporting that its process could not run. During Create, Start, or profile setup,
+**Close** leaves the operation running and exposes the existing cards' recovery
+Stop. Late completion never closes a subsequently opened dialog. If an operation
+cannot be confirmed, refresh status before repeating it.
 Create is blocked with an explanation if this app’s runtime is unavailable;
 existing agents and profile retry remain intact.
 The dev broker and native host must both support this flow. Packaged human
@@ -318,6 +319,9 @@ containment on non-Unix platforms.
 - `running` is **process-alive evidence only**, labeled “Process running · relay
   readiness unverified.” It is not a Listening/Working badge or proof a mention
   can be received. Native wake/readiness acceptance is separate.
+  The avatar badge is relay presence, which the harness publishes just after
+  the process starts; the card re-reads it briefly after start/stop (see
+  [presence](presence.md#ownership-and-bounds)).
 - Save uses `expectedRevision` and updates only editable fields. The planned
   flow restarts running agents whose effective settings change (see
   [Global agent defaults and saving](#global-agent-defaults-and-saving)).

@@ -161,9 +161,7 @@ export function AgentControlPanel({
       )}
       {state.status === "error" && state.data && (
         <p className="text-body-sm text-secondary">
-          Showing the last host snapshot. Current process state and durable
-          enabled intent are unconfirmed. Status retries automatically while
-          this page is visible; actions are never repeated automatically.
+          The agent statuses below may be out of date.
         </p>
       )}
       {state.status === "error" && (

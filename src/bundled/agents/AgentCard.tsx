@@ -1,5 +1,5 @@
 import { npubEncode } from "nostr-tools/nip19";
-import { Fragment, useRef, type ReactNode } from "react";
+import { Fragment, useEffect, useRef, type ReactNode } from "react";
 import {
   MenuRoot,
   MenuTrigger,
@@ -52,6 +52,23 @@ export function AgentCard({
     identities.length === 1 ? identities[0]?.pubkey : undefined,
   );
   const managed = editable.length === 1 ? editable[0] : undefined;
+  const status = managed?.status;
+  const settled =
+    status === "running" ? presence === "online" : presence !== "online";
+  useEffect(() => {
+    const owner = session?.presence;
+    if (!owner || !status || settled) return;
+    // The harness publishes presence just after native start/stop confirms,
+    // so one read can race it. Re-read at the owner's gate, then resume its
+    // normal cadence even if relay evidence never agrees.
+    owner.refresh();
+    let checks = 0;
+    const timer = setInterval(() => {
+      owner.refresh();
+      if (++checks === 6) clearInterval(timer);
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [session?.presence, status, settled]);
   const source = avatarSource(managed?.picture ?? avatar);
   const managedPicture = useAvatarPreview(
     managed?.picture ?? "",

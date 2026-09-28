@@ -238,6 +238,46 @@ it("uses a masked OpenAI key for Goose model lookup and discards unsaved keys on
   }
 });
 
+it("reveals only a key typed for the current provider", async () => {
+  const { view, control } = setup({ savedKeys: ["OPENAI_API_KEY"] });
+  const user = userEvent.setup();
+  try {
+    const key = screen.getByLabelText("OpenAI API key");
+    expect(screen.queryByRole("button", { name: "Show API key" })).toBeNull();
+    await user.type(key, "typed-key");
+    await user.click(screen.getByRole("button", { name: "Show API key" }));
+    expect(key).toHaveAttribute("type", "text");
+    await user.click(screen.getByRole("button", { name: "Hide API key" }));
+    expect(key).toHaveAttribute("type", "password");
+    await user.click(screen.getByRole("button", { name: "Show API key" }));
+    await user.click(screen.getByRole("combobox", { name: "LLM Provider" }));
+    await user.click(await screen.findByRole("option", { name: "Anthropic" }));
+    const next = screen.getByLabelText("Anthropic API key");
+    await user.type(next, "other-key");
+    expect(next).toHaveAttribute("type", "password");
+
+    // Round trip: returning to the revealed provider must not re-expose a replacement.
+    await user.click(screen.getByRole("button", { name: "Show API key" }));
+    await user.click(screen.getByRole("combobox", { name: "LLM Provider" }));
+    await user.click(await screen.findByRole("option", { name: "OpenAI" }));
+    await user.click(screen.getByRole("combobox", { name: "LLM Provider" }));
+    await user.click(await screen.findByRole("option", { name: "Anthropic" }));
+    const returned = screen.getByLabelText("Anthropic API key");
+    await user.type(returned, "replacement-key");
+    expect(returned).toHaveAttribute("type", "password");
+
+    // Clearing the revealed key withdraws consent for whatever is typed next.
+    await user.click(screen.getByRole("button", { name: "Show API key" }));
+    expect(returned).toHaveAttribute("type", "text");
+    await user.clear(returned);
+    await user.type(returned, "retyped-key");
+    expect(returned).toHaveAttribute("type", "password");
+  } finally {
+    view.unmount();
+    control.dispose();
+  }
+});
+
 it("preserves a saved key when blank and replaces it only when entered", async () => {
   const { draft, view, control } = setup({ savedKeys: ["OPENAI_API_KEY"] });
   const user = userEvent.setup();

@@ -437,3 +437,25 @@ it.each([null, false, true, "error"] as const)(
     expect(publish).toHaveBeenCalledTimes(2);
   },
 );
+it("refreshes early at the start gate without discarding current evidence", async () => {
+  const h = setup();
+  const statuses: string[] = [];
+  const release = h.owner.subscribe(key(3), () =>
+    statuses.push(h.owner.status(key(3))),
+  );
+  h.read.mockResolvedValueOnce(new Map([[key(3), "offline"]]));
+  await vi.advanceTimersByTimeAsync(100);
+  expect(h.read).toHaveBeenCalledOnce();
+  expect(h.owner.status(key(3))).toBe("offline");
+  h.owner.refresh();
+  await vi.advanceTimersByTimeAsync(4999);
+  expect(h.read).toHaveBeenCalledOnce();
+  expect(h.owner.status(key(3))).toBe("offline");
+  await vi.advanceTimersByTimeAsync(1);
+  expect(h.read).toHaveBeenCalledTimes(2);
+  expect(h.owner.status(key(3))).toBe("online");
+  // Selection notifies once; the refresh never passes back through Unknown.
+  expect(statuses).toEqual(["unknown", "offline", "online"]);
+  release();
+  h.owner.dispose();
+});

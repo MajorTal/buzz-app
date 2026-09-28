@@ -85,6 +85,8 @@ export const EnvelopeOpenIcon = defineIcon(
   "phosphor",
   PhosphorEnvelopeOpenIcon,
 );
+import { EyeIcon as PhosphorEyeIcon } from "@phosphor-icons/react/dist/csr/Eye";
+export const EyeIcon = defineIcon("phosphor", PhosphorEyeIcon);
 import { EyeSlashIcon as PhosphorEyeSlashIcon } from "@phosphor-icons/react/dist/csr/EyeSlash";
 export const EyeSlashIcon = defineIcon("phosphor", PhosphorEyeSlashIcon);
 import { FigmaLogoIcon as PhosphorFigmaLogoIcon } from "@phosphor-icons/react/dist/csr/FigmaLogo";

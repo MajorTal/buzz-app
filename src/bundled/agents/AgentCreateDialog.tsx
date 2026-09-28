@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
-import type {
-  AgentControl,
-  AgentControlState,
-  AgentView,
+import {
+  agentFailureReason,
+  type AgentControl,
+  type AgentControlState,
+  type AgentView,
 } from "../../features/agents/control";
 import { Button } from "../../shared/design-system/ui/Button";
 import { AgentSettingsFields } from "./AgentSettingsFields";
 import { agentDraft, agentEdit, type AgentDraft } from "./agent-edit";
+
+type CreatePhase = "creating" | "starting" | "publishing" | "checking";
 
 export function AgentCreateDialog({
   control,
@@ -47,8 +50,9 @@ export function AgentCreateDialog({
   );
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState<AgentView | null>(null);
+  const [nextStep, setNextStep] = useState<"start" | "profile">("start");
   const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [phase, setPhase] = useState<CreatePhase | null>(null);
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -62,38 +66,115 @@ export function AgentCreateDialog({
     state.data?.createAvailable &&
     control.create
   );
-  const runtimeBlocked = !state.data?.runtimeAvailable && !saved;
+  const runtimeBlocked =
+    !state.data?.runtimeAvailable && (!saved || nextStep === "start");
+  const busy = phase !== null;
   const blocked = busy || state.busy || state.status !== "ready";
   const create = async () => {
-    if (blocked || runtimeBlocked || !available || !control.create) return;
+    if (
+      blocked ||
+      runtimeBlocked ||
+      (!saved && (!available || !control.create))
+    )
+      return;
     setError(undefined);
-    setBusy(true);
+    let step: "creating" | "starting" | "publishing" = "creating";
+    let agent = saved;
+    let startFailure: string | null = null;
     try {
-      const agent =
-        saved ??
-        (await control.create(requestId, destination, owner, agentEdit(draft)));
-      // Closing leaves native creation alone; the saved card owns profile retry.
-      if (!mounted.current) return;
-      setDraft((current) => ({ ...current, environment: {} }));
-      setSaved(agent); // Durable local success survives a failed profile publication.
-      const current = state.data?.agents.find((item) => item.id === agent.id);
-      if (saved && current && !current.profilePending) {
-        onClose();
-        return;
+      if (!agent) {
+        let edit: ReturnType<typeof agentEdit>;
+        try {
+          edit = agentEdit(draft);
+        } catch (problem) {
+          if (mounted.current)
+            setError(
+              problem instanceof Error
+                ? problem.message
+                : "Check the agent settings and try again.",
+            );
+          return;
+        }
+        setPhase("creating");
+        if (!control.create) return;
+        agent = await control.create(requestId, destination, owner, edit);
       }
-      if (!control.publishProfile)
-        throw new Error("Agent saved; rebuild desktop to publish its profile.");
-      await control.publishProfile(agent.id);
-      if (mounted.current) onClose();
+      const created = agent;
+      if (!saved && mounted.current) {
+        setDraft((current) => ({ ...current, environment: {} }));
+        setSaved(agent);
+      }
+
+      if (!saved || nextStep === "start") {
+        const current = control
+          .snapshot()
+          .data?.agents.find((item) => item.id === created.id);
+        if (current?.status !== "running") {
+          step = "starting";
+          if (mounted.current) setPhase(step);
+          const result = await control.action(created.id, "start");
+          const started = result.agents.find((item) => item.id === created.id);
+          if (started?.status !== "running") {
+            startFailure = `${created.name} was created, but couldn't start. ${started?.error ?? "Check its settings, then try Start again."}`;
+          }
+        }
+        if (!startFailure && mounted.current) setNextStep("profile");
+      }
+
+      const current = control
+        .snapshot()
+        .data?.agents.find((item) => item.id === created.id);
+      if (current?.profilePending !== false) {
+        step = "publishing";
+        if (mounted.current) setPhase(step);
+        if (!control.publishProfile)
+          throw new Error(
+            "Profile setup is unavailable. Rebuild the desktop app.",
+          );
+        await control.publishProfile(created.id);
+      }
+      if (mounted.current) {
+        if (startFailure) setError(startFailure);
+        else onClose();
+      }
     } catch (problem) {
-      if (mounted.current)
+      if (mounted.current) setPhase("checking");
+      await control.refresh();
+      if (!mounted.current) return;
+      const detail = agentFailureReason(problem);
+      const reason = detail && ` ${detail}`;
+      const refreshed = control.snapshot();
+      const created = agent;
+      const current = created
+        ? refreshed.data?.agents.find((item) => item.id === created.id)
+        : undefined;
+      if (step === "starting" && current?.status === "running") {
+        setNextStep("profile");
+        setError(undefined);
+      } else if (step === "publishing" && current?.profilePending === false) {
+        if (startFailure) setError(startFailure);
+        else onClose();
+      } else if (step === "creating") {
         setError(
-          problem instanceof Error
-            ? problem.message
-            : "Could not finish creation. Your draft is retained.",
+          `We couldn't confirm whether the agent was created.${reason} Check the agent list before trying again.`,
         );
+      } else if (refreshed.status === "ready" && current) {
+        setError(
+          step === "starting"
+            ? `${agent?.name ?? draft.name} was saved, but couldn't start.${reason} Check its card, then select Start agent to try again.`
+            : startFailure
+              ? `${startFailure} Profile setup also didn't finish.${reason}`
+              : `${agent?.name ?? draft.name} was saved and started, but profile setup didn't finish.${reason} Select Finish profile to try again.`,
+        );
+      } else {
+        setError(
+          step === "starting"
+            ? `${agent?.name ?? draft.name} was saved, but we couldn't confirm whether it started. Refresh status before trying again.`
+            : `${agent?.name ?? draft.name} was saved, but we couldn't confirm its profile setup. Refresh status before trying again.`,
+        );
+      }
     } finally {
-      if (mounted.current) setBusy(false);
+      if (mounted.current) setPhase(null);
     }
   };
   return (
@@ -115,9 +196,9 @@ export function AgentCreateDialog({
             </Dialog.Title>
           </header>
           <Dialog.Description className="buzz-dialog-description">
-            Create a new identity in {destination || "a connected community"}.
-            It stays stopped until you start it or send it a mention. No channel
-            is joined automatically.
+            Create and start an agent in{" "}
+            {destination || "a connected community"}. It won't join a channel
+            automatically.
           </Dialog.Description>
           <form
             className="buzz-dialog-body space-y-section-gap"
@@ -155,28 +236,29 @@ export function AgentCreateDialog({
             {runtimeBlocked && (
               <p role="alert">
                 This app’s agent runtime is unavailable. Repair or rebuild the
-                desktop app before creating an agent.
+                desktop app before {saved ? "starting" : "creating"} an agent.
                 {state.data?.runtimeMessage && ` ${state.data.runtimeMessage}`}
               </p>
             )}
             {busy && (
               <p role="status">
-                You can close this dialog to stop another agent. Saving
-                continues; refresh status afterward to recover the saved agent
-                and retry its profile.
+                {phase === "creating" && "Creating agent…"}
+                {phase === "starting" &&
+                  `${saved?.name ?? draft.name} was created. Starting it…`}
+                {phase === "publishing" &&
+                  `${saved?.name ?? draft.name} was saved. Finishing its profile…`}
+                {phase === "checking" && "Checking agent status…"}
               </p>
             )}
-            {saved && (
+            {saved && !busy && !error && (
               <p role="status">
-                {saved.name} is saved and stopped. Its profile is not confirmed
-                yet; Retry uses this same identity. You can also close and retry
-                from its card.
+                {nextStep === "start"
+                  ? `${saved.name} was saved. Start it to finish setup.`
+                  : `${saved.name} was saved and started. Finish its profile setup.`}
               </p>
             )}
-            {(error || state.error) && (
-              <p role="alert">{state.error ?? error}</p>
-            )}
-            {state.status === "error" && (
+            {error && <p role="alert">{error}</p>}
+            {state.status === "error" && !busy && (
               <Button onClick={() => void control.refresh()}>
                 Retry status
               </Button>
@@ -188,9 +270,21 @@ export function AgentCreateDialog({
               <Button
                 type="submit"
                 variant="primary"
-                disabled={blocked || runtimeBlocked || !available}
+                disabled={blocked || runtimeBlocked || (!saved && !available)}
               >
-                {busy ? "Saving…" : saved ? "Retry profile" : "Create agent"}
+                {busy
+                  ? phase === "starting"
+                    ? "Starting…"
+                    : phase === "publishing"
+                      ? "Finishing…"
+                      : phase === "checking"
+                        ? "Checking…"
+                        : "Creating…"
+                  : saved
+                    ? nextStep === "start"
+                      ? "Start agent"
+                      : "Finish profile"
+                    : "Create agent"}
               </Button>
             </div>
           </form>

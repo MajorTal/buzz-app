@@ -219,12 +219,14 @@ export function createPresence(
         if (publisher === owned) publisher = undefined;
       });
   }
+  /** Read soon without discarding current evidence; the start gate still applies. */
+  function refresh() {
+    nextRead = Math.min(nextRead, Math.max(Date.now() + 100, readGate));
+    schedule();
+  }
   const stopActivity = activity?.subscribe(() => {
     if (!activity.visible()) clear(false);
-    else {
-      nextRead = Math.min(nextRead, Math.max(Date.now() + 100, readGate));
-      schedule();
-    }
+    else refresh();
     if (lastStatus !== activity.status()) {
       lastStatus = activity.status();
       // Replace desired state, not an event backlog. Restarting the lock cancels late signing.
@@ -285,6 +287,7 @@ export function createPresence(
       clear();
     },
     clear,
+    refresh,
     dispose() {
       closed = true;
       stopActivity?.();

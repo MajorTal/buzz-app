@@ -454,7 +454,7 @@ it("a failed native delete after confirmed relay effects reports it and stays op
   );
   await confirmDelete(userEvent.setup());
   const [error] = await screen.findAllByText(
-    /Synthetic native refusal Could not confirm the operation\. Check current status and saved settings before retrying/,
+    /Synthetic native refusal\. Could not confirm the operation\. Check current status and saved settings before retrying/,
   );
   expect(error).toBeVisible();
   expect(fixture.published.map((event) => event.kind)).toEqual([9001, 9035]);

@@ -290,7 +290,7 @@ for (const mode of ["absolute", "saved-override", "draft-override"]) {
   });
 }
 
-it("keeps lifecycle controls visible and reports failure without disabling recovery Stop", async () => {
+it("checks Start failure and keeps lifecycle controls available", async () => {
   const { f, control } = setup();
   const [card] = await screen.findAllByRole("article", {
     name: "Agent Fixture agent",
@@ -309,10 +309,11 @@ it("keeps lifecycle controls visible and reports failure without disabling recov
     throw "synthetic start failure";
   };
   fireEvent.click(within(card).getByRole("button", { name: "Start" }));
-  await screen.findByRole("button", { name: "Retry status" });
-  expect(within(card).getByRole("button", { name: "Start" })).toBeDisabled();
-  expect(within(card).getByRole("button", { name: "Stop" })).toBeEnabled();
-  await act(async () => control.refresh());
+  const notice = await within(card).findByText(
+    "The agent didn't start. synthetic start failure. Try again.",
+  );
+  expect(screen.queryByRole("button", { name: "Retry status" })).toBeNull();
+  expect(within(card).getByRole("button", { name: "Stop" })).toBeDisabled();
   expect(within(card).getByRole("button", { name: "Start" })).toBeEnabled();
   f.data.runtimeAvailable = false;
   await act(async () => control.refresh());
@@ -320,6 +321,41 @@ it("keeps lifecycle controls visible and reports failure without disabling recov
   expect(
     within(card).getByText(/bundled agent runtime is unavailable/),
   ).toBeVisible();
+  expect(notice).toBeVisible();
+  // A later status change, such as a mention start, supersedes the notice.
+  f.agent.status = "running";
+  await act(async () => control.refresh());
+  expect(within(card).queryByText(/The agent didn't start/)).toBeNull();
+});
+it("retires a card Start failure after the editor starts and stops the agent", async () => {
+  const { f } = setup();
+  const [card] = await screen.findAllByRole("article", {
+    name: "Agent Fixture agent",
+  });
+  if (!card) throw Error("Missing managed card");
+  fireEvent.click(within(card).getByRole("button", { name: "Stop" }));
+  await within(card).findByRole("button", { name: "Start" });
+  const action = f.host.action;
+  f.host.action = async () => {
+    throw "synthetic start failure";
+  };
+  fireEvent.click(within(card).getByRole("button", { name: "Start" }));
+  await within(card).findByText(/The agent didn't start/);
+  f.host.action = action;
+  fireEvent.click(
+    within(card).getByRole("button", { name: "Actions for Fixture agent" }),
+  );
+  fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+  const dialog = screen.getByRole("dialog", { name: "Edit agent" });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Runtime" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Start" }));
+  await within(card).findByText("Process running · relay readiness unverified");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Stop" }));
+  await within(card).findByText("Process stopped");
+  fireEvent.click(within(dialog).getByRole("button", { name: "Close editor" }));
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(within(card).getByText("Process stopped")).toBeVisible();
+  expect(within(card).queryByText(/The agent didn't start/)).toBeNull();
 });
 it("Add opens a focused creation dialog and retains a dirty draft on Escape", async () => {
   const { f } = setup();
@@ -707,9 +743,10 @@ it("keeps Goose model browsing available after a draft provider override", async
   expect(within(dialog).getByRole("combobox", { name: "Model" })).toBeVisible();
 });
 
-it("creates a stopped Goose agent with the selected provider", async () => {
+it("creates and starts a Goose agent with the selected provider", async () => {
   vi.spyOn(communityApi, "communityRequest").mockResolvedValue({ auth: [] });
   const commit = vi.fn();
+  const start = vi.fn();
   setup("connected", (fixture) => {
     fixture.data.createAvailable = true;
     fixture.data.defaultWorkspace = "/fixture/workspace";
@@ -734,6 +771,13 @@ it("creates a stopped Goose agent with the selected provider", async () => {
         status: "stopped",
         runningRevision: null,
       });
+      return structuredClone(fixture.data);
+    });
+    fixture.host.action = start.mockImplementation(async (id, action) => {
+      const agent = fixture.data.agents.find((item) => item.id === id);
+      if (!agent || action !== "start") throw Error("Unexpected agent action");
+      agent.enabled = true;
+      agent.status = "running";
       return structuredClone(fixture.data);
     });
     fixture.host.publishProfile = async () => structuredClone(fixture.data);
@@ -766,9 +810,148 @@ it("creates a stopped Goose agent with the selected provider", async () => {
     provider: "openrouter",
     model: "anthropic/claude-sonnet-4",
   });
+  expect(start).toHaveBeenCalledExactlyOnceWith("created-goose", "start");
   expect(
-    screen.getByRole("article", { name: "Agent Goose helper" }),
-  ).toHaveTextContent("Process stopped");
+    await screen.findByRole("article", { name: "Agent Goose helper" }),
+  ).toHaveTextContent("Process running");
+});
+
+it("keeps the saved agent when Start reports a process failure", async () => {
+  vi.spyOn(communityApi, "communityRequest").mockResolvedValue({ auth: [] });
+  let releaseStart!: () => void;
+  const startGate = new Promise<void>((resolve) => {
+    releaseStart = resolve;
+  });
+  const commit = vi.fn();
+  const start = vi.fn();
+  const profile = vi.fn();
+  setup("connected", (fixture) => {
+    fixture.data.createAvailable = true;
+    fixture.data.defaultWorkspace = "/fixture/workspace";
+    fixture.host.prepareCreate = async () => ({
+      id: "created",
+      pubkey: "cd".repeat(32),
+    });
+    fixture.host.commitCreate = commit.mockImplementation(async (_id, edit) => {
+      fixture.data.agents.push({
+        ...structuredClone(fixture.agent),
+        id: "created",
+        name: edit.name,
+        enabled: false,
+        status: "stopped",
+        profilePending: true,
+      });
+      return structuredClone(fixture.data);
+    });
+    fixture.host.action = start.mockImplementation(async (id, action) => {
+      const agent = fixture.data.agents.find((item) => item.id === id);
+      if (!agent || action !== "start") throw Error("Unexpected agent action");
+      if (start.mock.calls.length === 1) {
+        await startGate;
+        agent.status = "failed";
+        agent.error = "Goose could not open.";
+      } else {
+        agent.status = "running";
+        agent.error = null;
+      }
+      agent.enabled = true;
+      return structuredClone(fixture.data);
+    });
+    fixture.host.publishProfile = profile.mockImplementation(async () => {
+      const agent = fixture.data.agents.find((item) => item.id === "created");
+      if (!agent) throw Error("Created agent missing");
+      agent.profilePending = false;
+      return structuredClone(fixture.data);
+    });
+  });
+  const user = userEvent.setup();
+  try {
+    await user.click(await screen.findByRole("button", { name: "Add agent" }));
+    const dialog = screen.getByRole("dialog", { name: "Create agent" });
+    await user.type(within(dialog).getByLabelText("Name"), "Goose helper");
+    await user.click(
+      within(dialog).getByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(start).toHaveBeenCalledOnce());
+    expect(
+      within(dialog).getByText(/Goose helper was created. Starting it/),
+    ).toBeVisible();
+    expect(profile).not.toHaveBeenCalled();
+    await act(async () => releaseStart());
+    await within(dialog).findByText(
+      /Goose helper was created, but couldn't start/,
+    );
+    expect(commit).toHaveBeenCalledOnce();
+    expect(profile).toHaveBeenCalledOnce();
+    await user.click(
+      within(dialog).getByRole("button", { name: "Start agent" }),
+    );
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(commit).toHaveBeenCalledOnce();
+    expect(start).toHaveBeenCalledTimes(2);
+    expect(profile).toHaveBeenCalledOnce();
+  } finally {
+    await act(async () => releaseStart());
+  }
+});
+
+it("checks an unconfirmed Start without repeating it", async () => {
+  vi.spyOn(communityApi, "communityRequest").mockResolvedValue({ auth: [] });
+  const commit = vi.fn();
+  const start = vi.fn();
+  const profile = vi.fn();
+  setup("connected", (fixture) => {
+    fixture.data.createAvailable = true;
+    fixture.data.defaultWorkspace = "/fixture/workspace";
+    fixture.host.prepareCreate = async () => ({
+      id: "created",
+      pubkey: "cd".repeat(32),
+    });
+    fixture.host.commitCreate = commit.mockImplementation(async (_id, edit) => {
+      fixture.data.agents.push({
+        ...structuredClone(fixture.agent),
+        id: "created",
+        name: edit.name,
+        enabled: false,
+        status: "stopped",
+        profilePending: true,
+      });
+      return structuredClone(fixture.data);
+    });
+    fixture.host.action = start.mockImplementation(async (id) => {
+      const agent = fixture.data.agents.find((item) => item.id === id);
+      if (!agent) throw Error("Created agent missing");
+      agent.enabled = true;
+      agent.status = "running";
+      throw "Start confirmation was lost.";
+    });
+    fixture.host.publishProfile = profile.mockImplementation(async () => {
+      const agent = fixture.data.agents.find((item) => item.id === "created");
+      if (!agent) throw Error("Created agent missing");
+      agent.profilePending = false;
+      return structuredClone(fixture.data);
+    });
+  });
+  const user = userEvent.setup();
+  await user.click(await screen.findByRole("button", { name: "Add agent" }));
+  const dialog = screen.getByRole("dialog", { name: "Create agent" });
+  await user.type(within(dialog).getByLabelText("Name"), "Goose helper");
+  await user.click(
+    within(dialog).getByRole("button", { name: "Create agent" }),
+  );
+  expect(
+    await within(dialog).findByRole("button", { name: "Finish profile" }),
+  ).toBeEnabled();
+  expect(commit).toHaveBeenCalledOnce();
+  expect(start).toHaveBeenCalledOnce();
+  expect(profile).not.toHaveBeenCalled();
+  await user.click(
+    within(dialog).getByRole("button", { name: "Finish profile" }),
+  );
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  expect(commit).toHaveBeenCalledOnce();
+  expect(start).toHaveBeenCalledOnce();
+  expect(profile).toHaveBeenCalledOnce();
 });
 
 it("shows an unavailable Goose harness without allowing selection", async () => {
@@ -1032,6 +1215,14 @@ for (const stage of ["create", "profile"] as const) {
             return structuredClone(fixture.data);
           },
         );
+        fixture.host.action = async (id, action) => {
+          const agent = fixture.data.agents.find((item) => item.id === id);
+          if (!agent) throw Error("Agent missing");
+          fixture.calls.push({ action, payload: { id } });
+          agent.enabled = action !== "stop";
+          agent.status = action === "stop" ? "stopped" : "running";
+          return structuredClone(fixture.data);
+        };
         fixture.host.publishProfile = profile.mockImplementation(async () => {
           await gate;
           const created = fixture.data.agents.find(
@@ -1092,14 +1283,19 @@ for (const stage of ["create", "profile"] as const) {
           control
             .snapshot()
             .data?.agents.find((agent) => agent.id === "created"),
-        ).toMatchObject({ enabled: false, profilePending: stage === "create" });
+        ).toMatchObject({
+          enabled: stage === "profile" || !recoverStop,
+          profilePending: stage === "create" && recoverStop,
+        });
         if (recoverStop)
           expect(control.snapshot().data?.agents[0]).toMatchObject({
             enabled: false,
             status: "stopped",
           });
         expect(create).toHaveBeenCalledOnce();
-        expect(profile).toHaveBeenCalledTimes(stage === "create" ? 0 : 1);
+        expect(profile).toHaveBeenCalledTimes(
+          stage === "profile" || !recoverStop ? 1 : 0,
+        );
       } finally {
         await act(async () => {
           release();
@@ -1171,6 +1367,13 @@ it("retries the same saved profile even if the runtime becomes unavailable", asy
         return structuredClone(fixture.data);
       },
     );
+    fixture.host.action = async (id, action) => {
+      const agent = fixture.data.agents.find((item) => item.id === id);
+      if (!agent || action !== "start") throw Error("Unexpected agent action");
+      agent.enabled = true;
+      agent.status = "running";
+      return structuredClone(fixture.data);
+    };
     fixture.host.publishProfile = profile
       .mockRejectedValueOnce("Synthetic profile failure")
       .mockImplementation(async () => {
@@ -1189,11 +1392,11 @@ it("retries the same saved profile even if the runtime becomes unavailable", asy
   await user.click(
     within(dialog).getByRole("button", { name: "Create agent" }),
   );
-  await within(dialog).findByText(/Calvin is saved and stopped/);
+  await within(dialog).findByText(/Calvin was saved and started/);
   expect(profile).toHaveBeenCalledExactlyOnceWith("created");
   f.data.runtimeAvailable = false;
   await act(async () => control.refresh());
-  const retry = within(dialog).getByRole("button", { name: "Retry profile" });
+  const retry = within(dialog).getByRole("button", { name: "Finish profile" });
   expect(control.snapshot().error).toBeNull();
   expect(within(dialog).getByRole("alert")).toHaveTextContent(
     "Synthetic profile failure",
@@ -1273,75 +1476,76 @@ it("keeps persistent read failures visible and recovers on the next periodic rea
 it.each(["running", "failed"] as const)(
   "recovers Start status to %s without replay or cross-agent errors",
   async (status) => {
-    vi.useFakeTimers();
     const { f, control } = setup("ready", (f) => {
       f.agent.enabled = false;
       f.agent.status = "stopped";
     });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    const [card] = screen.getAllByRole("article", {
+    const [card] = await screen.findAllByRole("article", {
       name: "Agent Fixture agent",
     });
     if (!card) throw Error("Missing managed card");
+    let releaseRead!: () => void;
+    const readGate = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const snapshot = vi
+      .spyOn(f.host, "snapshot")
+      .mockImplementationOnce(async () => {
+        await readGate;
+        return structuredClone(f.data);
+      });
     const action = vi
       .spyOn(f.host, "action")
       .mockRejectedValueOnce("Synthetic start failure.");
-    fireEvent.click(within(card).getByRole("button", { name: "Start" }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    const error = screen.getByRole("alert");
-    const retry = screen.getByRole("button", { name: "Retry status" });
-    expect(error).toHaveTextContent("Synthetic start failure.");
-    for (const notice of [error, retry]) {
+    try {
+      fireEvent.click(within(card).getByRole("button", { name: "Start" }));
       expect(
-        notice.compareDocumentPosition(card) & Node.DOCUMENT_POSITION_FOLLOWING,
-      ).toBeTruthy();
-    }
-    expect(within(card).getByRole("button", { name: "Start" })).toBeDisabled();
-    f.agent.enabled = true;
-    f.agent.status = status;
-    f.agent.error = status === "failed" ? "Synthetic start failure." : null;
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-    expect(control.snapshot().status).toBe("ready");
-    expect(control.snapshot().error).toBeNull();
-    if (status === "failed") {
-      expect(within(card).getByRole("alert")).toHaveTextContent(
-        "Synthetic start failure.",
-      );
-      expect(screen.getAllByRole("alert")).toHaveLength(1);
-    } else {
-      expect(
-        within(card).getByText("Process running · relay readiness unverified"),
+        await within(card).findByText("Checking agent status…"),
       ).toBeVisible();
-      expect(screen.queryByRole("alert")).toBeNull();
+      expect(snapshot).toHaveBeenCalledOnce();
+      expect(
+        within(card).getByRole("button", { name: "Start" }),
+      ).toBeDisabled();
+      f.agent.enabled = true;
+      f.agent.status = status;
+      f.agent.error = status === "failed" ? "Synthetic start failure." : null;
+      await act(async () => releaseRead());
+      await waitFor(() => expect(control.snapshot().status).toBe("ready"));
+      expect(control.snapshot().error).toBeNull();
+      if (status === "failed") {
+        expect(within(card).getByRole("alert")).toHaveTextContent(
+          "Synthetic start failure.",
+        );
+        expect(screen.getAllByRole("alert")).toHaveLength(1);
+      } else {
+        expect(
+          within(card).getByText(
+            "Process running · relay readiness unverified",
+          ),
+        ).toBeVisible();
+        expect(screen.queryByRole("alert")).toBeNull();
+      }
+      expect(screen.queryByRole("button", { name: "Retry status" })).toBeNull();
+      expect(action).toHaveBeenCalledExactlyOnceWith(f.agent.id, "start");
+      const other = screen.getAllByRole("article", {
+        name: "Agent Fixture agent",
+      })[1];
+      if (!other) throw Error("Missing other agent");
+      expect(within(other).queryByRole("alert")).toBeNull();
+      fireEvent.click(
+        within(other).getByRole("button", {
+          name: "Actions for Fixture agent",
+        }),
+      );
+      fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
+      expect(
+        within(screen.getByRole("dialog", { name: "Edit agent" })).queryByRole(
+          "alert",
+        ),
+      ).toBeNull();
+    } finally {
+      await act(async () => releaseRead());
     }
-    expect(screen.queryByRole("button", { name: "Retry status" })).toBeNull();
-    expect(action).toHaveBeenCalledExactlyOnceWith(f.agent.id, "start");
-    const other = screen.getAllByRole("article", {
-      name: "Agent Fixture agent",
-    })[1];
-    if (!other) throw Error("Missing other agent");
-    expect(within(other).queryByRole("alert")).toBeNull();
-    fireEvent.click(
-      within(other).getByRole("button", { name: "Actions for Fixture agent" }),
-    );
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    fireEvent.click(screen.getByRole("menuitem", { name: "Edit" }));
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(
-      within(screen.getByRole("dialog", { name: "Edit agent" })).queryByRole(
-        "alert",
-      ),
-    ).toBeNull();
   },
 );
 

@@ -3,6 +3,9 @@ import { Accordion } from "../../shared/design-system/ui/Accordion";
 import { Textarea } from "../../shared/design-system/ui/Textarea";
 import { Field } from "../../shared/design-system/ui/Field";
 import { Input } from "../../shared/design-system/ui/Input";
+import { InputGroup } from "../../shared/design-system/ui/InputGroup";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
+import { EyeIcon, EyeSlashIcon } from "../../shared/design-system/icons/index";
 import type {
   AgentControl,
   AgentControlState,
@@ -45,6 +48,7 @@ export function AgentSettingsFields({
   onChange(patch: Partial<AgentDraft>): void;
 }) {
   const [piProviders, setPiProviders] = useState<string[]>([]);
+  const [revealed, setRevealed] = useState<string | null>(null);
   const pi = draft.command.split("/").at(-1) === "buzz-pi-acp";
   const goose = isGoose(draft.command);
   const buzzProvider =
@@ -69,6 +73,12 @@ export function AgentSettingsFields({
     : null;
   const apiKey = gooseProvider ? gooseApiKey(gooseProvider) : undefined;
   const savedKey = !!apiKey && environmentKeys.includes(apiKey.env);
+  // Saved keys are write-only; only a key typed for this provider can be shown.
+  const typedKey = apiKey && draft.environment[apiKey.env] ? apiKey.env : null;
+  // Reveal consent covers one typed key. Clear it during render once that key
+  // is removed or the provider changes, so a replacement starts masked.
+  if (revealed !== null && revealed !== typedKey) setRevealed(null);
+  const revealKey = revealed !== null && revealed === typedKey;
   const change = (patch: Partial<AgentDraft>) => {
     const next = { ...draft, ...patch };
     const nextProvider = isGoose(next.command)
@@ -131,27 +141,47 @@ export function AgentSettingsFields({
           {apiKey && (
             <div className="space-y-2">
               <Field label={`${apiKey.label} API key`}>
-                <Input
-                  type="password"
-                  autoComplete="new-password"
-                  spellCheck={false}
-                  disabled={disabled}
-                  value={draft.environment[apiKey.env] ?? ""}
-                  placeholder={
-                    draft.environment[apiKey.env] === null
-                      ? "Will remove on save"
-                      : savedKey
-                        ? "Saved key unchanged"
-                        : "Paste API key or use existing Goose credentials"
+                <InputGroup
+                  trailing={
+                    typedKey ? (
+                      <IconButton
+                        aria-label={revealKey ? "Hide API key" : "Show API key"}
+                        icon={
+                          revealKey ? (
+                            <EyeSlashIcon size={16} aria-hidden="true" />
+                          ) : (
+                            <EyeIcon size={16} aria-hidden="true" />
+                          )
+                        }
+                        size="sm"
+                        disabled={disabled}
+                        onClick={() => setRevealed(revealKey ? null : typedKey)}
+                      />
+                    ) : undefined
                   }
-                  onChange={(event) => {
-                    const environment = { ...draft.environment };
-                    if (event.target.value)
-                      environment[apiKey.env] = event.target.value;
-                    else delete environment[apiKey.env];
-                    change({ environment });
-                  }}
-                />
+                >
+                  <Input
+                    type={revealKey ? "text" : "password"}
+                    autoComplete="new-password"
+                    spellCheck={false}
+                    disabled={disabled}
+                    value={draft.environment[apiKey.env] ?? ""}
+                    placeholder={
+                      draft.environment[apiKey.env] === null
+                        ? "Will remove on save"
+                        : savedKey
+                          ? "Saved key unchanged"
+                          : "Paste API key or use existing Goose credentials"
+                    }
+                    onChange={(event) => {
+                      const environment = { ...draft.environment };
+                      if (event.target.value)
+                        environment[apiKey.env] = event.target.value;
+                      else delete environment[apiKey.env];
+                      change({ environment });
+                    }}
+                  />
+                </InputGroup>
               </Field>
               <p className="text-body-sm text-secondary">
                 {apiKey.env} is used for this agent and model lookup. Leave

@@ -10,13 +10,13 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { invoke } from "@tauri-apps/api/core";
-import { createIdentity } from "./service";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { createIdentity, nativeIdentityEnabled } from "./service";
 import { IdentitySetup } from "./IdentitySetup";
 import { PrivateKey } from "./PrivateKey";
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
-  isTauri: () => true,
+  isTauri: vi.fn(() => true),
 }));
 const viewer = "ab".repeat(32);
 const key = "nsec-fixture-only";
@@ -30,6 +30,8 @@ function deferred<T>() {
 afterEach(() => {
   cleanup();
   vi.resetAllMocks();
+  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 it("offers alternatives, passes exactly the imported key, and keeps secrets out of snapshots", async () => {
@@ -85,7 +87,7 @@ it("restore denial does not become first run or generate a replacement", async (
     screen.queryByRole("button", { name: "Create a new identity" }),
   ).toBeNull();
   await user.click(
-    screen.getByRole("button", { name: "Retry Keychain access" }),
+    screen.getByRole("button", { name: "Retry secure storage access" }),
   );
   expect(await screen.findByText("Restored")).toBeVisible();
   expect(vi.mocked(invoke).mock.calls.map(([command]) => command)).toEqual([
@@ -184,4 +186,21 @@ it("copies without revealing and cancels a pending export on blur before clipboa
   });
   expect(write).toHaveBeenCalledTimes(1);
   identity.dispose();
+});
+
+it("enables packaged identity on desktop platforms but never in the live broker or browser", () => {
+  vi.mocked(isTauri).mockReturnValue(true);
+  vi.stubEnv("VITE_BUZZ_LIVE", "");
+  for (const platform of ["MacIntel", "Win32", "Linux x86_64"]) {
+    vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
+    expect(nativeIdentityEnabled()).toBe(true);
+  }
+  vi.stubEnv("VITE_BUZZ_LIVE", "1");
+  expect(nativeIdentityEnabled()).toBe(false);
+  vi.stubEnv("VITE_BUZZ_LIVE", "");
+  vi.mocked(isTauri).mockReturnValue(false);
+  expect(nativeIdentityEnabled()).toBe(false);
+  vi.mocked(isTauri).mockReturnValue(true);
+  vi.spyOn(navigator, "platform", "get").mockReturnValue("iPhone");
+  expect(nativeIdentityEnabled()).toBe(false);
 });

@@ -486,7 +486,7 @@ live handover remains a separate step below.
 
 1. While old Buzz still runs, review/import only. Choose the installed/development
    library and destination under **Import options**. Import may prompt for the
-   selected legacy Keychain blob; it creates separate app credentials at service
+   selected legacy secure-storage blob; it creates separate app credentials at service
    `dev.local.buzz.foundation.agents`, account `agent:<key-community>`. The source
    is read-only and imported agents stay stopped. Refused custody is a blocker,
    never a reason to migrate keys implicitly.

@@ -1,5 +1,7 @@
 //! Device-local Goose setup. Never run the installer in a webview or accept a command from IPC.
-use crate::agents::{self, AgentHost};
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::agents;
+use crate::agents::AgentHost;
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use buzz_agent_controller::Action;
 use buzz_agent_controller::ProcessStatus;
@@ -33,7 +35,7 @@ struct InstallProcess {
 }
 #[cfg(not(any(target_os = "macos", target_os = "linux", test)))]
 #[derive(Default)]
-pub(crate) struct HarnessSetup;
+pub(crate) struct HarnessSetup {}
 #[cfg(not(any(target_os = "macos", target_os = "linux", test)))]
 impl HarnessSetup {
     pub(crate) fn shutdown(&self) {}
@@ -115,6 +117,8 @@ fn kill_group(group: u32) {
     unsafe {
         libc::kill(-(group as i32), libc::SIGKILL);
     }
+    #[cfg(not(unix))]
+    let _ = group; // Non-Unix unit tests exercise bookkeeping, not process signalling.
 }
 
 #[derive(Serialize)]
@@ -291,7 +295,7 @@ pub(crate) async fn goose_install<R: tauri::Runtime>(
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = (app, state, agents);
-        return Err("Goose installation is supported only on macOS and Linux".into());
+        Err("Goose installation is supported only on macOS and Linux".into())
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {

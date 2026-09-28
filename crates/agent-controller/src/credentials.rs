@@ -15,24 +15,24 @@ const MAX_BLOB: usize = 2 * 1024 * 1024;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Failure {
     Absent,
-    #[cfg(any(target_os = "macos", test))]
     Occupied,
-    #[cfg(any(target_os = "macos", test))]
     Denied,
     Corrupt,
     Unavailable,
+    #[cfg(any(target_os = "windows", target_os = "linux", test))]
+    Busy,
 }
 impl Failure {
     fn message(self) -> String {
         match self {
             Self::Absent => "Selected agent credential is absent",
-            #[cfg(any(target_os = "macos", test))]
             Self::Occupied => {
                 "Destination agent credential already exists; nothing was overwritten"
             }
-            #[cfg(any(target_os = "macos", test))]
-            Self::Denied => "Keychain access was denied; allow access explicitly and retry",
-            Self::Corrupt => "Selected Keychain credential is malformed",
+            Self::Denied => "Secure storage access was denied; allow access explicitly and retry",
+            Self::Corrupt => "Selected secure-storage credential is malformed",
+            #[cfg(any(target_os = "windows", target_os = "linux", test))]
+            Self::Busy => "Another Buzz app is accessing this credential; retry shortly",
             Self::Unavailable => "The OS credential store is unavailable on this platform",
         }
         .into()

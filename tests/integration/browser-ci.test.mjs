@@ -155,11 +155,21 @@ test("automatic CI stays on Linux and manual dispatch runs only Windows", () => 
   const windows = jobs["windows-native"];
   assert.equal(windows.if, "github.event_name == 'workflow_dispatch'");
   assert.equal(windows["runs-on"], "windows-2025");
+  const packages =
+    "-p buzz-foundation -p buzz-agent-controller -p buzz-credential-store";
   assert.ok(
     windows.steps.some(
-      (step) => step.run === "cargo test -p buzz-foundation --locked",
+      (step) => step.run === `cargo test ${packages} --locked`,
     ),
-    "on-demand Windows validation retains the complete native package tests",
+    "on-demand Windows validation retains complete tests for all native identity packages",
+  );
+  assert.ok(
+    windows.steps.some(
+      (step) =>
+        step.run ===
+        `cargo clippy ${packages} --locked --all-targets -- -D warnings`,
+    ),
+    "Windows lint covers production and test targets without suppressing warnings",
   );
 });
 

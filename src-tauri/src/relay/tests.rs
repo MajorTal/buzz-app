@@ -159,7 +159,7 @@ fn real_ipc_restores_identity_signs_and_rejects_invalid_requests() {
                 cmd: cmd.into(),
                 callback: tauri::ipc::CallbackFn(0),
                 error: tauri::ipc::CallbackFn(1),
-                url: "tauri://localhost".parse().unwrap(),
+                url: view.url().unwrap(),
                 body: tauri::ipc::InvokeBody::Json(body),
                 headers: Default::default(),
                 invoke_key: INVOKE_KEY.into(),

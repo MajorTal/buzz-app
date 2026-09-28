@@ -95,10 +95,10 @@ mod windows_job {
         }
         let mut thread_id = None;
         loop {
-            if entry.th32OwnerProcessID == process_id {
-                if thread_id.replace(entry.th32ThreadID).is_some() {
-                    return None;
-                }
+            if entry.th32OwnerProcessID == process_id
+                && thread_id.replace(entry.th32ThreadID).is_some()
+            {
+                return None;
             }
             entry.dwSize = std::mem::size_of::<THREADENTRY32>() as u32;
             if unsafe { Thread32Next(snapshot.as_raw_handle(), &mut entry) } == 0 {

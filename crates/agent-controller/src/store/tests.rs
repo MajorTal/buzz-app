@@ -12,7 +12,8 @@ pub(crate) fn fixture() -> Agent {
         relay_url,
         name: "Test Brain".into(),
         system_prompt: "Take over the test world".into(),
-        workspace: "/tmp".into(),
+        // Only validated/serialized here; never used to launch a harness.
+        workspace: std::env::current_dir().unwrap().to_str().unwrap().into(),
         harness: HarnessEdit {
             databricks: None,
             command: "buzz-agent".into(),
@@ -35,7 +36,8 @@ fn edit() -> AgentEdit {
         picture: None,
         name: "Edited Brain".into(),
         system_prompt: "New prompt".into(),
-        workspace: "/tmp".into(),
+        // Only validated/serialized here; never used to launch a harness.
+        workspace: std::env::current_dir().unwrap().to_str().unwrap().into(),
         harness: fixture().harness,
         environment: BTreeMap::new(),
     }

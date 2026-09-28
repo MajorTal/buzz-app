@@ -67,3 +67,6 @@ zbus = { version = "=5.19.0", default-features = false, features = ["async-io"] 
 futures-lite = "=2.6.1"
 gtk = "0.18"
 webkit2gtk = "=2.0.2"
+
+[target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
+buzz-credential-store = { path = "../crates/credential-store" }

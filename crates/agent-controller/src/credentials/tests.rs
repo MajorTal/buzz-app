@@ -155,6 +155,7 @@ fn missing_denied_and_malformed_legacy_never_fall_back_or_write() {
         for failure in [
             Some(Failure::Absent),
             Some(Failure::Denied),
+            Some(Failure::Busy),
             Some(Failure::Corrupt),
             None,
         ] {

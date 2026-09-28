@@ -25,7 +25,7 @@ export function IdentitySetup({
         <>
           <p role="alert">{state.error}</p>
           <Button onClick={() => void identity.retry()}>
-            Retry Keychain access
+            Retry secure storage access
           </Button>
         </>
       ) : (

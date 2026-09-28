@@ -1,9 +1,12 @@
 use super::*;
 use crate::config::{agent_id, HarnessEdit};
+#[cfg(unix)]
 use crate::process::Process;
 use crate::Secret;
 use serde_json::json;
+#[cfg(unix)]
 use std::fs;
+#[cfg(unix)]
 use std::time::{Duration, Instant};
 const KEY: &str = "0000000000000000000000000000000000000000000000000000000000000001";
 const PUB: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
@@ -154,6 +157,7 @@ while :; do [ -f "$BUZZ_AGENT_CONFIG_DIR/exit-listener" ] && exit 0; /bin/sleep 
     fs::write(directory.join("manifest.json"), serde_json::to_vec(&json!({"version":1,"revision":source["revision"],"target":env!("BUZZ_RUNTIME_TARGET"),"files":files})).unwrap()).unwrap();
     RuntimeBundle::new(directory.into()).unwrap()
 }
+#[cfg(unix)]
 fn wait_for_contents<T>(path: &Path, parse: impl Fn(&str) -> Option<T>) -> T {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {

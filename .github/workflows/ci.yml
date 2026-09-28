@@ -97,9 +97,9 @@ jobs:
           key: windows-native
           save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Native lint including Windows backend
-        run: cargo clippy -p buzz-foundation --locked --all-targets -- -D warnings
+        run: cargo clippy -p buzz-foundation -p buzz-agent-controller -p buzz-credential-store --locked --all-targets -- -D warnings
       - name: All native package tests
-        run: cargo test -p buzz-foundation --locked
+        run: cargo test -p buzz-foundation -p buzz-agent-controller -p buzz-credential-store --locked
 
   measurements:
     if: github.event_name != 'workflow_dispatch'

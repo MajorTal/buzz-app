@@ -6,6 +6,19 @@ use serde_json::{json, Value};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::process::{Child, Command, Stdio};
 use std::sync::atomic::{AtomicUsize, Ordering};
+fn python() -> Command {
+    let mut command = Command::new(if cfg!(windows) {
+        "python"
+    } else {
+        "/usr/bin/python3"
+    });
+    command.env_clear();
+    // Windows Python needs the OS directory to load its standard library/DLLs.
+    // Do not inherit user Python configuration, credentials or proxy settings.
+    #[cfg(windows)]
+    command.env("SystemRoot", std::env::var_os("SystemRoot").unwrap());
+    command
+}
 struct Owned(Child);
 impl Drop for Owned {
     fn drop(&mut self) {
@@ -78,13 +91,12 @@ async fn connect_catalog_actual_worker_inference_401_refresh_and_restart_share_c
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("provider.json");
     let mut server = Owned(
-        Command::new("/usr/bin/python3")
+        python()
             .arg(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/src/agent_models/fixtures/provider.py"
             ))
             .arg(&log)
-            .env_clear()
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())
@@ -222,14 +234,13 @@ async fn discovery_rejected_locally_fresh_token_reopens_auth_before_login() {
     let dir = tempfile::tempdir().unwrap();
     let log = dir.path().join("provider.json");
     let mut server = Owned(
-        Command::new("/usr/bin/python3")
+        python()
             .arg(concat!(
                 env!("CARGO_MANIFEST_DIR"),
                 "/src/agent_models/fixtures/provider.py"
             ))
             .arg(&log)
             .arg("catalog-rejection")
-            .env_clear()
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
             .stderr(Stdio::inherit())

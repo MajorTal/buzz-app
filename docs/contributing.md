@@ -351,7 +351,8 @@ gh workflow run ci.yml --ref <branch>
 ```
 
 A manual dispatch runs only **Windows native validation**: the same pinned Rust,
-Clippy and complete Tauri-package tests, without repeating Linux/browser jobs.
+Clippy and complete Tauri, agent-controller and credential-store package tests,
+without repeating Linux/browser jobs.
 Windows failures do not block the automatic `CI required` check; a Linux pass
 is not Windows validation. The job does not exercise OS banner interaction or
 packaged-app acceptance.

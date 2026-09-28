@@ -55,7 +55,7 @@ export function PrivateKey({ identity }: { identity: Identity }) {
         setMessage(
           copy
             ? "Couldn’t copy your private key. Reveal it to copy manually, or retry."
-            : "Couldn’t reveal your private key. Retry when Keychain is available.",
+            : "Couldn’t reveal your private key. Retry when secure storage is available.",
         );
       }
     } finally {

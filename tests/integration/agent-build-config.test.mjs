@@ -27,6 +27,14 @@ test("Cargo rebuilds the real controller's nonsecret defaults from local config 
       path.join(crate, entry),
       { recursive: true },
     );
+  // The controller's platform adapter has a sibling path dependency. Copy only
+  // that crate's source too, preserving the fixture's isolated build outputs.
+  for (const entry of ["Cargo.toml", "src"])
+    cpSync(
+      path.join(root, "crates/credential-store", entry),
+      path.join(directory, "crates/credential-store", entry),
+      { recursive: true },
+    );
   cpSync(path.join(root, "runtime"), path.join(directory, "runtime"), {
     recursive: true,
   });

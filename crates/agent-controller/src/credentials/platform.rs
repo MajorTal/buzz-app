@@ -58,7 +58,10 @@ fn status(code: i32) -> Failure {
     }
 }
 
-#[cfg(any(not(target_os = "macos"), test))]
+#[cfg(any(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    test
+))]
 impl Keychain for OsKeychain {
     fn legacy(&self, _: &str, _: &str) -> Result<Zeroizing<Vec<u8>>, Failure> {
         Err(Failure::Unavailable)
@@ -86,5 +89,36 @@ fn macos_status_codes_are_sanitized() {
         (-1, Failure::Unavailable),
     ] {
         assert_eq!(status(code), expected);
+    }
+}
+
+#[cfg(all(any(target_os = "windows", target_os = "linux"), not(test)))]
+mod keyring_platform {
+    use super::*;
+    use buzz_credential_store::{self as credentials, Error};
+    fn error(error: Error) -> Failure {
+        match error {
+            Error::Absent => Failure::Absent,
+            Error::Occupied => Failure::Occupied,
+            Error::Denied => Failure::Denied,
+            Error::Corrupt => Failure::Corrupt,
+            Error::Unavailable => Failure::Unavailable,
+            Error::Busy => Failure::Busy,
+        }
+    }
+    impl Keychain for OsKeychain {
+        fn legacy(&self, service: &str, account: &str) -> Result<Zeroizing<Vec<u8>>, Failure> {
+            // Exact selected legacy blob, read-only; keyring decodes Windows UTF-16.
+            credentials::read(service, account).map_err(error)
+        }
+        fn saved(&self, service: &str, account: &str) -> Result<Zeroizing<Vec<u8>>, Failure> {
+            credentials::read(service, account).map_err(error)
+        }
+        fn add(&self, service: &str, account: &str, value: &[u8]) -> Result<(), Failure> {
+            credentials::add(service, account, value).map_err(error)
+        }
+        fn delete(&self, service: &str, account: &str) -> Result<(), Failure> {
+            credentials::delete(service, account).map_err(error)
+        }
     }
 }

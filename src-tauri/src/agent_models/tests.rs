@@ -320,11 +320,11 @@ fn runtime_factory_no_ambient_auth_on_construction_or_empty_headless_refresh() {
             .await
             .unwrap();
         assert!(result.is_err());
-        // Actual production connect forwarding cannot silently become a no-op:
-        // a closed loopback endpoint must fail, never report authenticated.
-        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        // Actual production connect forwarding cannot silently become a no-op.
+        // Own the listener until it observes a TLS attempt, then close it rather
+        // than depending on platform-specific refused-connection retry timing.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
         let port = listener.local_addr().unwrap().port();
-        drop(listener);
         let connection = RuntimeFactory
             .open(
                 &format!("https://127.0.0.1:{port}"),
@@ -332,12 +332,16 @@ fn runtime_factory_no_ambient_auth_on_construction_or_empty_headless_refresh() {
                 Arc::new(NoBrowser),
             )
             .unwrap();
-        assert!(
-            tokio::time::timeout(Duration::from_secs(2), connection.connect())
-                .await
-                .unwrap()
-                .is_err()
-        );
+        let (result, ()) = tokio::time::timeout(Duration::from_secs(2), async {
+            tokio::join!(connection.connect(), async move {
+                let (peer, _) = listener.accept().await.unwrap();
+                let mut hello = [0u8; 1];
+                assert_eq!(peer.peek(&mut hello).await.unwrap(), 1);
+            })
+        })
+        .await
+        .unwrap();
+        assert!(result.is_err());
     });
     assert!(RuntimeFactory
         .open(

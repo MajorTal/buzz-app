@@ -8,9 +8,9 @@ use zeroize::Zeroizing;
 
 type Result<T> = std::result::Result<T, String>;
 const INVALID: &str = "Enter a valid nsec private key";
-const MALFORMED: &str = "Saved identity is malformed; nothing was changed. Keep your key backup and contact support before changing Keychain data.";
+const MALFORMED: &str = "Saved identity is malformed; nothing was changed. Keep your key backup and contact support before changing secure storage.";
 // Debug identities must never occupy the create-only release item.
-#[cfg(any(all(target_os = "macos", not(test)), test))]
+#[cfg(any(target_os = "macos", target_os = "windows", target_os = "linux", test))]
 const SERVICE: &str = if cfg!(debug_assertions) {
     "dev.local.buzz.foundation.identity.debug"
 } else {
@@ -144,8 +144,38 @@ mod platform {
         }
     }
 }
+#[cfg(all(any(target_os = "windows", target_os = "linux"), not(test)))]
+mod keyring_platform {
+    use super::*;
+    use buzz_credential_store::{self as credentials, Error};
+    const ACCOUNT: &str = "human";
+    fn error(error: Error) -> String {
+        match error {
+            Error::Occupied => "An identity is already saved; nothing was overwritten. Restart to restore it.",
+            Error::Denied => "Secure storage access was denied. Allow access and retry; no identity was created.",
+            Error::Busy => "Another Buzz app is accessing secure storage. Retry shortly.",
+            Error::Corrupt => MALFORMED,
+            _ => "Your identity could not be accessed in secure storage. Unlock your credential store and retry without changing keys.",
+        }.into()
+    }
+    impl Store for OsStore {
+        fn read(&self) -> Result<Option<Zeroizing<Vec<u8>>>> {
+            match credentials::read(SERVICE, ACCOUNT) {
+                Ok(value) => Ok(Some(value)),
+                Err(Error::Absent) => Ok(None),
+                Err(e) => Err(error(e)),
+            }
+        }
+        fn add(&self, value: &[u8]) -> Result<()> {
+            credentials::add(SERVICE, ACCOUNT, value).map_err(error)
+        }
+    }
+}
 // Native tests cannot touch an OS credential store, even via the default host.
-#[cfg(any(not(target_os = "macos"), test))]
+#[cfg(any(
+    not(any(target_os = "macos", target_os = "windows", target_os = "linux")),
+    test
+))]
 impl Store for OsStore {
     fn read(&self) -> Result<Option<Zeroizing<Vec<u8>>>> {
         Err("Secure identity storage is not available on this platform yet".into())

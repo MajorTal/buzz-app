@@ -1,4 +1,4 @@
 [workspace]
-members = ["crates/plugin-manager", "crates/agent-controller", "src-tauri"]
+members = ["crates/plugin-manager", "crates/agent-controller", "crates/credential-store", "src-tauri"]
 default-members = ["crates/plugin-manager"]
 resolver = "2"

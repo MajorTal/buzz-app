@@ -2,7 +2,9 @@
 use crate::Result;
 use sha2::{Digest, Sha256};
 use std::fs::{File, OpenOptions};
-use std::io::{Read, Seek, SeekFrom, Write};
+#[cfg(any(unix, test))]
+use std::io::Write;
+use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 /// Domain-separated proof input; only the native-generated single-use nonce is
@@ -92,9 +94,12 @@ fn open(path: &Path, write: bool) -> std::io::Result<File> {
     Ok(file)
 }
 
+// Only the Unix supervisor writes logs; keep the cross-platform retention tests.
+#[cfg(any(unix, test))]
 pub(crate) struct Writer {
     file: File,
 }
+#[cfg(any(unix, test))]
 impl Writer {
     pub(crate) fn new(path: &Path) -> Result<Self> {
         let file = open(path, true).map_err(|_| "Could not open harness log")?;

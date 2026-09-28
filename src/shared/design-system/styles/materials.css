@@ -38,6 +38,16 @@
     inset 0 -1px 0 var(--rim-shade);
 }
 
+/* Video pixels stay visible beneath floating preview controls. This material
+   remains static on hover; the control communicates activity through motion. */
+@utility media-glass {
+  background: var(--bg-media-glass);
+  border: 1px solid var(--border-media-glass);
+  color: var(--text-on-media);
+  backdrop-filter: blur(calc(var(--blur-md) + var(--blur-sm))) saturate(1.5);
+  box-shadow: none;
+}
+
 /* Sits over something already glass: popovers, menus, a modal over a panel.
    Less translucent so it separates, deeper blur so what it covers is not
    legible through it, and a real shadow because it is genuinely above. */

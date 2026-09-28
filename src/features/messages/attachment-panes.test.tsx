@@ -244,7 +244,9 @@ it.each([false, true])(
         </OuterComposer>
       </StrictMode>,
     );
-    const pane = screen.getByRole("complementary", { name: "Media comments" });
+    const pane = await screen.findByRole("complementary", {
+      name: "Media comments",
+    });
     expect(view.container.contains(pane)).toBe(false); // Actual document.body portal.
     const target = unavailable
       ? within(pane).getByText("Error: Unavailable review")

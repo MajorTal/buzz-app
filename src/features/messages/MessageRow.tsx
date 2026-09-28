@@ -84,6 +84,7 @@ export type MessageRowProps = {
     messageId: string,
     attachment: ChannelMessage["attachments"][number],
     seconds: number,
+    hasComments?: boolean,
   ) => void;
 };
 
@@ -154,8 +155,7 @@ export const MessageRow = memo(function MessageRow({
   const presence = usePresenceStatus(session?.presence, row.authorId);
   const presenceId = useId();
   const timeReply = row.diff ? undefined : parseMediaTimeReply(row.content);
-  const replaceTime = !!timeReply && !!onMediaTime;
-  const displayRow = replaceTime ? { ...row, content: timeReply.content } : row;
+  const displayRow = timeReply ? { ...row, content: timeReply.content } : row;
   const emojiOnly = usesLargeEmojiPresentation(displayRow.content, row.emoji);
   const canReact = !!(
     extensions &&
@@ -386,15 +386,19 @@ export const MessageRow = memo(function MessageRow({
               <MessageTimestamp createdAt={row.createdAt} />
             )}
           </div>
-          {timeReply && onMediaTime && (
+          {timeReply && (
             <span className={styles.mediaTimeLink}>
-              <Button
-                size="sm"
-                type="button"
-                onClick={() => onMediaTime(timeReply.anchor.seconds)}
-              >
-                {timeReply.label}
-              </Button>
+              {onMediaTime ? (
+                <Button
+                  size="sm"
+                  type="button"
+                  onClick={() => onMediaTime(timeReply.anchor.seconds)}
+                >
+                  {timeReply.label}
+                </Button>
+              ) : (
+                <span>{timeReply.label}</span>
+              )}
             </span>
           )}
           {extensions?.messages ? (
@@ -448,7 +452,14 @@ export const MessageRow = memo(function MessageRow({
                   {...(onOpenMediaReview
                     ? {
                         onOpenReview: (item, seconds) =>
-                          onOpenMediaReview(row.id, item, seconds),
+                          onOpenMediaReview(
+                            row.id,
+                            item,
+                            seconds,
+                            row.replyCount > 0 ||
+                              (!!row.threadRootId &&
+                                row.threadRootId !== row.id),
+                          ),
                       }
                     : {})}
                 />
@@ -471,7 +482,13 @@ export const MessageRow = memo(function MessageRow({
                 {...(onOpenMediaReview
                   ? {
                       onOpenReview: (item, seconds) =>
-                        onOpenMediaReview(row.id, item, seconds),
+                        onOpenMediaReview(
+                          row.id,
+                          item,
+                          seconds,
+                          row.replyCount > 0 ||
+                            (!!row.threadRootId && row.threadRootId !== row.id),
+                        ),
                     }
                   : {})}
               />

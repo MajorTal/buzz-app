@@ -375,6 +375,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
       "tint",
       "chrome",
       "avatar",
+      "media",
       "shape: round (default) | control",
       "size: xs (20px, 12px icon) | sm (32px) | md (40px) | lg (52px)",
       "legacy aliases: quiet, solid, compact, toolbar, default, large",

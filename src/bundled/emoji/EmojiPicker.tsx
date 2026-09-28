@@ -54,6 +54,7 @@ export function EmojiPicker({
     finalFocus(): HTMLButtonElement | false;
   };
 }) {
+  const [colorMode, setColorMode] = useState<"light" | "dark">();
   const [open, setOpen] = useState(!!externalTrigger);
   const [tab, setTab] = useState<"emoji" | "gifs">("emoji");
   const [gifAvailability, setGifAvailability] = useState<{
@@ -86,6 +87,16 @@ export function EmojiPicker({
     session.emoji.snapshot,
     session.emoji.snapshot,
   );
+  useLayoutEffect(() => {
+    if (!open) return;
+    const origin = externalTrigger?.ref.current ?? controls.current;
+    const themedSurface = origin?.closest<HTMLElement>("[data-color-mode]");
+    const mode =
+      themedSurface === document.documentElement
+        ? undefined
+        : themedSurface?.dataset.colorMode;
+    setColorMode(mode === "dark" || mode === "light" ? mode : undefined);
+  }, [open, externalTrigger]);
   useLayoutEffect(() => {
     // The popover is positioned against the action row; intermediate tool groups
     // may be narrower and are not its available width.
@@ -153,6 +164,7 @@ export function EmojiPicker({
         if (cancelled) return;
         dispose = mountEmojiMart({
           host: container,
+          colorMode,
           scope,
           perLine,
           emojiSize: EMOJI_SIZE,
@@ -184,7 +196,18 @@ export function EmojiPicker({
           ?.value ?? search.current;
       dispose?.();
     };
-  }, [open, disabled, session, scope, catalog, attempt, perLine, tab, host]);
+  }, [
+    open,
+    disabled,
+    session,
+    scope,
+    catalog,
+    attempt,
+    perLine,
+    tab,
+    host,
+    colorMode,
+  ]);
   const emojiContent = (
     <div className={styles.emojiMart}>
       <div ref={setHost} />
@@ -261,6 +284,7 @@ export function EmojiPicker({
   const controlsView = (
     <fieldset
       ref={controls}
+      data-external-trigger={!!externalTrigger || undefined}
       disabled={disabled}
       aria-label="Emoji controls"
       className={styles.emojiPicker}
@@ -284,6 +308,7 @@ export function EmojiPicker({
         <PopoverTrigger disabled={disabled} render={button} />
       )}
       <PopoverPopup
+        colorMode={colorMode}
         side={reaction && !externalTrigger ? "bottom" : "top"}
         anchor={
           reaction

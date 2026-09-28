@@ -318,6 +318,24 @@ export function IconButtonSpecimen() {
           </div>
         </div>
       </section>
+      <section
+        className="component-specimen-group"
+        aria-label="Media icon treatment"
+      >
+        <h2 className="text-body-sm text-tertiary">
+          Media · Static dark glass over video
+        </h2>
+        <div
+          className="component-specimen-frame"
+          style={{ background: "var(--bg-app)" }}
+        >
+          <IconButton
+            variant="media"
+            aria-label="Media settings"
+            icon={<GearIcon aria-hidden="true" />}
+          />
+        </div>
+      </section>
     </div>
   );
 }

@@ -98,7 +98,8 @@
       ):hover:not(
         [data-disabled],
         [data-icon-variant="chrome"],
-        [data-icon-variant="avatar"]
+        [data-icon-variant="avatar"],
+        [data-icon-variant="media"]
       ) {
       background: var(--affordance-subtle-hover);
     }
@@ -122,7 +123,8 @@
     [data-variant="inverted"]
   ):is(:active, [aria-expanded="true"]):not(
     [data-disabled],
-    [data-icon-variant="avatar"]
+    [data-icon-variant="avatar"],
+    [data-icon-variant="media"]
   ) {
     background: var(--affordance-subtle-pressed);
   }
@@ -207,6 +209,9 @@
   }
   .buzz-button[data-icon-variant="chrome"] {
     @apply glass-primary-interactive;
+  }
+  .buzz-button[data-icon-variant="media"] {
+    @apply media-glass;
   }
   @media (hover: hover) and (pointer: fine) {
     .buzz-button[data-icon-variant="tint"]:hover:not([data-disabled]) {

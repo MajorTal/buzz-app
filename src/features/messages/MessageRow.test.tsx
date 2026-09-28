@@ -832,3 +832,40 @@ it.each([9, 40002])(
     }
   },
 );
+
+it.each([
+  { replyCount: 0, threadRootId: undefined, expected: false },
+  { replyCount: 2, threadRootId: undefined, expected: true },
+  { replyCount: 0, threadRootId: "parent", expected: true },
+])(
+  "passes known comment state from the chat photo to its viewer: $expected",
+  ({ replyCount, threadRootId, expected }) => {
+    const attachment = {
+      kind: "image" as const,
+      url: "https://fixture.test/photo.png",
+    };
+    const open = vi.fn();
+    renderDom(
+      <MessageRow
+        row={{
+          ...row,
+          attachments: [attachment],
+          replyCount,
+          ...(threadRootId ? { threadRootId } : {}),
+        }}
+        profile={undefined}
+        media={(url) => url}
+        onOpenLink={() => false}
+        onOpenMediaReview={open}
+        day={false}
+        retry={undefined}
+      />,
+    );
+    fireEvent.click(
+      screen.getByRole("link", { name: "Open image attachment" }),
+      { detail: 1 },
+    );
+    expect(open).toHaveBeenCalledWith(row.id, attachment, 0, expected);
+    cleanup();
+  },
+);

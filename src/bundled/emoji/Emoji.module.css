@@ -13,6 +13,11 @@
   margin: 0;
   min-width: 0;
 }
+/* An external trigger already owns its layout slot. The portaled picker
+   must not add another flex item or gap to that action row. */
+.emojiPicker[data-external-trigger] {
+  position: absolute;
+}
 .emojiContent {
   display: flex;
   flex-direction: column;

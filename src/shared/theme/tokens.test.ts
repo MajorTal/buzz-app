@@ -32,6 +32,10 @@ function resolvedPalette(mode: "light" | "dark") {
     ))
       values[name] = value.trim();
   }
+  return resolveAliases(values);
+}
+
+function resolveAliases(values: Record<string, string>) {
   const resolve = (name: string, seen = new Set<string>()): string => {
     if (seen.has(name)) throw new Error(`Cyclic token: ${name}`);
     seen.add(name);
@@ -119,3 +123,34 @@ it.each([0, 1])(
     ).toBeGreaterThanOrEqual(3);
   },
 );
+
+it("a scoped dark surface rebinds glass roles inherited from a light app", () => {
+  // Custom properties inherit computed values, not unresolved var() expressions.
+  // Freeze the light root first, then cascade declarations on the .dark child.
+  const values = resolvedPalette("light");
+  const source = readFileSync(
+    "src/shared/design-system/styles/tokens.css",
+    "utf8",
+  ).replace(/\/\*[\s\S]*?\*\//g, "");
+  for (const [, selector = "", body = ""] of source.matchAll(
+    /([^{}]+)\{([^{}]*)\}/g,
+  )) {
+    if (!selector.includes(".dark")) continue;
+    for (const [, name = "", value = ""] of body.matchAll(
+      /(--[\w-]+):\s*([^;]+);/g,
+    ))
+      values[name] = value.trim();
+  }
+  const scoped = resolveAliases(values);
+  const dark = resolvedPalette("dark");
+  const light = resolvedPalette("light");
+  for (const role of [
+    "--bg-glass-primary",
+    "--bg-glass-primary-hover",
+    "--bg-glass-secondary",
+    "--bg-glass-secondary-hover",
+  ]) {
+    expect(scoped[role], role).toBe(dark[role]);
+    expect(scoped[role], role).not.toBe(light[role]);
+  }
+});

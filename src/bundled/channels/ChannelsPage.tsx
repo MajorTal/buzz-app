@@ -664,6 +664,7 @@ function ChannelWorkspace({
     messageId: string;
     attachment: Attachment;
     initialTime: number;
+    hasComments: boolean;
     entryId?: string | undefined;
   }>();
   const showingMediaReview = mediaReviewForDestination(
@@ -681,7 +682,12 @@ function ChannelWorkspace({
     destination.current = { current, navigation };
   }, [current, navigation]);
   const openMediaReview = useCallback(
-    (messageId: string, attachment: Attachment, initialTime: number) => {
+    (
+      messageId: string,
+      attachment: Attachment,
+      initialTime: number,
+      hasComments = false,
+    ) => {
       const { current, navigation } = destination.current;
       if (!current) return;
       setSettings(undefined);
@@ -696,6 +702,7 @@ function ChannelWorkspace({
         messageId,
         attachment,
         initialTime,
+        hasComments,
         ...(navigation ? { entryId: navigation.entryId } : {}),
       });
     },
@@ -1069,6 +1076,7 @@ function ChannelWorkspace({
           channelName={showingMediaReview.channelName}
           messageId={showingMediaReview.messageId}
           initialTime={showingMediaReview.initialTime}
+          hasComments={showingMediaReview.hasComments}
           restoreFocus={mediaReviewTrigger}
           onOpenLink={openLink}
           close={() => setMediaReview(undefined)}
@@ -1291,6 +1299,7 @@ const ChannelBody = memo(function ChannelBody({
     messageId: string,
     attachment: Attachment,
     seconds: number,
+    hasComments?: boolean,
   ): void;
 }) {
   // ChannelWorkspace already keys this lifetime by viewer/scope/generation.

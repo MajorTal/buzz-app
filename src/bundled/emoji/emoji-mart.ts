@@ -29,6 +29,7 @@ let active: (() => void) | undefined;
  * may use it; a React remount alone neither removes old emoji nor isolates scope. */
 export function mountEmojiMart({
   host,
+  colorMode,
   scope,
   perLine,
   emojiSize,
@@ -41,6 +42,7 @@ export function mountEmojiMart({
   close,
 }: {
   host: HTMLDivElement;
+  colorMode?: "light" | "dark" | undefined;
   scope: string;
   perLine: number;
   emojiSize: number;
@@ -105,7 +107,9 @@ export function mountEmojiMart({
     set: "native",
     skinTonePosition: "search",
     // Widget mode follows the host, never the OS independently.
-    theme: resolvedTheme(host.ownerDocument.documentElement.dataset.colorMode),
+    theme: resolvedTheme(
+      colorMode ?? host.ownerDocument.documentElement.dataset.colorMode,
+    ),
     onEmojiSelect: (emoji: { native?: string; id?: string }) => {
       if (disposed) return;
       if (emoji.native) {
@@ -120,7 +124,10 @@ export function mountEmojiMart({
   // picker/dictionary (or lose search, focus and scroll) just to change appearance.
   const documentRoot = host.ownerDocument.documentElement;
   const syncAppearance = () => {
-    picker.setAttribute("theme", resolvedTheme(documentRoot.dataset.colorMode));
+    picker.setAttribute(
+      "theme",
+      resolvedTheme(colorMode ?? documentRoot.dataset.colorMode),
+    );
     picker.toggleAttribute(
       "data-keyboard-navigation",
       documentRoot.hasAttribute("data-keyboard-navigation"),

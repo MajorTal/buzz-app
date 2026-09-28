@@ -21,6 +21,20 @@ const nativeRecipes = new Map([
     "src/features/messages/Messages.module.css",
     new Set(['.text input[type="checkbox"]']),
   ],
+  // The media renderer owns HTML video ranges/playback and timed emoji actions.
+  // These selectors target its native controls, never shared Button/IconButton.
+  [
+    "src/features/messages/VideoPlayer.module.css",
+    new Set([
+      ".controls button",
+      '.controls input[type="range"]',
+      ".speedMenu button",
+      ".reactions > fieldset > button",
+      ".controls button:enabled:hover,\n  .reactions > fieldset > button:enabled:hover",
+      ".controls button:enabled:active,\n.reactions > fieldset > button:enabled:active",
+      ".reactions > fieldset > button:focus-visible",
+    ]),
+  ],
   ["src/shared/InlineReference.module.css", new Set(["button.link"])],
 ]);
 const visualProperty =

@@ -1,3 +1,7 @@
+import { useReviewSidebarMotion } from "./use-review-sidebar-motion";
+import { readReviewOrigin, useReviewEntrance } from "./use-review-entrance";
+import { VideoPlayer, videoTime } from "./VideoPlayer";
+import { seekVideoBy } from "./use-video-gestures";
 import { Checkbox } from "../../shared/design-system/ui/Checkbox";
 import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
@@ -9,7 +13,11 @@ import {
   useSyncExternalStore,
   type RefObject,
 } from "react";
-import { XIcon } from "../../shared/design-system/icons/index";
+import {
+  XIcon,
+  SidebarIcon,
+  ChatCircleIcon,
+} from "../../shared/design-system/icons/index";
 import { createPortal } from "react-dom";
 import type { ConversationExtensions } from "../conversation/contracts";
 import type { Attachment, ChannelMessage } from "../relay/contracts";
@@ -22,7 +30,8 @@ import { rejectUnhandledFileDrop } from "./use-file-drop";
 import { MessageComposer } from "./MessageComposer";
 import { ImageReviewStage } from "./ImageReviewStage";
 import { MessageRow } from "./MessageRow";
-import { formatMediaTime } from "./media-timecode";
+import { parseMediaTimeReply } from "./media-timecode";
+import { VideoReviewReactions } from "./VideoReviewReactions";
 import styles from "./Messages.module.css";
 import { useModalBoundary } from "./useModalBoundary";
 
@@ -35,6 +44,7 @@ type MediaReviewViewerProps = {
   channelName: string;
   messageId: string;
   initialTime: number;
+  hasComments?: boolean;
   restoreFocus?: RefObject<HTMLElement | null>;
   onOpenLink(url: string): boolean;
   close(): void;
@@ -42,6 +52,14 @@ type MediaReviewViewerProps = {
 
 export function MediaReviewViewer(props: MediaReviewViewerProps) {
   const { session, channelId, messageId } = props;
+  const [origin] = useState(() =>
+    readReviewOrigin(
+      props.restoreFocus?.current ??
+        (document.activeElement instanceof HTMLElement
+          ? document.activeElement
+          : null),
+    ),
+  );
   const [active, setActive] = useState(() => ({
     attachment: props.attachment,
     initialTime: props.initialTime,
@@ -62,6 +80,7 @@ export function MediaReviewViewer(props: MediaReviewViewerProps) {
   }, [session, channelId, messageId]);
   const activeProps = {
     ...props,
+    origin,
     attachment: active.attachment,
     initialTime: active.initialTime,
     selectionRequest: active.request,
@@ -72,29 +91,39 @@ export function MediaReviewViewer(props: MediaReviewViewerProps) {
         request: current.request + 1,
       })),
   };
-  if (threadError) return <ReviewShell {...activeProps} error={threadError} />;
-  if (!view) return <ReviewShell {...activeProps} loading />;
-  return <ResolvedReview {...activeProps} view={view} />;
+  return (
+    <ResolvedReview {...activeProps} view={view} threadError={threadError} />
+  );
 }
 
 type ActiveReviewProps = MediaReviewViewerProps & {
+  origin: ReturnType<typeof readReviewOrigin>;
   selectionRequest: number;
   selectAttachment(attachment: Attachment, initialTime: number): void;
 };
 
+const noThreadSubscription = () => () => {};
+const noThreadSnapshot = () => undefined;
+
 function ResolvedReview({
   view,
+  threadError,
   ...props
-}: ActiveReviewProps & { view: ThreadView }) {
+}: ActiveReviewProps & {
+  view: ThreadView | undefined;
+  threadError: string | undefined;
+}) {
   const snapshot = useSyncExternalStore(
-    view.subscribe,
-    view.snapshot,
-    view.snapshot,
+    view?.subscribe ?? noThreadSubscription,
+    view?.snapshot ?? noThreadSnapshot,
+    view?.snapshot ?? noThreadSnapshot,
   );
   useEffect(() => {
-    if (snapshot.status === "ready" && snapshot.canLoadMore)
-      void view.loadMore();
-  }, [view, snapshot.status, snapshot.canLoadMore]);
+    if (snapshot?.status === "ready" && snapshot.canLoadMore)
+      void view?.loadMore();
+  }, [view, snapshot?.status, snapshot?.canLoadMore]);
+  if (threadError) return <ReviewShell {...props} error={threadError} />;
+  if (!view || !snapshot) return <ReviewShell {...props} loading />;
   if (snapshot.error)
     return (
       <ReviewShell {...props} error={snapshot.error} retry={view.refresh} />
@@ -106,6 +135,7 @@ function ResolvedReview({
       <ReviewShell
         {...props}
         error="Original message unavailable."
+        unavailable
         retry={view.refresh}
       />
     );
@@ -123,24 +153,18 @@ function ResolvedReview({
   const attachmentAvailable = threadRows.some((row) =>
     row.attachments.some((item) => item.url === props.attachment.url),
   );
-  const videoUrls = new Set(
-    threadRows.flatMap((row) =>
-      row.attachments
-        .filter((item) => item.kind === "video")
-        .map((item) => item.url),
-    ),
-  );
   if (!attachmentAvailable)
-    return <ReviewShell {...props} error="Attachment unavailable." />;
+    return (
+      <ReviewShell {...props} error="Attachment unavailable." unavailable />
+    );
   return (
     <ReviewShell
       {...props}
-      view={view}
       rootId={snapshot.root.id}
       editMessages={threadRows}
       replies={replies}
       limited={snapshot.limited}
-      timecodesSeekable={videoUrls.size === 1}
+      timecodesSeekable={props.attachment.kind === "video"}
     />
   );
 }
@@ -153,38 +177,86 @@ function ReviewShell({
   channelId,
   channelName,
   initialTime,
+  hasComments = false,
+  origin,
   close,
   onOpenLink,
-  view,
   rootId,
   replies = [],
   editMessages = [],
   limited = false,
   timecodesSeekable = false,
   loading = false,
+  unavailable = false,
   error,
   retry,
   restoreFocus,
   selectAttachment,
   selectionRequest,
 }: ActiveReviewProps & {
-  view?: ThreadView;
   rootId?: string;
   editMessages?: readonly ChannelMessage[];
   replies?: ReturnType<ThreadView["snapshot"]>["replies"];
   limited?: boolean;
   timecodesSeekable?: boolean;
   loading?: boolean;
+  unavailable?: boolean;
   error?: string;
   retry?: () => void | Promise<void>;
 }) {
   const source = session.media(attachment.url);
   const backdrop = useRef<HTMLDivElement>(null);
-  const closeButton = useRef<HTMLButtonElement>(null);
+  const frame = useRef<HTMLElement>(null);
   const video = useRef<HTMLVideoElement>(null);
+  const [commentsChoice, setCommentsOpen] = useState<boolean>();
+  const [selectedImageUrl, setSelectedImageUrl] = useState(attachment.url);
+  const { dismiss } = useReviewEntrance(
+    frame,
+    origin,
+    close,
+    selectionRequest === 0 && selectedImageUrl === attachment.url,
+  );
+  const commentsOpen =
+    commentsChoice ?? (loading ? hasComments : replies.length > 0 || !!error);
+  useEffect(() => {
+    if (rootId && !loading)
+      setCommentsOpen((choice) => choice ?? replies.length > 0);
+  }, [rootId, loading, replies.length]);
+  const prepareSidebarMotion = useReviewSidebarMotion(frame, commentsOpen);
+  const [commentsMotion, setCommentsMotion] = useState(false);
+  const [selectedComment, setSelectedComment] = useState<string>();
+  const profiles = useRowProfiles(session.profiles, replies);
+  const markers = timecodesSeekable
+    ? replies.flatMap((row) => {
+        const parsed = parseMediaTimeReply(row.content);
+        if (!parsed) return [];
+        const profile = profiles.get(row.authorId);
+        return [
+          {
+            id: row.id,
+            seconds: parsed.anchor.seconds,
+            label: parsed.label,
+            text: parsed.content,
+            author: profile?.name ?? row.authorId.slice(0, 10),
+            picture: profile?.picture
+              ? session.media(profile.picture)
+              : undefined,
+          },
+        ];
+      })
+    : [];
   const [currentTime, setCurrentTime] = useState(initialTime);
   const [includeTime, setIncludeTime] = useState(true);
-  const [selectedImageUrl, setSelectedImageUrl] = useState(attachment.url);
+  const imageAttachments = useMemo(() => {
+    const seen = new Set<string>();
+    return [
+      ...editMessages.flatMap((row) => row.attachments),
+      attachment,
+    ].filter(
+      (item) =>
+        item.kind === "image" && !seen.has(item.url) && !!seen.add(item.url),
+    );
+  }, [attachment, editMessages]);
   const [mediaFailed, setMediaFailed] = useState(false);
   // selectionRequest intentionally re-applies a seek when the same URL/time is selected again.
   useEffect(() => {
@@ -206,37 +278,129 @@ function ReviewShell({
     else element.addEventListener("loadedmetadata", apply, { once: true });
     return () => element.removeEventListener("loadedmetadata", apply);
   }, [attachment.url, attachment.kind, initialTime, selectionRequest]);
-  useModalBoundary(backdrop, closeButton, close, restoreFocus);
+  useModalBoundary(backdrop, frame, close, restoreFocus);
   const seek = (seconds: number) => {
     if (!video.current) return;
-    video.current.currentTime = seconds;
+    const duration = video.current.duration;
+    video.current.currentTime = Math.max(
+      0,
+      Math.min(seconds, Number.isFinite(duration) ? duration : seconds),
+    );
+    setCurrentTime(video.current.currentTime);
+    video.current.dispatchEvent(new Event("timeupdate"));
     void video.current.play().catch(() => {});
   };
   return createPortal(
-    <div ref={backdrop} className={styles.mediaReviewBackdrop}>
+    // biome-ignore lint/a11y/noStaticElementInteractions: backdrop dismissal complements the close button and Escape shortcut.
+    <div
+      ref={backdrop}
+      className={`${styles.mediaReviewBackdrop} ${styles.darkReviewBackdrop} dark`}
+      role="presentation"
+      onMouseDown={(event) => {
+        if (event.button === 0 && event.target === event.currentTarget)
+          dismiss(true);
+      }}
+    >
+      <div
+        className={styles.mediaReviewScrim}
+        data-review-backdrop=""
+        aria-hidden="true"
+      />
       <section
-        className={styles.mediaReviewViewer}
+        ref={frame}
+        className={`${styles.mediaReviewViewer} dark`}
+        data-color-mode="dark"
+        data-review-pending={origin ? "" : undefined}
+        data-video={attachment.kind === "video" || undefined}
+        data-comments-motion={commentsMotion || undefined}
+        data-comments-hidden={!commentsOpen || undefined}
         role="dialog"
+        tabIndex={-1}
         aria-modal="true"
+        onKeyDown={(event) => {
+          if (
+            attachment.kind !== "video" ||
+            event.currentTarget.hasAttribute("data-review-closing") ||
+            !video.current ||
+            event.defaultPrevented ||
+            event.nativeEvent.isComposing ||
+            event.altKey ||
+            event.ctrlKey ||
+            event.metaKey ||
+            event.shiftKey ||
+            (event.key !== "ArrowLeft" &&
+              event.key !== "ArrowRight" &&
+              event.key !== " ")
+          )
+            return;
+          const target = event.target;
+          if (
+            !(target instanceof Element) ||
+            !event.currentTarget.contains(target) ||
+            target.closest(
+              'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="slider"], [role="menu"], [role="listbox"], [aria-label="Media comments"], [aria-label="Playback speed"]',
+            )
+          )
+            return;
+          if (event.key === " ") {
+            // Space still activates a deliberately focused control normally.
+            if (
+              target.closest(
+                'button, a[href], [role="button"], [role="checkbox"], [role="switch"]',
+              )
+            )
+              return;
+            event.preventDefault();
+            event.stopPropagation();
+            if (event.repeat) return;
+            if (video.current.paused) void video.current.play().catch(() => {});
+            else video.current.pause();
+            return;
+          }
+          event.preventDefault();
+          event.stopPropagation();
+          seekVideoBy(video.current, event.key === "ArrowRight" ? 10 : -10);
+        }}
         aria-label={
           attachment.kind === "video" ? "Video review" : "Image viewer"
         }
       >
-        <header className={styles.mediaReviewHeading} data-tauri-drag-region>
+        <header
+          className={styles.mediaReviewHeading}
+          data-review-chrome=""
+          data-tauri-drag-region
+        >
           <span data-tauri-drag-region>
-            {attachment.kind === "video" ? "Video review" : "Image"}
+            {attachment.kind === "video"
+              ? (attachment.name ?? "Video review")
+              : "Image"}
           </span>
           <IconButton
             size="compact"
-            ref={closeButton}
+            variant="subtle"
+            shape="control"
+            aria-label={commentsOpen ? "Hide comments" : "Show comments"}
+            aria-pressed={commentsOpen}
+            onClick={(event) => {
+              prepareSidebarMotion(event.detail > 0);
+              setCommentsMotion(event.detail > 0);
+              setCommentsOpen(!commentsOpen);
+            }}
+            icon={<SidebarIcon size={20} />}
+          />
+          <IconButton
+            size="compact"
+            variant="subtle"
+            shape="control"
             type="button"
             aria-label="Close fullscreen viewer"
-            onClick={close}
+            data-review-dismiss=""
+            onClick={(event) => dismiss(event.detail > 0)}
             icon={<XIcon size={20} aria-hidden="true" />}
           />
         </header>
-        <div className={styles.mediaReviewStage}>
-          {!source || !rootId || mediaFailed ? (
+        <div className={styles.mediaReviewStage} data-review-stage="">
+          {!source || unavailable || mediaFailed ? (
             <p
               className={styles.mediaReviewUnavailable}
               role={error ? "alert" : "status"}
@@ -249,80 +413,104 @@ function ReviewShell({
               )}
             </p>
           ) : attachment.kind === "video" ? (
-            // biome-ignore lint/a11y/useMediaCaption: signed attachment metadata has no caption track URL.
-            <video
-              ref={video}
-              src={source}
-              controls
-              autoPlay
-              playsInline
-              onLoadedMetadata={(event) => {
-                event.currentTarget.currentTime = initialTime;
+            <VideoPlayer
+              key={source}
+              videoRef={video}
+              source={source}
+              poster={
+                (selectionRequest === 0 ? origin?.poster : undefined) ??
+                (attachment.previewUrl
+                  ? session.media(attachment.previewUrl)
+                  : undefined)
+              }
+              initialTime={initialTime}
+              markers={markers}
+              onMarker={(id) => {
+                setSelectedComment(id);
+                setCommentsOpen(true);
               }}
               onError={() => setMediaFailed(true)}
-              onTimeUpdate={(event) =>
-                setCurrentTime(event.currentTarget.currentTime)
-              }
-            />
-          ) : view ? (
-            <ImageReviewGallery
-              view={view}
+              onTime={setCurrentTime}
+            >
+              {rootId && (
+                <VideoReviewReactions
+                  session={session}
+                  scope={scope}
+                  channelId={channelId}
+                  rootId={rootId}
+                  videoRef={video}
+                  extensions={extensions}
+                />
+              )}
+            </VideoPlayer>
+          ) : (
+            <ImageReviewStage
+              attachments={imageAttachments}
               selectedUrl={selectedImageUrl}
               select={setSelectedImageUrl}
               media={session.media}
               onOpenLink={onOpenLink}
             />
-          ) : null}
+          )}
         </div>
         <aside
+          data-review-chrome=""
           className={styles.mediaReviewConversation}
+          inert={!commentsOpen}
+          aria-hidden={!commentsOpen || undefined}
           aria-label="Media comments"
+          onFocusCapture={() => {
+            if (attachment.kind === "video") video.current?.pause();
+          }}
           data-attachment-drop-zone=""
           onDragOver={rejectUnhandledFileDrop}
           onDrop={rejectUnhandledFileDrop}
         >
-          {rootId && source ? (
-            <>
-              <ReviewComments
-                replies={replies}
-                limited={limited}
-                session={session}
-                scope={scope}
-                extensions={extensions}
-                selectAttachment={selectAttachment}
-                {...(attachment.kind === "video" && timecodesSeekable
-                  ? { seek }
-                  : {})}
-              />
-              {attachment.kind === "video" && (
-                <div className={styles.mediaReviewTimeOption}>
-                  <span>{formatMediaTime(currentTime)}</span>
-                  <Checkbox
-                    label="Comment at current frame"
-                    checked={includeTime}
-                    onCheckedChange={setIncludeTime}
-                  />
-                </div>
-              )}
-              <MessageComposer
-                extensions={extensions}
-                session={session}
-                scope={scope}
-                channelId={channelId}
-                channelName={channelName}
-                threadRootId={rootId}
-                editMessages={editMessages}
-                {...(attachment.kind === "video" && includeTime
-                  ? { mediaTimeSeconds: currentTime }
-                  : {})}
-                hideMediaTimeIndicator
-              />
-            </>
-          ) : (
-            <p className={styles.empty} role={error ? "alert" : "status"}>
-              {error ?? "Loading comments…"}
-            </p>
-          )}
+          <div className={styles.mediaReviewConversationContent}>
+            {rootId && source ? (
+              <>
+                <ReviewComments
+                  selectedComment={selectedComment}
+                  replies={replies}
+                  limited={limited}
+                  session={session}
+                  scope={scope}
+                  extensions={extensions}
+                  selectAttachment={selectAttachment}
+                  {...(attachment.kind === "video" && timecodesSeekable
+                    ? { seek }
+                    : {})}
+                />
+                {attachment.kind === "video" && (
+                  <div className={styles.mediaReviewTimeOption}>
+                    <span>{videoTime(currentTime)}</span>
+                    <Checkbox
+                      label="Comment at current frame"
+                      checked={includeTime}
+                      onCheckedChange={setIncludeTime}
+                    />
+                  </div>
+                )}
+                <MessageComposer
+                  extensions={extensions}
+                  session={session}
+                  scope={scope}
+                  channelId={channelId}
+                  channelName={channelName}
+                  threadRootId={rootId}
+                  editMessages={editMessages}
+                  {...(attachment.kind === "video" && includeTime
+                    ? { mediaTimeSeconds: currentTime }
+                    : {})}
+                  hideMediaTimeIndicator
+                />
+              </>
+            ) : (
+              <p className={styles.empty} role={error ? "alert" : "status"}>
+                {error ?? "Loading comments…"}
+              </p>
+            )}
+          </div>
         </aside>
       </section>
     </div>,
@@ -330,46 +518,9 @@ function ReviewShell({
   );
 }
 
-function ImageReviewGallery({
-  view,
-  selectedUrl,
-  select,
-  media,
-  onOpenLink,
-}: {
-  view: ThreadView;
-  selectedUrl: string;
-  select(url: string): void;
-  media(url: string): string | undefined;
-  onOpenLink(url: string): boolean;
-}) {
-  const thread = useSyncExternalStore(
-    view.subscribe,
-    view.snapshot,
-    view.snapshot,
-  );
-  const attachments = useMemo(() => {
-    const seen = new Set<string>();
-    return [thread.root, thread.target, ...thread.replies]
-      .flatMap((row) => row?.attachments ?? [])
-      .filter(
-        (item) =>
-          item.kind === "image" && !seen.has(item.url) && !!seen.add(item.url),
-      );
-  }, [thread.root, thread.target, thread.replies]);
-  return (
-    <ImageReviewStage
-      attachments={attachments}
-      selectedUrl={selectedUrl}
-      media={media}
-      select={select}
-      onOpenLink={onOpenLink}
-    />
-  );
-}
-
 function ReviewComments({
   replies,
+  selectedComment,
   limited,
   session,
   scope,
@@ -378,6 +529,7 @@ function ReviewComments({
   selectAttachment,
 }: {
   replies: ReturnType<ThreadView["snapshot"]>["replies"];
+  selectedComment?: string | undefined;
   limited: boolean;
   session: RelaySession;
   scope: string;
@@ -387,6 +539,13 @@ function ReviewComments({
 }) {
   const profiles = useRowProfiles(session.profiles, replies);
   const agentPubkeys = useKnownAgentPubkeys(session, profiles);
+  const comments = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (selectedComment)
+      comments.current
+        ?.querySelector(`[data-review-comment="${selectedComment}"]`)
+        ?.scrollIntoView?.({ block: "nearest" });
+  }, [selectedComment]);
   const authors = [...new Set(replies.map((row) => row.authorId))]
     .sort()
     .join(":");
@@ -397,29 +556,41 @@ function ReviewComments({
         .catch(() => {});
   }, [session.profiles, authors]);
   return (
-    <section className={styles.mediaReviewThread} aria-label="Media comments">
+    <section
+      ref={comments}
+      className={styles.mediaReviewThread}
+      aria-label="Media comments"
+    >
       <div className={styles.mediaReviewThreadHeading}>
-        <strong>Comments</strong>
+        <strong>
+          <ChatCircleIcon size={18} /> Comments
+        </strong>
         <span>{replies.length}</span>
       </div>
       {replies.map((row) => (
-        <MessageRow
+        <div
           key={row.id}
-          row={row}
-          extensions={extensions}
-          session={session}
-          scope={scope}
-          profile={profiles.get(row.authorId)}
-          agentPubkeys={agentPubkeys}
-          media={session.media}
-          onOpenLink={() => false}
-          day={false}
-          retry={session.messages.retry}
-          onOpenMediaReview={(_rowId, attachment, seconds) =>
-            selectAttachment(attachment, seconds)
-          }
-          {...(seek ? { onMediaTime: seek } : {})}
-        />
+          data-review-comment={row.id}
+          data-selected={selectedComment === row.id || undefined}
+          className={styles.mediaReviewComment}
+        >
+          <MessageRow
+            row={row}
+            extensions={extensions}
+            session={session}
+            scope={scope}
+            profile={profiles.get(row.authorId)}
+            agentPubkeys={agentPubkeys}
+            media={session.media}
+            onOpenLink={() => false}
+            day={false}
+            retry={session.messages.retry}
+            onOpenMediaReview={(_rowId, attachment, seconds) =>
+              selectAttachment(attachment, seconds)
+            }
+            {...(seek ? { onMediaTime: seek } : {})}
+          />
+        </div>
       ))}
       {!replies.length && <p className={styles.threadNote}>No comments yet.</p>}
       {limited && (

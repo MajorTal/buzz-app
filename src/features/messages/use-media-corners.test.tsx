@@ -1,0 +1,47 @@
+// @vitest-environment jsdom
+import { cleanup, render } from "@testing-library/react";
+import { afterEach, expect, it, vi } from "vitest";
+import { useMediaCorners } from "./use-media-corners";
+
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+});
+
+it("updates the media silhouette after resize and releases its observer on unmount", () => {
+  let resize = () => {};
+  const disconnect = vi.fn();
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      constructor(callback: () => void) {
+        resize = callback;
+      }
+      observe() {}
+      disconnect = disconnect;
+    },
+  );
+  let width = 320;
+  vi.spyOn(HTMLElement.prototype, "offsetWidth", "get").mockImplementation(
+    () => width,
+  );
+  vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(180);
+  function Surface() {
+    const corners = useMediaCorners();
+    return <div ref={corners} style={{ borderTopLeftRadius: 16 }} />;
+  }
+  const { container, unmount } = render(<Surface />);
+  const surface = container.firstElementChild as HTMLElement;
+  expect(surface.style.getPropertyValue("--media-corner-clip")).toContain(
+    "M 25.6 0 L 294.4 0",
+  );
+  width = 240;
+  resize();
+  expect(surface.style.getPropertyValue("--media-corner-clip")).toContain(
+    "M 25.6 0 L 214.4 0",
+  );
+  unmount();
+  expect(disconnect).toHaveBeenCalledOnce();
+  expect(surface.style.getPropertyValue("--media-corner-clip")).toBe("");
+});

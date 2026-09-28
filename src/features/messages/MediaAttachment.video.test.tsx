@@ -6,6 +6,7 @@ import { MediaAttachment } from "./MediaAttachment";
 
 afterEach(() => {
   cleanup();
+  localStorage.clear();
   vi.restoreAllMocks();
 });
 
@@ -59,7 +60,7 @@ it("tracks received video play, pause, time updates, and review handoff", () => 
     value: 42,
   });
   fireEvent.timeUpdate(video);
-  expect(screen.getByText("0:42")).toBeInTheDocument();
+  expect(screen.getByText("00:42")).toBeInTheDocument();
   expect(onPlayback).toHaveBeenLastCalledWith({
     attachmentUrl: videoAttachment.url,
     seconds: 42,
@@ -120,4 +121,82 @@ it("shows unavailable treatment when received video playback errors", () => {
 
   expect(screen.getByRole("status")).toHaveTextContent("Video unavailable");
   expect(container.querySelector("video")).toBeNull();
+});
+
+it("offers inline seek, speed and volume controls and hands off the scrubbed position", () => {
+  const onOpenReview = vi.fn();
+  const { container } = render(
+    <MediaAttachment
+      attachment={videoAttachment}
+      media={media}
+      onOpenReview={onOpenReview}
+    />,
+  );
+  const video = container.querySelector("video");
+  if (!video) throw new Error("Missing video");
+  mockPlayback(video);
+  Object.defineProperty(video, "duration", { configurable: true, value: 90 });
+  fireEvent.durationChange(video);
+  fireEvent.change(screen.getByRole("slider", { name: "Video progress" }), {
+    target: { value: "32" },
+  });
+  expect(video.currentTime).toBe(32);
+  fireEvent.click(screen.getByRole("button", { name: "Playback speed: 1x" }));
+  fireEvent.click(screen.getByRole("button", { name: "0.25x" }));
+  expect(video.playbackRate).toBe(0.25);
+  fireEvent.change(screen.getByRole("slider", { name: "Video volume" }), {
+    target: { value: "0.25" },
+  });
+  expect(video.volume).toBe(0.25);
+  fireEvent.click(
+    screen.getByRole("button", { name: "Open video fullscreen" }),
+  );
+  expect(onOpenReview).toHaveBeenCalledWith(videoAttachment, 32);
+});
+
+it("shares the saved playback speed with mounted previews and later videos", () => {
+  localStorage.setItem("buzz.video.playback-speed", "1.25");
+  const { container, rerender } = render(
+    <>
+      <MediaAttachment attachment={videoAttachment} media={media} />
+      <MediaAttachment
+        attachment={{
+          ...videoAttachment,
+          url: "https://fixture.test/second.mp4",
+        }}
+        media={media}
+      />
+    </>,
+  );
+  expect(
+    screen.getAllByRole("button", { name: "Playback speed: 1.25x" }),
+  ).toHaveLength(2);
+  const firstSpeed = screen.getAllByRole("button", {
+    name: "Playback speed: 1.25x",
+  })[0];
+  if (!firstSpeed) throw new Error("Missing speed control");
+  fireEvent.click(firstSpeed);
+  fireEvent.click(screen.getByRole("button", { name: "1.75x" }));
+  expect(
+    [...container.querySelectorAll("video")].map((video) => video.playbackRate),
+  ).toEqual([1.75, 1.75]);
+  expect(
+    screen.getAllByRole("button", { name: "Playback speed: 1.75x" }),
+  ).toHaveLength(2);
+  expect(localStorage.getItem("buzz.video.playback-speed")).toBe("1.75");
+  rerender(
+    <MediaAttachment key="new" attachment={videoAttachment} media={media} />,
+  );
+  expect(container.querySelector("video")?.playbackRate).toBe(1.75);
+  expect(
+    screen.getByRole("button", { name: "Playback speed: 1.75x" }),
+  ).toBeInTheDocument();
+});
+
+it("uses normal speed when a saved preference is invalid", () => {
+  localStorage.setItem("buzz.video.playback-speed", "NaN");
+  const { container } = render(
+    <MediaAttachment attachment={videoAttachment} media={media} />,
+  );
+  expect(container.querySelector("video")?.playbackRate).toBe(1);
 });

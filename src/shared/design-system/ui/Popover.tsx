@@ -22,6 +22,8 @@ type PopoverPopupProps = Omit<
     | "anchor"
     | "sticky"
   > & {
+    /** Preserve an explicitly themed surface across the portal. */
+    colorMode?: "light" | "dark" | undefined;
     /** Compact account/action surfaces use tighter corners as well as width. */
     size?: "compact" | "default" | "wide";
     /** Embedded pickers own their internal spacing. */
@@ -39,6 +41,7 @@ export function PopoverPopup({
   sticky,
   size = "default",
   padding = "content",
+  colorMode,
   ...props
 }: PopoverPopupProps) {
   return (
@@ -59,7 +62,8 @@ export function PopoverPopup({
           data-buzz-ui=""
           data-size={size}
           data-padding={padding}
-          className="buzz-popover-popup text-body"
+          data-color-mode={colorMode}
+          className={`buzz-popover-popup text-body ${colorMode ?? ""}`}
         />
       </BasePopover.Positioner>
     </BasePopover.Portal>

@@ -1,6 +1,9 @@
+import { useImageGalleryMotion } from "./use-image-gallery-motion";
+import { useImageViewport } from "./use-image-viewport";
+import { useMediaControls } from "./use-media-controls";
 import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowSquareOutIcon,
   CaretLeftIcon,
@@ -27,10 +30,6 @@ type ImageReviewStageProps = {
   onOpenLink(url: string): boolean;
 };
 
-function clamp(value: number, limit: number) {
-  return Math.max(-limit, Math.min(limit, value));
-}
-
 export function ImageReviewStage({
   attachments,
   selectedUrl,
@@ -40,11 +39,11 @@ export function ImageReviewStage({
 }: ImageReviewStageProps) {
   const stage = useRef<HTMLDivElement>(null);
   const image = useRef<HTMLImageElement>(null);
+  const previousButton = useRef<HTMLButtonElement>(null);
+  const nextButton = useRef<HTMLButtonElement>(null);
   const drag = useRef<
     { pointer: number; origin: Point; offset: Point } | undefined
   >(undefined);
-  const [zoom, setZoom] = useState(MIN_ZOOM);
-  const [offset, setOffset] = useState<Point>({ x: 0, y: 0 });
   const [dragging, setDragging] = useState(false);
   const selectedIndex = Math.max(
     0,
@@ -54,59 +53,99 @@ export function ImageReviewStage({
   const source = selected ? media(selected.url) : undefined;
   const proxySource = source ? isProxySource(source) : false;
   const externalSource = source ? safeOpenUrl(source) && !proxySource : false;
+  const {
+    zoom,
+    offset,
+    zoomTo: setBoundedZoom,
+    panTo,
+    constrain,
+  } = useImageViewport(stage, image, source);
+  const idle = useMediaControls(stage, source);
   const pannable = zoom > MIN_ZOOM;
+  const { departing, prepare } = useImageGalleryMotion(
+    stage,
+    image,
+    selected?.url,
+    source,
+  );
 
-  const panLimits = (nextZoom = zoom) => {
-    const frame = stage.current?.getBoundingClientRect();
-    const element = image.current;
-    if (!frame || !element?.naturalWidth || !element.naturalHeight)
-      return { x: 0, y: 0 };
-    const fit = Math.min(
-      frame.width / element.naturalWidth,
-      frame.height / element.naturalHeight,
-    );
-    const width = element.naturalWidth * fit * nextZoom;
-    const height = element.naturalHeight * fit * nextZoom;
-    return {
-      x: Math.max(0, (width - frame.width) / 2),
-      y: Math.max(0, (height - frame.height) / 2),
-    };
-  };
-  const setBoundedZoom = (value: number) => {
-    const next = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, value));
-    const limits = panLimits(next);
-    setZoom(next);
-    setOffset((current) => ({
-      x: clamp(current.x, limits.x),
-      y: clamp(current.y, limits.y),
-    }));
-  };
-  const choose = (index: number) => {
-    const item = attachments[index];
-    if (!item) return;
-    setZoom(MIN_ZOOM);
-    setOffset({ x: 0, y: 0 });
-    select(item.url);
-  };
-
+  const choose = useCallback(
+    (index: number) => {
+      const item = attachments[index];
+      if (!item || item.url === selected?.url) return;
+      prepare(index > selectedIndex ? 1 : -1);
+      setBoundedZoom(MIN_ZOOM);
+      const active = document.activeElement;
+      const keepsNavigationFocus =
+        (active === previousButton.current && index > 0) ||
+        (active === nextButton.current && index < attachments.length - 1);
+      if (!keepsNavigationFocus) stage.current?.focus({ preventScroll: true });
+      select(item.url);
+    },
+    [
+      attachments,
+      setBoundedZoom,
+      select,
+      selected?.url,
+      selectedIndex,
+      prepare,
+    ],
+  );
   useEffect(() => {
-    const reset = () => setBoundedZoom(zoom);
-    window.addEventListener("resize", reset);
-    return () => window.removeEventListener("resize", reset);
-  });
+    if (attachments.length < 2) return;
+    const keydown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.shiftKey ||
+        (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
+      )
+        return;
+      const viewer = stage.current?.closest('[role="dialog"]') ?? stage.current;
+      const target = event.target;
+      // A disabled end-arrow or a click on the picture can leave focus on body.
+      const modalHasBodyFocus =
+        target === document.body &&
+        viewer?.getAttribute("aria-modal") === "true" &&
+        !viewer.closest('[inert], [aria-hidden="true"]');
+      if (
+        !viewer ||
+        !(target instanceof Element) ||
+        (!viewer.contains(target) && !modalHasBodyFocus) ||
+        target.closest(
+          'input, textarea, select, [contenteditable]:not([contenteditable="false"]), [role="slider"], [role="menu"], [role="listbox"]',
+        ) ||
+        (target.closest('[role="dialog"]') &&
+          target.closest('[role="dialog"]') !== viewer)
+      )
+        return;
+      event.preventDefault();
+      choose(selectedIndex + (event.key === "ArrowRight" ? 1 : -1));
+    };
+    document.addEventListener("keydown", keydown);
+    return () => document.removeEventListener("keydown", keydown);
+  }, [attachments.length, selectedIndex, choose]);
 
-  if (!selected || !source)
+  if (!selected)
     return (
       <p className={styles.mediaReviewUnavailable} role="status">
         Image unavailable
       </p>
     );
   return (
+    // biome-ignore lint/a11y/useSemanticElements: This groups gallery media and navigation, not form fields.
     <div
       ref={stage}
+      role="group"
+      aria-label="Image gallery"
+      tabIndex={-1}
+      data-controls-idle={idle || undefined}
+      data-review-zoomed={pannable || undefined}
       className={`${styles.imageReviewStage} ${pannable ? styles.imageReviewPannable : ""} ${dragging ? styles.imageReviewDragging : ""}`}
       onPointerDown={(event) => {
-        if (!pannable) return;
+        if (!pannable || event.button !== 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         drag.current = {
           pointer: event.pointerId,
@@ -118,10 +157,9 @@ export function ImageReviewStage({
       onPointerMove={(event) => {
         const active = drag.current;
         if (!active || active.pointer !== event.pointerId) return;
-        const limits = panLimits();
-        setOffset({
-          x: clamp(active.offset.x + event.clientX - active.origin.x, limits.x),
-          y: clamp(active.offset.y + event.clientY - active.origin.y, limits.y),
+        panTo({
+          x: active.offset.x + event.clientX - active.origin.x,
+          y: active.offset.y + event.clientY - active.origin.y,
         });
       }}
       onPointerUp={(event) => {
@@ -130,22 +168,54 @@ export function ImageReviewStage({
         setDragging(false);
         event.currentTarget.releasePointerCapture(event.pointerId);
       }}
+      onLostPointerCapture={() => {
+        drag.current = undefined;
+        setDragging(false);
+      }}
       onPointerCancel={() => {
         drag.current = undefined;
         setDragging(false);
       }}
     >
-      <img
-        ref={image}
-        src={source}
-        alt="Attachment preview"
-        draggable={false}
-        style={{
-          transform: `translate3d(${offset.x}px, ${offset.y}px, 0) scale(${zoom})`,
-        }}
-      />
+      {[
+        ...(departing && departing.url !== selected.url ? [departing] : []),
+        {
+          url: selected.url,
+          source,
+          transform: pannable
+            ? `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`
+            : "none",
+        },
+      ].map((item) => {
+        const current = item.url === selected.url;
+        return item.source ? (
+          <img
+            key={item.url}
+            ref={current ? image : undefined}
+            data-review-media={current ? "" : undefined}
+            data-gallery-departing={!current ? "" : undefined}
+            data-review-chrome={!current ? "" : undefined}
+            src={item.source}
+            alt={current ? "Attachment preview" : ""}
+            aria-hidden={!current || undefined}
+            draggable={false}
+            onLoad={current ? constrain : undefined}
+            style={{ transform: item.transform }}
+          />
+        ) : (
+          <p
+            key={item.url}
+            className={styles.mediaReviewUnavailable}
+            role="status"
+          >
+            Image unavailable
+          </p>
+        );
+      })}
       <div
         className={styles.imageReviewToolbar}
+        data-image-controls=""
+        data-review-chrome=""
         onPointerDown={(event) => event.stopPropagation()}
       >
         {attachments.length > 1 && (
@@ -153,17 +223,19 @@ export function ImageReviewStage({
             <IconButton
               size="compact"
               type="button"
+              ref={previousButton}
               aria-label="Previous image"
               disabled={selectedIndex === 0}
               onClick={() => choose(selectedIndex - 1)}
               icon={<CaretLeftIcon size={18} aria-hidden="true" />}
             />
-            <span>
+            <span aria-live="polite" aria-atomic="true">
               {selectedIndex + 1} / {attachments.length}
             </span>
             <IconButton
               size="compact"
               type="button"
+              ref={nextButton}
               aria-label="Next image"
               disabled={selectedIndex === attachments.length - 1}
               onClick={() => choose(selectedIndex + 1)}
@@ -219,7 +291,7 @@ export function ImageReviewStage({
             icon={<DownloadIcon size={17} />}
           />
         )}
-        {externalSource && (
+        {source && externalSource && (
           <IconButton
             nativeButton={false}
             role="link"

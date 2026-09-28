@@ -1,3 +1,5 @@
+import { prepareReviewEntrance } from "./use-review-entrance";
+import { useMediaCorners } from "./use-media-corners";
 import { useEffect, useRef, useState } from "react";
 import type { Attachment } from "../relay/contracts";
 import { validatedBlurhash } from "../relay/blurhash";
@@ -19,6 +21,7 @@ export function AttachmentImage({
   onOpenLink(url: string): boolean;
   onOpenReview?: (attachment: Attachment, seconds: number) => void;
 }) {
+  const corners = useMediaCorners();
   const style = attachment.dimensions
     ? {
         width: Math.min(
@@ -32,6 +35,7 @@ export function AttachmentImage({
   if (!source)
     return cached ? (
       <span
+        ref={corners}
         className={`${styles.attachmentImage} ${styles.mediaPlaceholder}`}
         style={style}
         aria-hidden="true"
@@ -43,16 +47,19 @@ export function AttachmentImage({
     );
   return (
     <a
+      ref={corners}
       className={styles.attachmentImage}
       style={style}
       href={url}
       target="_blank"
       rel="noreferrer"
       aria-label="Open image attachment"
+      data-media-preview=""
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey) return;
         if (onOpenReview) {
           event.preventDefault();
+          prepareReviewEntrance(event);
           onOpenReview(attachment, 0);
         } else if (onOpenLink(url)) event.preventDefault();
       }}

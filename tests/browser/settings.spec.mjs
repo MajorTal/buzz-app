@@ -154,18 +154,18 @@ test("avatar Settings access dismisses cleanly and exposes Profile and Plugins",
     await expect(availability).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(
-      page.getByRole("menuitemradio", { name: "Automatic", exact: true }),
+      page.getByRole("menuitemradio", { name: "Online", exact: true }),
     ).toBeFocused();
     await page.keyboard.press("ArrowDown");
     await expect(
-      page.getByRole("menuitemradio", { name: "Online", exact: true }),
+      page.getByRole("menuitemradio", { name: "Away", exact: true }),
     ).toBeFocused();
     await expect(
       page.getByRole("menuitemradio", { name: "Automatic", exact: true }),
-    ).toBeChecked();
+    ).toHaveCount(0);
     await expect(
       page.getByRole("menuitemradio", { name: "Online", exact: true }),
-    ).not.toBeChecked();
+    ).toBeChecked();
     await page.keyboard.press("Escape");
     await expect(availability).toBeFocused();
     await page.keyboard.press("Escape");

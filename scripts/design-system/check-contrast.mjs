@@ -296,10 +296,11 @@ for (const [mode, map] of Object.entries(modes)) {
         borderColor && surfaceColor
           ? wcagRatio(borderColor, surfaceColor)
           : null;
-      if (ratio === null || ratio < 3)
+      if (ratio === null || ratio < 3) {
         boundaryFailures.push(
           `${mode}: ${role} on ${surface} — ${ratio === null ? "unresolved color" : `${ratio.toFixed(3)}:1`}, needs 3:1`,
         );
+      }
     }
   }
 }

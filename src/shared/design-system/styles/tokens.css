@@ -510,6 +510,7 @@
   --text-warning: var(--amber-12);
   --text-success: var(--green-12);
   --status-online: var(--green-11);
+  --status-availability-online: var(--green-10);
   --status-avatar-online: var(--green-10);
   --status-avatar-online-border: var(--green-11);
   --status-away: var(--amber-10);
@@ -565,6 +566,7 @@
   --text-warning: var(--amber-12);
   --text-success: var(--green-12);
   --status-online: var(--green-11);
+  --status-availability-online: var(--green-10);
   --status-avatar-online: var(--green-10);
   --status-avatar-online-border: var(--green-11);
   --status-away: var(--amber-10);

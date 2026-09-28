@@ -105,6 +105,34 @@ it("publishes the real activity transition and latest editor input through the p
   expect(vi.getTimerCount()).toBe(0);
 });
 
+it.each([null, "auto", "unrecognized"])(
+  "preserves internal automatic behavior for saved preference %s without rewriting storage",
+  async (saved) => {
+    vi.useFakeTimers();
+    vi.stubGlobal("BroadcastChannel", undefined);
+    const viewer = "c".repeat(64);
+    const key = `buzz-presence.v1:${viewer}`;
+    if (saved === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, saved);
+    const activity = createPresenceActivity();
+    try {
+      activity.setViewer(viewer);
+      expect(activity.snapshot().preference).toBe("auto");
+      expect(activity.status()).toBe("online");
+      await vi.advanceTimersByTimeAsync(599999);
+      expect(activity.status()).toBe("online");
+      await vi.advanceTimersByTimeAsync(1);
+      expect(activity.status()).toBe("away");
+      document.dispatchEvent(new Event("input", { bubbles: true }));
+      expect(activity.status()).toBe("online");
+      expect(localStorage.getItem(key)).toBe(saved);
+    } finally {
+      activity.dispose();
+      localStorage.removeItem(key);
+    }
+  },
+);
+
 it("persists viewer-local manual choices, isolates identities, follows storage changes and reports denied storage", () => {
   vi.stubGlobal("BroadcastChannel", undefined);
   localStorage.clear();

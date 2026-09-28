@@ -56,6 +56,7 @@ describe("semantic contrast contract", () => {
     );
     expect(result.output.match(/\(accepted link contrast\)/g)).toHaveLength(8);
     expect(result.output).toContain("not a contrast pass");
+    expect(result.output).not.toContain("exceptions no longer needed");
   });
 
   it.each([

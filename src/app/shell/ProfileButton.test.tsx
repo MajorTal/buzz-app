@@ -63,7 +63,9 @@ it("keeps the header cutout and menu status in sync with presence", () => {
   );
   fireEvent.click(button);
   expect(
-    screen.getByText("Online", { selector: "[data-status]" }),
+    screen
+      .getByRole("button", { name: "Availability: Online" })
+      .closest("[data-status]"),
   ).toHaveAttribute("data-status", "online");
 
   for (const [status, label] of [
@@ -79,7 +81,9 @@ it("keeps the header cutout and menu status in sync with presence", () => {
       status,
     );
     expect(
-      screen.getByText(label, { selector: "[data-status]" }),
+      screen
+        .getByRole("button", { name: `Availability: ${label}` })
+        .closest("[data-status]"),
     ).toHaveAttribute("data-status", status);
   }
 });
@@ -347,7 +351,12 @@ it.each(["online", "away", "offline"] as const)(
       profile: { name: "Fixture", picture: "" },
       viewer: "fixture",
     };
-    const presence = { status, preference: "auto", error: null };
+    const presence = {
+      status,
+      preference: status === "offline" ? "offline" : "auto",
+      error: null,
+    };
+    const setPreference = vi.fn();
     const connection = { status: "unavailable", session: undefined, scope: "" };
     const subscribe = () => () => {};
     const actions: readonly [] = [];
@@ -358,7 +367,7 @@ it.each(["online", "away", "offline"] as const)(
     const communities = {
       subscribe,
       snapshot: () => snapshot,
-      presence: { subscribe, snapshot: () => presence },
+      presence: { subscribe, snapshot: () => presence, setPreference },
       relay: { subscribe, snapshot: () => connection },
     } as unknown as Communities;
     render(
@@ -383,6 +392,20 @@ it.each(["online", "away", "offline"] as const)(
     ).toHaveTextContent(
       { online: "Online", away: "Away", offline: "Offline" }[status],
     );
+    await user.click(screen.getByRole("button", { name: /^Availability:/ }));
+    expect(
+      (await screen.findAllByRole("menuitemradio")).map(
+        (item) => item.textContent,
+      ),
+    ).toEqual(["Online", "Away", "Offline"]);
+    expect(
+      screen.getByRole("menuitemradio", {
+        name: { online: "Online", away: "Away", offline: "Offline" }[status],
+      }),
+    ).toBeChecked();
+    const next = status === "offline" ? "Online" : "Offline";
+    await user.click(screen.getByRole("menuitemradio", { name: next }));
+    expect(setPreference).toHaveBeenCalledWith(next.toLowerCase());
   },
 );
 

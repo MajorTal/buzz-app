@@ -204,22 +204,22 @@ export function ProfileButton({
               <p className="m-0 truncate text-label-sm">{name}</p>
               {viewer && (
                 <MenuRoot modal={false}>
-                  <MenuTrigger
-                    aria-label={`Availability: ${label}`}
-                    render={
-                      <Button variant="subtle" size="xs">
-                        <span
-                          className={styles.availability}
-                          data-status={presence.status}
-                        >
+                  <span
+                    className={styles.availability}
+                    data-status={presence.status}
+                  >
+                    <MenuTrigger
+                      aria-label={`Availability: ${label}`}
+                      render={
+                        <Button variant="subtle" size="xs">
                           {label}
-                        </span>
-                      </Button>
-                    }
-                  />
+                        </Button>
+                      }
+                    />
+                  </span>
                   <MenuPopup align="start">
                     <MenuRadioGroup
-                      value={presence.preference}
+                      value={presence.status}
                       onValueChange={(value) =>
                         communities.presence.setPreference(value)
                       }
@@ -227,7 +227,6 @@ export function ProfileButton({
                     >
                       {(
                         [
-                          ["auto", "Automatic"],
                           ["online", "Online"],
                           ["away", "Away"],
                           ["offline", "Offline"],

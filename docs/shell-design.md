@@ -89,8 +89,8 @@ The top-right group contains enabled plugin launchers (Bestie supplies the snake
 a page finder, and the local avatar. `ProfileButton.tsx` subscribes to the community
 service's local default profile and opens an anchored account dropdown containing
 local presence controls and Settings; there is no separate top-bar Settings button.
-The avatar dot shows local intent (Active/Away/Offline). The shared account menu
-provides Automatic, Away and Appear offline choices: arrow keys move focus, and
+The avatar dot shows local intent (Online/Away/Offline). The shared account menu
+provides Online, Away and Offline choices: arrow keys move focus, and
 Enter/Space selects without closing the menu. See
 [presence ownership and limitations](presence.md). Escape, outside click and Tab
 leaving dismiss the menu; Escape returns focus to the avatar. Selecting Settings

@@ -480,16 +480,30 @@ test("avatar choices publish through the existing socket and persist across relo
     .toBe(true);
   await expect(badge).toHaveCSS("background-image", "none");
   await expect(badge).toHaveCSS("box-shadow", "none");
+  await expect(badge).toHaveCSS("background-color", "rgb(33, 131, 88)");
   await avatar.screenshot({
     path: test.info().outputPath("avatar-online.png"),
   });
   await avatar.click();
+  await expect(
+    page.getByRole("button", { name: "Availability: Online", exact: true }),
+  ).toHaveCSS("color", "rgb(43, 154, 102)");
   await page.getByRole("button", { name: /^Availability:/ }).click();
   await page.getByRole("menuitemradio", { name: "Away", exact: true }).click();
   await expect(
     avatar.getByRole("img", { name: "Your status: Away" }),
   ).toBeVisible();
   await expect(badge).toHaveCSS("background-color", "rgb(171, 100, 0)");
+  await expect
+    .poll(() =>
+      badge.evaluate(
+        (element) => getComputedStyle(element, "::after").backgroundColor,
+      ),
+    )
+    .toBe("rgb(255, 186, 24)");
+  await expect(
+    page.getByRole("button", { name: "Availability: Away", exact: true }),
+  ).toHaveCSS("color", "rgb(79, 52, 34)");
   await expect(badge).toHaveCSS("background-image", "none");
   await expect(badge).toHaveCSS("box-shadow", "none");
   await avatar.screenshot({ path: test.info().outputPath("avatar-away.png") });
@@ -526,7 +540,7 @@ test("avatar choices publish through the existing socket and persist across relo
   ).toBeChecked();
   const before = published("online");
   await page
-    .getByRole("menuitemradio", { name: "Automatic", exact: true })
+    .getByRole("menuitemradio", { name: "Online", exact: true })
     .click();
   await expect(
     avatar.getByRole("img", { name: "Your status: Online" }),

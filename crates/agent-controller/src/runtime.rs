@@ -230,6 +230,26 @@ fn databricks_with_defaults(
     settings.validate()?;
     Ok(Some(settings))
 }
+/// App-owned npm shims and the pinned Node binary are separate from user-global tools.
+/// `app_data` is Tauri's resolved app-data directory, never browser input.
+pub fn managed_tool(app_data: &Path, name: &str) -> Option<PathBuf> {
+    let path = match name {
+        "pi" | "buzz-pi-acp" => app_data.join("node-tools/bin").join(name),
+        "node" => app_data.join("runtimes/node/v24.18.0").join(
+            match (std::env::consts::OS, std::env::consts::ARCH) {
+                ("macos", "aarch64") => "darwin-arm64/bin/node",
+                ("macos", "x86_64") => "darwin-x64/bin/node",
+                ("linux", "aarch64") => "linux-arm64/bin/node",
+                ("linux", "x86_64") => "linux-x64/bin/node",
+                _ => return None,
+            },
+        ),
+        _ => return None,
+    };
+    executable(&path).ok()?;
+    Some(path)
+}
+
 pub fn installed(name: &str) -> Option<PathBuf> {
     let mut dirs = Vec::new();
     if let Some(home) = std::env::var_os("HOME") {

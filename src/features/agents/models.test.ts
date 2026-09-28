@@ -62,6 +62,52 @@ it("cancellation overtaking begin prevents run, including late begin", async () 
   expect(host.run).not.toHaveBeenCalled();
   expect(host.cancel).toHaveBeenCalledWith(7);
 });
+// Native admits one lookup. It frees an unstarted ticket on cancel, but keeps a
+// running lookup's admission until its aborted task is dropped.
+function singleAdmissionHost() {
+  let pending: number | null = null;
+  let next = 0;
+  const running = new Map<number, (reason: string) => void>();
+  return {
+    begin: vi.fn(async () => {
+      if (pending !== null)
+        throw "Another model connection request is in progress; cancel it first";
+      pending = ++next;
+      return pending;
+    }),
+    run: vi.fn(
+      (ticket: number) =>
+        new Promise<ModelCatalog>((_, reject) => running.set(ticket, reject)),
+    ),
+    cancel: vi.fn(async (ticket: number) => {
+      if (pending !== ticket) return;
+      const reject = running.get(ticket);
+      if (!reject) {
+        pending = null;
+        return;
+      }
+      setTimeout(() => {
+        pending = null;
+        reject("Cancelled");
+      }, 5);
+    }),
+  };
+}
+it("a replacement waits for a cancelled running lookup to retire instead of being refused", async () => {
+  const host = singleAdmissionHost();
+  const service = createAgentModels(host);
+  const first = new AbortController();
+  const stale = service.request(request, first.signal);
+  await vi.waitFor(() => expect(host.run).toHaveBeenCalledOnce());
+  first.abort();
+  await expect(stale).rejects.toThrow("cancelled");
+  const replacement = service.request(request, new AbortController().signal);
+  await vi.waitFor(() => expect(host.run).toHaveBeenCalledTimes(2));
+  expect(host.begin).toHaveBeenCalledTimes(2);
+  await expect(host.begin.mock.results[1]?.value).resolves.toBe(2);
+  service.dispose();
+  await expect(replacement).rejects.toThrow("cancelled");
+});
 it("real control composition keeps Stop and Save independent of model waits and fences disposal", async () => {
   const fixture = controlFixture();
   const response = deferred<ModelCatalog>();

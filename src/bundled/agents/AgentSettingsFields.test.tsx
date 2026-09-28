@@ -502,6 +502,94 @@ it("uses a masked OpenAI key for Goose model lookup and discards unsaved keys on
   }
 });
 
+it("adds a Pi provider API key for lookup and drops it when the provider changes", async () => {
+  const fixture = controlFixture();
+  fixture.data.harnessOptions = [
+    {
+      command: "/usr/local/bin/buzz-pi-acp",
+      label: "Pi",
+      defaultArgs: [],
+      providers: [],
+    },
+  ];
+  const run = vi.fn(async () => ({
+    host: "",
+    models: [{ id: "databricks/model-a", name: "databricks/model-a" }],
+    modelOverridden: false,
+    disconnected: false,
+  }));
+  fixture.host.models = { begin: async () => 1, run, cancel: async () => {} };
+  const control = createAgentControl(fixture.host);
+  let draft!: AgentDraft;
+  function Editor() {
+    const [value, setValue] = useState(() => ({
+      ...agentDraft(fixture.agent),
+      command: "/usr/local/bin/buzz-pi-acp",
+      args: "[]",
+      provider: "",
+      model: "",
+      environment: {},
+    }));
+    draft = value;
+    return (
+      <AgentSettingsFields
+        draft={value}
+        control={control}
+        state={{
+          status: "ready",
+          data: fixture.data,
+          busy: false,
+          error: null,
+        }}
+        disabled={false}
+        onChange={(patch) => setValue((current) => ({ ...current, ...patch }))}
+      />
+    );
+  }
+  const view = render(<Editor />);
+  const user = userEvent.setup();
+  try {
+    await waitFor(() => expect(run).toHaveBeenCalledOnce());
+    // The provider list stays disabled until Pi's catalog arrives.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "LLM Provider" }),
+      ).toBeEnabled(),
+    );
+    await user.click(screen.getByRole("combobox", { name: "LLM Provider" }));
+    await user.click(
+      await screen.findByRole("option", {
+        name: "Google Gemini (API key needed)",
+      }),
+    );
+    const key = screen.getByLabelText("Google Gemini API key");
+    expect(key).toHaveAttribute("type", "password");
+    await user.type(key, "test-gemini-key");
+    // Pi reads GEMINI_API_KEY for google, unlike Goose's GOOGLE_API_KEY.
+    expect(agentEdit(draft, true).environment).toEqual({
+      GEMINI_API_KEY: "test-gemini-key",
+    });
+    await user.click(screen.getByRole("button", { name: "Browse models" }));
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+    expect(run).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({
+        edit: expect.objectContaining({
+          environment: { GEMINI_API_KEY: "test-gemini-key" },
+        }),
+      }),
+    );
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("combobox", { name: "LLM Provider" }));
+    await user.click(await screen.findByRole("option", { name: "Not set" }));
+    expect(screen.queryByLabelText("Google Gemini API key")).toBeNull();
+    expect(draft.environment).toEqual({});
+  } finally {
+    view.unmount();
+    control.dispose();
+  }
+});
+
 it("reveals only a key typed for the current provider", async () => {
   const { view, control } = setup({ savedKeys: ["OPENAI_API_KEY"] });
   const user = userEvent.setup();

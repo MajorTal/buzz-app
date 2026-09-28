@@ -27,6 +27,7 @@
     "allow-agent-control-log-challenge",
     "allow-agent-control-read-log",
     "allow-goose-install",
+    "allow-pi-install",
     "allow-agent-control-save",
     "allow-agent-control-save-defaults",
     "allow-agent-control-start-on-app-launch",

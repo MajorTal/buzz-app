@@ -43,6 +43,14 @@ const GOOSE_API_KEYS: Record<string, { label: string; env: string }> = {
 export function gooseApiKey(provider: string) {
   return GOOSE_API_KEYS[provider];
 }
+// Pi provider key variables from `pi --help`. Buzz never inherits shell-exported
+// keys, so these are the providers someone can sign in to from the agent form.
+export const PI_API_KEYS: Record<string, { label: string; env: string }> = {
+  openai: { label: "OpenAI", env: "OPENAI_API_KEY" },
+  anthropic: { label: "Anthropic", env: "ANTHROPIC_API_KEY" },
+  google: { label: "Google Gemini", env: "GEMINI_API_KEY" },
+  openrouter: { label: "OpenRouter", env: "OPENROUTER_API_KEY" },
+};
 export function agentDraft(agent: AgentView): AgentDraft {
   const databricks = agent.harness.databricks;
   return {

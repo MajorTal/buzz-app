@@ -8,7 +8,11 @@ import type {
   ControlSnapshot,
 } from "../../features/agents/control";
 import type { ModelCatalog } from "../../features/agents/models";
-import { CircleNotchIcon } from "../../shared/design-system/icons";
+import {
+  CheckCircleIcon,
+  CircleNotchIcon,
+  WarningCircleIcon,
+} from "../../shared/design-system/icons";
 import { Button } from "../../shared/design-system/ui/Button";
 import { agentEdit, isGoose, type AgentDraft } from "./agent-edit";
 
@@ -27,7 +31,8 @@ export function AgentModelPicker({
   disabled = false,
 }: {
   disabled?: boolean;
-  onPiProviders?(providers: string[]): void;
+  /** Pi's signed-in providers, or null while its catalog is loading. */
+  onPiProviders?(providers: string[] | null): void;
   id?: string | undefined;
   savedRevision?: number | undefined;
   draft: AgentDraft;
@@ -88,13 +93,11 @@ export function AgentModelPicker({
     setQuery(null);
     setOpen(false);
     attempted.current = null;
-    onPiProviders?.([]);
     return () => {
       pending.current?.abort();
       pending.current = null;
-      onPiProviders?.([]);
     };
-  }, [key, onPiProviders]);
+  }, [key]);
   // Provider is only a filter for Pi's catalog, but pending search text belongs
   // to the provider the person was editing.
   // biome-ignore lint/correctness/useExhaustiveDependencies: provider changes retire its pending search text without invalidating Pi’s catalog.
@@ -102,8 +105,62 @@ export function AgentModelPicker({
     setQuery(null);
     highlighted.current = null;
   }, [draft.provider]);
+  // A test result belongs to the exact draft it tested.
+  const testKey = JSON.stringify([key, draft.provider, draft.model]);
+  const [test, setTest] = useState<{
+    key: string;
+    run: AbortController;
+    result: string;
+  } | null>(null);
+  const testing = useRef<AbortController | null>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: editing the tested draft retires its native test.
+  useEffect(
+    () => () => {
+      testing.current?.abort();
+      testing.current = null;
+    },
+    [testKey],
+  );
+  const testResult = test?.key === testKey ? test.result : null;
+  const testConnection = async () => {
+    if (!control.models || testing.current) return;
+    const run = new AbortController();
+    testing.current = run;
+    // Only this run may settle its own result; a retired run clears it.
+    const settle = (result: string) =>
+      setTest((current) =>
+        current?.run !== run
+          ? current
+          : run.signal.aborted
+            ? null
+            : { ...current, result },
+      );
+    setTest({ key: testKey, run, result: "testing" });
+    try {
+      await control.models.request(
+        {
+          id,
+          expectedRevision: id ? draft.revision : undefined,
+          edit: agentEdit(draft, true),
+          host: "",
+          filter: "",
+          action: "test",
+        },
+        run.signal,
+      );
+      settle("ok");
+    } catch (error) {
+      settle((error as Error).message);
+    } finally {
+      if (testing.current === run) testing.current = null;
+    }
+  };
   const run = async (action: "connect" | "refresh" | "disconnect") => {
     if (!control.models || pending.current) return;
+    // Native runs one lookup at a time; model browsing replaces a test.
+    testing.current?.abort();
+    testing.current = null;
+    setTest(null);
     if (!external && !host.trim() && !inheritedWorkspace?.host) {
       setStatus(
         "Set your Databricks workspace under Advanced → Model to browse models.",
@@ -143,10 +200,6 @@ export function AgentModelPicker({
       );
       if (abort.signal.aborted || currentKey.current !== key) return;
       setCatalog({ key, data });
-      if (pi)
-        onPiProviders?.([
-          ...new Set(data.models.map((m) => m.id.split("/")[0] ?? "")),
-        ]);
       setStatus(
         data.disconnected
           ? "Disconnected from this workspace in Foundation."
@@ -155,7 +208,7 @@ export function AgentModelPicker({
             : goose
               ? "No models found for this Goose provider. Check its configuration or enter a custom ID."
               : pi
-                ? "No Pi models found. Check local configuration or enter a custom ID."
+                ? "No signed-in Pi providers found. Buzz doesn’t use API keys exported in your shell profile. Choose a provider under LLM Provider to add its API key, or enter a custom ID."
                 : "No models found. Enter a custom ID or check the workspace/filter under Advanced → Model.",
       );
     } catch (error) {
@@ -168,12 +221,29 @@ export function AgentModelPicker({
       }
     }
   };
+  // Pi's catalog is headless and supplies the signed-in provider list, so load
+  // it when Pi is selected. Later context edits wait for Browse or Retry.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: only entering Pi triggers the automatic lookup.
+  useEffect(() => {
+    if (pi) void run("connect");
+  }, [pi, draft.command]);
   const fresh = catalog?.key === key ? catalog.data : null;
+  const reportedProviders = JSON.stringify(
+    !pi
+      ? []
+      : busy
+        ? null
+        : [...new Set(fresh?.models.map((m) => m.id.split("/")[0] ?? ""))],
+  );
+  useEffect(() => {
+    onPiProviders?.(JSON.parse(reportedProviders));
+  }, [reportedProviders, onPiProviders]);
+  useEffect(() => () => onPiProviders?.([]), [onPiProviders]);
   const entries = (fresh?.models ?? []).filter(
     (m) => !pi || !draft.provider || m.id.startsWith(`${draft.provider}/`),
   );
   const piNoModelsMessage =
-    "No Pi models for this provider. If it needs an API key, add the provider's key variable under Advanced → Environment overrides or configure it in Pi's auth.json (for example, with /login). Then refresh models.";
+    "No Pi models for this provider. Buzz doesn’t use API keys exported in your shell profile. Add this provider’s API key for this agent, then browse models again.";
   const selectedId =
     pi && draft.provider && draft.model
       ? `${draft.provider}/${draft.model}`
@@ -397,6 +467,34 @@ export function AgentModelPicker({
               Retry models
             </Button>
           )
+        )}
+        {supported && pi && draft.provider && draft.model && !busy && (
+          <div className="space-y-2">
+            <Button
+              disabled={disabled}
+              loading={testResult === "testing"}
+              onClick={() => void testConnection()}
+            >
+              Test connection
+            </Button>
+            {testResult && (
+              <p
+                role="status"
+                className={`flex items-center gap-2 text-body-sm ${testResult === "ok" ? "text-success" : testResult === "testing" ? "text-secondary" : "text-danger"}`}
+              >
+                {testResult === "ok" ? (
+                  <CheckCircleIcon size={16} aria-hidden="true" />
+                ) : testResult !== "testing" ? (
+                  <WarningCircleIcon size={16} aria-hidden="true" />
+                ) : null}
+                {testResult === "ok"
+                  ? "Connected. The model replied."
+                  : testResult === "testing"
+                    ? "Sending a short test message…"
+                    : testResult}
+              </p>
+            )}
+          </div>
         )}
         {pi && draft.provider && !draft.model && (
           <p className="text-body-sm text-warning">

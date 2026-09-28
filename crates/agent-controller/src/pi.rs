@@ -54,8 +54,21 @@ impl PiContext {
                 installed(name)
             }
         };
+        let managed_data = adapter
+            .parent()
+            .filter(|bin| bin.file_name().is_some_and(|name| name == "bin"))
+            .and_then(Path::parent)
+            .filter(|prefix| prefix.file_name().is_some_and(|name| name == "node-tools"))
+            .and_then(Path::parent);
         let command = resolve("pi").ok_or("Install Pi and reopen the desktop app")?;
-        let node = resolve("node").ok_or("Install Node.js for the Pi ACP adapter")?;
+        // A managed adapter always uses the pinned Node beside its app-owned
+        // prefix. A user-global adapter keeps its existing user-global resolution.
+        let node = if let Some(app_data) = managed_data {
+            crate::runtime::managed_tool(app_data, "node")
+        } else {
+            resolve("node")
+        }
+        .ok_or("Install Node.js for the Pi ACP adapter")?;
         let path = std::env::join_paths([
             node.parent().unwrap(),
             command.parent().unwrap(),

@@ -136,6 +136,55 @@ fn harnesses_classify_cli_and_adapter_separately() {
 }
 
 #[test]
+fn managed_pi_detection_prefers_a_complete_user_install_and_requires_managed_node() {
+    let path = |name| Some(PathBuf::from(format!("/fixture/{name}")));
+    let empty = || PiTools {
+        cli: None,
+        adapter: None,
+        node: None,
+    };
+    let managed = || PiTools {
+        cli: path("managed-pi"),
+        adapter: path("managed-adapter"),
+        node: path("managed-node"),
+    };
+    let (command, status) = pi_choice(empty(), managed());
+    assert_eq!(command, path("managed-adapter"));
+    assert_eq!(status, "ready");
+    let (command, status) = pi_choice(
+        PiTools {
+            cli: path("user-pi"),
+            adapter: path("user-adapter"),
+            node: path("user-node"),
+        },
+        managed(),
+    );
+    assert_eq!(command, path("user-adapter"));
+    assert_eq!(status, "ready");
+    let (command, status) = pi_choice(
+        PiTools {
+            cli: path("user-pi"),
+            ..empty()
+        },
+        PiTools {
+            cli: None,
+            ..managed()
+        },
+    );
+    assert_eq!(command, path("managed-adapter"));
+    assert_eq!(status, "ready");
+    let (command, status) = pi_choice(
+        empty(),
+        PiTools {
+            node: None,
+            ..managed()
+        },
+    );
+    assert!(command.is_none());
+    assert_eq!(status, "cli-needed");
+}
+
+#[test]
 fn restart_on_save_selects_only_live_agents_with_changed_effective_settings() {
     let before = BTreeMap::from([
         ("changed".to_owned(), json!({"model":"a"})),
@@ -395,6 +444,8 @@ fn real_ipc_snapshot_save_cas_stop_and_launch_gate() {
         before["harnessOptions"][2]["status"] == "ready"
     );
     assert_eq!(before["harnessOptions"][2]["defaultArgs"], json!([]));
+    // Pi's signed-in providers come from its catalog, never a static list.
+    assert_eq!(before["harnessOptions"][2]["providers"], json!([]));
     assert_eq!(
         before["harnessOptions"][2]["status"],
         pi_status(
@@ -577,7 +628,7 @@ fn queued_restore_skips_agent_stopped_after_launch() {
     .unwrap();
     assert_eq!(stopped["agents"][0]["startOnAppLaunch"], true);
     let restored =
-        tauri::async_runtime::block_on(start(host.clone(), id, Action::Start, true, None, false));
+        tauri::async_runtime::block_on(start(host.clone(), id, Action::Start, true, None, None));
     assert_eq!(
         restored.err().as_deref(),
         Some("Agent disabled before restore")
@@ -757,7 +808,7 @@ mod overlap {
             Action::Start,
             false,
             None,
-            false
+            None
         ));
         assert_pending(starting.as_mut()).await;
         let target = id.clone();
@@ -935,7 +986,7 @@ mod overlap {
     // A genuinely eligible agent: its Start failed on the missing Goose CLI.
     // Stop during the download must win over the install's late restart.
     #[test]
-    fn goose_install_restart_does_not_reenable_an_agent_stopped_during_download() {
+    fn install_restart_does_not_reenable_a_stopped_goose_or_pi_agent() {
         const KEY: &str = "0000000000000000000000000000000000000000000000000000000000000001";
         const PUB: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
         struct Stored;
@@ -953,67 +1004,93 @@ mod overlap {
                 Secret::parse(KEY, pubkey).map(Some)
             }
         }
-        let (dir, host, _app, view) = fixture();
-        let id = seed(dir.path());
-        let path = dir.path().join("store/agents.json");
-        let mut saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
-        let id = id.replacen(&"ab".repeat(32), PUB, 1);
-        saved["agents"][0]["id"] = json!(id);
-        saved["agents"][0]["pubkey"] = json!(PUB);
-        saved["agents"][0]["credentialId"] = json!(id);
-        saved["agents"][0]["harness"]["command"] = json!(dir.path().join("missing/goose"));
-        saved["agents"][0]["harness"]["args"] = json!(["acp"]);
-        std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
-        let credentials: Arc<dyn Credentials> = Arc::new(Stored);
-        host.with(|h| {
-            h.controller = Controller::new(
-                Store::open(dir.path().join("replacement"))?,
-                credentials.clone(),
-                Err("placeholder".into()),
-                dir.path().join("ownership"),
+        for (harness, is_goose) in [("goose", true), ("buzz-pi-acp", false)] {
+            let (dir, host, _app, view) = fixture();
+            let id = seed(dir.path());
+            let path = dir.path().join("store/agents.json");
+            let mut saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            let id = id.replacen(&"ab".repeat(32), PUB, 1);
+            saved["agents"][0]["id"] = json!(id);
+            saved["agents"][0]["pubkey"] = json!(PUB);
+            saved["agents"][0]["credentialId"] = json!(id);
+            saved["agents"][0]["harness"]["command"] =
+                json!(dir.path().join("missing").join(harness));
+            saved["agents"][0]["harness"]["args"] =
+                json!(if is_goose { vec!["acp"] } else { vec![] });
+            std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
+            let credentials: Arc<dyn Credentials> = Arc::new(Stored);
+            host.with(|h| {
+                h.controller = Controller::new(
+                    Store::open(dir.path().join("replacement"))?,
+                    credentials.clone(),
+                    Err("placeholder".into()),
+                    dir.path().join("ownership"),
+                );
+                h.controller = Controller::new(
+                    Store::open(dir.path().join("store"))?,
+                    credentials.clone(),
+                    Ok(synthetic_bundle(&dir.path().join("tools"))),
+                    dir.path().join("ownership"),
+                );
+                h.credentials = credentials;
+                h.legacy_check = || Ok(());
+                Ok(())
+            })
+            .unwrap();
+            let started = tauri::async_runtime::block_on(start(
+                host.clone(),
+                id.clone(),
+                Action::Start,
+                false,
+                None,
+                None,
+            ))
+            .unwrap();
+            assert_eq!(
+                started.data.agents[0].error.as_deref(),
+                Some("Required runtime executable is missing")
             );
-            h.controller = Controller::new(
-                Store::open(dir.path().join("store"))?,
-                credentials.clone(),
-                Ok(synthetic_bundle(&dir.path().join("tools"))),
-                dir.path().join("ownership"),
-            );
-            h.credentials = credentials;
-            h.legacy_check = || Ok(());
-            Ok(())
-        })
-        .unwrap();
-        let started = tauri::async_runtime::block_on(start(
-            host.clone(),
-            id.clone(),
-            Action::Start,
-            false,
-            None,
-            false,
-        ))
-        .unwrap();
-        assert_eq!(
-            started.data.agents[0].error.as_deref(),
-            Some("Required runtime executable is missing")
-        );
-        assert_eq!(
-            tauri::async_runtime::block_on(host.waiting_for_goose()).unwrap(),
-            vec![id.clone()]
-        );
-        invoke(
-            &view,
-            "agent_control_action",
-            json!({"id":id,"action":"stop"}),
-        )
-        .unwrap();
-        assert!(tauri::async_runtime::block_on(host.waiting_for_goose())
-            .unwrap()
+            let waiting = if is_goose {
+                tauri::async_runtime::block_on(host.waiting_for_goose()).unwrap()
+            } else {
+                tauri::async_runtime::block_on(host.waiting_for_pi()).unwrap()
+            };
+            assert_eq!(waiting, vec![id.clone()]);
+            invoke(
+                &view,
+                "agent_control_action",
+                json!({"id":id,"action":"stop"}),
+            )
+            .unwrap();
+            assert!(if is_goose {
+                tauri::async_runtime::block_on(host.waiting_for_goose()).unwrap()
+            } else {
+                tauri::async_runtime::block_on(host.waiting_for_pi()).unwrap()
+            }
             .is_empty());
-        let result =
-            tauri::async_runtime::block_on(start(host, id, Action::Restart, false, None, true));
-        assert_eq!(result.err().as_deref(), Some(NOT_WAITING_FOR_GOOSE));
-        let saved: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
-        assert_eq!(saved["agents"][0]["enabled"], false);
+            let result = tauri::async_runtime::block_on(start(
+                host,
+                id,
+                Action::Restart,
+                false,
+                None,
+                Some(if is_goose {
+                    InstallRestart::Goose
+                } else {
+                    InstallRestart::Pi
+                }),
+            ));
+            assert_eq!(
+                result.err().as_deref(),
+                Some(if is_goose {
+                    NOT_WAITING_FOR_GOOSE
+                } else {
+                    NOT_WAITING_FOR_PI
+                })
+            );
+            let saved: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+            assert_eq!(saved["agents"][0]["enabled"], false);
+        }
     }
 }
 
@@ -1221,7 +1298,7 @@ async fn native_start_restore_disconnect_stop_and_quit_fence_late_credentials() 
                 owner.restore().await;
                 Err("restore completed".into())
             } else {
-                start(owner, agent_id, Action::Start, false, None, false).await
+                start(owner, agent_id, Action::Start, false, None, None).await
             }
         });
         tokio::task::spawn_blocking({
@@ -1540,6 +1617,84 @@ fn log_ipc_requires_fresh_exact_owner_proof_and_consumes_challenge() {
         )
         .unwrap(),
         ""
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn pi_model_lookup_waits_out_brief_host_contention() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, host, _app, view) = fixture();
+    let tools = dir.path().join("tools");
+    std::fs::create_dir(&tools).unwrap();
+    for tool in ["pi", "node", "buzz-pi-acp"] {
+        let file = tools.join(tool);
+        std::fs::write(&file, "#!/bin/sh\nread request\nprintf '%s\\n' '{\"id\":\"catalog\",\"type\":\"response\",\"command\":\"get_available_models\",\"success\":true,\"data\":{\"models\":[{\"provider\":\"databricks\",\"id\":\"model-a\"}]}}'\n").unwrap();
+        std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    // Another native operation (for example a snapshot refresh) briefly holds
+    // the host while the lookup reads its settings.
+    let (locked, wait) = std::sync::mpsc::channel();
+    let holder = {
+        let lock = host.0.clone();
+        std::thread::spawn(move || {
+            let _guard = lock.lock().unwrap();
+            locked.send(()).unwrap();
+            std::thread::sleep(std::time::Duration::from_millis(400));
+        })
+    };
+    wait.recv().unwrap();
+    let ticket = invoke(&view, "agent_models_begin", json!({})).unwrap();
+    let result = invoke(
+        &view,
+        "agent_models_run",
+        json!({"ticket":ticket,"request":{
+            "host":"","filter":"","action":"connect","edit":{
+                "name":"Pi draft","systemPrompt":"","workspace":dir.path(),
+                "harness":{"command":tools.join("buzz-pi-acp"),"args":[],"provider":"","model":""},
+                "environment":{}
+            }
+        }}),
+    )
+    .unwrap();
+    holder.join().unwrap();
+    assert_eq!(
+        result["models"],
+        json!([{"id":"databricks/model-a","name":"databricks/model-a"}])
+    );
+}
+
+#[cfg(unix)]
+#[test]
+fn pi_connection_test_prompts_the_draft_selection() {
+    use std::os::unix::fs::PermissionsExt;
+    let (dir, _host, _app, view) = fixture();
+    let tools = dir.path().join("tools");
+    std::fs::create_dir(&tools).unwrap();
+    for tool in ["pi", "node", "buzz-pi-acp"] {
+        let file = tools.join(tool);
+        std::fs::write(&file, "#!/bin/sh\nread request\ncase \"$*\" in *'--model model-a'*) stop=stop;; *) stop=error;; esac\nprintf '{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"stopReason\":\"%s\",\"errorMessage\":\"401\"}}\\n' \"$stop\"\n").unwrap();
+        std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let test = |model: &str| {
+        let ticket = invoke(&view, "agent_models_begin", json!({})).unwrap();
+        invoke(
+            &view,
+            "agent_models_run",
+            json!({"ticket":ticket,"request":{
+                "host":"","filter":"","action":"test","edit":{
+                    "name":"Pi draft","systemPrompt":"","workspace":dir.path(),
+                    "harness":{"command":tools.join("buzz-pi-acp"),"args":[],"provider":"databricks","model":model},
+                    "environment":{}
+                }
+            }}),
+        )
+    };
+    assert_eq!(test("model-a").unwrap()["models"], json!([]));
+    let error = test("model-b").unwrap_err();
+    assert!(
+        error.as_str().unwrap().contains("rejected the API key"),
+        "{error}"
     );
 }
 

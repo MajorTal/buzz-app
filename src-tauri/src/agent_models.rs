@@ -49,6 +49,8 @@ enum Operation {
     Connect,
     Refresh,
     Disconnect,
+    /// Pi only: one tiny prompt with the draft's provider and model.
+    Test,
 }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -264,11 +266,12 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
             .and_then(|n| n.to_str())
             == Some("buzz-pi-acp")
     }) {
+        let edit = request.edit.clone().unwrap();
         let prepared = controller
             .pi_model_context(
                 request.id.as_deref(),
                 request.expected_revision,
-                request.edit.clone().unwrap(),
+                edit.clone(),
             )
             .await;
         return host
@@ -276,7 +279,18 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
                 if request.action == Operation::Disconnect {
                     return Err("Pi credentials are managed by Pi".into());
                 }
-                let models = crate::pi_models::fetch(prepared?)
+                let context = prepared?;
+                if request.action == Operation::Test {
+                    let harness = &edit.harness;
+                    crate::pi_models::test(context, &harness.provider, &harness.model).await?;
+                    return Ok(Catalog {
+                        host: String::new(),
+                        models: vec![],
+                        model_overridden: false,
+                        disconnected: false,
+                    });
+                }
+                let models = crate::pi_models::fetch(context)
                     .await?
                     .into_iter()
                     .map(|id| Model {
@@ -290,6 +304,13 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
                     model_overridden: false,
                     disconnected: false,
                 })
+            })
+            .await;
+    }
+    if request.action == Operation::Test {
+        return host
+            .run(ticket, async {
+                Err("Connection tests are only available for Pi".into())
             })
             .await;
     }

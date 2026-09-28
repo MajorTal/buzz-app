@@ -29,14 +29,19 @@ pub(crate) struct Snapshot {
     restart_failures: Option<usize>,
 }
 impl Snapshot {
-    fn from(data: ControlSnapshot, import_available: bool, workspace: &std::path::Path) -> Self {
+    fn from(
+        data: ControlSnapshot,
+        import_available: bool,
+        workspace: &std::path::Path,
+        app_data: &std::path::Path,
+    ) -> Self {
         Self {
             data,
             import_available,
             create_available: import_available,
             avatar_editing_available: true,
             default_workspace: workspace.to_string_lossy().into_owned(),
-            harness_options: harness_options(),
+            harness_options: harness_options(app_data),
             databricks_defaults: crate::agent_models::defaults(),
             agent_defaults: buzz_agent_controller::build_defaults(),
             restarted: None,
@@ -134,13 +139,46 @@ fn pi_status(cli: bool, adapter: bool, node: bool) -> &'static str {
     }
 }
 
-fn harness_options() -> Vec<HarnessOption> {
+struct PiTools {
+    cli: Option<PathBuf>,
+    adapter: Option<PathBuf>,
+    node: Option<PathBuf>,
+}
+
+fn pi_choice(user: PiTools, managed: PiTools) -> (Option<PathBuf>, &'static str) {
+    // An existing, complete user install always wins. Otherwise use the
+    // app-owned pair only when its pinned Node can run its npm shims.
+    let selected = if user.cli.is_some() && user.adapter.is_some() && user.node.is_some() {
+        user
+    } else if managed.adapter.is_some() && managed.node.is_some() {
+        PiTools {
+            cli: managed.cli.or(user.cli),
+            ..managed
+        }
+    } else {
+        user
+    };
+    let status = pi_status(
+        selected.cli.is_some(),
+        selected.adapter.is_some(),
+        selected.node.is_some(),
+    );
+    (selected.adapter, status)
+}
+
+fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
     let goose = installed_goose();
-    let pi = buzz_agent_controller::installed("buzz-pi-acp");
-    let pi_status = pi_status(
-        buzz_agent_controller::installed("pi").is_some(),
-        pi.is_some(),
-        buzz_agent_controller::installed("node").is_some(),
+    let (pi, pi_status) = pi_choice(
+        PiTools {
+            cli: buzz_agent_controller::installed("pi"),
+            adapter: buzz_agent_controller::installed("buzz-pi-acp"),
+            node: buzz_agent_controller::installed("node"),
+        },
+        PiTools {
+            cli: buzz_agent_controller::managed_tool(app_data, "pi"),
+            adapter: buzz_agent_controller::managed_tool(app_data, "buzz-pi-acp"),
+            node: buzz_agent_controller::managed_tool(app_data, "node"),
+        },
     );
     vec![
         HarnessOption {
@@ -179,30 +217,13 @@ fn harness_options() -> Vec<HarnessOption> {
             label: "Pi",
             available: pi_status == "ready",
             status: pi_status,
-            install_supported: None,
+            install_supported: Some(cfg!(all(
+                any(target_os = "macos", target_os = "linux"),
+                any(target_arch = "x86_64", target_arch = "aarch64")
+            ))),
             default_args: &[],
-            providers: &[
-                ProviderOption {
-                    value: "anthropic",
-                    label: "Anthropic",
-                },
-                ProviderOption {
-                    value: "openai",
-                    label: "OpenAI",
-                },
-                ProviderOption {
-                    value: "openai-codex",
-                    label: "OpenAI Codex",
-                },
-                ProviderOption {
-                    value: "google",
-                    label: "Google",
-                },
-                ProviderOption {
-                    value: "openrouter",
-                    label: "OpenRouter",
-                },
-            ],
+            // Pi reports signed-in providers through its model catalog.
+            providers: &[],
         },
     ]
 }
@@ -224,6 +245,7 @@ struct Host {
     imports: Imports,
     legacy_parent: PathBuf,
     workspace: PathBuf,
+    app_data: PathBuf,
     closed: bool,
     credentials: Arc<dyn Credentials>,
     starts: BTreeMap<String, (u64, Option<String>)>,
@@ -243,6 +265,10 @@ impl Host {
         bundle: Result<RuntimeBundle, String>,
         credentials: Arc<dyn Credentials>,
     ) -> Result<Self, String> {
+        let app_data = root
+            .parent()
+            .ok_or("Invalid local agent storage")?
+            .to_path_buf();
         let store = Store::open(root)?;
         let controller = Controller::new(
             store,
@@ -255,6 +281,7 @@ impl Host {
             imports: Imports::default(),
             legacy_parent,
             workspace,
+            app_data,
             closed: false,
             credentials,
             starts: BTreeMap::new(),
@@ -267,9 +294,14 @@ impl Host {
         })
     }
     fn snapshot(&mut self) -> Result<Snapshot, String> {
-        self.controller
-            .snapshot()
-            .map(|data| Snapshot::from(data, cfg!(target_os = "macos"), &self.workspace))
+        self.controller.snapshot().map(|data| {
+            Snapshot::from(
+                data,
+                cfg!(target_os = "macos"),
+                &self.workspace,
+                &self.app_data,
+            )
+        })
     }
     fn action(&mut self, id: &str, action: Action) -> Result<Snapshot, String> {
         self.starts.remove(id);
@@ -423,7 +455,7 @@ impl AgentHost {
             .await
             .unwrap_or_default();
         for id in ids {
-            let _ = start(self.clone(), id, Action::Start, true, None, false).await;
+            let _ = start(self.clone(), id, Action::Start, true, None, None).await;
         }
     }
     pub(crate) async fn ensure_open(&self) -> Result<(), String> {
@@ -434,13 +466,25 @@ impl AgentHost {
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) async fn waiting_for_goose(&self) -> Result<Vec<String>, String> {
+        self.waiting_for(crate::harness_setup::waiting_for_goose)
+            .await
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    pub(crate) async fn waiting_for_pi(&self) -> Result<Vec<String>, String> {
+        self.waiting_for(crate::harness_setup::waiting_for_pi).await
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    async fn waiting_for(
+        &self,
+        predicate: fn(&buzz_agent_controller::AgentView) -> bool,
+    ) -> Result<Vec<String>, String> {
         run(self.clone(), move |host| {
             Ok(host
                 .controller
                 .snapshot()?
                 .agents
                 .iter()
-                .filter(|agent| crate::harness_setup::waiting_for_goose(agent))
+                .filter(|agent| predicate(agent))
                 .map(|agent| agent.id.clone())
                 .collect())
         })
@@ -701,21 +745,32 @@ pub(crate) async fn agent_control_action(
     if matches!(action, Action::Stop) {
         return run(owner, move |host| host.action(&id, action)).await;
     }
-    start(owner, id, action, false, replay_floor, false).await
+    start(owner, id, action, false, replay_floor, None).await
 }
 pub(crate) const NOT_WAITING_FOR_GOOSE: &str = "Agent no longer waiting for Goose";
+pub(crate) const NOT_WAITING_FOR_PI: &str = "Agent no longer waiting for Pi";
+#[derive(Clone, Copy)]
+pub(crate) enum InstallRestart {
+    Goose,
+    Pi,
+}
 pub(crate) async fn start(
     owner: AgentHost,
     id: String,
     action: Action,
     restore: bool,
     replay_floor: Option<u64>,
-    from_goose_install: bool,
+    install_restart: Option<InstallRestart>,
 ) -> Result<Snapshot, String> {
-    let guard = from_goose_install.then_some((
-        crate::harness_setup::waiting_for_goose as fn(&_) -> bool,
-        NOT_WAITING_FOR_GOOSE,
-    ));
+    let guard = install_restart.map(|harness| -> StartGuard {
+        match harness {
+            InstallRestart::Goose => (
+                crate::harness_setup::waiting_for_goose,
+                NOT_WAITING_FOR_GOOSE,
+            ),
+            InstallRestart::Pi => (crate::harness_setup::waiting_for_pi, NOT_WAITING_FOR_PI),
+        }
+    });
     start_guarded(owner, id, action, restore, replay_floor, guard).await
 }
 const START_CANCELLED: &str = "Start cancelled by a newer action";

@@ -1,7 +1,7 @@
-//! Device-local Goose setup. Never run the installer in a webview or accept a command from IPC.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-use crate::agents;
+//! Device-local Harnesses setup. Never run installers in a webview or accept a command from IPC.
 use crate::agents::AgentHost;
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+use crate::agents::{self, InstallRestart};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use buzz_agent_controller::Action;
 use buzz_agent_controller::ProcessStatus;
@@ -53,7 +53,7 @@ impl HarnessSetup {
     fn claim(&self) -> Result<InstallGuard<'_>, String> {
         self.0
             .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
-            .map_err(|_| "A Goose installation is already in progress".to_owned())?;
+            .map_err(|_| "A Harness installation is already in progress".to_owned())?;
         let guard = InstallGuard(self);
         if self
             .1
@@ -67,7 +67,7 @@ impl HarnessSetup {
     }
     /// Quit either prevents spawning or observes the registered process group.
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    fn spawn(
+    pub(crate) fn spawn(
         &self,
         spawn: impl FnOnce() -> std::io::Result<tokio::process::Child>,
     ) -> Result<InstallerChild<'_>, String> {
@@ -78,9 +78,9 @@ impl HarnessSetup {
         if state.shutting_down {
             return Err("Buzz is quitting".into());
         }
-        let child = spawn().map_err(|_| "Could not start the Goose installer".to_owned())?;
+        let child = spawn().map_err(|_| "Could not start the Harness installer".to_owned())?;
         let group = child.id();
-        state.group = Some(group.ok_or("Could not start the Goose installer")?);
+        state.group = Some(group.ok_or("Could not start the Harness installer")?);
         Ok(InstallerChild {
             child,
             group,
@@ -193,11 +193,11 @@ where
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
-struct InstallerChild<'a> {
-    child: tokio::process::Child,
+pub(crate) struct InstallerChild<'a> {
+    pub(crate) child: tokio::process::Child,
     group: Option<u32>,
     setup: &'a HarnessSetup,
-    reaped: bool,
+    pub(crate) reaped: bool,
 }
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 impl Drop for InstallerChild<'_> {
@@ -265,18 +265,35 @@ pub(crate) fn waiting_for_goose(agent: &buzz_agent_controller::AgentView) -> boo
         agent.enabled,
         agent.status,
         &agent.harness.command,
+        "goose",
         agent.error.as_deref(),
     )
 }
 
-fn waiting(enabled: bool, status: ProcessStatus, command: &str, error: Option<&str>) -> bool {
+pub(crate) fn waiting_for_pi(agent: &buzz_agent_controller::AgentView) -> bool {
+    waiting(
+        agent.enabled,
+        agent.status,
+        &agent.harness.command,
+        "buzz-pi-acp",
+        agent.error.as_deref(),
+    )
+}
+
+fn waiting(
+    enabled: bool,
+    status: ProcessStatus,
+    command: &str,
+    name: &str,
+    error: Option<&str>,
+) -> bool {
     if !enabled || status != ProcessStatus::Failed {
         return false;
     }
     if Path::new(command)
         .file_name()
         .and_then(|name| name.to_str())
-        != Some("goose")
+        != Some(name)
     {
         return false;
     }
@@ -331,11 +348,84 @@ pub(crate) async fn goose_install<R: tauri::Runtime>(
                 Action::Restart,
                 false,
                 None,
-                true,
+                Some(InstallRestart::Goose),
             )
             .await
             {
                 Err(error) if error == agents::NOT_WAITING_FOR_GOOSE => continue,
+                Ok(snapshot)
+                    if snapshot
+                        .data
+                        .agents
+                        .iter()
+                        .any(|agent| agent.id == id && agent.status == ProcessStatus::Running) =>
+                {
+                    report.restarted += 1
+                }
+                _ => report.restart_failures += 1,
+            }
+        }
+        Ok(report)
+    }
+}
+
+#[tauri::command]
+pub(crate) async fn pi_install<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    state: tauri::State<'_, HarnessSetup>,
+    agents: tauri::State<'_, AgentHost>,
+) -> Result<InstallReport, String> {
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = (app, state, agents);
+        return Err("Pi installation is supported only on macOS and Linux".into());
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux"))]
+    {
+        let _guard = state.claim()?;
+        let app_data = app
+            .path()
+            .app_data_dir()
+            .map_err(|_| "Could not resolve Pi install storage")?;
+        if ["pi", "buzz-pi-acp", "node"]
+            .iter()
+            .all(|name| buzz_agent_controller::installed(name).is_some())
+            || ["pi", "buzz-pi-acp", "node"]
+                .iter()
+                .all(|name| buzz_agent_controller::managed_tool(&app_data, name).is_some())
+        {
+            return Err("Pi is already installed; click Check again".into());
+        }
+        let waiting = agents.waiting_for_pi().await?;
+        let path = app_data.join("agent-controller/pi-install.log");
+        let mut report = run_install(&path, |log| {
+            crate::managed_pi::install(state.inner(), &app_data, log)
+        })
+        .await?;
+        if !report.ready {
+            return Ok(report);
+        }
+        if buzz_agent_controller::managed_tool(&app_data, "pi").is_none()
+            || buzz_agent_controller::managed_tool(&app_data, "buzz-pi-acp").is_none()
+            || buzz_agent_controller::managed_tool(&app_data, "node").is_none()
+        {
+            report.ready = false;
+            report.error =
+                Some("Pi install finished but its tools were not found. See the log.".into());
+            return Ok(report);
+        }
+        for id in waiting {
+            match agents::start(
+                agents.inner().clone(),
+                id.clone(),
+                Action::Restart,
+                false,
+                None,
+                Some(InstallRestart::Pi),
+            )
+            .await
+            {
+                Err(error) if error == agents::NOT_WAITING_FOR_PI => continue,
                 Ok(snapshot)
                     if snapshot
                         .data

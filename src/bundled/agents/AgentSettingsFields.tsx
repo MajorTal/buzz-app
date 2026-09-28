@@ -14,6 +14,7 @@ import {
   gooseApiKey,
   harnessKind,
   isGoose,
+  PI_API_KEYS,
   type AgentDraft,
 } from "./agent-edit";
 import { AgentEnvironmentEditor } from "./AgentEnvironmentEditor";
@@ -26,6 +27,14 @@ function effectiveGooseProvider(draft: AgentDraft, savedKeys: string[]) {
   if (override === undefined && savedKeys.includes("GOOSE_PROVIDER"))
     return null;
   return draft.provider;
+}
+
+function providerApiKey(draft: AgentDraft, savedKeys: string[]) {
+  if (draft.command.split("/").at(-1) === "buzz-pi-acp")
+    return PI_API_KEYS[draft.provider];
+  if (!isGoose(draft.command)) return undefined;
+  const provider = effectiveGooseProvider(draft, savedKeys);
+  return provider ? gooseApiKey(provider) : undefined;
 }
 
 /** Create and Edit share the same settings and native model discovery. */
@@ -52,7 +61,7 @@ export function AgentSettingsFields({
   environmentKeys?: string[];
   onChange(patch: Partial<AgentDraft>): void;
 }) {
-  const [piProviders, setPiProviders] = useState<string[]>([]);
+  const [piProviders, setPiProviders] = useState<string[] | null>([]);
   const [revealed, setRevealed] = useState<string | null>(null);
   const pi = draft.command.split("/").at(-1) === "buzz-pi-acp";
   const goose = isGoose(draft.command);
@@ -114,7 +123,7 @@ export function AgentSettingsFields({
     host: inheritedKey("DATABRICKS_HOST"),
     filter: inheritedKey("DATABRICKS_MODEL_FILTER"),
   };
-  const apiKey = gooseProvider ? gooseApiKey(gooseProvider) : undefined;
+  const apiKey = providerApiKey(draft, environmentKeys);
   const savedKey = !!apiKey && environmentKeys.includes(apiKey.env);
   // Saved keys are write-only; only a key typed for this provider can be shown.
   const typedKey = apiKey && draft.environment[apiKey.env] ? apiKey.env : null;
@@ -123,14 +132,14 @@ export function AgentSettingsFields({
   if (revealed !== null && revealed !== typedKey) setRevealed(null);
   const revealKey = revealed !== null && revealed === typedKey;
   const change = (patch: Partial<AgentDraft>) => {
-    const next = { ...draft, ...patch };
-    const nextProvider = isGoose(next.command)
-      ? effectiveGooseProvider(next, environmentKeys)
-      : null;
-    if (gooseProvider !== nextProvider && gooseProvider) {
-      const key = gooseApiKey(gooseProvider)?.env;
+    const key = apiKey?.env;
+    // A typed key belongs to the provider it was entered for.
+    if (
+      key &&
+      providerApiKey({ ...draft, ...patch }, environmentKeys)?.env !== key
+    ) {
       const environment = { ...(patch.environment ?? draft.environment) };
-      if (key && typeof environment[key] === "string") {
+      if (typeof environment[key] === "string") {
         delete environment[key];
         onChange({ ...patch, environment });
         return;
@@ -212,7 +221,9 @@ export function AgentSettingsFields({
                         ? "Will remove on save"
                         : savedKey
                           ? "Saved key unchanged"
-                          : "Paste API key or use existing Goose credentials"
+                          : pi
+                            ? "Paste API key or use an existing Pi sign-in"
+                            : "Paste API key or use existing Goose credentials"
                     }
                     onChange={(event) => {
                       const environment = { ...draft.environment };
@@ -226,9 +237,10 @@ export function AgentSettingsFields({
               </Field>
               <p className="text-body-sm text-secondary">
                 {apiKey.env} is used for this agent and model lookup. Leave
-                blank to keep a saved key, if present, or use Goose credentials.
-                Saved keys are stored in this device’s local agent settings
-                files.
+                blank to keep a saved key, if present, or use{" "}
+                {pi ? "your Pi sign-in" : "Goose credentials"}. Keys exported in
+                your shell profile are not used. Saved keys are stored in this
+                device’s local agent settings files.
               </p>
             </div>
           )}
@@ -246,9 +258,10 @@ export function AgentSettingsFields({
           />
           {pi && (
             <p className="text-body-sm text-secondary">
-              Browse loads available models and providers from your local Pi
-              configuration, including extensions. Configure sign-in in Pi
-              first. Save restarts a running agent to apply changes.
+              Providers and models load from your local Pi configuration,
+              including extensions. To use a provider that isn’t signed in,
+              choose it and add its API key. Save restarts a running agent to
+              apply changes.
             </p>
           )}
         </fieldset>

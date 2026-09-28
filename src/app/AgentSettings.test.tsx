@@ -92,9 +92,14 @@ function setupHarnesses(
     installSupported?: boolean;
     installGoose?: NonNullable<AgentControlHost["installGoose"]>;
   } = {},
+  pi: {
+    installSupported?: boolean;
+    installPi?: NonNullable<AgentControlHost["installPi"]>;
+  } = {},
 ) {
   const fixture = controlFixture();
   if (goose.installGoose) fixture.host.installGoose = goose.installGoose;
+  if (pi.installPi) fixture.host.installPi = pi.installPi;
   fixture.data.harnessOptions = [
     {
       command: "buzz-agent",
@@ -118,6 +123,9 @@ function setupHarnesses(
       label: "Pi",
       available: piStatus === "ready",
       status: piStatus,
+      ...(pi.installSupported !== undefined
+        ? { installSupported: pi.installSupported }
+        : {}),
       providers: [],
     },
   ];
@@ -367,4 +375,114 @@ it("keeps Install available and shows the recorded output on failure", async () 
   );
   await user.click(screen.getByText("Goose install log"));
   expect(screen.getByText("curl failed to fetch the installer")).toBeVisible();
+});
+
+it.each([
+  ["cli-needed", true, true],
+  ["adapter-needed", true, true],
+  ["ready", true, false],
+  ["cli-needed", false, false],
+  ["adapter-needed", false, false],
+] as const)(
+  "shows Pi Install only when needed and supported (%s, %s)",
+  async (status, supported, visible) => {
+    setupHarnesses(
+      status,
+      {},
+      { installSupported: supported, installPi: vi.fn() },
+    );
+    const pi = within(await screen.findByRole("list")).getAllByRole(
+      "listitem",
+    )[2];
+    if (!pi) throw new Error("Missing Pi row");
+    expect(within(pi).queryByRole("button", { name: "Install" }) !== null).toBe(
+      visible,
+    );
+    if (status !== "ready")
+      expect(
+        screen.getByRole("button", { name: "Copy Pi command" }),
+      ).toBeVisible();
+  },
+);
+
+it("keeps Pi install progress and report across Settings remounts without taking the agent-write lane", async () => {
+  const user = userEvent.setup();
+  let complete!: (report: GooseInstallReport) => void;
+  const installing = new Promise<GooseInstallReport>((resolve) => {
+    complete = resolve;
+  });
+  const installPi = vi.fn(() => installing);
+  const { control, fixture } = setupHarnesses(
+    "adapter-needed",
+    {},
+    { installSupported: true, installPi },
+  );
+  const pi = within(await screen.findByRole("list")).getAllByRole(
+    "listitem",
+  )[2];
+  if (!pi) throw new Error("Missing Pi row");
+  await user.click(within(pi).getByRole("button", { name: "Install" }));
+  expect(
+    await screen.findByText("Installing Pi and its ACP adapter…"),
+  ).toBeVisible();
+  expect(control.snapshot().busy).toBe(false);
+  expect(installPi).toHaveBeenCalledTimes(1);
+  cleanup();
+  render(<AgentSettings control={control} />, { wrapper: ToastProvider });
+  expect(
+    await screen.findByText("Installing Pi and its ACP adapter…"),
+  ).toBeVisible();
+  const option = fixture.data.harnessOptions?.[2];
+  if (!option) throw new Error("Missing Pi fixture");
+  option.status = "ready";
+  option.available = true;
+  complete({
+    ready: true,
+    restarted: 1,
+    restartFailures: 0,
+    logPath: "/fixture/pi-install.log",
+    output: "done",
+    error: null,
+  });
+  expect(
+    await screen.findByText("Pi installed. Restarted 1 waiting agents."),
+  ).toBeVisible();
+  cleanup();
+  render(<AgentSettings control={control} />, { wrapper: ToastProvider });
+  expect(
+    await screen.findByText("Pi installed. Restarted 1 waiting agents."),
+  ).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Copy Pi command" })).toBeNull();
+});
+
+it("disables Goose Install during a Pi installation", async () => {
+  const user = userEvent.setup();
+  let complete!: (report: GooseInstallReport) => void;
+  const pending = new Promise<GooseInstallReport>((resolve) => {
+    complete = resolve;
+  });
+  const gooseInstall = vi.fn();
+  setupHarnesses(
+    "cli-needed",
+    { installSupported: true, installGoose: gooseInstall },
+    { installSupported: true, installPi: () => pending },
+  );
+  const rows = within(await screen.findByRole("list")).getAllByRole("listitem");
+  if (!rows[1] || !rows[2]) throw new Error("Missing Harness rows");
+  await user.click(within(rows[2]).getByRole("button", { name: "Install" }));
+  expect(
+    within(rows[1]).getByRole("button", { name: "Install" }),
+  ).toBeDisabled();
+  complete({
+    ready: false,
+    restarted: 0,
+    restartFailures: 0,
+    logPath: "/fixture/pi-install.log",
+    output: "failed",
+    error: "Pi install failed",
+  });
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Pi install failed",
+  );
+  expect(gooseInstall).not.toHaveBeenCalled();
 });

@@ -74,34 +74,39 @@ fn only_enabled_goose_waiting_for_a_missing_cli_restarts() {
         true,
         Failed,
         "/home/user/.local/bin/goose",
+        "goose",
         Some("Required runtime executable is missing")
     ));
     // Enabled but never started this session is not evidence of waiting.
-    assert!(!waiting(true, Stopped, "goose", None));
+    assert!(!waiting(true, Stopped, "goose", "goose", None));
     assert!(!waiting(
         true,
         Failed,
         "goose",
+        "goose",
         Some("Choose the installed harness's absolute executable path")
     ));
-    assert!(!waiting(false, Stopped, "goose", None));
+    assert!(!waiting(false, Stopped, "goose", "goose", None));
     assert!(!waiting(
         false,
         Failed,
         "goose",
+        "goose",
         Some("Required runtime executable is missing")
     ));
-    assert!(!waiting(true, Running, "goose", None));
-    assert!(!waiting(true, Stopped, "buzz-agent", None));
+    assert!(!waiting(true, Running, "goose", "goose", None));
+    assert!(!waiting(true, Stopped, "buzz-agent", "goose", None));
     assert!(!waiting(
         true,
         Failed,
+        "goose",
         "goose",
         Some("Agent listener exited; restart to retry")
     ));
     assert!(!waiting(
         true,
         Failed,
+        "goose",
         "goose",
         Some("Saved agent key is unavailable")
     ));
@@ -232,4 +237,55 @@ fn a_finished_install_clears_its_group_without_killing_it_again_on_quit() {
     state.shutdown();
     drop(guard);
     assert_eq!(state.claim().err().as_deref(), Some("Buzz is quitting"));
+}
+
+#[test]
+fn goose_and_pi_claim_the_same_app_lifetime_install_guard() {
+    let setup = HarnessSetup::default();
+    let goose = setup.claim().unwrap();
+    assert_eq!(
+        setup.claim().err().as_deref(),
+        Some("A Harness installation is already in progress")
+    );
+    drop(goose);
+    let pi = setup.claim().unwrap();
+    assert!(setup.claim().is_err());
+    drop(pi);
+    setup.shutdown();
+    assert_eq!(setup.claim().err().as_deref(), Some("Buzz is quitting"));
+}
+
+#[test]
+fn only_failed_enabled_pi_waiting_for_its_missing_adapter_restarts() {
+    use ProcessStatus::{Failed, Running, Stopped};
+    assert!(waiting(
+        true,
+        Failed,
+        "/managed/node-tools/bin/buzz-pi-acp",
+        "buzz-pi-acp",
+        Some("Required runtime executable is missing")
+    ));
+    assert!(!waiting(
+        false,
+        Failed,
+        "/managed/node-tools/bin/buzz-pi-acp",
+        "buzz-pi-acp",
+        Some("Required runtime executable is missing")
+    ));
+    assert!(!waiting(true, Stopped, "buzz-pi-acp", "buzz-pi-acp", None));
+    assert!(!waiting(true, Running, "buzz-pi-acp", "buzz-pi-acp", None));
+    assert!(!waiting(
+        true,
+        Failed,
+        "goose",
+        "buzz-pi-acp",
+        Some("Required runtime executable is missing")
+    ));
+    assert!(!waiting(
+        true,
+        Failed,
+        "buzz-pi-acp",
+        "buzz-pi-acp",
+        Some("Agent listener exited; restart to retry")
+    ));
 }

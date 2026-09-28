@@ -169,7 +169,7 @@ it("switching Pi, Goose and Buzz resets incompatible selections and uses each ha
             defaultArgs: [],
           },
         ]}
-        piProviders={["extension"]}
+        piProviders={["extension", "openai"]}
         onChange={(patch) => setDraft((d) => ({ ...d, ...patch }))}
       />
     );
@@ -185,7 +185,23 @@ it("switching Pi, Goose and Buzz resets incompatible selections and uses each ha
     model: "",
   });
   await user.click(screen.getByRole("combobox", { name: "LLM Provider" }));
-  await user.click(await screen.findByRole("option", { name: "extension" }));
+  const extension = await screen.findByRole("option", { name: "extension" });
+  // Signed-in providers come from the catalog; the static harness list is
+  // ignored, and key providers that are not signed in say so.
+  expect(screen.getByRole("option", { name: "OpenAI" })).toBeVisible();
+  expect(
+    screen.getByRole("option", { name: "Anthropic (API key needed)" }),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("option", { name: "Google Gemini (API key needed)" }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("option", { name: "OpenAI (API key needed)" }),
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("option", { name: "Anthropic" }),
+  ).not.toBeInTheDocument();
+  await user.click(extension);
   expect(current.provider).toBe("extension");
   await user.click(screen.getByRole("combobox", { name: "Harness" }));
   await user.click(await screen.findByRole("option", { name: "Goose" }));
@@ -203,4 +219,34 @@ it("switching Pi, Goose and Buzz resets incompatible selections and uses each ha
     provider: "databricks_v2",
     model: "",
   });
+});
+
+it("disables Pi's provider list while signed-in providers load and keeps the current choice", () => {
+  const f = controlFixture();
+  render(
+    <AgentHarnessEditor
+      draft={{
+        ...agentDraft(f.agent),
+        command: "/local/buzz-pi-acp",
+        provider: "databricks",
+      }}
+      options={[
+        {
+          command: "/local/buzz-pi-acp",
+          label: "Pi",
+          providers: [],
+          defaultArgs: [],
+        },
+      ]}
+      piProviders={null}
+      onChange={() => {}}
+    />,
+  );
+  const provider = screen.getByRole("combobox", { name: "LLM Provider" });
+  expect(provider).toHaveTextContent("databricks");
+  expect(provider).toHaveAttribute("data-disabled");
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Loading signed-in providers…",
+  );
+  expect(screen.queryByLabelText("Custom provider")).toBeNull();
 });

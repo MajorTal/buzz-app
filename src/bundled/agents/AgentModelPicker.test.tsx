@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { useState } from "react";
+import { StrictMode, useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -424,10 +424,111 @@ it("Pi discovers extension providers before start and selects the exact provider
   }
 });
 
+it("Pi loads its signed-in providers when selected, without Browse", async () => {
+  const f = controlFixture();
+  const run = vi.fn(async () => ({
+    host: "",
+    models: [
+      { id: "databricks/model-a", name: "databricks/model-a" },
+      { id: "ds4/model-b", name: "ds4/model-b" },
+    ],
+    modelOverridden: false,
+    disconnected: false,
+  }));
+  f.host.models = { begin: async () => 1, run, cancel: async () => {} };
+  const control = createAgentControl(f.host);
+  const providers = vi.fn();
+  const renderPicker = (command: string) => (
+    <AgentModelPicker
+      draft={{ ...agentDraft(f.agent), command, provider: "", model: "" }}
+      control={control}
+      defaults={{ host: "", filter: "" }}
+      onPiProviders={providers}
+      onChange={() => {}}
+    />
+  );
+  const view = render(renderPicker("/local/goose"));
+  try {
+    // Goose may start OAuth, so it still waits for an explicit Browse.
+    expect(run).not.toHaveBeenCalled();
+    view.rerender(renderPicker("/local/buzz-pi-acp"));
+    await waitFor(() =>
+      expect(providers).toHaveBeenLastCalledWith(["databricks", "ds4"]),
+    );
+    expect(run).toHaveBeenCalledOnce();
+    expect(run).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ action: "connect" }),
+    );
+  } finally {
+    view.unmount();
+    control.dispose();
+  }
+});
+
+it("Pi's automatic lookup survives a StrictMode remount under single native admission", async () => {
+  const f = controlFixture();
+  let pending: number | null = null;
+  let next = 0;
+  const started = new Set<number>();
+  const begin = vi.fn(async () => {
+    if (pending !== null)
+      throw "Another model connection request is in progress; cancel it first";
+    pending = ++next;
+    return pending;
+  });
+  f.host.models = {
+    begin,
+    run: async (ticket) => {
+      started.add(ticket);
+      pending = null;
+      return {
+        host: "",
+        models: [{ id: "databricks/model-a", name: "databricks/model-a" }],
+        modelOverridden: false,
+        disconnected: false,
+      };
+    },
+    cancel: async (ticket) => {
+      if (pending === ticket && !started.has(ticket)) pending = null;
+    },
+  };
+  const control = createAgentControl(f.host);
+  const providers = vi.fn();
+  const view = render(
+    <StrictMode>
+      <AgentModelPicker
+        draft={{
+          ...agentDraft(f.agent),
+          command: "/local/buzz-pi-acp",
+          provider: "",
+          model: "",
+        }}
+        control={control}
+        defaults={undefined}
+        onPiProviders={providers}
+        onChange={() => {}}
+      />
+    </StrictMode>,
+  );
+  try {
+    await waitFor(() =>
+      expect(providers).toHaveBeenLastCalledWith(["databricks"]),
+    );
+    // The remount's lookup waited for the first ticket instead of being refused.
+    expect(begin).toHaveBeenCalledTimes(2);
+    expect(providers).toHaveBeenCalledWith(null);
+    expect(screen.queryByText(/Another model connection/)).toBeNull();
+  } finally {
+    view.unmount();
+    control.dispose();
+  }
+});
+
 it("explains an empty Pi provider in the open model list without discarding other providers", async () => {
   const f = controlFixture();
   const message =
-    "No Pi models for this provider. If it needs an API key, add the provider's key variable under Advanced → Environment overrides or configure it in Pi's auth.json (for example, with /login). Then refresh models.";
+    "No Pi models for this provider. Buzz doesn’t use API keys exported in your shell profile. Add this provider’s API key for this agent, then browse models again.";
   const run = vi.fn(async () => ({
     host: "",
     models: [{ id: "openai/model", name: "openai/model" }],
@@ -702,6 +803,85 @@ it("Pi clears discovered providers when catalog context changes or the picker un
     }
     view.unmount();
     expect(providers).toHaveBeenLastCalledWith([]);
+  } finally {
+    view.unmount();
+    control.dispose();
+  }
+});
+
+it("Pi Test connection prompts the draft selection and reports each result", async () => {
+  const f = controlFixture();
+  const tests: { resolve(): void; reject(error: string): void }[] = [];
+  const run = vi.fn(
+    async (_ticket: number, request: { action: string }) =>
+      new Promise<ModelCatalog>((resolve, reject) => {
+        const catalog = {
+          host: "",
+          models: [{ id: "openai/gpt", name: "openai/gpt" }],
+          modelOverridden: false,
+          disconnected: false,
+        };
+        if (request.action !== "test") resolve(catalog);
+        else tests.push({ resolve: () => resolve(catalog), reject });
+      }),
+  );
+  f.host.models = { begin: async () => 1, run, cancel: async () => {} };
+  const control = createAgentControl(f.host);
+  const user = userEvent.setup();
+  let draft = {
+    ...agentDraft(f.agent),
+    command: "/local/buzz-pi-acp",
+    args: "[]",
+    provider: "openai",
+    model: "gpt",
+  };
+  const picker = () => (
+    <AgentModelPicker
+      draft={draft}
+      control={control}
+      defaults={undefined}
+      onChange={() => {}}
+    />
+  );
+  const view = render(picker());
+  const button = () => screen.getByRole("button", { name: "Test connection" });
+  try {
+    await waitFor(() => expect(button()).toBeEnabled());
+    await user.click(button());
+    expect(run).toHaveBeenLastCalledWith(
+      1,
+      expect.objectContaining({
+        action: "test",
+        edit: expect.objectContaining({
+          harness: expect.objectContaining({
+            provider: "openai",
+            model: "gpt",
+          }),
+        }),
+      }),
+    );
+    expect(screen.getByText(/Sending a short test message/)).toBeVisible();
+    await act(async () =>
+      tests.at(-1)?.reject("The provider rejected the API key."),
+    );
+    expect(
+      await screen.findByText("The provider rejected the API key."),
+    ).toBeVisible();
+    await user.click(button());
+    await act(async () => tests.at(-1)?.resolve());
+    expect(
+      await screen.findByText("Connected. The model replied."),
+    ).toBeVisible();
+    // An edit retires the in-flight test; returning must not strand its spinner.
+    await user.click(button());
+    draft = { ...draft, model: "other" };
+    view.rerender(picker());
+    draft = { ...draft, model: "gpt" };
+    view.rerender(picker());
+    await waitFor(() => expect(button()).toBeEnabled());
+    expect(
+      screen.queryByText(/Sending a short test message|cancelled/i),
+    ).not.toBeInTheDocument();
   } finally {
     view.unmount();
     control.dispose();

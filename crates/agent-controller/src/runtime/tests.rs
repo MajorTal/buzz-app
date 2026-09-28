@@ -1772,6 +1772,75 @@ fn import_and_repair_deliver_team_instructions_to_a_started_process() {
 
 #[cfg(unix)]
 #[test]
+fn managed_prefix_detection_and_shim_launch_path_use_pinned_node() {
+    use std::os::unix::fs::PermissionsExt;
+    let dir = tempfile::tempdir().unwrap();
+    let app_data = dir.path();
+    let prefix = app_data.join("node-tools/bin");
+    let platform = match (std::env::consts::OS, std::env::consts::ARCH) {
+        ("macos", "aarch64") => "darwin-arm64",
+        ("macos", "x86_64") => "darwin-x64",
+        ("linux", "x86_64") => "linux-x64",
+        ("linux", "aarch64") => "linux-arm64",
+        _ => return,
+    };
+    let node_bin = app_data
+        .join("runtimes/node/v24.18.0")
+        .join(platform)
+        .join("bin");
+    fs::create_dir_all(&prefix).unwrap();
+    fs::create_dir_all(&node_bin).unwrap();
+    for path in [
+        prefix.join("pi"),
+        prefix.join("buzz-pi-acp"),
+        node_bin.join("node"),
+    ] {
+        let script = if path.file_name().is_some_and(|name| name == "node") {
+            "#!/bin/sh\nprintf 'managed-node\\n'\n"
+        } else {
+            "#!/usr/bin/env node\n"
+        };
+        fs::write(&path, script).unwrap();
+        fs::set_permissions(&path, fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    assert_eq!(
+        managed_tool(app_data, "buzz-pi-acp"),
+        Some(prefix.join("buzz-pi-acp"))
+    );
+    assert_eq!(managed_tool(app_data, "node"), Some(node_bin.join("node")));
+    assert!(managed_tool(app_data, "goose").is_none());
+    let mut harness = agent(dir.path()).harness;
+    harness.command = prefix.join("buzz-pi-acp").display().to_string();
+    harness.args.clear();
+    let context =
+        crate::pi::PiContext::new(&harness, dir.path().to_str().unwrap(), &BTreeMap::new())
+            .unwrap();
+    assert_eq!(context.command, prefix.join("pi"));
+    assert_eq!(
+        context.environment["PI_ACP_PI_COMMAND"],
+        prefix.join("pi").display().to_string()
+    );
+    assert_eq!(
+        std::env::split_paths(&context.path).next().unwrap(),
+        node_bin
+    );
+    assert_eq!(std::env::split_paths(&context.path).nth(1).unwrap(), prefix);
+    let output = std::process::Command::new(&context.command)
+        .env_clear()
+        .env("PATH", &context.path)
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    assert_eq!(output.stdout, b"managed-node\n");
+    fs::remove_file(node_bin.join("node")).unwrap();
+    assert!(
+        crate::pi::PiContext::new(&harness, dir.path().to_str().unwrap(), &BTreeMap::new())
+            .is_err()
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn agent_value_beats_agent_default_which_beats_build_default() {
     let dir = tempfile::tempdir().unwrap();
     let bundle = bundle(dir.path());

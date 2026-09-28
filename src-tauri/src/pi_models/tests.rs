@@ -94,6 +94,78 @@ async fn cancellation_kills_lookup_after_observed_start() {
     .unwrap();
 }
 
+#[test]
+fn test_errors_map_to_fixed_text_without_echoing_keys() {
+    // Captured from Pi 0.87 against each provider with a bad key or model.
+    for (error, expected) in [
+        (
+            "No API key found for mistral.\n\nUse /login to log into a provider",
+            "No API key found",
+        ),
+        (
+            r#"OpenAI API error (401): {"message":"Incorrect API key provided: sk-bad*****1234","code":"invalid_api_key"}"#,
+            "rejected the API key",
+        ),
+        (
+            r#"401 {"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}"#,
+            "rejected the API key",
+        ),
+        (
+            r#"{"error":{"code":400,"message":"API key not valid. Please pass a valid API key.","status":"INVALID_ARGUMENT","reason":"API_KEY_INVALID"}}"#,
+            "rejected the API key",
+        ),
+        (
+            r#"401: {"message":"Missing Authentication header","code":401}"#,
+            "rejected the API key",
+        ),
+        (
+            r#"429 {"error":{"code":"insufficient_quota","message":"You exceeded your current quota"}}"#,
+            "out of credits",
+        ),
+        (
+            "400 Your credit balance is too low to access the Anthropic API",
+            "out of credits",
+        ),
+        ("429 Too Many Requests", "rate limiting"),
+        (
+            "databricks API error (404): 404 status code (no body)",
+            "doesn’t recognize this model",
+        ),
+        ("socket hang up sk-4011234", "Connection test failed"),
+    ] {
+        let message = classify(error);
+        assert!(message.contains(expected), "{error} -> {message}");
+        assert!(!message.contains("sk-"));
+    }
+}
+#[cfg(unix)]
+#[tokio::test]
+async fn test_prompts_the_selected_model_and_reports_its_reply() {
+    let reply = |stop: &str, error: &str| {
+        format!("printf '%s\\n' \"$*\" > args\nread request\nprintf '%s\\n' '{{\"type\":\"extension_ui_request\"}}' 'not json' '{{\"type\":\"message_end\",\"message\":{{\"role\":\"user\"}}}}' '{{\"type\":\"message_end\",\"message\":{{\"role\":\"assistant\",\"stopReason\":\"{stop}\",\"errorMessage\":\"{error}\"}}}}'\n")
+    };
+    let (dir, context) = fixture(&reply("stop", ""));
+    test(context, "openai", "ns/gpt").await.unwrap();
+    let args = std::fs::read_to_string(dir.path().join("args")).unwrap();
+    assert!(args.contains("--no-session"), "{args}");
+    assert!(args.contains("--no-tools"), "{args}");
+    assert!(
+        args.ends_with("--provider openai --model ns/gpt\n"),
+        "{args}"
+    );
+    let (_dir, context) = fixture(&reply("error", "401 Incorrect API key provided: sk-secret"));
+    let error = test(context, "openai", "gpt").await.unwrap_err();
+    assert!(error.contains("rejected the API key"), "{error}");
+    assert!(!error.contains("secret"));
+    let (_dir, context) = fixture("read request\nprintf '%s\\n' '{\"id\":\"test\",\"type\":\"response\",\"command\":\"prompt\",\"success\":false,\"error\":\"No API key found for openai.\"}'\n");
+    let error = test(context, "openai", "gpt").await.unwrap_err();
+    assert!(error.contains("No API key found"), "{error}");
+    let (_dir, context) = fixture("exit 1\n");
+    assert!(test(context, "openai", "gpt").await.is_err());
+    let (_dir, context) = fixture("exit 1\n");
+    assert!(test(context, "openai", "").await.is_err());
+}
+
 #[tokio::test]
 #[ignore = "requires explicitly selected installed Pi/ACP and local configuration; no inference"]
 async fn installed_pi_catalog_uses_production_context() {
@@ -127,4 +199,43 @@ async fn installed_pi_catalog_uses_production_context() {
             .collect::<std::collections::BTreeSet<_>>()
             .len()
     );
+}
+
+#[tokio::test]
+#[ignore = "requires installed Pi/ACP and a signed-in BUZZ_TEST_PI_PROVIDER; sends two tiny prompts"]
+async fn installed_pi_connection_test_uses_production_context() {
+    use buzz_agent_controller::{AgentEdit, Controller, HarnessEdit};
+    let adapter = std::env::var("BUZZ_TEST_PI_ADAPTER").expect("set BUZZ_TEST_PI_ADAPTER");
+    let provider = std::env::var("BUZZ_TEST_PI_PROVIDER").expect("set BUZZ_TEST_PI_PROVIDER");
+    let model = std::env::var("BUZZ_TEST_PI_MODEL").expect("set BUZZ_TEST_PI_MODEL");
+    let dir = tempfile::tempdir().unwrap();
+    let context = |environment| {
+        Controller::draft_pi_model_context(AgentEdit {
+            name: "Probe".into(),
+            picture: None,
+            system_prompt: String::new(),
+            workspace: dir.path().display().to_string(),
+            harness: HarnessEdit {
+                command: adapter.clone(),
+                args: vec![],
+                model: String::new(),
+                provider: String::new(),
+                databricks: None,
+            },
+            environment,
+        })
+        .unwrap()
+    };
+    test(context(Default::default()), &provider, &model)
+        .await
+        .unwrap();
+    let bad_key = [(
+        "OPENAI_API_KEY".to_owned(),
+        Some("sk-buzz-invalid".to_owned()),
+    )]
+    .into();
+    let error = test(context(bad_key), "openai", "gpt-4o-mini")
+        .await
+        .unwrap_err();
+    assert!(error.contains("rejected the API key"), "{error}");
 }

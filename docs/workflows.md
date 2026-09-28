@@ -72,13 +72,25 @@ Legacy deletion can retain a visible definition; accepted delivery is not proof
 of runtime cleanup. These backend limitations are displayed, not repaired here.
 
 The landing discovers workflows in serial batches of up to 128 participating
-channel IDs, including authorized DMs. Each channel keeps its own single-`#h`
-kind-30620 filter and 100-event limit, matching the old app's relay-compatible
-batching. Only this exact filter shape gets the reader/broker exception to the
-generic four-filter limit; request/response byte budgets remain unchanged.
-500 memberships need four requests. Signed event IDs are deduplicated before
-counting/folding, and saturated channels are marked partial; a finished scan is
-not proof of an exhaustive runtime inventory.
+channel IDs, including authorized DMs. Each request uses one kind-30620 filter
+whose `#h` contains the whole batch, reading all authors in 100-event pages.
+Full pages continue with the relay's exact `until`/`before_id` cursor, preserving
+same-timestamp definitions. Each batch finishes paging before the next starts
+with a fresh cursor; retry and refresh also start at the head. Signed event IDs
+are deduplicated before counting/folding, and non-advancing pages fail the read.
+The existing reader/broker request and response byte budgets and per-request
+deadlines apply to every page. 500 memberships need four initial requests plus
+continuations for full pages. Single-channel detail reads remain capped at 100
+events and mark saturated results partial. Completed landing batch reads are
+retained in the session workflow capability: returning within ten seconds can
+reuse the matching batch without another relay read, and older retained results
+can warm the landing while a fresh read runs. Retaining a completed batch evicts
+older retained batches that requested any of the same channels, including empty
+results, so targeted save readback cannot leave an overlapping stale landing
+batch reusable. Explicit Refresh, save readback, configuration commands,
+receipts, disconnects, access loss, cache clear and session disposal bypass or
+purge that reuse. Retention is memory-only and bounded; a finished scan is not
+proof of an exhaustive runtime inventory.
 
 Metadata renames/reordering do not restart discovery; new memberships add only
 their missing reads. One stable status replaces

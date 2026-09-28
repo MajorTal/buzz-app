@@ -1,5 +1,4 @@
-/** The relay bounds aggregate explicit channel values at 128. Keep single-channel
- * filters for older-relay compatibility, with the existing per-channel limit. */
+/** The relay bounds aggregate explicit channel values at 128. */
 export const WORKFLOW_CHANNEL_BATCH = 128;
 export const WORKFLOW_DEFINITION_LIMIT = 100;
 

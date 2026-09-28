@@ -23,6 +23,10 @@ import {
   UUID,
 } from "./protocol";
 
+const WORKFLOW_DEFINITION_CACHE_FRESH_MS = 10_000;
+const WORKFLOW_DEFINITION_CACHE_RETAIN_MS = 60_000;
+const WORKFLOW_DEFINITION_CACHE_MAX_ENTRIES = 32;
+
 /** Session-owned configuration snapshots and bounded result state; never an engine. */
 export function createWorkflows({
   reader,
@@ -45,6 +49,63 @@ export function createWorkflows({
   notify?: (listener: () => void) => void;
 }) {
   let closed = false;
+  let definitionCacheVersion = 0;
+  const definitionCache = new Map<
+    string,
+    {
+      data: WorkflowDefinitions;
+      channelIds: readonly string[];
+      readAt: number;
+      lastUsedAt: number;
+    }
+  >();
+  function pruneDefinitionCache(now = Date.now()) {
+    for (const [key, entry] of definitionCache)
+      if (now - entry.readAt > WORKFLOW_DEFINITION_CACHE_RETAIN_MS)
+        definitionCache.delete(key);
+    while (definitionCache.size > WORKFLOW_DEFINITION_CACHE_MAX_ENTRIES) {
+      let oldestKey: string | undefined;
+      let oldest = Infinity;
+      for (const [key, entry] of definitionCache) {
+        if (entry.lastUsedAt >= oldest) continue;
+        oldest = entry.lastUsedAt;
+        oldestKey = key;
+      }
+      if (!oldestKey) break;
+      definitionCache.delete(oldestKey);
+    }
+  }
+  function cachedDefinitions(key: string) {
+    const now = Date.now();
+    pruneDefinitionCache(now);
+    const cached = definitionCache.get(key);
+    if (cached) cached.lastUsedAt = now;
+    return cached;
+  }
+  function retainDefinitions(
+    key: string,
+    requestedChannelIds: readonly string[],
+    data: WorkflowDefinitions,
+    version: number,
+  ) {
+    if (version !== definitionCacheVersion) return;
+    const now = Date.now();
+    const requested = new Set(requestedChannelIds);
+    for (const [existingKey, entry] of definitionCache)
+      if (entry.channelIds.some((id) => requested.has(id)))
+        definitionCache.delete(existingKey);
+    definitionCache.set(key, {
+      data,
+      channelIds: Object.freeze([...requestedChannelIds]),
+      readAt: now,
+      lastUsedAt: now,
+    });
+    pruneDefinitionCache(now);
+  }
+  function invalidateDefinitionCache() {
+    definitionCache.clear();
+    definitionCacheVersion++;
+  }
   const views = new Set<{
     clear(): void;
     interrupt(): void;
@@ -137,6 +198,7 @@ export function createWorkflows({
     empty: T,
     load: (signal: AbortSignal) => Promise<T>,
     accept?: (data: T) => void,
+    cached?: { data: T; isFresh(): boolean },
   ): WorkflowView<T> {
     const channelIds =
       typeof channelId === "string" ? [channelId] : [...new Set(channelId)];
@@ -155,8 +217,14 @@ export function createWorkflows({
     const subscribers = new Set<() => void>();
     type Snapshot = ReturnType<WorkflowView<T>["snapshot"]>;
     let snapshot: Snapshot = Object.freeze({
-      status: available && !closed && accessible() ? "idle" : "unavailable",
-      data: empty,
+      status:
+        available && !closed && accessible()
+          ? cached
+            ? "ready"
+            : "idle"
+          : "unavailable",
+      data:
+        available && !closed && accessible() ? (cached?.data ?? empty) : empty,
     });
     const emit = () => {
       for (const listener of subscribers) notify(listener);
@@ -207,7 +275,7 @@ export function createWorkflows({
           subscribers.delete(listener);
         };
       },
-      refresh() {
+      refresh({ ifStale = false } = {}) {
         if (closed || disposed || !available) return Promise.resolve();
         if (!accessible()) {
           clear();
@@ -215,12 +283,15 @@ export function createWorkflows({
           return Promise.resolve();
         }
         if (pending) return pending;
+        if (ifStale && snapshot.status === "ready" && cached?.isFresh())
+          return Promise.resolve();
         const owned = new AbortController();
         controller = owned;
-        const signal = AbortSignal.any([
-          owned.signal,
-          AbortSignal.timeout(10000),
-        ]);
+        // Paged batches use the shared reader's deadline for each request.
+        const signal =
+          typeof channelId !== "string"
+            ? owned.signal
+            : AbortSignal.any([owned.signal, AbortSignal.timeout(10000)]);
         snapshot = Object.freeze({ status: "loading", data: snapshot.data });
         pending = Promise.resolve()
           .then(() => {
@@ -307,14 +378,19 @@ export function createWorkflows({
     if (receiptInterest.size >= 256)
       throw new Error("Too many unresolved workflow commands");
     const id = outbox.send(input);
+    if (kind !== 46020) invalidateDefinitionCache();
     receiptInterest.add(id);
     return id;
   }
   const capability = Object.freeze<WorkflowCapability>({
     availability,
     definitions(channelId) {
+      const aggregate = typeof channelId !== "string";
       const channelIds =
         typeof channelId === "string" ? [channelId] : [...new Set(channelId)];
+      const cacheKey = aggregate ? [...channelIds].sort().join(":") : "";
+      const cached = aggregate ? cachedDefinitions(cacheKey) : undefined;
+      let readVersion = definitionCacheVersion;
       return view<WorkflowDefinitions>(
         channelId,
         !!reader,
@@ -324,45 +400,72 @@ export function createWorkflows({
         }),
         async (signal) => {
           if (!reader) throw new Error("Workflow definitions unavailable");
-          const events = await reader.read(
-            channelIds.map((id) => ({
-              kinds: [30620],
-              "#h": [id],
-              limit: WORKFLOW_DEFINITION_LIMIT,
-            })),
-            { signal, fresh: true },
-          );
+          readVersion = definitionCacheVersion;
           const coordinates = new Map<string, WorkflowDefinition>();
-          const counts = new Map<string, number>();
-          const seen = new Set<string>();
-          for (const event of events) {
-            if (seen.has(event.id)) continue;
-            seen.add(event.id);
-            const row = definition(event);
-            if (!channelIds.includes(row.channelId))
-              throw new Error("Mismatched workflow channel");
-            counts.set(row.channelId, (counts.get(row.channelId) ?? 0) + 1);
-            const key = `${row.channelId}:${row.owner}:${row.id}`;
-            const old = coordinates.get(key);
-            if (
-              !old ||
-              row.createdAt > old.createdAt ||
-              (row.createdAt === old.createdAt && row.revision < old.revision)
-            )
-              coordinates.set(key, row);
+          let cursor: { until: number; before_id: string } | undefined;
+          let partial = false;
+          while (true) {
+            signal.throwIfAborted();
+            if (!channelIds.every(canAccess))
+              throw new Error("Workflow channel access unavailable");
+            const events = await reader.read(
+              [
+                {
+                  kinds: [30620],
+                  "#h": channelIds,
+                  limit: WORKFLOW_DEFINITION_LIMIT,
+                  ...cursor,
+                },
+              ],
+              { signal, fresh: true },
+            );
+            signal.throwIfAborted();
+            if (!channelIds.every(canAccess))
+              throw new Error("Workflow channel access unavailable");
+            const page = [
+              ...new Map(events.map((event) => [event.id, event])).values(),
+            ].sort(
+              (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
+            );
+            for (const event of page) {
+              if (
+                cursor &&
+                (event.created_at > cursor.until ||
+                  (event.created_at === cursor.until &&
+                    event.id <= cursor.before_id))
+              )
+                throw new Error("Workflow page did not advance");
+              const row = definition(event);
+              if (!channelIds.includes(row.channelId))
+                throw new Error("Mismatched workflow channel");
+              const key = `${row.channelId}:${row.owner}:${row.id}`;
+              const old = coordinates.get(key);
+              if (
+                !old ||
+                row.createdAt > old.createdAt ||
+                (row.createdAt === old.createdAt && row.revision < old.revision)
+              )
+                coordinates.set(key, row);
+            }
+            const full = page.length >= WORKFLOW_DEFINITION_LIMIT;
+            if (!aggregate) {
+              partial = full;
+              break;
+            }
+            const last = page.at(-1);
+            if (!full || !last) break;
+            cursor = { until: last.created_at, before_id: last.id };
           }
-          const partialChannelIds = Object.freeze(
-            channelIds.filter(
-              (id) => (counts.get(id) ?? 0) >= WORKFLOW_DEFINITION_LIMIT,
-            ),
-          );
           return Object.freeze({
             items: Object.freeze([...coordinates.values()]),
-            partial: partialChannelIds.length > 0,
-            partialChannelIds,
+            partial,
+            partialChannelIds: Object.freeze(partial ? channelIds : []),
           });
         },
-        ({ items }) => {
+        (data) => {
+          if (aggregate)
+            retainDefinitions(cacheKey, channelIds, data, readVersion);
+          const { items } = data;
           // Only a fresh, verified exact configuration head resolves an unknown
           // save. An echo, another revision, or run history cannot do so.
           let changed = false;
@@ -386,6 +489,14 @@ export function createWorkflows({
           }
           if (changed) rebuild();
         },
+        cached
+          ? {
+              data: cached.data,
+              isFresh: () =>
+                definitionCache.get(cacheKey) === cached &&
+                Date.now() - cached.readAt < WORKFLOW_DEFINITION_CACHE_FRESH_MS,
+            }
+          : undefined,
       );
     },
     runs(workflow, cursor) {
@@ -461,6 +572,7 @@ export function createWorkflows({
     },
     receipt(event: EventData, message: string | undefined) {
       if (closed || !receiptInterest.delete(event.id)) return;
+      if (event.kind !== 46020) invalidateDefinitionCache();
       if (message === undefined) {
         if (results.get(event.id)?.outcome !== "succeeded")
           results.delete(event.id);
@@ -517,11 +629,13 @@ export function createWorkflows({
       rebuild();
     },
     interrupt() {
+      invalidateDefinitionCache();
       // Socket recovery retires reads, not editor intent or HTTP receipt interest.
       for (const owned of views) owned.interrupt();
       for (const owned of views) owned.emit();
     },
     clear() {
+      invalidateDefinitionCache();
       results.clear();
       secrets.clear();
       receiptInterest.clear();
@@ -533,6 +647,7 @@ export function createWorkflows({
     },
     dispose() {
       closed = true;
+      invalidateDefinitionCache();
       for (const owned of [...views]) owned.dispose();
       results.clear();
       secrets.clear();

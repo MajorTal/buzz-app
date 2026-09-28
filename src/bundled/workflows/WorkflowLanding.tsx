@@ -103,16 +103,18 @@ function useLandingDefinitions(
   saveReadback: Pick<WorkflowDefinition, "channelId" | "revision"> | undefined,
 ) {
   // Mount already reads current definitions; only consume subsequent notifications.
+  const observedRefresh = useRef(refreshRequest);
   const observedReadback = useRef(saveReadback);
   const store = useMemo(() => {
     let snapshots: Readonly<Record<string, DefinitionsSnapshot>> = {};
     let paused = false;
     let state = { snapshots, paused };
     let channelIds: readonly string[] = [];
-    const queued = new Set<string>();
+    const queued = new Map<string, boolean>();
     const listeners = new Set<() => void>();
     type Read = {
       ids: readonly string[];
+      ifStale: boolean;
       view: WorkflowView<WorkflowDefinitions>;
       stop(): void;
     };
@@ -153,32 +155,37 @@ function useLandingDefinitions(
       data: snapshots[id]?.data ?? EMPTY_DEFINITIONS,
       error: "Workflow read unavailable. Retry; this is not proof of deletion.",
     });
+    const definitionsFor = (id: string, data: WorkflowDefinitions) => ({
+      items: data.items.filter((row) => row.channelId === id),
+      partial: data.partialChannelIds?.includes(id) ?? data.partial,
+    });
+    const hasCopiedData = (data: WorkflowDefinitions | undefined) =>
+      !!data &&
+      (data.items.length > 0 ||
+        data.partial ||
+        (data.partialChannelIds?.length ?? 0) > 0);
     const record = (owned: Read, snapshot: DefinitionsSnapshot) => {
       for (const id of owned.ids) {
+        const previous = snapshots[id]?.data;
         snapshots = {
           ...snapshots,
           [id]: {
             ...snapshot,
             data:
               snapshot.status === "loading" || snapshot.status === "error"
-                ? (snapshots[id]?.data ?? EMPTY_DEFINITIONS)
-                : {
-                    items: snapshot.data.items.filter(
-                      (row) => row.channelId === id,
-                    ),
-                    partial:
-                      snapshot.data.partialChannelIds?.includes(id) ??
-                      snapshot.data.partial,
-                  },
+                ? previous && hasCopiedData(previous)
+                  ? previous
+                  : definitionsFor(id, snapshot.data)
+                : definitionsFor(id, snapshot.data),
           },
         };
       }
     };
     const pause = (owned: Read, snapshot: DefinitionsSnapshot) => {
       paused = true;
-      for (const id of owned.ids) queued.add(id);
+      for (const id of owned.ids) queued.set(id, false);
       if (active) {
-        for (const id of active.ids) queued.add(id);
+        for (const id of active.ids) queued.set(id, false);
         if (active !== owned) release(active);
       }
       active = undefined;
@@ -187,9 +194,9 @@ function useLandingDefinitions(
       record(owned, snapshot);
       emit();
     };
-    const observe = (ids: readonly string[]): Read => {
+    const observe = (ids: readonly string[], ifStale: boolean): Read => {
       const view = capability.definitions(ids);
-      const owned = { ids, view, stop: () => {} };
+      const owned = { ids, ifStale, view, stop: () => {} };
       owned.stop = view.subscribe(() => {
         if (active !== owned && retained !== owned) return;
         const snapshot = view.snapshot();
@@ -211,13 +218,14 @@ function useLandingDefinitions(
         .slice(0, WORKFLOW_CHANNEL_BATCH);
       const first = ids[0];
       if (!first) return;
+      const ifStale = ids.every((id) => queued.get(id));
       for (const id of ids) queued.delete(id);
       let owned: Read;
       try {
-        owned = observe(ids);
+        owned = observe(ids, ifStale);
         active = owned;
         void owned.view
-          .refresh()
+          .refresh({ ifStale: owned.ifStale })
           .catch(() => {
             if (active === owned) pause(owned, failure(first));
           })
@@ -240,7 +248,7 @@ function useLandingDefinitions(
         active = undefined;
         for (const id of ids) {
           snapshots = { ...snapshots, [id]: failure(id) };
-          queued.add(id);
+          queued.set(id, false);
         }
         paused = true;
         emit();
@@ -264,7 +272,8 @@ function useLandingDefinitions(
         if (active?.ids.some((id) => !wanted.has(id))) {
           const previous = active;
           active = undefined;
-          for (const id of previous.ids) if (wanted.has(id)) queued.add(id);
+          for (const id of previous.ids)
+            if (wanted.has(id)) queued.set(id, previous.ifStale);
           release(previous);
         }
         if (retained?.ids.some((id) => !wanted.has(id))) {
@@ -273,9 +282,9 @@ function useLandingDefinitions(
           // Keep copied snapshots subscribed to session invalidation without
           // rereading a completed channel just to replace the observer.
           const replacement = ids[0];
-          if (replacement && !active) retained = observe([replacement]);
+          if (replacement && !active) retained = observe([replacement], true);
         }
-        for (const id of queued) if (!wanted.has(id)) queued.delete(id);
+        for (const id of queued.keys()) if (!wanted.has(id)) queued.delete(id);
         snapshots = Object.fromEntries(
           Object.entries(snapshots).filter(([id]) => wanted.has(id)),
         );
@@ -285,7 +294,7 @@ function useLandingDefinitions(
               ...snapshots,
               [id]: { status: "loading", data: EMPTY_DEFINITIONS },
             };
-            queued.add(id);
+            queued.set(id, true);
           }
         emit();
         readNext();
@@ -298,7 +307,8 @@ function useLandingDefinitions(
       refresh(ids = channelIds, afterPending = false) {
         invalidated = false;
         if (!afterPending) paused = false;
-        for (const id of ids) if (channelIds.includes(id)) queued.add(id);
+        for (const id of ids)
+          if (channelIds.includes(id)) queued.set(id, false);
         // A pending read already satisfies refresh; never cancel and repeat it.
         if (active && !afterPending)
           for (const id of active.ids) queued.delete(id);
@@ -327,7 +337,8 @@ function useLandingDefinitions(
     store.channels(channelIdsKey ? channelIdsKey.split(":") : []);
   }, [channelIdsKey, store]);
   useEffect(() => {
-    void refreshRequest;
+    if (observedRefresh.current === refreshRequest) return;
+    observedRefresh.current = refreshRequest;
     store.refresh();
   }, [refreshRequest, store]);
   useEffect(() => {

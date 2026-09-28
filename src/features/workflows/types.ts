@@ -19,7 +19,7 @@ export type WorkflowDefinitions = Readonly<{
   items: readonly WorkflowDefinition[];
   /** A bounded configuration snapshot is not a complete runtime inventory. */
   partial: boolean;
-  /** Channels that reached the per-channel limit before coordinate folding. */
+  /** Channels whose definition read stopped at the result limit. */
   partialChannelIds?: readonly string[];
 }>;
 
@@ -31,7 +31,7 @@ export interface WorkflowView<T> {
     error?: string;
   }>;
   subscribe(listener: () => void): () => void;
-  refresh(): Promise<void>;
+  refresh(options?: { ifStale?: boolean }): Promise<void>;
   dispose(): void;
 }
 
@@ -84,6 +84,7 @@ export type WorkflowAvailability = Readonly<{
 /** Bundled UI contract. No socket, signer, arbitrary HTTP, scheduler or approval writes. */
 export interface WorkflowCapability {
   readonly availability: WorkflowAvailability;
+  /** Arrays page a batch of up to 128 channels; single-channel detail reads stay bounded. */
   definitions(
     channelId: string | readonly string[],
   ): WorkflowView<WorkflowDefinitions>;

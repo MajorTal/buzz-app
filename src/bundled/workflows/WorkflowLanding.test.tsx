@@ -9,16 +9,19 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { StrictMode } from "react";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import type { ChannelSummary } from "../../features/relay/contracts";
-import type { RelayEvent } from "../../features/relay/events";
+import type { ReadFilter, RelayEvent } from "../../features/relay/events";
 import { keypair, signed } from "../../features/relay/testing";
 import { createWorkflows } from "../../features/workflows/capability";
 import { WorkflowLanding } from "./WorkflowLanding";
 import type { WorkflowDefinition } from "../../features/workflows/types";
 import { fixtureDefinition, fixtureViewer, fixtureYaml } from "./fixtures";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
 const channel = (index: number): ChannelSummary => ({
   id: `00000000-0000-4000-8000-${String(index).padStart(12, "0")}`,
   name: `Channel ${index}`,
@@ -43,6 +46,7 @@ function mount(
   let channels = initial;
   const reads: {
     ids: readonly string[];
+    filters: readonly ReadFilter[];
     signal: AbortSignal | undefined;
     resolve(events: readonly RelayEvent[]): void;
     reject(error: Error): void;
@@ -58,6 +62,7 @@ function mount(
         return new Promise((resolve, reject) => {
           reads.push({
             ids: filters.flatMap((filter) => filter["#h"] ?? []),
+            filters,
             signal: options?.signal,
             resolve,
             reject,
@@ -216,29 +221,62 @@ it("purges globally without automatic reads and recovers remaining channels on m
   }
 });
 
-it("preserves per-channel partial results and retry never drops loaded cards", async () => {
+it("finishes paging before the next batch, resets its cursor, and retains loaded cards on retry", async () => {
   const channels = Array.from({ length: 129 }, (_, i) => channel(i + 1));
   const fixture = mount(channels);
   try {
-    await fixture.finish(
-      0,
-      Array.from({ length: 100 }, (_, i) => event(channel(1).id, i)),
+    const page = Array.from({ length: 100 }, (_, i) =>
+      event(channel(1).id, 100 + i),
     );
-    expect(
-      screen.getByText("#Channel 1 returned a partial workflow list."),
-    ).toBeVisible();
-    expect(
-      screen.queryByText("#Channel 2 returned a partial workflow list."),
-    ).toBeNull();
+    await fixture.finish(0, page);
     await waitFor(() => expect(fixture.reads).toHaveLength(2));
-    await act(async () => fixture.reads[1]?.reject(new Error("offline")));
-    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    expect(fixture.reads[1]?.filters).toEqual([
+      {
+        kinds: [30620],
+        "#h": channels.slice(0, 128).map((c) => c.id),
+        limit: 100,
+        until: 100,
+        before_id: page[0]?.id,
+      },
+    ]);
+    expect(screen.getByRole("status")).toHaveTextContent("Reading workflows");
+    await fixture.finish(1, [event(channel(2).id, 99)]);
     await waitFor(() => expect(fixture.reads).toHaveLength(3));
+    expect(fixture.reads[2]?.filters).toEqual([
+      {
+        kinds: [30620],
+        "#h": [channel(129).id],
+        limit: 100,
+      },
+    ]);
+    await act(async () => fixture.reads[2]?.reject(new Error("offline")));
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(fixture.reads).toHaveLength(4));
     expect(
-      screen.getByRole("button", { name: "Open Message helper" }),
-    ).toBeVisible();
-    await fixture.finish(2);
-    expect(fixture.reads[2]?.ids).toEqual([channel(129).id]);
+      screen.getAllByRole("button", { name: "Open Message helper" }),
+    ).toHaveLength(2);
+    const nextPage = Array.from({ length: 100 }, (_, i) =>
+      event(channel(129).id, 200 + i),
+    );
+    await fixture.finish(3, nextPage);
+    await waitFor(() => expect(fixture.reads).toHaveLength(5));
+    expect(fixture.reads[4]?.filters).toEqual([
+      {
+        kinds: [30620],
+        "#h": [channel(129).id],
+        limit: 100,
+        until: 200,
+        before_id: nextPage[0]?.id,
+      },
+    ]);
+    await fixture.finish(4);
+    expect(
+      screen.getAllByRole("button", { name: "Open Message helper" }),
+    ).toHaveLength(3);
+    expect(screen.queryByText(/returned a partial workflow list/)).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Workflow scan finished.",
+    );
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   } finally {
     fixture.close();
@@ -494,7 +532,7 @@ it("drops queued readback for a removed membership without restoring its card", 
   }
 });
 
-it("skips already copied revisions and does not replay readback on landing remount", async () => {
+it("reuses fresh session cache and does not replay readback on landing remount", async () => {
   const [a, b] = [channel(1), channel(2)];
   const saved = event(a.id);
   const fixture = mount([a, b]);
@@ -503,15 +541,96 @@ it("skips already copied revisions and does not replay readback on landing remou
     fixture.readback(a.id, saved.id);
     expect(fixture.reads).toHaveLength(1);
     fixture.remount();
-    await fixture.finish(1, [saved]);
-    expect(fixture.reads).toHaveLength(2);
-    expect(fixture.reads[1]?.ids).toEqual([a.id, b.id]);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Workflow scan finished.",
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Workflow scan finished.",
+      ),
     );
+    expect(fixture.reads).toHaveLength(1);
     expect(
       screen.getByRole("button", { name: "Open Message helper" }),
     ).toBeVisible();
+  } finally {
+    fixture.close();
+  }
+});
+
+it("rereads an overlapping landing batch after queued verified readback", async () => {
+  vi.spyOn(Date, "now").mockImplementation(() => 0);
+  const [a, b] = [channel(1), channel(2)];
+  const saved = event(a.id);
+  const fixture = mount([a, b]);
+  try {
+    await waitFor(() => expect(fixture.reads).toHaveLength(1));
+    fixture.readback(a.id, saved.id);
+    expect(fixture.reads).toHaveLength(1);
+    await fixture.finish(0);
+    await fixture.finish(1, [saved]);
+    expect(fixture.reads.map((read) => read.ids)).toEqual([
+      [a.id, b.id],
+      [a.id],
+    ]);
+    expect(
+      screen.getByRole("button", { name: "Open Message helper" }),
+    ).toBeVisible();
+
+    fixture.remount();
+    await waitFor(() => expect(fixture.reads).toHaveLength(3));
+    expect(fixture.reads[2]?.ids).toEqual([a.id, b.id]);
+    await fixture.finish(2, [saved]);
+    expect(
+      screen.getByRole("button", { name: "Open Message helper" }),
+    ).toBeVisible();
+  } finally {
+    fixture.close();
+  }
+});
+
+it("reuses fresh cached results for every completed batch after navigation", async () => {
+  const channels = Array.from({ length: 129 }, (_, i) => channel(i + 1));
+  const fixture = mount(channels);
+  try {
+    await fixture.finish(0, [event(channel(1).id)]);
+    await fixture.finish(1, [event(channel(129).id)]);
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Workflow scan finished.",
+      ),
+    );
+    expect(fixture.reads.map((read) => read.ids.length)).toEqual([128, 1]);
+    fixture.remount();
+    await waitFor(() =>
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Workflow scan finished.",
+      ),
+    );
+    expect(fixture.reads).toHaveLength(2);
+    expect(
+      screen.getAllByRole("button", { name: "Open Message helper" }),
+    ).toHaveLength(2);
+  } finally {
+    fixture.close();
+  }
+});
+
+it("shows stale cached cards on remount while refreshing and retrying", async () => {
+  let now = 0;
+  vi.spyOn(Date, "now").mockImplementation(() => now);
+  const [a, b] = [channel(1), channel(2)];
+  const fixture = mount([a, b]);
+  try {
+    await fixture.finish(0, [event(a.id)]);
+    now = 10_001;
+    fixture.remount();
+    await waitFor(() => expect(fixture.reads).toHaveLength(2));
+    expect(
+      screen.getByRole("button", { name: "Open Message helper" }),
+    ).toBeVisible();
+    await act(async () => fixture.reads[1]?.reject(new Error("offline")));
+    expect(
+      screen.getByRole("button", { name: "Open Message helper" }),
+    ).toBeVisible();
+    expect(screen.getByRole("button", { name: "Retry" })).toBeVisible();
   } finally {
     fixture.close();
   }

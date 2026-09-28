@@ -7,6 +7,7 @@ import {
   fireEvent,
   render,
   screen,
+  within,
 } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { createRelaySession } from "../../features/relay/session";
@@ -26,6 +27,57 @@ afterEach(() => {
   cleanup();
   vi.useRealTimers();
   Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
+});
+
+it("opens with a conversation action and recent channels in activity order", async () => {
+  const relay = keypair();
+  const viewer = keypair();
+  const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
+  const discovery = [
+    metadata(relay, "older", "older", 1700000000),
+    roster(relay, "older", [viewer.pubkey]),
+    metadata(relay, "latest", "latest", 1700000100),
+    roster(relay, "latest", [viewer.pubkey]),
+  ];
+  const owner = createRelaySession({
+    ...wire.transport,
+    query(filters) {
+      return Promise.resolve(
+        discovery.filter((event) =>
+          filters.some((filter) => filter.kinds?.includes(event.kind)),
+        ),
+      );
+    },
+  });
+  const changeScope = vi.fn();
+  try {
+    render(
+      <SearchResults
+        session={owner.session}
+        query=""
+        onQueryChange={() => {}}
+        input={createRef()}
+        pages={[]}
+        currentChannelId="older"
+        onScopeChange={changeScope}
+        openConversation={() => {}}
+      />,
+    );
+    const action = await screen.findByRole("option", {
+      name: /Search in older/,
+    });
+    const recent = within(
+      screen.getByRole("group", { name: "Recent activity" }),
+    );
+    const [first, second] = recent.getAllByRole("option");
+    expect(first).toHaveTextContent("latest");
+    expect(second).toHaveTextContent("older");
+    fireEvent.click(action);
+    expect(changeScope).toHaveBeenCalledExactlyOnceWith("older");
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
 });
 
 it("shows the real read failure, retains conversation choices, and retries to an exact message", async () => {
@@ -98,6 +150,74 @@ it("shows the real read failure, retains conversation choices, and retries to an
     ).toHaveAttribute("aria-selected", "true");
     fireEvent.keyDown(input, { key: "Enter" });
     expect(open).toHaveBeenCalledExactlyOnceWith("crew", hit.id);
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
+});
+
+it("scopes conversation search at the relay and discards out-of-scope hits", async () => {
+  vi.useFakeTimers();
+  const relay = keypair();
+  const viewer = keypair();
+  const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
+  const discovery = [
+    metadata(relay, "crew", "crew"),
+    roster(relay, "crew", [viewer.pubkey]),
+    metadata(relay, "other", "other"),
+    roster(relay, "other", [viewer.pubkey]),
+  ];
+  const owner = createRelaySession({
+    ...wire.transport,
+    query(filters, signal) {
+      if (filters.some((filter) => filter.search !== undefined))
+        return wire.transport.query(filters, signal);
+      return Promise.resolve(
+        discovery.filter((event) =>
+          filters.some((filter) => filter.kinds?.includes(event.kind)),
+        ),
+      );
+    },
+  });
+  const changeScope = vi.fn();
+  try {
+    render(
+      <SearchResults
+        session={owner.session}
+        query="scope"
+        onQueryChange={() => {}}
+        input={createRef()}
+        pages={[]}
+        scopedChannelId="crew"
+        onScopeChange={changeScope}
+        openConversation={() => {}}
+      />,
+    );
+    await act(async () => vi.advanceTimersByTimeAsync(180));
+    const request = wire.next();
+    expect(request.filters).toEqual([
+      {
+        kinds: [40002, 40008, 9],
+        search: "scope",
+        search_mode: "prefix",
+        limit: 20,
+        "#h": ["crew"],
+      },
+    ]);
+    await act(async () =>
+      request.respond([
+        message(viewer, "crew", "scope match", 1700000001),
+        message(viewer, "other", "scope elsewhere", 1700000002),
+      ]),
+    );
+    expect(screen.getByRole("option", { name: /scope match/ })).toBeVisible();
+    expect(
+      screen.queryByRole("option", { name: /scope elsewhere/ }),
+    ).toBeNull();
+    fireEvent.click(
+      screen.getByRole("button", { name: /Remove .* search scope/ }),
+    );
+    expect(changeScope).toHaveBeenCalledExactlyOnceWith();
   } finally {
     cleanup();
     owner.dispose();

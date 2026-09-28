@@ -35,10 +35,10 @@ test("global search opens a child session without changing collapsed sidebar lev
   const search = dialog.getByRole("combobox", { name: "Search Buzz" });
   await search.fill("Alpha");
   const result = dialog
-    .locator("[data-search-result]")
-    .filter({ hasText: "Alpha" })
-    .first();
+    .getByRole("group", { name: "Channels" })
+    .getByRole("option", { name: /Alpha/ });
   await expect(result).toBeVisible();
+  await search.press("ArrowDown");
   await search.press("ArrowDown");
   await expect(search).toBeFocused();
   await expect(result).toHaveAttribute("aria-selected", "true");

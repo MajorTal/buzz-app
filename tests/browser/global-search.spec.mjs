@@ -34,7 +34,7 @@ test.describe("photo avatar", () => {
   });
 });
 
-test("search arrows traverse pages and conversations, Enter opens and Escape restores focus", async ({
+test("search arrows traverse the conversation action and recent activity, Enter opens and Escape restores focus", async ({
   page,
   app,
 }) => {
@@ -48,19 +48,19 @@ test("search arrows traverse pages and conversations, Enter opens and Escape res
   await expect(input).toHaveAttribute("autocapitalize", "off");
   await expect(input).toHaveAttribute("autocomplete", "off");
   await expect(input).toBeFocused();
-  const messages = dialog.getByRole("option", {
-    name: "Messages",
-    exact: true,
-  });
-  const projects = dialog.getByRole("option", {
-    name: "Projects",
-    exact: true,
-  });
+  const first = dialog
+    .getByRole("group", { name: "This conversation" })
+    .getByRole("option");
+  const second = dialog
+    .getByRole("group", { name: "Recent activity" })
+    .getByRole("option")
+    .first();
+  await expect(second).toBeVisible();
   for (const [key, result] of [
-    ["ArrowDown", messages],
-    ["ArrowDown", projects],
-    ["ArrowUp", messages],
-    ["ArrowUp", messages],
+    ["ArrowDown", first],
+    ["ArrowDown", second],
+    ["ArrowUp", first],
+    ["ArrowUp", first],
   ]) {
     await input.press(key);
     await expect(input).toBeFocused();
@@ -82,10 +82,10 @@ test("search arrows traverse pages and conversations, Enter opens and Escape res
   await expect(input).not.toHaveAttribute("aria-activedescendant");
   await input.fill("Alpha");
   const alpha = dialog
-    .locator("[data-search-result]")
-    .filter({ hasText: "Alpha" })
-    .first();
+    .getByRole("group", { name: "Channels" })
+    .getByRole("option", { name: /Alpha/ });
   await expect(alpha).toBeVisible();
+  await input.press("ArrowDown");
   await input.press("ArrowDown");
   await expect(input).toBeFocused();
   await expect(alpha).toHaveAttribute("aria-selected", "true");
@@ -98,6 +98,43 @@ test("search arrows traverse pages and conversations, Enter opens and Escape res
   await expect(
     page.getByRole("textbox", { name: "Message #Alpha", exact: true }),
   ).toBeVisible();
+});
+
+test("changing search scope returns focus to the input without clearing the query", async ({
+  page,
+  app,
+}) => {
+  await page.goto(app.origin);
+  await button(page, "Search Buzz").click();
+  const scopeAction = page
+    .getByRole("dialog", { name: "Search Buzz" })
+    .getByRole("group", { name: "This conversation" })
+    .getByRole("option");
+  await scopeAction.click();
+
+  const scoped = page.getByRole("dialog", { name: "Search this conversation" });
+  const scopedInput = scoped.getByRole("combobox", {
+    name: "Search this conversation",
+  });
+  await expect(scopedInput).toBeFocused();
+  await page.keyboard.type("hello");
+  await expect(scopedInput).toHaveValue("hello");
+
+  const chip = scoped.getByRole("button", {
+    name: /Remove .* search scope/,
+  });
+  await chip.focus();
+  await chip.press("Enter");
+  const global = page.getByRole("dialog", { name: "Search Buzz" });
+  const input = global.getByRole("combobox", { name: "Search Buzz" });
+  await expect(input).toBeFocused();
+  await expect(input).toHaveValue("hello");
+  await page.keyboard.press("ArrowDown");
+  await expect(
+    global
+      .getByRole("group", { name: "This conversation" })
+      .getByRole("option"),
+  ).toHaveAttribute("aria-selected", "true");
 });
 
 // Real portal → routed timeline/thread ownership and focus, in both browser engines.

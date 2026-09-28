@@ -287,6 +287,7 @@ it("presents actual host registrations in navigation, text sizing, search/settin
       "Decrease text size",
       "Reset text size",
       "Search Buzz",
+      "Search this conversation",
       "Open Settings",
       ...(import.meta.env.DEV ? ["Reload development app"] : []),
     ]);

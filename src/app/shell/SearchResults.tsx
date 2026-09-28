@@ -35,10 +35,16 @@ export function SearchResults({
   onQueryChange,
   input,
   pages,
+  scopedChannelId,
+  currentChannelId,
+  onScopeChange,
   openConversation,
 }: {
   session: RelaySession;
   pages: readonly SearchDestination[];
+  scopedChannelId?: string | undefined;
+  currentChannelId?: string | undefined;
+  onScopeChange?: ((channelId?: string) => void) | undefined;
   openConversation: (channelId: string, messageId?: string) => void;
 } & SearchInputProps) {
   const resolveName = useIdentityNames(session.names);
@@ -52,11 +58,12 @@ export function SearchResults({
       list.channels.filter(
         (channel) =>
           !channel.archived &&
-          (!channel.hidden || channel.channelType === "dm"),
+          (!channel.hidden || channel.channelType === "dm") &&
+          (!scopedChannelId || channel.id === scopedChannelId),
       ),
-    [list.channels],
+    [list.channels, scopedChannelId],
   );
-  const search = useSearchMessages(session, query.trim());
+  const search = useSearchMessages(session, query.trim(), scopedChannelId);
   const names = new Map(
     channels.map((channel) => [
       channel.id,
@@ -81,21 +88,50 @@ export function SearchResults({
         .catch(() => {});
   }, [session, profileKey]);
   const needle = query.trim().toLowerCase().replace(/^#/, "");
-  const conversations: SearchDestination[] = channels
+  const matchingChannels = channels
     .filter((channel) => names.get(channel.id)?.toLowerCase().includes(needle))
-    .slice(0, 8)
+    .slice(0, 8);
+  const conversationDestination = (
+    channel: ChannelSummary,
+  ): SearchDestination => ({
+    key: `channel:${channel.id}`,
+    label: names.get(channel.id) ?? channel.name,
+    detail:
+      channel.channelType === "dm"
+        ? "Direct message"
+        : channel.channelType === "session"
+          ? "Session"
+          : "Conversation",
+    icon: ChatCircleIcon,
+    run: () => openConversation(channel.id),
+  });
+  const recent: SearchDestination[] = channels
+    .filter((channel) => !channel.readOnly)
+    .sort(
+      (a, b) =>
+        (b.lastActivityAt ?? b.updatedAt ?? 0) -
+        (a.lastActivityAt ?? a.updatedAt ?? 0),
+    )
+    .slice(0, 4)
     .map((channel) => ({
-      key: `channel:${channel.id}`,
-      label: names.get(channel.id) ?? channel.name,
-      detail:
-        channel.channelType === "dm"
-          ? "Direct message"
-          : channel.channelType === "session"
-            ? "Session"
-            : "Conversation",
-      icon: ChatCircleIcon,
-      run: () => openConversation(channel.id),
+      ...conversationDestination(channel),
+      ...(channel.preview ? { detail: channel.preview } : {}),
     }));
+  const currentChannel = currentChannelId
+    ? channels.find((channel) => channel.id === currentChannelId)
+    : undefined;
+  const scopeAction: SearchDestination[] =
+    !scopedChannelId && currentChannel && onScopeChange
+      ? [
+          {
+            key: `scope:${currentChannel.id}`,
+            label: `Search ${currentChannel.channelType === "dm" ? "conversation with" : "in"} ${names.get(currentChannel.id) ?? currentChannel.name}`,
+            detail: "Search messages in this conversation",
+            icon: ChatCircleIcon,
+            run: () => onScopeChange(currentChannel.id),
+          },
+        ]
+      : [];
   const messages: SearchDestination[] = search.messages.map((message) => ({
     key: message.id,
     label: message.preview,
@@ -103,16 +139,88 @@ export function SearchResults({
     icon: ChatCircleIcon,
     run: () => openConversation(message.channelId, message.id),
   }));
+  const messageEmpty = search.loading
+    ? "Searching messages…"
+    : search.error
+      ? "Message search is unavailable."
+      : query.trim()
+        ? "No matching messages in accessible conversations."
+        : scopedChannelId
+          ? "Type to search messages in this conversation."
+          : "Type to search messages in this community.";
   return (
     <SearchChoices
       query={query}
       onQueryChange={onQueryChange}
       input={input}
-      groups={[
-        { label: "Pages", destinations: pages },
-        { label: "Conversations", destinations: conversations },
-        { label: "Messages", destinations: messages },
-      ]}
+      label={scopedChannelId ? "Search this conversation" : "Search Buzz"}
+      placeholder={
+        scopedChannelId
+          ? "Search messages…"
+          : "Search pages, conversations and messages…"
+      }
+      scope={
+        scopedChannelId && onScopeChange
+          ? {
+              label:
+                names.get(scopedChannelId) ??
+                session.channels.get?.(scopedChannelId)?.name ??
+                "Conversation",
+              onRemove: () => onScopeChange(),
+            }
+          : undefined
+      }
+      groups={
+        scopedChannelId
+          ? [
+              {
+                label: "Most relevant",
+                destinations: messages,
+                empty: messageEmpty,
+              },
+            ]
+          : !query.trim()
+            ? [
+                ...(scopeAction.length
+                  ? [{ label: "This conversation", destinations: scopeAction }]
+                  : []),
+                {
+                  label: "Recent activity",
+                  destinations: recent,
+                  empty:
+                    list.status === "loading"
+                      ? "Loading recent conversations…"
+                      : "No recent activity yet.",
+                },
+                { label: "Actions", destinations: pages },
+              ]
+            : [
+                ...(scopeAction.length
+                  ? [{ label: "This conversation", destinations: scopeAction }]
+                  : []),
+                {
+                  label: "Channels",
+                  destinations: matchingChannels
+                    .filter((channel) => channel.channelType !== "dm")
+                    .map(conversationDestination),
+                },
+                {
+                  label: "Direct messages",
+                  destinations: matchingChannels
+                    .filter((channel) => channel.channelType === "dm")
+                    .map(conversationDestination),
+                },
+                { label: "Pages", destinations: pages },
+                {
+                  label: "Most relevant",
+                  destinations: messages,
+                  empty:
+                    matchingChannels.length || pages.length
+                      ? undefined
+                      : messageEmpty,
+                },
+              ]
+      }
     >
       <div
         className="space-y-2 px-3 text-body-sm text-subtle"
@@ -138,7 +246,6 @@ export function SearchResults({
         {list.coverage === "partial" && (
           <p>Conversation names include only loaded joined conversations.</p>
         )}
-        {search.loading && <p>Searching messages…</p>}
         {search.error && (
           <div>
             <p>{search.error}</p>
@@ -147,14 +254,6 @@ export function SearchResults({
             </Button>
           </div>
         )}
-        {query.trim() &&
-          !search.loading &&
-          !search.error &&
-          !messages.length &&
-          list.status === "ready" && (
-            <p>No matching messages in accessible conversations.</p>
-          )}
-        {!query.trim() && <p>Type to search messages in this community.</p>}
       </div>
     </SearchChoices>
   );

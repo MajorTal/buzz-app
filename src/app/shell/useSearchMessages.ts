@@ -16,12 +16,16 @@ type Result = {
 };
 
 /** Finite, ranked results belong to this open palette, not a retained event view. */
-export function useSearchMessages(session: RelaySession, query: string) {
+export function useSearchMessages(
+  session: RelaySession,
+  query: string,
+  scopedChannelId?: string,
+) {
   const [attempt, setAttempt] = useState(0);
   const [result, setResult] = useState<Result>();
   const owner = useMemo(
-    () => ({ session, query, attempt }),
-    [session, query, attempt],
+    () => ({ session, query, scopedChannelId, attempt }),
+    [session, query, scopedChannelId, attempt],
   );
   // The copied result changes synchronously even if React has not committed it yet.
   const copied = useRef<Result | undefined>(undefined);
@@ -55,6 +59,7 @@ export function useSearchMessages(session: RelaySession, query: string) {
               search: query,
               search_mode: "prefix",
               limit: 20,
+              ...(scopedChannelId ? { "#h": [scopedChannelId] } : {}),
             },
           ],
           { signal: controller.signal, priority: "foreground", fresh: true },
@@ -68,6 +73,7 @@ export function useSearchMessages(session: RelaySession, query: string) {
               ![9, 40002, 40008].includes(event.kind) ||
               destinations.length !== 1 ||
               !channelId ||
+              (scopedChannelId && channelId !== scopedChannelId) ||
               !session.channels.get?.(channelId)
             )
               return [];
@@ -100,7 +106,7 @@ export function useSearchMessages(session: RelaySession, query: string) {
             replace({
               owner,
               messages: [],
-              error: `Message search couldn’t finish${error instanceof Error && error.message ? `: ${error.message.slice(0, 240)}` : "."} Pages and conversations are still available.`,
+              error: `Message search couldn’t finish${error instanceof Error && error.message ? `: ${error.message.slice(0, 240)}` : "."}${scopedChannelId ? " Try again." : " Pages and conversations are still available."}`,
             });
         });
     }, 180);
@@ -108,7 +114,7 @@ export function useSearchMessages(session: RelaySession, query: string) {
       clearTimeout(timer);
       controller.abort();
     };
-  }, [session, query, owner, replace]);
+  }, [session, query, scopedChannelId, owner, replace]);
   const current = result?.owner === owner ? result : undefined;
   return {
     messages: (current?.messages ?? []).filter(

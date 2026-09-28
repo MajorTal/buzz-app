@@ -123,6 +123,7 @@ test("channel establishment preserves an in-flight unread batch and its sidebar 
       ({ community, filter }) =>
         community === "primary" &&
         filter.kinds?.includes(9) &&
+        filter["#h"]?.length &&
         filter.top_level === undefined &&
         filter.depth_limit === undefined &&
         filter.until === undefined,

@@ -81,6 +81,9 @@ test("row menu moves and removes a channel optimistically, retaining keyboard na
   await page.keyboard.press("ArrowRight");
   const menu = page.getByRole("menu", { name: "Move channel", exact: true });
   await expect(menu).toBeVisible();
+  await expect(
+    menu.getByRole("menuitemradio", { name: "Starred", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("ArrowLeft");
   await expect(
     page.getByRole("menuitem", { name: "Move channel", exact: true }),

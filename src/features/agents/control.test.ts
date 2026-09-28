@@ -1091,3 +1091,58 @@ it("keeps Stop available while Goose installs and refreshes once it settles", as
   expect(control.snapshot().data?.agents[0]?.enabled).toBe(false);
   control.dispose();
 });
+
+for (const operation of ["save", "saveDefaults"] as const) {
+  it(`${operation} restart credential wait admits Stop and drops the late result`, async () => {
+    const fixture = controlFixture();
+    const before = structuredClone(fixture.data);
+    const saved = structuredClone(before);
+    saved.restarted = 1;
+    const gate = deferred<void>();
+    const started = deferred<void>();
+    const write = vi.fn(async () => {
+      started.resolve();
+      await gate.promise;
+      return saved;
+    });
+    fixture.host.save = write;
+    fixture.host.saveDefaults = write;
+    const stopped = structuredClone(before);
+    stopped.agents[0] = {
+      ...fixture.agent,
+      enabled: false,
+      status: "stopped",
+      runningRevision: null,
+    };
+    const action = vi.spyOn(fixture.host, "action").mockResolvedValue(stopped);
+    const control = createAgentControl(fixture.host);
+    await control.refresh();
+    const pending = (
+      operation === "save"
+        ? control.save(
+            fixture.agent.id,
+            fixture.agent.revision,
+            agentEdit(agentDraft(fixture.agent)),
+          )
+        : control.saveDefaults?.({
+            harness: "buzz-agent",
+            provider: "",
+            model: "next",
+            effort: "",
+            environment: {},
+          })
+    )?.catch((error: Error) => error);
+    await started.promise;
+    expect(control.snapshot().busy).toBe(true);
+    expect(canStopAgent(control.snapshot(), fixture.agent.id)).toBe(true);
+    await control.action(fixture.agent.id, "stop");
+    expect(action).toHaveBeenCalledExactlyOnceWith(fixture.agent.id, "stop");
+    expect(control.snapshot().data?.agents[0]?.status).toBe("stopped");
+    gate.resolve();
+    expect(await pending).toBeInstanceOf(Error);
+    // The superseded save cannot overwrite the newer Stop's evidence.
+    expect(control.snapshot().data?.agents[0]?.status).toBe("stopped");
+    expect(control.snapshot().busy).toBe(false);
+    control.dispose();
+  });
+}

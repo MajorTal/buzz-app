@@ -99,9 +99,7 @@ test("local controls preserve drafts, confirm operations and distinguish disable
       editor.getByLabel("Replacement for EXAMPLE_TOKEN"),
     ).toHaveAttribute("type", "password");
     await editor.getByRole("button", { name: "Save changes" }).click();
-    await expect(
-      editor.getByText("Saved. Running work was not restarted."),
-    ).toBeVisible();
+    await expect(editor.getByText("Saved.", { exact: true })).toBeVisible();
     await expect(
       editor.getByText(/Saved revision 2 · Running revision 1/),
     ).toBeVisible();

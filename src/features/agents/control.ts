@@ -92,6 +92,33 @@ export interface ControlSnapshot {
   runtimeMessage?: string | null;
   databricksDefaults?: { host: string; filter: string };
   agentDefaults?: { provider: string; model: string; ownerOnly: boolean };
+  /** Device-wide Agent defaults from Settings; environment keys only. */
+  defaultSettings?: AgentDefaultSettings;
+  /** Running agents restarted by the save that produced this snapshot. */
+  restarted?: number;
+  /** Agents whose automatic restart after that save failed. */
+  restartFailures?: number;
+}
+export interface AgentDefaultSettings {
+  harness: "buzz-agent" | "goose" | "pi";
+  provider: string;
+  model: string;
+  effort: string;
+  environmentKeys: string[];
+}
+export interface AgentDefaultsEdit
+  extends Omit<AgentDefaultSettings, "environmentKeys"> {
+  /** Missing preserves the native value; null removes it; string replaces it. */
+  environment: Record<string, string | null>;
+}
+/** Save feedback once native restarted the affected running agents. */
+export function savedMessage(restarted = 0, failures = 0) {
+  const agents = (n: number) => `${n} agent${n === 1 ? "" : "s"}`;
+  const saved =
+    restarted === 0 ? "Saved." : `Saved. Restarted ${agents(restarted)}.`;
+  return failures === 0
+    ? saved
+    : `${saved} ${agents(failures)} couldn’t restart with the new settings; check Agents.`;
 }
 export interface AgentEdit {
   name: string;
@@ -147,6 +174,7 @@ export interface AgentControlHost {
     edit: AgentEdit,
   ): Promise<ControlSnapshot>;
   delete?(id: string, expectedRevision: number): Promise<ControlSnapshot>;
+  saveDefaults?(edit: AgentDefaultsEdit): Promise<ControlSnapshot>;
   action(
     id: string,
     action: AgentAction,
@@ -193,6 +221,7 @@ export interface AgentControl {
   refresh(): Promise<void>;
   save: AgentControlHost["save"];
   delete?(id: string, expectedRevision: number): Promise<ControlSnapshot>;
+  saveDefaults?(edit: AgentDefaultsEdit): Promise<ControlSnapshot>;
   action: AgentControlHost["action"];
   previewImport: AgentControlHost["previewImport"];
   commitImport: AgentControlHost["commitImport"];
@@ -532,7 +561,32 @@ export function createAgentControl(
     },
     refresh,
     save: (id, revision, edit) =>
-      run((native) => native.save(id, revision, edit), ready),
+      // Save may restart running agents and wait on their OS credential
+      // prompts; like other credential waits, recovery Stop stays available
+      // and a superseded result never replaces the newer Stop's evidence.
+      run(
+        (native) => native.save(id, revision, edit),
+        ready,
+        false,
+        undefined,
+        true,
+      ),
+    ...(host?.saveDefaults
+      ? {
+          saveDefaults: (edit: AgentDefaultsEdit) =>
+            run(
+              (native) => {
+                if (!native.saveDefaults)
+                  throw new Error("Agent defaults are unavailable.");
+                return native.saveDefaults(edit);
+              },
+              ready,
+              false,
+              undefined,
+              true,
+            ),
+        }
+      : {}),
     ...(host?.delete
       ? {
           // Resolve the host method per call, like every other command.

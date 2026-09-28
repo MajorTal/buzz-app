@@ -11,6 +11,7 @@ import { Avatar } from "../../shared/design-system/ui/Avatar";
 import {
   canStopAgent,
   agentLaunchBlock,
+  savedMessage,
   type AgentControl,
   type AgentControlState,
   type AgentView,
@@ -104,8 +105,8 @@ export function AgentEditor({
             />
           </header>
           <Dialog.Description className="sr-only">
-            Edit {displayName}. Save updates settings without restarting the
-            agent.
+            Edit {displayName}. Save restarts the agent if it is running and its
+            effective settings changed.
           </Dialog.Description>
           <form
             className="buzz-dialog-body space-y-section-gap"
@@ -146,7 +147,9 @@ export function AgentEditor({
                     }
                   }
                   if (mounted.current)
-                    setNotice("Saved. Running work was not restarted.");
+                    setNotice(
+                      savedMessage(saved.restarted, saved.restartFailures),
+                    );
                 })
                 .catch((problem: Error) => setError(problem.message));
             }}

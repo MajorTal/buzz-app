@@ -11,6 +11,244 @@ import { controlFixture } from "../../features/agents/control-testing";
 
 afterEach(cleanup);
 
+it("browses an own Databricks workspace before global defaults, and inherits when blank", async () => {
+  const f = controlFixture();
+  f.data.defaultSettings = {
+    harness: "buzz-agent",
+    provider: "databricks_v2",
+    model: "",
+    effort: "",
+    environmentKeys: ["DATABRICKS_HOST", "DATABRICKS_MODEL_FILTER"],
+  };
+  f.data.databricksDefaults = {
+    host: "https://compiled.example.com",
+    filter: "compiled-*",
+  };
+  const run = vi.fn(async () => ({
+    host: "",
+    models: [{ id: "endpoint-two", name: "Endpoint Two" }],
+    modelOverridden: false,
+    disconnected: false,
+  }));
+  f.host.models = { begin: async () => 1, run, cancel: async () => {} };
+  const control = createAgentControl(f.host);
+  const user = userEvent.setup();
+  const own = {
+    ...agentDraft(f.agent),
+    command: "/fixture/bin/buzz-agent",
+    provider: "databricks_v2",
+    databricks: { host: "https://agent.example.com", filter: "agent-*" },
+  };
+  const fields = (draft: AgentDraft) => (
+    <AgentSettingsFields
+      draft={draft}
+      control={control}
+      state={{ status: "ready", busy: false, error: null, data: f.data }}
+      disabled={false}
+      onChange={vi.fn()}
+    />
+  );
+  const view = render(fields(own));
+  try {
+    await user.click(screen.getByRole("button", { name: "Browse models" }));
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+    expect(run).toHaveBeenNthCalledWith(
+      1,
+      1,
+      expect.objectContaining({
+        host: "https://agent.example.com",
+        filter: "agent-*",
+        action: "connect",
+      }),
+    );
+    expect(run).not.toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({ inheritWorkspace: true }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByRole("combobox", { name: "Model" }),
+      ).not.toHaveAttribute("aria-busy", "true"),
+    );
+    view.rerender(fields({ ...own, databricks: null }));
+    await user.click(screen.getByRole("button", { name: "Browse models" }));
+    await waitFor(() => expect(run).toHaveBeenCalledTimes(2));
+    expect(run).toHaveBeenNthCalledWith(
+      2,
+      1,
+      expect.objectContaining({
+        host: "",
+        filter: "",
+        inheritWorkspace: true,
+        action: "connect",
+      }),
+    );
+  } finally {
+    view.unmount();
+    control.dispose();
+  }
+});
+
+it("hides inherited Agent defaults hints when a selector override decides the launch", () => {
+  const f = controlFixture();
+  const control = createAgentControl(f.host);
+  const base = {
+    ...agentDraft(f.agent),
+    command: "/opt/tools/goose",
+    provider: "",
+    model: "",
+  };
+  const cases: {
+    draft?: Partial<AgentDraft>;
+    keys?: string[];
+    globalKeys?: string[];
+    provider: boolean;
+    model: boolean;
+  }[] = [
+    { provider: true, model: true },
+    { keys: ["GOOSE_MODEL"], provider: true, model: false },
+    { keys: ["GOOSE_PROVIDER"], provider: false, model: true },
+    { globalKeys: ["GOOSE_MODEL"], provider: true, model: false },
+    { globalKeys: ["GOOSE_PROVIDER"], provider: false, model: true },
+    {
+      globalKeys: ["GOOSE_MODEL"],
+      draft: { environment: { GOOSE_MODEL: null } },
+      provider: true,
+      model: false,
+    },
+    {
+      draft: { environment: { GOOSE_MODEL: "draft-model" } },
+      provider: true,
+      model: false,
+    },
+    {
+      keys: ["GOOSE_MODEL"],
+      draft: { environment: { GOOSE_MODEL: null } },
+      provider: true,
+      model: true,
+    },
+  ];
+  const fields = (entry: (typeof cases)[number]) => (
+    <AgentSettingsFields
+      draft={{ ...base, ...entry.draft }}
+      control={control}
+      state={{
+        status: "ready",
+        busy: false,
+        error: null,
+        data: {
+          ...f.data,
+          harnessOptions: [
+            {
+              command: "/opt/tools/goose",
+              label: "Goose",
+              available: true,
+              providers: [{ value: "anthropic", label: "Anthropic" }],
+            },
+          ],
+          defaultSettings: {
+            harness: "goose",
+            provider: "anthropic",
+            model: "default-model",
+            effort: "",
+            environmentKeys: entry.globalKeys ?? [],
+          },
+        },
+      }}
+      disabled={false}
+      environmentKeys={entry.keys ?? []}
+      onChange={vi.fn()}
+    />
+  );
+  const view = render(fields(cases[0] as (typeof cases)[number]));
+  try {
+    for (const entry of cases) {
+      view.rerender(fields(entry));
+      expect(
+        screen.getByRole("combobox", { name: "Model" }),
+        JSON.stringify(entry),
+      ).toHaveAttribute(
+        "placeholder",
+        entry.model
+          ? "Use agent defaults (default-model)"
+          : "Choose or enter a model",
+      );
+      expect(
+        screen.queryAllByText("Use agent defaults (anthropic)").length > 0,
+        JSON.stringify(entry),
+      ).toBe(entry.provider);
+    }
+  } finally {
+    view.unmount();
+    control.dispose();
+  }
+});
+
+it("uses the inherited provider before the build floor to choose the build-model hint", () => {
+  const f = controlFixture();
+  const control = createAgentControl(f.host);
+  const base = {
+    ...agentDraft(f.agent),
+    command: "buzz-agent",
+    provider: "",
+    model: "",
+  };
+  const cases = [
+    // Global anthropic beats the Databricks build floor: no Databricks model.
+    { build: "databricks_v2", global: "anthropic", hint: false },
+    // Global Databricks makes the build model apply despite a non-Databricks floor.
+    { build: "anthropic", global: "databricks_v2", hint: true },
+    { build: "databricks_v2", global: "", hint: true },
+  ];
+  const fields = (entry: (typeof cases)[number]) => (
+    <AgentSettingsFields
+      draft={base}
+      control={control}
+      state={{
+        status: "ready",
+        busy: false,
+        error: null,
+        data: {
+          ...f.data,
+          agentDefaults: {
+            provider: entry.build,
+            model: "build-model",
+            ownerOnly: false,
+          },
+          defaultSettings: {
+            harness: "buzz-agent",
+            provider: entry.global,
+            model: "",
+            effort: "",
+            environmentKeys: [],
+          },
+        },
+      }}
+      disabled={false}
+      environmentKeys={[]}
+      onChange={vi.fn()}
+    />
+  );
+  const view = render(fields(cases[0] as (typeof cases)[number]));
+  try {
+    for (const entry of cases) {
+      view.rerender(fields(entry));
+      expect(
+        screen.getByRole("combobox", { name: "Model" }),
+        JSON.stringify(entry),
+      ).toHaveAttribute(
+        "placeholder",
+        entry.hint
+          ? "Use agent defaults (build-model)"
+          : "Choose or enter a model",
+      );
+    }
+  } finally {
+    view.unmount();
+    control.dispose();
+  }
+});
+
 it("only hints the compiled model when the current provider and overrides can use it", () => {
   const f = controlFixture();
   const control = createAgentControl(f.host);
@@ -25,6 +263,7 @@ it("only hints the compiled model when the current provider and overrides can us
     provider: string;
     draft?: Partial<AgentDraft>;
     keys?: string[];
+    globalKeys?: string[];
     hint: boolean;
   }[] = [
     { provider: "databricks_v2", hint: true },
@@ -58,6 +297,22 @@ it("only hints the compiled model when the current provider and overrides can us
     },
     { provider: "databricks_v2", keys: ["BUZZ_AGENT_MODEL"], hint: false },
     { provider: "databricks_v2", keys: ["DATABRICKS_MODEL"], hint: false },
+    {
+      provider: "databricks_v2",
+      globalKeys: ["DATABRICKS_MODEL"],
+      hint: false,
+    },
+    {
+      provider: "databricks_v2",
+      globalKeys: ["BUZZ_AGENT_PROVIDER"],
+      hint: false,
+    },
+    {
+      provider: "databricks_v2",
+      globalKeys: ["DATABRICKS_MODEL"],
+      draft: { environment: { DATABRICKS_MODEL: null } },
+      hint: false,
+    },
     {
       provider: "databricks_v2",
       draft: { environment: { BUZZ_AGENT_MODEL: "" } },
@@ -110,6 +365,13 @@ it("only hints the compiled model when the current provider and overrides can us
             model: "build-model",
             ownerOnly: false,
           },
+          defaultSettings: {
+            harness: "buzz-agent",
+            provider: "",
+            model: "",
+            effort: "",
+            environmentKeys: entry.globalKeys ?? [],
+          },
         },
       }}
       disabled={false}
@@ -126,7 +388,9 @@ it("only hints the compiled model when the current provider and overrides can us
         JSON.stringify(entry),
       ).toHaveAttribute(
         "placeholder",
-        entry.hint ? "Build default: build-model" : "Choose or enter a model",
+        entry.hint
+          ? "Use agent defaults (build-model)"
+          : "Choose or enter a model",
       );
     }
     expect(onChange).not.toHaveBeenCalled();

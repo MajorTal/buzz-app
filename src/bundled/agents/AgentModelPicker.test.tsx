@@ -707,3 +707,72 @@ it("Pi clears discovered providers when catalog context changes or the picker un
     control.dispose();
   }
 });
+
+it("browses an inherited Agent defaults workspace without repeating it in the form", async () => {
+  const f = controlFixture();
+  const run = vi.fn(async () => ({
+    host: "",
+    models: [{ id: "endpoint-two", name: "Endpoint Two" }],
+    modelOverridden: false,
+    disconnected: false,
+  }));
+  f.host.models = { begin: async () => 1, run, cancel: async () => {} };
+  const control = createAgentControl(f.host);
+  const user = userEvent.setup();
+  const draft = {
+    ...agentDraft(f.agent),
+    command: "buzz-agent",
+    provider: "databricks_v2",
+    model: "",
+  };
+  delete draft.databricks;
+  render(
+    <AgentModelPicker
+      draft={draft}
+      control={control}
+      // A compiled floor that differs from the hidden inherited values.
+      defaults={{ host: "https://compiled.example.com", filter: "compiled-*" }}
+      inheritedWorkspace={{ host: true, filter: true }}
+      onChange={() => {}}
+    />,
+  );
+  try {
+    await user.click(screen.getByRole("button", { name: "Browse models" }));
+    await waitFor(() =>
+      expect(run).toHaveBeenCalledWith(
+        1,
+        expect.objectContaining({
+          host: "",
+          filter: "",
+          action: "connect",
+          inheritWorkspace: true,
+        }),
+      ),
+    );
+    expect(screen.queryByText(/Set your Databricks workspace/)).toBeNull();
+    // Browse opens the model list once the catalog renders; its popup makes
+    // the rest of the form inert, so close it before opening Advanced.
+    await screen.findByRole("option", { name: /Endpoint Two/ });
+    await user.keyboard("{Escape}");
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull());
+    await user.click(screen.getByRole("button", { name: "Model" }));
+    expect(
+      screen.getByLabelText("Databricks workspace (HTTPS origin)"),
+    ).toHaveAttribute("placeholder", "Use agent defaults");
+    // Disconnect names the same hidden workspace for native to resolve.
+    await user.click(screen.getByRole("button", { name: "Disconnect" }));
+    await waitFor(() =>
+      expect(run).toHaveBeenLastCalledWith(
+        1,
+        expect.objectContaining({
+          host: "",
+          action: "disconnect",
+          inheritWorkspace: true,
+          edit: undefined,
+        }),
+      ),
+    );
+  } finally {
+    control.dispose();
+  }
+});

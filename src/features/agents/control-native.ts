@@ -35,6 +35,7 @@ export function nativeAgentControlHost(): AgentControlHost | null {
     installGoose: () => invoke("goose_install"),
     save: (id, expectedRevision, edit) =>
       invoke("agent_control_save", { id, expectedRevision, edit }),
+    saveDefaults: (edit) => invoke("agent_control_save_defaults", { edit }),
     delete: (id, expectedRevision) =>
       invoke("agent_control_delete", { id, expectedRevision }),
     action: (id, action, replayFloor) =>

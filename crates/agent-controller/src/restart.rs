@@ -3,6 +3,7 @@
 use crate::config::Agent;
 use serde::Serialize;
 use serde_json::{json, Map, Value};
+use std::path::Path;
 
 const MASK: &str = "••••";
 
@@ -36,31 +37,85 @@ pub enum RestartChange {
     Removed,
 }
 
-/// Saved settings that a start applies. Identity and relay are immutable, and
-/// the imported response policy is not editable, so neither can drift.
+/// Effective settings a start applies. Identity, relay and imported response
+/// policy are immutable. Values stay native; `diff` redacts environment-derived
+/// selectors before producing an IPC projection.
 pub(crate) fn spawn_config(agent: &Agent) -> Value {
-    let databricks = agent.harness.databricks.as_ref();
+    let env = &agent.environment;
+    let harness = crate::build_defaults().resolve(&agent.harness, env);
+    let worker = Path::new(&harness.command)
+        .file_name()
+        .and_then(|name| name.to_str());
+    let selected = crate::defaults::selectors(&harness, env);
+    let provider = selected
+        .provider
+        .or_else(|| (!harness.provider.is_empty()).then_some(harness.provider.as_str()));
+    let databricks = if worker == Some("buzz-agent")
+        && matches!(
+            provider,
+            Some("databricks_v2" | "databricks-v2" | "databricks")
+        ) {
+        Some(harness.databricks.as_ref())
+    } else {
+        None
+    };
+    let host = databricks.and_then(|stored| {
+        env.get("DATABRICKS_HOST")
+            .map(String::as_str)
+            .or_else(|| stored.map(|settings| settings.host.as_str()))
+    });
+    let filter = databricks.and_then(|stored| {
+        env.get("DATABRICKS_MODEL_FILTER")
+            .map(String::as_str)
+            .or_else(|| stored.map(|settings| settings.filter.as_str()))
+    });
     json!({
         "name": agent.name,
         "system_prompt": agent.system_prompt,
         "workspace": agent.workspace,
-        "command": agent.harness.command,
-        "args": agent.harness.args,
-        "model": agent.harness.model,
-        "provider": agent.harness.provider,
-        "databricks_host": databricks.map(|s| &s.host),
-        "databricks_filter": databricks.map(|s| &s.filter),
-        "env": agent.environment,
+        "command": harness.command,
+        "args": harness.args,
+        "model": selected.model,
+        "provider": provider,
+        "databricks_host": host,
+        "databricks_filter": filter,
+        "env": env,
+        "effort": crate::agent_defaults::effort(agent),
     })
 }
 
 pub(crate) fn diff(before: &Value, after: &Value) -> Vec<RestartDiffEntry> {
+    // These selectors may be derived from private environment values. Compare
+    // their actual values, but mask the corresponding field if either side used
+    // an environment key; the env.* difference is always redacted as well.
+    let masked: Vec<_> = [
+        (
+            "model",
+            &["BUZZ_AGENT_MODEL", "GOOSE_MODEL", "DATABRICKS_MODEL"][..],
+        ),
+        ("provider", &["BUZZ_AGENT_PROVIDER", "GOOSE_PROVIDER"][..]),
+        ("databricks_host", &["DATABRICKS_HOST"][..]),
+        ("databricks_filter", &["DATABRICKS_MODEL_FILTER"][..]),
+    ]
+    .into_iter()
+    .filter_map(|(field, keys)| {
+        keys.iter()
+            .any(|key| before["env"].get(key).is_some() || after["env"].get(key).is_some())
+            .then_some(field)
+    })
+    .collect();
     let mut out = Vec::new();
-    walk("", before, after, &mut out);
+    walk("", before, after, &masked, &mut out);
     out
 }
 
-fn walk(path: &str, before: &Value, after: &Value, out: &mut Vec<RestartDiffEntry>) {
+fn walk(
+    path: &str,
+    before: &Value,
+    after: &Value,
+    masked: &[&str],
+    out: &mut Vec<RestartDiffEntry>,
+) {
     if before == after {
         return;
     }
@@ -72,7 +127,7 @@ fn walk(path: &str, before: &Value, after: &Value, out: &mut Vec<RestartDiffEntr
                 format!("{path}.{key}")
             };
             match (before.get(key), after.get(key)) {
-                (Some(b), Some(a)) => walk(&child, b, a, out),
+                (Some(b), Some(a)) => walk(&child, b, a, masked, out),
                 (None, _) => out.push(entry(child, RestartChange::Added)),
                 (_, None) => out.push(entry(child, RestartChange::Removed)),
             }
@@ -85,10 +140,12 @@ fn walk(path: &str, before: &Value, after: &Value, out: &mut Vec<RestartDiffEntr
             after_chars: after.as_str().map(|s| s.chars().count()),
         },
         // Arguments and environment values may carry credentials.
-        _ if path == "args" || path.starts_with("env.") => RestartChange::Masked {
-            before: (!before.is_null()).then(|| MASK.into()),
-            after: (!after.is_null()).then(|| MASK.into()),
-        },
+        _ if path == "args" || path.starts_with("env.") || masked.contains(&path) => {
+            RestartChange::Masked {
+                before: (!before.is_null()).then(|| MASK.into()),
+                after: (!after.is_null()).then(|| MASK.into()),
+            }
+        }
         _ => RestartChange::Value {
             before: before.clone(),
             after: after.clone(),

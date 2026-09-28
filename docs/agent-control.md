@@ -99,7 +99,8 @@ choices come from the selected harness; model discovery uses the current draft.
 Existing/custom values remain intact when another field changes. Workspace,
 arguments and write-only environment patches remain under **Advanced**;
 Start/Stop/Restart and exact identity are under **Runtime and identity**. Save uses
-native ID/revision; the planned restart-on-save flow is described below. Dirty
+native ID/revision and restarts the agent only if it is running and its effective
+settings changed (see [saving](#global-agent-defaults-and-saving)). Dirty
 drafts resist backdrop/Escape; explicit Cancel/Close discards. Page
 navigation/reload still discards page-local drafts.
 
@@ -167,13 +168,11 @@ and `DATABRICKS_TOKEN` still conflicts with app-isolated persistent OAuth.
 See [configuration parity](configuration.md) for development routing, release
 flag exclusions and the supported deployment boundary.
 
-## Planned: Harnesses and agent defaults
+## Harnesses and agent defaults
 
-This is the approved Settings → Agents contract for the next implementation
-slices, not a description of controls already shipped. The current desktop still
-requires a restart to discover newly installed CLIs, and Save currently leaves
-running agents unchanged. Individual-agent configuration stays on the Agents
-page; Settings → Agents owns installation guidance and device-wide defaults.
+Individual-agent configuration stays on the Agents page; Settings → Agents owns
+installation guidance and device-wide defaults. One-click Pi installation is
+still planned.
 
 ### Harnesses
 
@@ -202,26 +201,39 @@ the app. The ACP tooltip says:
 
 ### Global agent defaults and saving
 
-Settings → Agents provides a default harness, provider, model, effort and
-environment variables. The default harness is **copied into each new agent** at
-creation; changing it later does not switch existing agents. Provider, model,
-effort and environment defaults are **looked up at each start** only for fields
-an agent leaves blank; per-agent values win. Per-agent effort is not yet an
-editable field. Changing the default harness clears the default model and effort.
+The **Agent defaults** card in Settings → Agents holds a default harness,
+provider, model, effort and environment variables.
 
-These mutable defaults live in a native store under app-data
-`agent-controller/`, not localStorage. Native files use owner-only permissions
-(0600); environment values are write-only and never read back into the UI, as
-with per-agent API keys. This layer sits above
-[`BuildDefaults::resolve()`](../crates/agent-controller/src/defaults.rs): global
-defaults win over the [nonsecret build floor](#nonsecret-build-defaults), which
-stays compiled and is not the editable store.
+- The default harness is **copied into each new agent** at creation (Create
+  falls back to Buzz Agent while the default harness is not installed). Changing
+  it later does not switch existing agents.
+- Provider, model and effort are **looked up at each start** for fields an agent
+  leaves blank, only when the agent uses the default harness; per-agent values
+  win. The editor shows a blank field as “Use agent defaults (…)”. Effort has no
+  per-agent field: an imported agent's `effort_level` stays its override.
+- Environment variables apply to every agent and merge **per key**; the agent's
+  key wins. A saved Databricks workspace/filter also wins over the corresponding
+  global `DATABRICKS_HOST` / `DATABRICKS_MODEL_FILTER` pair. Agents without their
+  own workspace/filter inherit the global pair.
+- Changing the default harness in the card clears the default model and effort;
+  values entered for the new harness before Save are kept.
 
-Saving an agent or defaults restarts **running agents whose effective settings
-changed** through the native supervisor and reports **“Saved. Restarted N
-agents.”** Unchanged and stopped agents are not restarted. Effective settings
-include inherited defaults, so today's `restartDiff` (raw saved configs) is not
-enough on its own. This supersedes the current Save-without-restart rule.
+The store is `defaults.json` under app-data `agent-controller/`, not
+localStorage, written atomically with owner-only permissions (0600).
+Environment values are write-only, like per-agent API keys: only key names are
+returned to the UI. This layer applies before
+[`BuildDefaults::resolve()`](../crates/agent-controller/src/defaults.rs), so a
+global value wins over the [nonsecret build floor](#nonsecret-build-defaults),
+which still fills only Buzz Agent blanks. Goose and Pi receive inherited
+provider/model through their existing selectors. Inherited values are never
+written into saved agents.
+
+Saving an agent or the defaults restarts, through the native supervisor, only
+agents that were **running** before and after the save and whose **effective**
+launch settings changed. Stopped and disabled agents are never started or
+enabled; a Stop that lands before the restart wins. Save reports “Saved.” or
+“Saved. Restarted N agents.” `restartDiff` compares effective settings, so it
+also flags inherited changes.
 
 ## Avatar editing
 
@@ -322,8 +334,8 @@ containment on non-Unix platforms.
   The avatar badge is relay presence, which the harness publishes just after
   the process starts; the card re-reads it briefly after start/stop (see
   [presence](presence.md#ownership-and-bounds)).
-- Save uses `expectedRevision` and updates only editable fields. The planned
-  flow restarts running agents whose effective settings change (see
+- Save uses `expectedRevision` and updates only editable fields, then restarts
+  running agents whose effective settings changed (see
   [Global agent defaults and saving](#global-agent-defaults-and-saving)).
   Saved/running revisions remain distinct. Dirty drafts survive refresh and save
   failure. A newer saved revision blocks overwrite and offers explicit discard;
@@ -332,14 +344,14 @@ containment on non-Unix platforms.
 - Arguments use a JSON string array rather than splitting shell text, preserving
   spaces and literal quoting. Empty/comma-containing arguments are rejected because
   the current ACP transport cannot represent them faithfully. The executable is a per-agent
-  harness choice; Settings → Agents owns the planned Harnesses setup card. The
+  harness choice; Settings → Agents owns the Harnesses setup card. The
   host must validate launch configuration and unsupported imported semantics
   before execution.
 - Harness and Provider choices come from native `harnessOptions` through the
   injected Core snapshot. Buzz Agent offers Databricks v2. Goose appears with an
   absolute executable path when the local CLI is installed, and offers common
   Goose providers plus a custom ID. A missing CLI leaves Goose disabled; the
-  planned **Check again** action re-detects it after installation without an app
+  **Check again** action re-detects it after installation without an app
   restart. Switching into or out of Goose supplies ACP
   arguments and clears the previous provider/model; selecting a Goose provider clears the
   previous model. For Goose, an explicit Browse asks Goose ACP for the selected
@@ -509,7 +521,7 @@ live handover remains a separate step below.
 
 `control.test.ts`, `control-native.test.ts`, `agent-edit.test.ts` cover projection
 races, unavailable browser, exact IPC payloads, uncertain result handling,
-the current save/restart distinction, literal arguments and environment patch
+save/restart feedback, literal arguments and environment patch
 semantics.
 `tests/browser/agent-control.spec.mjs` drives the real editor and capability over
 the isolated fake host in Chromium/WebKit: dirty refresh, save failure, revisions,
@@ -569,9 +581,8 @@ The Advanced model field preserves text literally, including IDs that themselves
 start with the provider name. After Browse, an unlisted ID carries a warning;
 manual IDs remain allowed and an available catalog is not inference validation.
 Clear both fields to keep Pi's own defaults. Choosing a provider requires a model
-before Start; Pi otherwise silently ignores a provider-only flag. Until the
-planned restart-on-save flow ships, use Restart explicitly to apply a saved
-change to a running Pi agent.
+before Start; Pi otherwise silently ignores a provider-only flag. Save restarts a
+running Pi agent whose effective settings changed.
 
 Discovery launches the same locally resolved Pi used by the ACP adapter, in the
 agent's workspace, with the same explicit environment and extension arguments.

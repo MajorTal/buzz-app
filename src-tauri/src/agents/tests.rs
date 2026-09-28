@@ -136,6 +136,244 @@ fn harnesses_classify_cli_and_adapter_separately() {
 }
 
 #[test]
+fn restart_on_save_selects_only_live_agents_with_changed_effective_settings() {
+    let before = BTreeMap::from([
+        ("changed".to_owned(), json!({"model":"a"})),
+        ("same".to_owned(), json!({"model":"a"})),
+        ("stopped-after".to_owned(), json!({"model":"a"})),
+    ]);
+    let after = BTreeMap::from([
+        ("changed".to_owned(), json!({"model":"b"})),
+        ("same".to_owned(), json!({"model":"a"})),
+        // Started during the save: not an effect of this save.
+        ("started-after".to_owned(), json!({"model":"b"})),
+    ]);
+    assert_eq!(changed_running(before, after), ["changed"]);
+}
+
+#[test]
+fn save_restart_failures_are_reported_separately_from_benign_skips() {
+    let (dir, host, _app, _view) = fixture();
+    let id = seed(dir.path());
+    let snapshot = |enabled: bool, status, error: Option<&str>| {
+        let mut snapshot = host.with(|host| host.snapshot()).unwrap();
+        let agent = &mut snapshot.data.agents[0];
+        agent.enabled = enabled;
+        agent.status = status;
+        agent.error = error.map(str::to_owned);
+        Ok(snapshot)
+    };
+    use buzz_agent_controller::ProcessStatus::{Failed, Running, Stopped};
+    assert_eq!(
+        restart_outcome(&id, snapshot(true, Running, None)),
+        RestartOutcome::Restarted
+    );
+    // A denied credential prompt returns a snapshot with the old process
+    // still running the previous settings: nothing was restarted.
+    let mut stale = snapshot(true, Running, Some("Keychain access was denied"));
+    if let Ok(stale) = &mut stale {
+        stale.data.agents[0].restart_diff = vec![buzz_agent_controller::RestartDiffEntry {
+            field: "model".into(),
+            change: buzz_agent_controller::RestartChange::Added,
+        }];
+    }
+    assert_eq!(restart_outcome(&id, stale), RestartOutcome::Failed);
+    // The settings were saved, but the new launch failed: warn, don't hide it.
+    assert_eq!(
+        restart_outcome(&id, snapshot(true, Failed, Some("Invalid launch"))),
+        RestartOutcome::Failed
+    );
+    assert_eq!(
+        restart_outcome(&id, Err("Saved agent key is unavailable".into())),
+        RestartOutcome::Failed
+    );
+    // No longer needed, an explicit Stop, or a newer action are not failures.
+    assert_eq!(
+        restart_outcome(&id, Err(NO_SAVE_RESTART.into())),
+        RestartOutcome::Skipped
+    );
+    assert_eq!(
+        restart_outcome(&id, Err(START_CANCELLED.into())),
+        RestartOutcome::Skipped
+    );
+    assert_eq!(
+        restart_outcome(&id, snapshot(false, Stopped, None)),
+        RestartOutcome::Skipped
+    );
+}
+
+#[test]
+fn disabled_live_agent_is_not_eligible_for_a_save_restart() {
+    let (dir, host, _app, _view) = fixture();
+    seed(dir.path());
+    let mut agent = host
+        .with(|host| Ok(host.controller.snapshot()?.agents.remove(0)))
+        .unwrap();
+    agent.status = buzz_agent_controller::ProcessStatus::Running;
+    assert!(is_running(&agent));
+    // A user Stop/Start after Save may already have applied the new settings.
+    assert!(!needs_save_restart(&agent));
+    agent.enabled = false;
+    assert!(!is_running(&agent));
+    assert!(!needs_save_restart(&agent));
+}
+
+#[test]
+fn create_draft_model_browsing_inherits_native_provider_and_environment() {
+    let (dir, host, _app, _view) = fixture();
+    host.with(|host| {
+        host.controller
+            .save_defaults(
+                serde_json::from_value(json!({
+                    "harness":"buzz-agent", "provider":"databricks_v2", "model":"",
+                    "effort":"", "environment":{"DATABRICKS_HOST":"https://models.example",
+                        "DATABRICKS_MODEL_FILTER":"inherited-*"}
+                }))
+                .unwrap(),
+            )
+            .map(drop)
+    })
+    .unwrap();
+    let draft = json!({
+        "name":"New agent", "systemPrompt":"", "workspace":dir.path(),
+        "harness":{"command":"buzz-agent","args":[],"provider":"","model":""},
+        "environment":{}
+    });
+    let context = tauri::async_runtime::block_on(host.model_context(
+        None,
+        None,
+        serde_json::from_value(draft.clone()).unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(context.host.as_deref(), Some("https://models.example"));
+    assert_eq!(context.filter.as_deref(), Some("inherited-*"));
+    let mut own = draft;
+    own["harness"]["databricks"] = json!({"host":"https://own.example", "filter":"own-*"});
+    let context = tauri::async_runtime::block_on(host.model_context(
+        None,
+        None,
+        serde_json::from_value(own).unwrap(),
+    ))
+    .unwrap();
+    assert_eq!(context.host.as_deref(), Some("https://own.example"));
+    assert_eq!(context.filter.as_deref(), Some("own-*"));
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let goose = dir.path().join("goose");
+        std::fs::write(&goose, "#!/bin/sh\n").unwrap();
+        std::fs::set_permissions(&goose, std::fs::Permissions::from_mode(0o700)).unwrap();
+        host.with(|host| {
+            host.controller
+                .save_defaults(
+                    serde_json::from_value(json!({
+                        "harness":"goose", "provider":"openai", "model":"",
+                        "effort":"", "environment":{"GOOSE_API_KEY":"write-only-key"}
+                    }))
+                    .unwrap(),
+                )
+                .map(drop)
+        })
+        .unwrap();
+        let draft = json!({
+            "name":"New agent", "systemPrompt":"", "workspace":dir.path(),
+            "harness":{"command":goose,"args":["acp"],"provider":"","model":""},
+            "environment":{}
+        });
+        let context = tauri::async_runtime::block_on(host.goose_model_context(
+            None,
+            None,
+            serde_json::from_value(draft).unwrap(),
+        ))
+        .unwrap();
+        assert_eq!(context.provider_id, "openai");
+        assert_eq!(context.environment["GOOSE_API_KEY"], "write-only-key");
+    }
+}
+
+#[test]
+fn an_invalid_pi_defaults_switch_is_refused_before_persisting_or_restarting() {
+    let (dir, _host, _app, view) = fixture();
+    seed(dir.path());
+    let save = |edit: Value| invoke(&view, "agent_control_save_defaults", json!({"edit":edit}));
+    save(
+        json!({"harness":"buzz-agent","provider":"anthropic","model":"m","effort":"",
+        "environment":{}}),
+    )
+    .unwrap();
+    let before = std::fs::read(dir.path().join("store/defaults.json")).unwrap();
+    // Harness-only switch: the card clears model/effort but keeps the provider.
+    let error = save(
+        json!({"harness":"pi","provider":"anthropic","model":"","effort":"",
+        "environment":{}}),
+    )
+    .unwrap_err();
+    assert!(error.to_string().contains("Choose a Pi model"), "{error}");
+    // Nothing was committed, so no effective change can trigger a Restart.
+    assert_eq!(
+        std::fs::read(dir.path().join("store/defaults.json")).unwrap(),
+        before
+    );
+}
+
+#[test]
+fn saving_defaults_never_starts_or_enables_stopped_agents() {
+    let (dir, host, _app, view) = fixture();
+    let id = seed(dir.path());
+    let path = dir.path().join("store/agents.json");
+    let mut saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    saved["agents"][0]["enabled"] = json!(false);
+    saved["agents"][0]["harness"]["model"] = json!("");
+    std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
+    let result = invoke(
+        &view,
+        "agent_control_save_defaults",
+        json!({"edit":{"harness":"buzz-agent","provider":"","model":"new-default","effort":"high",
+            "environment":{"GLOBAL_TOKEN":"DO_NOT_PROJECT"}}}),
+    )
+    .unwrap();
+    assert_eq!(result["restarted"], 0);
+    assert_eq!(result["restartFailures"], 0);
+    assert_eq!(result["defaultSettings"]["model"], "new-default");
+    assert_eq!(
+        result["defaultSettings"]["environmentKeys"],
+        json!(["GLOBAL_TOKEN"])
+    );
+    assert!(!result.to_string().contains("DO_NOT_PROJECT"));
+    assert_eq!(result["agents"][0]["status"], "stopped");
+    assert_eq!(result["agents"][0]["launchModel"], "new-default");
+    let saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(saved["agents"][0]["enabled"], false);
+    assert_eq!(saved["agents"][0]["harness"]["model"], "");
+    // The guard refuses a restart for an agent that is not live.
+    let refused = tauri::async_runtime::block_on(start_guarded(
+        host,
+        id,
+        Action::Restart,
+        false,
+        None,
+        Some((needs_save_restart, "Agent no longer needs a save restart")),
+    ));
+    assert_eq!(
+        refused.err().as_deref(),
+        Some("Agent no longer needs a save restart")
+    );
+    let saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    assert_eq!(saved["agents"][0]["enabled"], false);
+    // Native defaults file is owner-only.
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = std::fs::metadata(dir.path().join("store/defaults.json"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+}
+
+#[test]
 fn real_ipc_snapshot_save_cas_stop_and_launch_gate() {
     let (dir, _host, _app, view) = fixture();
     let id = seed(dir.path());
@@ -619,6 +857,79 @@ mod overlap {
             assert_eq!(agent(&after, id)["startOnAppLaunch"], true);
         }
         fresh.shutdown().unwrap();
+    }
+
+    // Eligibility can lapse while the OS credential prompt is open (e.g. the
+    // listener exits). The guard must be re-checked before Restart enables it.
+    #[test]
+    fn save_restart_rechecks_eligibility_after_the_credential_prompt() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        const KEY: &str = "0000000000000000000000000000000000000000000000000000000000000001";
+        const PUB: &str = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        static ELIGIBLE: AtomicBool = AtomicBool::new(true);
+        struct Lapsing;
+        impl Credentials for Lapsing {
+            fn delete(&self, _: &str, _: &str) -> Result<(), String> {
+                panic!("not a deletion")
+            }
+            fn read_legacy(&self, _: LegacySource, _: &str) -> Result<Secret, String> {
+                panic!("not an import")
+            }
+            fn add(&self, _: &str, _: &Secret) -> Result<(), String> {
+                panic!("not a write")
+            }
+            fn read(&self, _: &str, pubkey: &str) -> Result<Option<Secret>, String> {
+                ELIGIBLE.store(false, Ordering::SeqCst);
+                Secret::parse(KEY, pubkey).map(Some)
+            }
+        }
+        fn eligible(_: &buzz_agent_controller::AgentView) -> bool {
+            ELIGIBLE.load(Ordering::SeqCst)
+        }
+        let (dir, host, _app, _view) = fixture();
+        let id = seed(dir.path());
+        let path = dir.path().join("store/agents.json");
+        let mut saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let id = id.replacen(&"ab".repeat(32), PUB, 1);
+        saved["agents"][0]["id"] = json!(id);
+        saved["agents"][0]["pubkey"] = json!(PUB);
+        saved["agents"][0]["credentialId"] = json!(id);
+        saved["agents"][0]["enabled"] = json!(false);
+        std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
+        let credentials: Arc<dyn Credentials> = Arc::new(Lapsing);
+        host.with(|h| {
+            h.controller = Controller::new(
+                Store::open(dir.path().join("replacement"))?,
+                credentials.clone(),
+                Err("placeholder".into()),
+                dir.path().join("ownership"),
+            );
+            h.controller = Controller::new(
+                Store::open(dir.path().join("store"))?,
+                credentials.clone(),
+                Ok(synthetic_bundle(&dir.path().join("tools"))),
+                dir.path().join("ownership"),
+            );
+            h.credentials = credentials;
+            h.legacy_check = || Ok(());
+            Ok(())
+        })
+        .unwrap();
+        let result = tauri::async_runtime::block_on(start_guarded(
+            host,
+            id,
+            Action::Restart,
+            false,
+            None,
+            Some((eligible, "Agent no longer needs a save restart")),
+        ));
+        assert_eq!(
+            result.err().as_deref(),
+            Some("Agent no longer needs a save restart")
+        );
+        // Restart never ran, so it did not enable the agent.
+        let saved: Value = serde_json::from_slice(&std::fs::read(path).unwrap()).unwrap();
+        assert_eq!(saved["agents"][0]["enabled"], false);
     }
 
     // A genuinely eligible agent: its Start failed on the missing Goose CLI.

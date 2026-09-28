@@ -15,6 +15,8 @@ pub struct ControlSnapshot {
     pub agents: Vec<AgentView>,
     pub runtime_available: bool,
     pub runtime_message: Option<String>,
+    /// Device-wide defaults; environment keys only.
+    pub default_settings: crate::agent_defaults::AgentDefaultsView,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -43,8 +45,8 @@ pub struct AgentView {
     pub backend: Option<String>,
     pub acp_command: Option<String>,
     pub mcp_command: Option<String>,
-    /// Model/provider the next start passes to the worker from saved selectors
-    /// or build defaults; `None` when an environment override decides it.
+    /// Model/provider the next start passes to the worker from saved selectors,
+    /// agent defaults or build defaults; `None` when an environment override decides it.
     pub launch_model: Option<String>,
     pub launch_provider: Option<String>,
     /// Environment key deciding that selector. Its value never leaves native.
@@ -123,9 +125,11 @@ pub(crate) struct Agent {
     pub extra: BTreeMap<String, Value>,
 }
 impl Agent {
-    pub fn view(&self) -> AgentView {
+    /// `inherited` supplies launch selectors; the saved harness is shown as saved.
+    pub(crate) fn view(&self, inherited: &crate::agent_defaults::AgentDefaults) -> AgentView {
         let defaults = crate::build_defaults();
-        let launch = defaults.launch_view(&self.harness, &self.environment);
+        let effective = crate::agent_defaults::effective(self, inherited);
+        let launch = defaults.launch_view(&effective.harness, &effective.environment);
         AgentView {
             id: self.id.clone(),
             pubkey: self.pubkey.clone(),

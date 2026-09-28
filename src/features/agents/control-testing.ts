@@ -84,6 +84,17 @@ export function controlFixture() {
       });
       return structuredClone(data);
     },
+    async saveDefaults(edit) {
+      calls.push({ action: "saveDefaults", payload: { edit } });
+      const keys = new Set(data.defaultSettings?.environmentKeys ?? []);
+      for (const [key, value] of Object.entries(edit.environment)) {
+        if (value === null) keys.delete(key);
+        else keys.add(key);
+      }
+      const { environment: _values, ...fields } = edit;
+      data.defaultSettings = { ...fields, environmentKeys: [...keys].sort() };
+      return { ...structuredClone(data), restarted: 0 };
+    },
     async setStartOnAppLaunch(id, enabled) {
       calls.push({ action: "startOnAppLaunch", payload: { id, enabled } });
       if (failStartOnAppLaunch) throw "The host could not save settings.";

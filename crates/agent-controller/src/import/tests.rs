@@ -725,7 +725,7 @@ fn repair_only_adds_team_snapshot_without_keys_or_overwriting_edits() {
     agent.harness.model = "edited-model".into();
     agent.environment.insert("KEEP".into(), "private".into());
     agent.enabled = true;
-    assert!(agent.view().needs_team_import);
+    assert!(agent.view(&Default::default()).needs_team_import);
     let mut expected = serde_json::to_value(&agent).unwrap();
     expected["revision"] = json!(2);
     expected["imported"]["teamInstructions"] = json!("team prompt");

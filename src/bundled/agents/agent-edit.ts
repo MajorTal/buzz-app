@@ -16,6 +16,16 @@ export interface AgentDraft {
 export function isGoose(command: string): boolean {
   return command.replaceAll("\\", "/").split("/").at(-1) === "goose";
 }
+/** Agent defaults harness a saved command belongs to, matching native. */
+export function harnessKind(
+  command: string,
+): "buzz-agent" | "goose" | "pi" | undefined {
+  const name = command.replaceAll("\\", "/").split("/").at(-1);
+  if (name === "buzz-agent") return "buzz-agent";
+  if (name === "goose") return "goose";
+  if (name === "buzz-pi-acp") return "pi";
+  return undefined;
+}
 // Goose provider config keys, checked against built-in ConfigKey declarations
 // and declarative provider api_key_env values. OAuth/local providers have none.
 const GOOSE_API_KEYS: Record<string, { label: string; env: string }> = {

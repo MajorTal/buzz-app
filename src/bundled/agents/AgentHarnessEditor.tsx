@@ -111,10 +111,9 @@ export function AgentHarnessEditor({
         options={[
           {
             value: "",
-            label:
-              draft.command === "buzz-agent" && defaultProvider
-                ? `Build default (${defaultProvider})`
-                : "Not set",
+            label: defaultProvider
+              ? `Use agent defaults (${defaultProvider})`
+              : "Not set",
           },
           ...(harness?.providers ?? []),
           ...(harness?.label === "Pi"

@@ -394,3 +394,61 @@ fn invalid_avatar_and_stale_save_leave_persistent_bytes_unchanged() {
     assert!(store.save(&a.id, 0, update).is_err());
     assert_eq!(fs::read(store.path()).unwrap(), before);
 }
+
+#[test]
+fn agent_defaults_persist_owner_only_and_never_project_values() {
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().join("agent-controller");
+    let store = Store::open(root.clone()).unwrap();
+    assert_eq!(store.defaults().unwrap().harness, "buzz-agent");
+    let mut defaults = store.defaults().unwrap();
+    defaults.harness = "goose".into();
+    defaults.model = "global-model".into();
+    defaults
+        .environment
+        .insert("API_TOKEN".into(), "secret-env-value".into());
+    store.save_defaults(&defaults).unwrap();
+    drop(store);
+    let store = Store::open(root.clone()).unwrap();
+    assert!(store.defaults().unwrap() == defaults);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let mode = fs::metadata(root.join("defaults.json"))
+            .unwrap()
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o777, 0o600);
+    }
+    let snapshot = serde_json::to_string(&store.snapshot().unwrap()).unwrap();
+    assert!(snapshot.contains("\"environmentKeys\":[\"API_TOKEN\"]"));
+    assert!(!snapshot.contains("secret-env-value"));
+    fs::write(root.join("defaults.json"), b"{not json").unwrap();
+    assert!(store.defaults().is_err());
+}
+
+#[test]
+fn oversized_defaults_are_rejected_before_replacing_the_usable_record() {
+    let dir = tempfile::tempdir().unwrap();
+    let store = Store::open(dir.path().to_owned()).unwrap();
+    let mut defaults = store.defaults().unwrap();
+    defaults.model = "working-model".into();
+    store.save_defaults(&defaults).unwrap();
+    let original = fs::read(dir.path().join("defaults.json")).unwrap();
+
+    // Individual values are valid, but their combined JSON exceeds the read limit.
+    for index in 0..40 {
+        defaults
+            .environment
+            .insert(format!("TOKEN_{index}"), "x".repeat(32 * 1024));
+    }
+    assert_eq!(
+        store.save_defaults(&defaults).unwrap_err(),
+        "Agent defaults exceed the size limit"
+    );
+    assert_eq!(
+        fs::read(dir.path().join("defaults.json")).unwrap(),
+        original
+    );
+    assert_eq!(store.defaults().unwrap().model, "working-model");
+}

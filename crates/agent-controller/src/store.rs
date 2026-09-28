@@ -1,3 +1,4 @@
+use crate::agent_defaults::AgentDefaults;
 use crate::config::{Agent, AgentEdit, MAX_AGENTS, MAX_BYTES};
 use crate::Result;
 use serde::{Deserialize, Serialize};
@@ -6,6 +7,8 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::fs::{self, File, OpenOptions};
 use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
+
+const MAX_DEFAULTS_BYTES: usize = 1024 * 1024;
 
 #[derive(Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -129,11 +132,60 @@ impl Store {
     pub(crate) fn agents(&self) -> Result<Vec<Agent>> {
         Ok(self.read()?.agents)
     }
+    /// Device-wide defaults; absent means the built-in Buzz Agent defaults.
+    pub(crate) fn defaults(&self) -> Result<AgentDefaults> {
+        let path = self.root.join("defaults.json");
+        match fs::symlink_metadata(&path) {
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(AgentDefaults::default())
+            }
+            Err(_) => return Err("Could not inspect agent defaults".into()),
+            Ok(meta) if !meta.is_file() || meta.len() > MAX_DEFAULTS_BYTES as u64 => {
+                return Err("Agent defaults must be a bounded regular file; left unchanged".into())
+            }
+            Ok(_) => {}
+        }
+        let mut options = OpenOptions::new();
+        options.read(true);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::OpenOptionsExt;
+            options.custom_flags(libc::O_NOFOLLOW);
+        }
+        let mut bytes = Vec::new();
+        options
+            .open(path)
+            .and_then(|file| {
+                file.take((MAX_DEFAULTS_BYTES + 1) as u64)
+                    .read_to_end(&mut bytes)
+            })
+            .map_err(|_| "Could not read agent defaults")?;
+        if bytes.len() > MAX_DEFAULTS_BYTES {
+            return Err("Agent defaults exceed the size limit; left unchanged".into());
+        }
+        let defaults: AgentDefaults = serde_json::from_slice(&bytes)
+            .map_err(|_| "Agent defaults are malformed; left unchanged")?;
+        defaults.validate()?;
+        Ok(defaults)
+    }
+    /// Owner-only (0600) atomic replacement, like saved agents.
+    pub(crate) fn save_defaults(&self, defaults: &AgentDefaults) -> Result<()> {
+        defaults.validate()?;
+        self.defaults()?;
+        let bytes =
+            serde_json::to_vec_pretty(defaults).map_err(|_| "Could not encode agent defaults")?;
+        if bytes.len() > MAX_DEFAULTS_BYTES {
+            return Err("Agent defaults exceed the size limit".into());
+        }
+        atomic_write(&self.root.join("defaults.json"), &bytes)
+    }
     pub fn snapshot(&self) -> Result<crate::ControlSnapshot> {
+        let defaults = self.defaults()?;
         Ok(crate::ControlSnapshot {
-            agents: self.agents()?.iter().map(Agent::view).collect(),
+            agents: self.agents()?.iter().map(|a| a.view(&defaults)).collect(),
             runtime_available: false,
             runtime_message: Some("Native runtime has not been connected".into()),
+            default_settings: defaults.view(),
         })
     }
     pub fn save(&mut self, id: &str, revision: u64, edit: AgentEdit) -> Result<()> {

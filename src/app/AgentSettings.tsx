@@ -10,6 +10,7 @@ import { IconButton } from "../shared/design-system/ui/IconButton";
 import { PreferenceRow } from "../shared/design-system/ui/PreferenceRow";
 import { ToastNotice } from "../shared/design-system/ui/Toast";
 import { Tooltip } from "../shared/design-system/ui/Tooltip";
+import { AgentDefaultsCard } from "./AgentDefaultsCard";
 import styles from "./AgentSettings.module.css";
 
 const acpHint =
@@ -228,6 +229,7 @@ export function AgentSettings({
           </>
         )}
       </section>
+      <AgentDefaultsCard control={control} state={state} />
       <div className="mt-6">
         <PreferenceRow
           label="Remember mentioned agents"

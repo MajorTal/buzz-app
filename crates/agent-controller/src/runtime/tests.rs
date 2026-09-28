@@ -804,7 +804,10 @@ fn delete_stops_the_listener_and_refuses_deployed_remote_records() {
         .contains("no longer exists"));
     // Base Buzz refuses to orphan a deployed remote agent; the view says so
     // before any caller starts work that depends on deletion.
-    assert!(remote.view().deployed_remote && !a.view().deployed_remote);
+    assert!(
+        remote.view(&Default::default()).deployed_remote
+            && !a.view(&Default::default()).deployed_remote
+    );
     assert!(controller
         .delete(&remote.id, remote.revision)
         .err()
@@ -1301,7 +1304,7 @@ fn launch_selectors_show_defaults_blanks_and_overrides() {
         .environment
         .insert("BUZZ_AGENT_MODEL".into(), "override-model".into());
     // The view names the deciding override key, never its value.
-    let view = agent.view();
+    let view = agent.view(&Default::default());
     assert_eq!(view.harness.model, "saved-model");
     assert_eq!(view.launch_model, None);
     assert_eq!(view.launch_model_env, Some("BUZZ_AGENT_MODEL"));
@@ -1311,7 +1314,7 @@ fn launch_selectors_show_defaults_blanks_and_overrides() {
     agent
         .environment
         .insert("GOOSE_PROVIDER".into(), "override-provider".into());
-    let view = agent.view();
+    let view = agent.view(&Default::default());
     assert_eq!(view.launch_model.as_deref(), Some("saved-model"));
     assert_eq!(view.launch_model_env, None);
     assert_eq!(view.launch_provider, None);
@@ -1319,7 +1322,7 @@ fn launch_selectors_show_defaults_blanks_and_overrides() {
     agent.harness.model.clear();
     agent.environment.clear();
     agent.harness.provider.clear();
-    let view = agent.view();
+    let view = agent.view(&Default::default());
     assert!(view.launch_model.is_none() && view.launch_provider.is_none());
 }
 
@@ -1765,4 +1768,250 @@ fn import_and_repair_deliver_team_instructions_to_a_started_process() {
         ));
         assert!(controller.running.is_empty());
     }
+}
+
+#[cfg(unix)]
+#[test]
+fn agent_value_beats_agent_default_which_beats_build_default() {
+    let dir = tempfile::tempdir().unwrap();
+    let bundle = bundle(dir.path());
+    let key = Secret::parse(KEY, PUB).unwrap();
+    let mut blank = agent(dir.path());
+    blank.harness.provider.clear();
+    blank.harness.model.clear();
+    blank.imported["record"]
+        .as_object_mut()
+        .unwrap()
+        .remove("effort_level");
+    let env = |agent: &Agent| {
+        let command = bundle
+            .command_with_defaults(agent, &key, &deployment_defaults())
+            .unwrap();
+        command
+            .get_envs()
+            .filter_map(|(k, v)| Some((k.to_str()?.to_owned(), v?.to_str()?.to_owned())))
+            .collect::<BTreeMap<_, _>>()
+    };
+    // Build floor only.
+    assert_eq!(env(&blank)["BUZZ_AGENT_MODEL"], "build-model");
+    assert!(!env(&blank).contains_key("BUZZ_ACP_EFFORT_LEVEL"));
+    let defaults = crate::agent_defaults::AgentDefaults {
+        harness: "buzz-agent".into(),
+        provider: "databricks_v2".into(),
+        model: "global-model".into(),
+        effort: "medium".into(),
+        environment: BTreeMap::from([
+            ("PROVIDER_TEST_SETTING".into(), "global-value".into()),
+            ("GLOBAL_SETTING".into(), "global-value".into()),
+        ]),
+    };
+    let inherited = env(&crate::agent_defaults::effective(&blank, &defaults));
+    assert_eq!(inherited["BUZZ_AGENT_MODEL"], "global-model");
+    assert_eq!(inherited["BUZZ_ACP_EFFORT_LEVEL"], "medium");
+    assert_eq!(inherited["PROVIDER_TEST_SETTING"], "explicit-value");
+    assert_eq!(inherited["GLOBAL_SETTING"], "global-value");
+    let mut own = blank.clone();
+    own.harness.model = "agent-model".into();
+    own.imported["record"]["effort_level"] = json!("low");
+    let own = env(&crate::agent_defaults::effective(&own, &defaults));
+    assert_eq!(own["BUZZ_AGENT_MODEL"], "agent-model");
+    assert_eq!(own["BUZZ_ACP_EFFORT_LEVEL"], "low");
+}
+
+#[test]
+#[cfg(unix)]
+fn inherited_default_changes_reach_restart_diff_and_the_next_start() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = tempfile::tempdir().unwrap();
+    let mut store = Store::open(dir.path().join("config")).unwrap();
+    let mut a = agent(dir.path());
+    a.harness.model.clear();
+    store.insert(vec![a.clone()]).unwrap();
+    let mut controller = Controller::new(
+        store,
+        Arc::new(Memory),
+        Ok(bundle(tools.path())),
+        dir.path().join("ownership"),
+    );
+    let edit = |model: &str| crate::AgentDefaultsEdit {
+        harness: "buzz-agent".into(),
+        provider: String::new(),
+        model: model.into(),
+        effort: String::new(),
+        environment: BTreeMap::new(),
+    };
+    controller.save_defaults(edit("first-default")).unwrap();
+    controller.action(&a.id, Action::Start).unwrap();
+    let first = wait_for_contents(&dir.path().join("starts"), |text| {
+        (text.lines().count() == 10).then(|| text.to_owned())
+    });
+    assert_eq!(first.lines().nth(3), Some("first-default"));
+    let before = controller.running_settings().unwrap();
+    let saved = controller.save_defaults(edit("second-default")).unwrap();
+    let fields: Vec<_> = saved.agents[0]
+        .restart_diff
+        .iter()
+        .map(|e| e.field.as_str())
+        .collect();
+    assert_eq!(fields, ["model"]);
+    assert_eq!(
+        saved.agents[0].launch_model.as_deref(),
+        Some("second-default")
+    );
+    assert_ne!(controller.running_settings().unwrap(), before);
+    // An unrelated defaults edit leaves effective settings unchanged.
+    let before = controller.running_settings().unwrap();
+    let mut other = edit("second-default");
+    other.environment = BTreeMap::from([("PROVIDER_TEST_SETTING".into(), Some("hidden".into()))]);
+    controller.save_defaults(other).unwrap();
+    assert_eq!(controller.running_settings().unwrap(), before);
+    // A failed Stop can persist disabled intent while its listener remains live.
+    // Saving defaults must not select it for a restart or re-enable it.
+    controller.store.enabled(&a.id, false).unwrap();
+    let disabled = controller.snapshot().unwrap();
+    assert!(disabled.agents[0].status == ProcessStatus::Running);
+    assert!(!disabled.agents[0].enabled);
+    assert!(controller.running_settings().unwrap().is_empty());
+    controller.shutdown().unwrap();
+    assert!(controller.running_settings().unwrap().is_empty());
+}
+
+#[test]
+#[cfg(unix)]
+fn saved_databricks_workspace_launches_without_inheriting_global_host_or_restart() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = tempfile::tempdir().unwrap();
+    let mut store = Store::open(dir.path().join("config")).unwrap();
+    let mut a = agent(dir.path());
+    a.harness.provider = "databricks_v2".into();
+    a.harness.databricks = Some(crate::connection::DatabricksSettings {
+        host: "https://agent.example".into(),
+        filter: "agent-*".into(),
+    });
+    store.insert(vec![a.clone()]).unwrap();
+    let mut controller = Controller::new(
+        store,
+        Arc::new(Memory),
+        Ok(bundle(tools.path())),
+        dir.path().join("ownership"),
+    );
+    let edit = |host: &str, filter: &str| crate::AgentDefaultsEdit {
+        harness: "buzz-agent".into(),
+        provider: "databricks_v2".into(),
+        model: String::new(),
+        effort: String::new(),
+        environment: BTreeMap::from([
+            ("DATABRICKS_HOST".into(), Some(host.into())),
+            ("DATABRICKS_MODEL_FILTER".into(), Some(filter.into())),
+        ]),
+    };
+    controller
+        .save_defaults(edit("https://global.example", "global-*"))
+        .unwrap();
+    controller.action(&a.id, Action::Start).unwrap();
+    let env = wait_for_contents(&dir.path().join("runtime-env"), |text| {
+        (text.lines().count() == 6).then(|| text.to_owned())
+    });
+    assert_eq!(env.lines().nth(1), Some("https://agent.example"));
+    assert_eq!(env.lines().nth(2), Some("agent-*"));
+    assert_eq!(
+        controller.running[&a.id].databricks_host.as_deref(),
+        Some("https://agent.example")
+    );
+    let before = controller.running_settings().unwrap();
+    let snapshot = controller
+        .save_defaults(edit("https://next-global.example", "next-global-*"))
+        .unwrap();
+    assert_eq!(controller.running_settings().unwrap(), before);
+    assert!(snapshot.agents[0].restart_diff.is_empty());
+
+    let mut blank = a.clone();
+    blank.harness.databricks = None;
+    let inherited = crate::agent_defaults::effective(&blank, &controller.store.defaults().unwrap());
+    let settings = effective_databricks(&inherited).unwrap().unwrap();
+    assert_eq!(settings.host, "https://next-global.example");
+    assert_eq!(settings.filter, "next-global-*");
+    controller.shutdown().unwrap();
+}
+
+#[test]
+fn restart_comparison_ignores_overridden_selectors_without_exposing_secrets() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut a = agent(dir.path());
+    a.harness.command = "/usr/local/bin/goose".into();
+    a.harness.model.clear();
+    a.harness.provider.clear();
+    a.environment
+        .insert("GOOSE_MODEL".into(), "secret-model".into());
+    a.environment
+        .insert("GOOSE_PROVIDER".into(), "secret-provider".into());
+    let defaults = |model: &str, provider: &str| crate::agent_defaults::AgentDefaults {
+        harness: "goose".into(),
+        provider: provider.into(),
+        model: model.into(),
+        ..Default::default()
+    };
+    let first = crate::restart::spawn_config(&crate::agent_defaults::effective(
+        &a,
+        &defaults("global-one", "provider-one"),
+    ));
+    let second = crate::restart::spawn_config(&crate::agent_defaults::effective(
+        &a,
+        &defaults("global-two", "provider-two"),
+    ));
+    assert_eq!(
+        first, second,
+        "overridden global selectors must not restart"
+    );
+    assert!(crate::restart::diff(&first, &second).is_empty());
+    a.environment
+        .insert("GOOSE_MODEL".into(), "other-secret".into());
+    let changed = crate::restart::spawn_config(&crate::agent_defaults::effective(
+        &a,
+        &defaults("global-two", "provider-two"),
+    ));
+    let diff = serde_json::to_string(&crate::restart::diff(&first, &changed)).unwrap();
+    assert!(diff.contains("GOOSE_MODEL"));
+    assert!(!diff.contains("secret-model") && !diff.contains("other-secret"));
+}
+
+#[test]
+fn databricks_environment_override_is_not_projected_as_a_restart_selector() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut a = agent(dir.path());
+    a.harness.provider = "databricks_v2".into();
+    a.harness.model.clear();
+    a.environment
+        .insert("DATABRICKS_MODEL".into(), "secret-model".into());
+    a.environment
+        .insert("DATABRICKS_HOST".into(), "https://private.example".into());
+    a.harness.databricks = Some(crate::connection::DatabricksSettings {
+        host: "https://old.example".into(),
+        filter: String::new(),
+    });
+    let first = crate::restart::spawn_config(&a);
+    let matching_default = crate::agent_defaults::AgentDefaults {
+        harness: "buzz-agent".into(),
+        model: "secret-model".into(),
+        ..Default::default()
+    };
+    assert_eq!(
+        first,
+        crate::restart::spawn_config(&crate::agent_defaults::effective(&a, &matching_default)),
+        "setting the same model must not restart even if the source changes"
+    );
+    a.harness.databricks.as_mut().unwrap().host = "https://new.example".into();
+    let second = crate::restart::spawn_config(&a);
+    assert_eq!(first, second, "env overrides the saved workspace host");
+    a.environment
+        .insert("DATABRICKS_MODEL".into(), "new-secret".into());
+    let third = crate::restart::spawn_config(&a);
+    let entries = crate::restart::diff(&first, &third);
+    assert!(matches!(
+        entries.iter().find(|e| e.field == "model").unwrap().change,
+        crate::restart::RestartChange::Masked { .. }
+    ));
+    let wire = serde_json::to_string(&entries).unwrap();
+    assert!(wire.contains("DATABRICKS_MODEL"));
+    assert!(!wire.contains("secret-model") && !wire.contains("new-secret"));
 }

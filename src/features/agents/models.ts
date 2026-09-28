@@ -7,6 +7,8 @@ export interface ModelRequest {
   host: string;
   filter: string;
   action: "connect" | "refresh" | "disconnect";
+  /** Blank host/filter come from write-only Agent defaults; native supplies them. */
+  inheritWorkspace?: boolean;
 }
 export interface ModelCatalog {
   host: string;

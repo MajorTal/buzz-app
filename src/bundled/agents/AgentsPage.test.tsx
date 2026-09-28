@@ -616,7 +616,7 @@ it("selects installed Goose with ACP arguments and saves its provider and model"
   });
   fireEvent.blur(model);
   fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-  await within(dialog).findByText("Saved. Running work was not restarted.");
+  await within(dialog).findByText("Saved.");
   expect(f.calls.find((call) => call.action === "save")?.payload).toMatchObject(
     {
       edit: {
@@ -1049,7 +1049,7 @@ it("shows Harness, Provider and Model in order while preserving settings on Save
     target: { value: "Focused everyday edit" },
   });
   fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
-  await within(dialog).findByText("Saved. Running work was not restarted.");
+  await within(dialog).findByText("Saved.");
   expect(f.agent.harness).toEqual(original);
   const advanced = within(dialog).getByRole("button", {
     name: "Environment",
@@ -1646,7 +1646,7 @@ for (const mode of ["edit", "create"] as const) {
         exact: true,
         selector: "input",
       }),
-    ).toHaveAttribute("placeholder", "Build default: first-model");
+    ).toHaveAttribute("placeholder", "Use agent defaults (first-model)");
     expect(
       within(dialog).getByText(
         "Editing either field saves both displayed values.",
@@ -1676,7 +1676,7 @@ for (const mode of ["edit", "create"] as const) {
         exact: true,
         selector: "input",
       }),
-    ).toHaveAttribute("placeholder", "Build default: next-model");
+    ).toHaveAttribute("placeholder", "Use agent defaults (next-model)");
     fireEvent.click(
       within(dialog).getByRole("button", {
         name: mode === "create" ? "Create agent" : "Save changes",
@@ -1684,8 +1684,7 @@ for (const mode of ["edit", "create"] as const) {
     );
     if (mode === "create")
       await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
-    else
-      await within(dialog).findByText("Saved. Running work was not restarted.");
+    else await within(dialog).findByText("Saved.");
     const edit =
       mode === "create"
         ? create.mock.calls[0]?.[1]
@@ -1704,6 +1703,64 @@ for (const mode of ["edit", "create"] as const) {
     expect(edit.harness.databricks).toBeUndefined();
   });
 }
+it("create copies only the default harness and shows inherited defaults", async () => {
+  const create = vi.fn();
+  vi.spyOn(communityApi, "communityRequest").mockResolvedValue({ auth: [] });
+  setup("connected", (fixture) => {
+    fixture.data.harnessOptions?.push({
+      command: "/opt/tools/goose",
+      label: "Goose",
+      available: true,
+      status: "ready",
+      defaultArgs: ["acp"],
+      providers: [{ value: "anthropic", label: "Anthropic" }],
+    });
+    fixture.data.defaultSettings = {
+      harness: "goose",
+      provider: "anthropic",
+      model: "default-model",
+      effort: "high",
+      environmentKeys: ["SHARED_TOKEN"],
+    };
+    fixture.data.createAvailable = true;
+    fixture.data.defaultWorkspace = "/fixture/workspace";
+    fixture.host.prepareCreate = async () => ({
+      id: "created",
+      pubkey: "cd".repeat(32),
+    });
+    fixture.host.commitCreate = create.mockImplementation(async () => {
+      fixture.data.agents.push({
+        ...structuredClone(fixture.agent),
+        id: "created",
+      });
+      return structuredClone(fixture.data);
+    });
+  });
+  fireEvent.click(await screen.findByRole("button", { name: "Add agent" }));
+  const dialog = screen.getByRole("dialog");
+  fireEvent.change(within(dialog).getByLabelText("Name"), {
+    target: { value: "Defaults agent" },
+  });
+  expect(
+    within(dialog).getByLabelText("Model", { exact: true, selector: "input" }),
+  ).toHaveAttribute("placeholder", "Use agent defaults (default-model)");
+  expect(
+    within(dialog).getByText("Use agent defaults (anthropic)"),
+  ).toBeInTheDocument();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Create agent" }));
+  await waitFor(() => expect(create).toHaveBeenCalled());
+  // Only the harness is copied; provider, model, effort and env stay blank
+  // so they are looked up at each start.
+  expect(create.mock.calls[0]?.[1]).toMatchObject({
+    harness: {
+      command: "/opt/tools/goose",
+      args: ["acp"],
+      provider: "",
+      model: "",
+    },
+    environment: {},
+  });
+});
 it("qualifies management identities while keeping configured names and edit targets exact", async () => {
   const { f } = setup("ready", (fixture) => {
     fixture.data.agents.push({

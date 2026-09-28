@@ -21,6 +21,12 @@ pub(crate) struct Snapshot {
     harness_options: Vec<HarnessOption>,
     databricks_defaults: crate::agent_models::Defaults,
     agent_defaults: buzz_agent_controller::BuildDefaults,
+    /// Running agents restarted by this save; absent on other responses.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    restarted: Option<usize>,
+    /// Agents whose automatic restart after this save failed (not skipped).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    restart_failures: Option<usize>,
 }
 impl Snapshot {
     fn from(data: ControlSnapshot, import_available: bool, workspace: &std::path::Path) -> Self {
@@ -33,6 +39,8 @@ impl Snapshot {
             harness_options: harness_options(),
             databricks_defaults: crate::agent_models::defaults(),
             agent_defaults: buzz_agent_controller::build_defaults(),
+            restarted: None,
+            restart_failures: None,
         }
     }
 }
@@ -421,6 +429,9 @@ impl AgentHost {
     pub(crate) async fn ensure_open(&self) -> Result<(), String> {
         run(self.clone(), |_| Ok(())).await
     }
+    pub(crate) async fn inherited_workspace(&self) -> Result<Option<String>, String> {
+        run(self.clone(), |host| host.controller.inherited_workspace()).await
+    }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) async fn waiting_for_goose(&self) -> Result<Vec<String>, String> {
         run(self.clone(), move |host| {
@@ -456,7 +467,7 @@ impl AgentHost {
         let id = id.map(str::to_owned);
         run(self.clone(), move |host| match (id.as_deref(), revision) {
             (Some(id), Some(revision)) => host.controller.model_context(id, revision, edit),
-            (None, None) => Controller::draft_model_context(edit),
+            (None, None) => Controller::draft_model_context(host.controller.effective_draft(edit)?),
             _ => Err("Invalid agent model context".into()),
         })
         .await
@@ -470,7 +481,9 @@ impl AgentHost {
         let id = id.map(str::to_owned);
         run(self.clone(), move |host| match (id.as_deref(), revision) {
             (Some(id), Some(revision)) => host.controller.goose_model_context(id, revision, edit),
-            (None, None) => Controller::draft_goose_model_context(edit),
+            (None, None) => {
+                Controller::draft_goose_model_context(host.controller.effective_draft(edit)?)
+            }
             _ => Err("Invalid agent model context".into()),
         })
         .await
@@ -484,7 +497,9 @@ impl AgentHost {
         let id = id.map(str::to_owned);
         run(self.clone(), move |host| match (id.as_deref(), revision) {
             (Some(id), Some(revision)) => host.controller.pi_model_context(id, revision, edit),
-            (None, None) => Controller::draft_pi_model_context(edit),
+            (None, None) => {
+                Controller::draft_pi_model_context(host.controller.effective_draft(edit)?)
+            }
             _ => Err("Invalid agent model context".into()),
         })
         .await
@@ -555,11 +570,100 @@ pub(crate) async fn agent_control_save(
     expected_revision: u64,
     edit: AgentEdit,
 ) -> Result<Snapshot, String> {
-    run(state.inner().clone(), move |host| {
-        host.controller.save(&id, expected_revision, edit)?;
-        host.snapshot()
+    save_and_restart(state.inner().clone(), move |host| {
+        host.controller.save(&id, expected_revision, edit).map(drop)
     })
     .await
+}
+#[tauri::command]
+pub(crate) async fn agent_control_save_defaults(
+    state: tauri::State<'_, AgentHost>,
+    edit: buzz_agent_controller::AgentDefaultsEdit,
+) -> Result<Snapshot, String> {
+    save_and_restart(state.inner().clone(), move |host| {
+        host.controller.save_defaults(edit).map(drop)
+    })
+    .await
+}
+/// Save, then restart only agents that were running before and after it and whose
+/// effective settings changed. Stopped or disabled agents are never started.
+async fn save_and_restart(
+    owner: AgentHost,
+    save: impl FnOnce(&mut Host) -> Result<(), String> + Send + 'static,
+) -> Result<Snapshot, String> {
+    let changed = run(owner.clone(), move |host| {
+        let before = host.controller.running_settings()?;
+        save(host)?;
+        let after = host.controller.running_settings()?;
+        Ok(changed_running(before, after))
+    })
+    .await?;
+    let (mut restarted, mut failures) = (0, 0);
+    for id in changed {
+        // Re-checked under the lock: Stop wins, and a subsequent user Start
+        // may already have launched the saved settings.
+        let result = start_guarded(
+            owner.clone(),
+            id.clone(),
+            Action::Restart,
+            false,
+            None,
+            Some((needs_save_restart, NO_SAVE_RESTART)),
+        )
+        .await;
+        match restart_outcome(&id, result) {
+            RestartOutcome::Restarted => restarted += 1,
+            RestartOutcome::Skipped => {}
+            RestartOutcome::Failed => failures += 1,
+        }
+    }
+    let mut snapshot = run(owner, |host| host.snapshot()).await?;
+    snapshot.restarted = Some(restarted);
+    snapshot.restart_failures = Some(failures);
+    Ok(snapshot)
+}
+#[derive(Debug, PartialEq)]
+enum RestartOutcome {
+    Restarted,
+    /// No longer needed, or an explicit Stop/newer action won: not a failure.
+    Skipped,
+    Failed,
+}
+const NO_SAVE_RESTART: &str = "Agent no longer needs a save restart";
+fn restart_outcome(id: &str, result: Result<Snapshot, String>) -> RestartOutcome {
+    match result {
+        Err(error) if error == NO_SAVE_RESTART || error == START_CANCELLED => {
+            RestartOutcome::Skipped
+        }
+        Err(_) => RestartOutcome::Failed,
+        Ok(snapshot) => match snapshot.data.agents.iter().find(|agent| agent.id == id) {
+            // A denied credential prompt or failed stop leaves the old process
+            // running; only a launch of the saved settings counts as a restart.
+            Some(agent) if is_running(agent) && agent.restart_diff.is_empty() => {
+                RestartOutcome::Restarted
+            }
+            // Stop disabled it while the restart was in flight.
+            Some(agent) if !agent.enabled => RestartOutcome::Skipped,
+            _ => RestartOutcome::Failed,
+        },
+    }
+}
+/// Agents live both before and after a save whose effective settings differ.
+fn changed_running(
+    before: BTreeMap<String, serde_json::Value>,
+    after: BTreeMap<String, serde_json::Value>,
+) -> Vec<String> {
+    after
+        .into_iter()
+        .filter(|(id, settings)| before.get(id).is_some_and(|old| old != settings))
+        .map(|(id, _)| id)
+        .collect()
+}
+fn is_running(agent: &buzz_agent_controller::AgentView) -> bool {
+    agent.enabled && agent.status == buzz_agent_controller::ProcessStatus::Running
+}
+fn needs_save_restart(agent: &buzz_agent_controller::AgentView) -> bool {
+    is_running(agent) && !agent.restart_diff.is_empty()
 }
 #[tauri::command]
 pub(crate) async fn agent_control_start_on_app_launch(
@@ -608,24 +712,47 @@ pub(crate) async fn start(
     replay_floor: Option<u64>,
     from_goose_install: bool,
 ) -> Result<Snapshot, String> {
+    let guard = from_goose_install.then_some((
+        crate::harness_setup::waiting_for_goose as fn(&_) -> bool,
+        NOT_WAITING_FOR_GOOSE,
+    ));
+    start_guarded(owner, id, action, restore, replay_floor, guard).await
+}
+const START_CANCELLED: &str = "Start cancelled by a newer action";
+type StartGuard = (fn(&buzz_agent_controller::AgentView) -> bool, &'static str);
+fn check_guard(host: &mut Host, id: &str, guard: Option<StartGuard>) -> Result<(), String> {
+    let Some((eligible, refusal)) = guard else {
+        return Ok(());
+    };
+    if host
+        .controller
+        .snapshot()?
+        .agents
+        .iter()
+        .any(|agent| agent.id == id && eligible(agent))
+    {
+        Ok(())
+    } else {
+        Err(refusal.into())
+    }
+}
+async fn start_guarded(
+    owner: AgentHost,
+    id: String,
+    action: Action,
+    restore: bool,
+    replay_floor: Option<u64>,
+    guard: Option<StartGuard>,
+) -> Result<Snapshot, String> {
     let target = id.clone();
     let prepared = run(owner.clone(), move |host| {
         let id = target;
         if restore && (host.acted.contains(&id) || !host.controller.launch_ids()?.contains(&id)) {
             return Err("Agent disabled before restore".into());
         }
-        // Re-check while holding the controller, not just at install start:
-        // Stop or Edit may have changed this agent while the download ran.
-        if from_goose_install
-            && !host
-                .controller
-                .snapshot()?
-                .agents
-                .iter()
-                .any(|agent| agent.id == id && crate::harness_setup::waiting_for_goose(agent))
-        {
-            return Err(NOT_WAITING_FOR_GOOSE.into());
-        }
+        // Re-check while holding the controller, not just when the caller
+        // chose this agent: Stop or Edit may have changed it since.
+        check_guard(host, &id, guard)?;
         host.starts.remove(&id);
         if !restore {
             host.acted.insert(id.clone());
@@ -661,7 +788,7 @@ pub(crate) async fn start(
             .and_then(|v| v.ok_or("Saved agent key is unavailable; nothing was started".into()));
     run(owner, move |host| {
         if host.starts.get(&id).map(|(ticket, _)| *ticket) != Some(ticket) {
-            return Err("Start cancelled by a newer action".into());
+            return Err(START_CANCELLED.into());
         }
         host.starts.remove(&id);
         let key = match acquired {
@@ -675,6 +802,9 @@ pub(crate) async fn start(
             host.controller.record_error(&id, error);
             return host.snapshot();
         }
+        // The OS credential prompt can outlast the agent (e.g. its listener
+        // exited); eligibility must still hold right before Restart enables it.
+        check_guard(host, &id, guard)?;
         host.controller
             .action_with_key(&id, action, revision, &key, replay_floor)?;
         host.snapshot()

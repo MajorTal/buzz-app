@@ -8,7 +8,40 @@ import {
 } from "../../features/agents/control";
 import { Button } from "../../shared/design-system/ui/Button";
 import { AgentSettingsFields } from "./AgentSettingsFields";
-import { agentDraft, agentEdit, type AgentDraft } from "./agent-edit";
+import {
+  agentDraft,
+  agentEdit,
+  harnessKind,
+  type AgentDraft,
+} from "./agent-edit";
+
+/** The Agent defaults harness is copied at creation; the rest is inherited at start. */
+function newAgentDraft(state: AgentControlState): AgentDraft {
+  const defaults = state.data?.defaultSettings;
+  const chosen = state.data?.harnessOptions?.find(
+    (option) =>
+      option.available !== false &&
+      harnessKind(option.command) === (defaults?.harness ?? "buzz-agent"),
+  );
+  const command = chosen?.command ?? "buzz-agent";
+  const inherits = defaults?.harness === "buzz-agent" && !!defaults.provider;
+  return {
+    revision: 0,
+    name: "",
+    systemPrompt: "",
+    workspace: state.data?.defaultWorkspace ?? "",
+    command,
+    args: JSON.stringify(chosen?.defaultArgs ?? []),
+    model: "",
+    provider:
+      command !== "buzz-agent" ||
+      inherits ||
+      state.data?.agentDefaults?.provider
+        ? ""
+        : "databricks_v2",
+    environment: {},
+  };
+}
 
 type CreatePhase = "creating" | "starting" | "publishing" | "checking";
 
@@ -36,17 +69,7 @@ export function AgentCreateDialog({
           ...agentDraft(source),
           name: `${source.name} copy`,
         }
-      : {
-          revision: 0,
-          name: "",
-          systemPrompt: "",
-          workspace: state.data?.defaultWorkspace ?? "",
-          command: "buzz-agent",
-          args: "[]",
-          model: "",
-          provider: state.data?.agentDefaults?.provider ? "" : "databricks_v2",
-          environment: {},
-        },
+      : newAgentDraft(state),
   );
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState<AgentView | null>(null);

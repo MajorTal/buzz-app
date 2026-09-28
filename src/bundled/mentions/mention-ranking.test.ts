@@ -6,6 +6,7 @@ import {
   mentionMatch,
   type MentionChoice,
 } from "./mention-ranking";
+import { fixtureChoice, mentionConformance } from "./mention-rules.conformance";
 const choice = (
   key: string,
   name: string,
@@ -228,3 +229,29 @@ it("orders mixed people and agents the same way from every input order", () => {
       other,
     ]);
 });
+
+it("validates the portable mention fixture version and case lists", () => {
+  expect(mentionConformance.version).toBe(1);
+  expect(mentionConformance.ranking.length).toBeGreaterThan(0);
+  expect(mentionConformance.space.length).toBeGreaterThan(0);
+});
+it.each(mentionConformance.ranking)(
+  "conforms to the portable ranking contract: $name",
+  (fixture) => {
+    const ranked = rankMentions(
+      fixture.choices.map(fixtureChoice),
+      fixture.query,
+      new Map(Object.entries(fixture.history ?? {})),
+      (key) => fixture.presence?.[key] ?? "unknown",
+    );
+    expect(ranked.map((c) => c.recipient.pubkey)).toEqual(fixture.expected);
+  },
+);
+it.each(mentionConformance.space)(
+  "conforms to the portable Space contract: $name",
+  (fixture) => {
+    expect(
+      exactMention(fixture.choices.map(fixtureChoice), fixture.query) ?? null,
+    ).toBe(fixture.expected);
+  },
+);

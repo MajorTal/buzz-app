@@ -1,5 +1,6 @@
 import { expect, it } from "vitest";
 import { mentionQuery, matchesMentionQuery } from "./mention-query";
+import { mentionConformance } from "./mention-rules.conformance";
 
 it("opens at word/open-bracket boundaries without treating email/URLs as mentions", () => {
   for (const text of ["@", "hi @Ho", "(@Ho", "[@Ho", "{@Ho", "\n@Ho"]) {
@@ -29,3 +30,18 @@ it("only continues spaces for known multi-word names; completion does not bind i
   expect(matchesMentionQuery("Honey ", ["Honey", "Honey Bee"])).toBe(false);
   expect(matchesMentionQuery("Unknown", [])).toBe(true);
 });
+
+it.each(mentionConformance.query)(
+  "conforms to the portable query contract: $name",
+  (fixture) => {
+    expect(mentionQuery(fixture.text, fixture.caret)).toEqual(fixture.expected);
+  },
+);
+it.each(mentionConformance.admission)(
+  "conforms to the portable multi-word admission contract: $name",
+  (fixture) => {
+    expect(matchesMentionQuery(fixture.query, fixture.names)).toBe(
+      fixture.expected,
+    );
+  },
+);

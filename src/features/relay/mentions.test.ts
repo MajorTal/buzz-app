@@ -2,6 +2,7 @@ import { assert, afterEach, expect, it, vi } from "vitest";
 import type { EventTemplate } from "nostr-tools";
 import type { RelayEvent } from "./events";
 import { createRelaySession } from "./session";
+import { mentionConformance } from "../../bundled/mentions/mention-rules.conformance";
 import {
   flush,
   keypair,
@@ -294,5 +295,40 @@ it.each([false, true])(
     expect(() =>
       h.session.messages.send("c", "@Outside", [], [], undefined, ["invalid"]),
     ).toThrow(/valid mention references/);
+  },
+);
+
+it.each(mentionConformance.tags.write)(
+  "conforms to the portable mention tag writing contract: $name",
+  async (fixture) => {
+    const h = setup();
+    // The sender must be a member; fixtures list only the other members.
+    await h.members([viewer.pubkey, ...fixture.members]);
+    const send = () =>
+      h.session.messages.send(
+        "c",
+        "@Someone",
+        fixture.recipients,
+        [],
+        undefined,
+        fixture.references,
+      );
+    const expected = fixture.expected;
+    if ("error" in expected) {
+      expect(send).toThrow(
+        {
+          not_member: /no longer a channel member/,
+          invalid: /valid mention/,
+          too_many: /at most 32/,
+        }[expected.error],
+      );
+      return;
+    }
+    send();
+    await flush();
+    const event = h.publish.mock.calls[0]?.[0];
+    expect(
+      event?.tags.filter(([name]) => name === "p" || name === "mention"),
+    ).toEqual(expected.tags);
   },
 );

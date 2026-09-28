@@ -380,7 +380,7 @@ it("reads rosters scoped to the viewer, then metadata only for unnamed channels"
   store.dispose();
 });
 
-it("keeps known membership when a capped roster read omits it, and reports partial coverage", async () => {
+it("keeps known membership and cached heads when a later roster page fails", async () => {
   const { queries, store, next } = setup();
   queries.ensureList();
   next().respond(discovery(["a"])); // Metadata answered inline; no second read.
@@ -394,8 +394,10 @@ it("keeps known membership when a capped roster read omits it, and reports parti
   );
   next().respond(capped);
   await flush();
-  next().respond([]);
-  await flush();
+  const continuation = next();
+  expect(continuation.filters[0]?.kinds).toEqual([39002]);
+  continuation.fail(new Error("Later roster page unavailable"));
+  await vi.waitFor(() => expect(queries.list().status).toBe("error"));
   expect(queries.list().channels.map((c) => c.id)).toContain("a");
   expect(queries.list().channels.length).toBe(501);
   expect(queries.list().coverage).toBe("partial");

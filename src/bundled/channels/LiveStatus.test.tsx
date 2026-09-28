@@ -172,6 +172,33 @@ it("keeps partial roster coverage visible even with healthy established routes",
   );
 });
 
+it.each(["idle", "pending"] as const)(
+  "keeps partial roster coverage quiet while discovery is %s",
+  (state) => {
+    expect(render({ roster: { state } }, true)).toBe("");
+    expect(render({ roster: { state } }, true, true)).not.toContain(
+      "Some channels are missing",
+    );
+  },
+);
+it.each(["error", "deferred"] as const)(
+  "offers roster recovery when partial discovery is %s",
+  (state) => {
+    const notice = render({ roster: { state } }, true);
+    expect(notice).toContain("Channel list needs refreshing.");
+    expect(notice).toContain("Retry live updates");
+  },
+);
+it.each<Partial<Snapshot>>([
+  { error: "Socket refused" },
+  { routes: [{ ...channel, status: "error", error: "Stream stopped" }] },
+  { heads: [{ channelId: "a", state: "error", error: "Head read failed" }] },
+])("pending partial discovery does not hide another failure: %j", (patch) => {
+  const notice = render({ ...patch, roster: { state: "pending" } }, true);
+  expect(notice).toContain("Retry live updates");
+  expect(notice).not.toContain("Some channels are missing");
+});
+
 it("diagnostics does not duplicate notices; changing the selected channel/session replaces recovery ownership", () => {
   const oldRetry = vi.fn();
   const retry = vi.fn();

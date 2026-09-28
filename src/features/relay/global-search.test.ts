@@ -415,19 +415,23 @@ it.each(["private", "public", "dm"])(
   async (visibility) => {
     const viewer = keypair(),
       relay = keypair();
+    const memberships = Array.from({ length: 500 }, (_, i) =>
+      roster(relay, `c${i}`, [viewer.pubkey]),
+    ).sort((a, b) => a.id.localeCompare(b.id));
+    const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
     const owner = createRelaySession({
-      ...scriptedTransport(viewer.pubkey, relay.pubkey).transport,
-      async query(filters) {
+      ...wire.transport,
+      async query(filters, signal) {
         if (filters.some((filter) => filter.search))
           return [message(viewer, "omitted", "crew", 1700000000)];
-        if (
-          filters.some(
-            (filter) => filter.kinds?.includes(39002) && !filter["#d"],
-          )
-        )
-          return Array.from({ length: 500 }, (_, i) =>
-            roster(relay, `c${i}`, [viewer.pubkey]),
-          );
+        const rosterFilter = filters.find(
+          (filter) => filter.kinds?.includes(39002) && !filter["#d"],
+        );
+        if (rosterFilter)
+          return rosterFilter.until === undefined &&
+            rosterFilter.before_id === undefined
+            ? memberships
+            : wire.transport.query(filters, signal);
         if (filters.some((filter) => filter["#d"]?.includes("omitted")))
           return [
             publicMetadata(
@@ -446,11 +450,39 @@ it.each(["private", "public", "dm"])(
     });
     try {
       owner.session.channels.ensureList();
-      await flush();
-      expect(owner.session.channels.list().coverage).toBe("partial");
-      const result = await owner.session.read(search);
-      expect(result).toHaveLength(1);
-      expect(owner.session.channels.get?.("omitted")?.readOnly).toBeUndefined();
+      await vi.waitFor(() => expect(wire.pending).toHaveLength(1));
+      const continuation = wire.next();
+      try {
+        expect(continuation.filters).toEqual([
+          {
+            kinds: [39002],
+            "#p": [viewer.pubkey],
+            limit: 500,
+            until: memberships.at(-1)?.created_at,
+            before_id: memberships.at(-1)?.id,
+          },
+        ]);
+        expect(owner.session.channels.list().channels).toHaveLength(500);
+        expect(owner.session.channels.list().coverage).toBe("partial");
+        expect(owner.session.live.snapshot().roster.state).toBe("pending");
+        expect(owner.session.channels.get?.("omitted")).toBeUndefined();
+        const result = await owner.session.read(search);
+        expect(result).toHaveLength(1);
+        expect(
+          owner.session.channels.get?.("omitted")?.readOnly,
+        ).toBeUndefined();
+        expect(
+          owner.session.channels
+            .list()
+            .channels.some((channel) => channel.id === "omitted"),
+        ).toBe(true);
+      } finally {
+        continuation.respond([]);
+      }
+      await vi.waitFor(() =>
+        expect(owner.session.live.snapshot().roster.state).toBe("verified"),
+      );
+      expect(owner.session.channels.list().coverage).toBeUndefined();
       expect(
         owner.session.channels
           .list()

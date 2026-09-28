@@ -71,8 +71,10 @@ export type ChannelStoreOptions = {
   notifyListener?: (listener: () => void) => void;
 };
 const EMPTY_ROWS: readonly ChannelMessage[] = Object.freeze([]);
-/** Relay read cap. A roster read returning fewer than this is complete evidence of the viewer's membership. */
+/** Relay page size, separate from discovery's retained-entry budget. */
 const DISCOVERY_LIMIT = 500;
+/** Exact omission confirmations use the relay's explicit channel-ID cap. */
+const DISCOVERY_CONFIRM_LIMIT = 128;
 const UNAVAILABLE: ChannelList = Object.freeze({
   status: "unavailable",
   channels: Object.freeze([]),
@@ -151,6 +153,8 @@ export function createChannelStore(
   const discovery = transport
     ? new DiscoveryState(transport.viewer, transport.relayAuthor)
     : null;
+  // Restored metadata needs confirmation independently of roster progress/retries.
+  const pendingMetadata = new Set<string>();
   const heads = new ByteLru<Head>(maxHeads, maxHeadBytes);
   const windows = new Map<string, WindowState>();
   const tails = new ByteLru<{
@@ -223,6 +227,7 @@ export function createChannelStore(
       !discoveryChanged &&
       sameChannels &&
       next.status === list.status &&
+      next.coverage === list.coverage &&
       next.error === list.error &&
       next.asOf === list.asOf
     )
@@ -879,10 +884,23 @@ export function createChannelStore(
     if (!cached) discoveryObserved = true;
     started ??= discovery.rosterVersions();
     const accessRevision = discovery.accessRevision;
+    const overflowRevision = discovery.overflowRevision;
     if (cached) discovery.restrictToKnown();
     let discoveryChanged = false;
-    for (const event of events)
+    for (const event of events) {
       discoveryChanged = discovery.accept(event, cached) || discoveryChanged;
+      if (event.kind === 39000) {
+        const id = tag(event, "d");
+        if (id && discovery.metadataVersion(id)?.id === event.id) {
+          if (cached) pendingMetadata.add(id);
+          else pendingMetadata.delete(id);
+        }
+      }
+    }
+    if (discovery.overflowRevision !== overflowRevision) {
+      coverage = "partial";
+      complete = undefined;
+    }
     // Only a complete viewer-scoped roster read proves absence; capped reads and live traffic never revoke by omission.
     if (complete) {
       discovery.retain(complete, started);
@@ -908,12 +926,14 @@ export function createChannelStore(
         void persistence?.remove(id).catch(() => {});
       }
     allowed = nextAllowed;
+    let appliedEpoch = epoch;
     const commit = () => {
       for (const state of [...windows.values()])
         if (!authorized(state.channelId)) evict(state);
       for (const id of heads.keys()) if (!authorized(id)) heads.delete(id);
       for (const id of tails.keys()) if (!authorized(id)) tails.delete(id);
       if (complete) void persistence?.retain([...nextAllowed]).catch(() => {});
+      appliedEpoch = epoch;
       setList(
         {
           status: "ready",
@@ -945,6 +965,7 @@ export function createChannelStore(
         if (windows.has(channel.id)) queries.ensure(channel.id);
       }
     }
+    return !disposed && appliedEpoch === epoch;
   }
   /** Apply roster authority as soon as it succeeds; names are a separate,
    * optional read and cannot delay revocation or overwrite newer live grants. */
@@ -970,8 +991,9 @@ export function createChannelStore(
       listBusy = false;
       return;
     }
+    coverage = "partial";
     if (list.status !== "ready")
-      setList({ status: "loading", channels: list.channels });
+      setList({ status: "loading", channels: list.channels, coverage });
     if (disposed) {
       listBusy = false;
       return;
@@ -980,57 +1002,174 @@ export function createChannelStore(
     let controller = new AbortController();
     controllers.add(controller);
     const started = discovery.rosterVersions();
+    const overflowRevision = discovery.overflowRevision;
     let readingRoster = true;
+    let denyAllOnFailure = true;
     let outcome: RosterRefresh = { state: "deferred" };
     try {
-      const rosters = await transport.read(
-        [{ kinds: [39002], "#p": [transport.viewer], limit: DISCOVERY_LIMIT }],
-        { signal: controller.signal },
-      );
-      if (disposed || generation !== epoch) return;
-      const ids = [
-        ...new Set(
-          rosters
-            .filter(
-              (event) =>
-                event.kind === 39002 &&
-                event.pubkey === transport.relayAuthor &&
-                hasTag(event, "p", transport.viewer),
+      const ids = new Set<string>();
+      const named = new Set<string | undefined>();
+      let cursor: RelayEvent | undefined;
+      let complete: Set<string> | undefined;
+      let retainedComplete = false;
+      let paged = false;
+      // At most the retained roster budget plus its final exhaustion read.
+      // This also bounds a relay returning repeated coordinates with new versions.
+      for (let page = 0; page <= discovery.capacity / DISCOVERY_LIMIT; page++) {
+        const rosters = await transport.read(
+          [
+            {
+              kinds: [39002],
+              "#p": [transport.viewer],
+              limit: DISCOVERY_LIMIT,
+              ...(cursor
+                ? { until: cursor.created_at, before_id: cursor.id }
+                : {}),
+            },
+          ],
+          { signal: controller.signal },
+        );
+        if (disposed || generation !== epoch) return;
+        const members = rosters
+          .filter(
+            (event) =>
+              event.kind === 39002 &&
+              event.pubkey === transport.relayAuthor &&
+              hasTag(event, "p", transport.viewer) &&
+              tag(event, "d"),
+          )
+          .sort(
+            (a, b) => b.created_at - a.created_at || a.id.localeCompare(b.id),
+          );
+        for (const event of members) {
+          const id = tag(event, "d");
+          if (id) ids.add(id);
+        }
+        for (const event of rosters)
+          if (event.kind === 39000 && event.pubkey === transport.relayAuthor)
+            named.add(tag(event, "d"));
+        const last = members.at(-1);
+        const advances =
+          members.every(
+            (event) =>
+              !cursor ||
+              event.created_at < cursor.created_at ||
+              (event.created_at === cursor.created_at && event.id > cursor.id),
+          ) &&
+          (rosters.length < DISCOVERY_LIMIT || !!last);
+        const shortPage = advances && rosters.length < DISCOVERY_LIMIT;
+        const pageComplete = shortPage ? ids : undefined;
+        if (
+          !applyDiscovery(
+            rosters,
+            pageComplete && !paged ? pageComplete : undefined,
+            started,
+          )
+        )
+          return;
+        const overflowed = discovery.overflowRevision !== overflowRevision;
+        if (overflowed) complete = undefined;
+        if (disposed || (!shortPage && generation !== epoch)) return;
+        if (!advances)
+          throw new ReadError(
+            "invalid-response",
+            "Channel discovery cursor did not advance",
+          );
+        if (shortPage && !overflowed) {
+          complete = ids;
+          retainedComplete = !paged;
+          break;
+        }
+        if (overflowed) break;
+        cursor = last;
+        paged = true;
+      }
+      if (complete && !retainedComplete) {
+        denyAllOnFailure = false;
+        const current = discovery.rosterVersions();
+        const omitted = paged
+          ? [...started].flatMap(([id, roster]) =>
+              !complete?.has(id) &&
+              current.get(id) === roster &&
+              hasTag(roster, "p", transport.viewer) &&
+              discovery.authorized(id)
+                ? [id]
+                : [],
             )
-            .map((event) => tag(event, "d"))
-            .filter((id): id is string => !!id),
-        ),
-      ];
-      const named = new Set(
-        rosters
-          .filter((event) => event.kind === 39000)
-          .map((event) => tag(event, "d")),
-      );
-      const wanted = ids.filter(
+          : [];
+        for (
+          let offset = 0;
+          offset < omitted.length;
+          offset += DISCOVERY_CONFIRM_LIMIT
+        ) {
+          const batch = omitted.slice(offset, offset + DISCOVERY_CONFIRM_LIMIT);
+          const confirmations = await transport.read(
+            [
+              {
+                kinds: [39002],
+                authors: [transport.relayAuthor],
+                "#d": batch,
+                "#p": [transport.viewer],
+                limit: batch.length + 1,
+              },
+            ],
+            { signal: controller.signal, fresh: true },
+          );
+          if (disposed || generation !== epoch) return;
+          if (
+            confirmations.length > batch.length ||
+            confirmations.some(
+              (event) =>
+                event.kind !== 39002 ||
+                event.pubkey !== transport.relayAuthor ||
+                !hasTag(event, "p", transport.viewer) ||
+                !batch.includes(tag(event, "d") ?? ""),
+            )
+          )
+            throw new ReadError(
+              "invalid-response",
+              "Channel discovery confirmation exceeded its read budget",
+            );
+          for (const event of confirmations) {
+            const id = tag(event, "d");
+            if (id) complete.add(id);
+          }
+          applyDiscovery(confirmations);
+          if (disposed || generation !== epoch) return;
+        }
+        if (discovery.overflowRevision !== overflowRevision)
+          complete = undefined;
+        if (complete && !applyDiscovery([], complete, started)) return;
+      }
+      const wanted = [...ids].filter(
         (id) =>
+          discovery.authorized(id) &&
           !named.has(id) &&
-          (force || discovery.get(id)?.cached || !discovery.named(id)),
+          (force || pendingMetadata.has(id) || !discovery.named(id)),
       );
-      const complete =
-        rosters.length < DISCOVERY_LIMIT ? new Set(ids) : undefined;
-      if (!complete) coverage = "partial";
-      applyDiscovery(rosters, complete, started);
-      if (disposed) return;
       generation = epoch;
       readingRoster = false;
+      denyAllOnFailure = false;
       // Applying our own complete roster can invalidate the original request.
       // Metadata gets a fresh cancellation owner, never another completeness set.
       controllers.delete(controller);
       controller = new AbortController();
       controllers.add(controller);
-      const metadata = wanted.length
-        ? await transport.read(
-            [{ kinds: [39000], "#d": wanted, limit: DISCOVERY_LIMIT }],
-            { signal: controller.signal },
-          )
-        : [];
-      if (disposed || generation !== epoch) return;
-      applyDiscovery(metadata);
+      for (let offset = 0; offset < wanted.length; offset += DISCOVERY_LIMIT) {
+        const metadata = await transport.read(
+          [
+            {
+              kinds: [39000],
+              "#d": wanted.slice(offset, offset + DISCOVERY_LIMIT),
+              limit: DISCOVERY_LIMIT,
+            },
+          ],
+          { signal: controller.signal },
+        );
+        if (disposed || generation !== epoch) return;
+        applyDiscovery(metadata);
+        if (disposed || generation !== epoch) return;
+      }
       if (!disposed && generation === epoch) outcome = { state: "verified" };
     } catch (error) {
       if (disposed || generation !== epoch) return;
@@ -1039,7 +1178,7 @@ export function createChannelStore(
         : { state: "error", error: describe(error) };
       if (error instanceof ReadError && error.retryAfterMs !== undefined)
         listRetryAt = performance.now() + error.retryAfterMs;
-      if (readingRoster && readErrorKind(error) === "denied") {
+      if (denyAllOnFailure && readErrorKind(error) === "denied") {
         discovery.denyAll();
         transport.revokeAccess(() => {
           for (const id of allowed ?? [])
@@ -1064,6 +1203,10 @@ export function createChannelStore(
       }
     } finally {
       controllers.delete(controller);
+      if (!disposed && readingRoster) {
+        coverage = "partial";
+        setList({ ...list, coverage });
+      }
       listBusy = false;
       if (!disposed) {
         rosterRefresh = Object.freeze(outcome);

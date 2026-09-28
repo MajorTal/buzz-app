@@ -42,17 +42,19 @@ export function LiveStatus({
   const routeError = actionable.find((route) => route.error)?.error;
   const error =
     snapshot.error ?? snapshot.roster.error ?? head?.error ?? routeError;
+  const incompleteRoster =
+    partialRoster && snapshot.roster.state === "verified";
   const issue =
     ["unavailable", "retrying", "error"].includes(snapshot.status) ||
     error !== undefined ||
     actionable.some((route) => ["error", "limited"].includes(route.status)) ||
     head?.state === "error" ||
     ["error", "deferred"].includes(snapshot.roster.state) ||
-    partialRoster;
+    incompleteRoster;
   const reason = error?.includes("rate-limited: quota exceeded")
     ? "A relay request was rate-limited; recovery needs attention."
     : (error ??
-      (partialRoster
+      (incompleteRoster
         ? "Some channels are missing from the current roster."
         : ["error", "deferred"].includes(snapshot.roster.state)
           ? "Channel list needs refreshing."

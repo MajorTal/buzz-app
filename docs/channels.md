@@ -368,6 +368,16 @@ The port retains the prepared-store implementation and its behavior tests:
 - A 60-second head freshness lease; warm revisits reuse heads without new reads.
   Partial discovery never treats an omitted channel as a membership revocation.
   Explicit denial or signed membership removal invalidates private cached views.
+- Viewer membership discovery follows 500-event roster pages using the relay's
+  `(until, before_id)` cursor (timestamp descending, event ID ascending), then
+  fetches names in batches of at most 500 channel IDs. Verified grants become
+  available page by page; successful paged exhaustion confirms scan-start
+  omissions with fresh exact roster reads before reconciling against the roster
+  versions present when the scan began. Failure, cancellation, nonadvancing
+  cursors and the separate 1,024-entry roster/metadata retention caps leave
+  coverage partial. Each scan is bounded to three roster-page reads plus at most
+  eight 128-channel confirmation reads; metadata failure preserves successful
+  membership evidence and earlier name batches.
 - Conventional top-down virtua timeline, prepend anchoring, near-bottom following,
   and three cached geometries keyed by session, channel, content, profiles, and width.
 

@@ -39,6 +39,7 @@ it("loads PR details and preserves merged state, branches, and change counts", a
       JSON.stringify({
         title: "Simplify panels",
         body: "An independent panel contract.",
+        body_html: "<p>An independent panel contract.</p>",
         state: "closed",
         merged: true,
         user: { login: "author" },
@@ -55,12 +56,18 @@ it("loads PR details and preserves merged state, branches, and change counts", a
   const data = await loadGitHubDetails(reference, signal);
   expect(fetch).toHaveBeenCalledWith(
     "https://api.github.com/repos/block/buzz/pulls/23",
-    expect.objectContaining({ signal, credentials: "omit" }),
+    expect.objectContaining({
+      signal,
+      credentials: "omit",
+      headers: { Accept: "application/vnd.github.full+json" },
+    }),
   );
   expect(data).toMatchObject({
     title: "Simplify panels",
     state: "Merged",
     author: "author",
+    body: "An independent panel contract.",
+    bodyHtml: "<p>An independent panel contract.</p>",
   });
   expect(data.facts).toContainEqual(["Changes", "+10 / −80"]);
 });

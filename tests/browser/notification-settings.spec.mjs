@@ -2,6 +2,14 @@ import { test, expect } from "./fixture.mjs";
 
 test.use({ historyCounts: { alpha: 0, beta: 0 } });
 
+const button = (page, name) => page.getByRole("button", { name, exact: true });
+
+async function settings(page) {
+  await button(page, "Your profile").click();
+  await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+  await expect(page.getByRole("main")).toBeFocused();
+}
+
 // Real font metrics, wrapping and parent layout need a browser, not jsdom.
 test("Notifications keeps settings separated and button labels contained at supported text sizes", async ({
   page,
@@ -17,13 +25,12 @@ test("Notifications keeps settings separated and button labels contained at supp
     };
   });
   await page.goto(app.origin);
-  const modifier = process.platform === "darwin" ? "Meta" : "Control";
-  await page.keyboard.press(`${modifier}+,`);
+  await settings(page);
   const section = page.locator(
     'section[aria-labelledby="notification-settings-title"]',
   );
   for (const scale of [100, 200]) {
-    await page.getByRole("button", { name: "Appearance", exact: true }).click();
+    await button(page, "Appearance").click();
     if (scale === 200) {
       for (let i = 0; i < 10; i++) {
         await page.getByRole("button", { name: "Increase text size" }).click();

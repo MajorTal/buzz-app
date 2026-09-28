@@ -25,6 +25,8 @@ type MediaAttachmentProps = {
   attachment: Attachment;
   media(url: string): string | undefined;
   mode?: "inline" | "thread";
+  imageDescription?: string;
+  preload?: "auto" | "metadata" | "none";
   seekTo?: number;
   seekRequest?: number;
   onPlayback?(playback: MediaPlayback): void;
@@ -54,6 +56,8 @@ export function MediaAttachment({
   attachment,
   media,
   mode = "inline",
+  imageDescription = "Attachment preview",
+  preload = "auto",
   seekTo,
   seekRequest,
   onPlayback,
@@ -123,7 +127,7 @@ export function MediaAttachment({
         >
           <img
             src={source}
-            alt="Attachment preview"
+            alt={imageDescription}
             loading="lazy"
             onLoad={(event) =>
               setMeasuredDimensions({
@@ -143,7 +147,7 @@ export function MediaAttachment({
               <img
                 className={styles.mediaViewerImage}
                 src={source}
-                alt="Attachment preview"
+                alt={imageDescription}
               />
             </MediaViewer>,
             document.body,
@@ -165,7 +169,7 @@ export function MediaAttachment({
       className={styles.mediaVideo}
       src={source}
       poster={visiblePreview}
-      preload="auto"
+      preload={preload}
       playsInline
       style={previewStyle}
       onLoadedData={(event) => {

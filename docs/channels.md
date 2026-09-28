@@ -12,6 +12,10 @@ The panel reads GitHub's public API on demand. Private or unavailable objects an
 API limits show an explanation with a direct GitHub link. File and branch links
 continue to open normally. No GitHub account connection is configured yet.
 
+Descriptions support GitHub-flavored Markdown with inline images, video, and
+audio. Other files remain links; media that cannot load keeps a fallback link.
+Use **Open on GitHub** for attachments that require repository access.
+
 On desktop, an ordinary click on an unhandled HTTP(S) link with
 `target="_blank"` uses the native Tauri opener to launch the default browser,
 including attachments and **Open on GitHub**. A plugin that handles the click prevents that fallback; disabling

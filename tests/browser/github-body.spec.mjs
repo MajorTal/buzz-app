@@ -1,0 +1,247 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { test, expect } from "./fixture.mjs";
+import { openPage } from "./navigation.mjs";
+import { end, settle } from "./timeline.mjs";
+
+test.use({ historyCounts: { alpha: 1, beta: 0 } });
+const target = "https://github.com/block/buzz-app/pull/327";
+const before =
+  "https://github.com/user-attachments/assets/81e77cff-0e61-4694-9a88-add0c1f997e4";
+const after =
+  "https://github.com/user-attachments/assets/dd1f7e4f-e2a4-4aec-b661-cb45032f29c5";
+const picture =
+  "https://github.com/user-attachments/assets/cd0773ee-9861-46d9-8a0f-352ae951ec7f";
+// GitHub media downloads redirect to the objects CDN; the packaged media
+// policy must allow the redirect origin, not only the original URL.
+const redirected =
+  "https://objects.githubusercontent.com/github-production-user-asset-6210df/659873452-after.mp4";
+const videoPath = fileURLToPath(
+  new URL("../fixtures/message-gallery/assets/sample.mp4", import.meta.url),
+);
+const imagePath = fileURLToPath(
+  new URL("../fixtures/attachment-media/still.png", import.meta.url),
+);
+const details = {
+  title: "Render PR descriptions with inline media",
+  state: "open",
+  body: `## Before\n\nThe description was **plain text**.\n\n${before}\n\n## After\n\nReview **formatted sections** and recordings in place.\n\n${after}\n\n### Checklist\n\n- [x] Preserve document order\n- [x] Keep original attachment links\n\n### Attachments\n\n- Video\n- Image\n\n1. Review\n2. Compare\n\n| Media | Result |\n| --- | --- |\n| Recordings | Inline players |\n\n<details><summary>Supporting evidence</summary><p>Captured after the change.</p><img src="${picture}" alt="Example attachment"><p><a href="https://github.com/user-attachments/files/99/source.zip">Source archive</a></p></details>`,
+  body_html: `<video src="https://private-user-images.githubusercontent.com/1888043/659873452-81e77cff-0e61-4694-9a88-add0c1f997e4.mp4?jwt=expired"></video><video src="${after}"></video>`,
+};
+
+// Browser-only: real decoding/playback, fullscreen controls and seeking, CSS
+// containment, CSP media enforcement, and the production message-to-panel path.
+// Classification, failures and navigation races live in the colocated RTL tests.
+test("PR media plays under the packaged media policy in a narrow GitHub panel", async ({
+  page,
+  context,
+  app,
+}, testInfo) => {
+  const config = JSON.parse(
+    await readFile(
+      new URL("../../src-tauri/tauri.conf.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const mediaPolicy = config.app.security.csp
+    .split(";")
+    .filter((directive) => /^\s*(img|media)-src /.test(directive))
+    .join(";")
+    .trim();
+  await page.route(`${app.origin}/`, async (route) => {
+    const response = await route.fetch();
+    await route.fulfill({
+      response,
+      headers: {
+        ...response.headers(),
+        "content-security-policy": mediaPolicy,
+      },
+    });
+  });
+  await page.route(
+    "https://api.github.com/repos/block/buzz-app/pulls/327",
+    (route) => route.fulfill({ json: details }),
+  );
+  for (const [url, path, contentType] of [
+    [before, videoPath, "video/mp4"],
+    [after, videoPath, "video/mp4"],
+    [redirected, videoPath, "video/mp4"],
+    [picture, imagePath, "image/png"],
+  ]) {
+    const bytes = await readFile(path);
+    await context.route(url, (route) => {
+      const range = /^bytes=(\d+)-(\d*)$/.exec(
+        route.request().headers().range ?? "",
+      );
+      if (!range)
+        return route.fulfill({
+          body: bytes,
+          contentType,
+          headers: { "accept-ranges": "bytes" },
+        });
+      const start = Number(range[1]);
+      const last = range[2]
+        ? Math.min(Number(range[2]), bytes.length - 1)
+        : bytes.length - 1;
+      return route.fulfill({
+        status: 206,
+        contentType,
+        headers: {
+          "accept-ranges": "bytes",
+          "content-range": `bytes ${start}-${last}/${bytes.length}`,
+        },
+        body: bytes.subarray(start, last + 1),
+      });
+    });
+  }
+  const response = await page.goto(app.origin);
+  expect(response.headers()["content-security-policy"]).toBe(mediaPolicy);
+  await openPage(page, "Messages");
+  await page
+    .getByRole("textbox", { name: "Message #Alpha", exact: true })
+    .waitFor();
+  await settle(page);
+  app.append("primary", "alpha", target);
+  const link = page.locator(`a[href="${target}"]`);
+  await expect(link).toBeAttached();
+  await end(page);
+  await link.click();
+  const panel = page.getByRole("complementary", {
+    name: "GitHub",
+    exact: true,
+  });
+  await expect(
+    panel.getByRole("heading", { name: "Before", exact: true }),
+  ).toBeVisible();
+  const videos = panel.locator("video");
+  await expect(videos).toHaveCount(2);
+  await expect(panel.locator("ol")).toHaveCSS("list-style-type", "decimal");
+  await expect(panel.locator("ul:not(.contains-task-list)")).toHaveCSS(
+    "list-style-type",
+    "disc",
+  );
+  for (let index = 0; index < 2; index++) {
+    const video = videos.nth(index);
+    await panel
+      .getByRole("button", { name: "Play video", exact: true })
+      .nth(index)
+      .click();
+    await expect
+      .poll(() => video.evaluate((element) => element.currentTime))
+      .toBeGreaterThan(0.2);
+    await expect
+      .poll(() => video.evaluate((element) => element.videoWidth))
+      .toBeGreaterThan(0);
+    await panel
+      .getByRole("button", { name: "Pause video", exact: true })
+      .click();
+  }
+  for (const source of [before, after])
+    await expect(panel.locator(`a[href="${source}"]`)).toHaveCount(0);
+  await panel
+    .getByRole("button", { name: "Open video fullscreen" })
+    .nth(1)
+    .click();
+  const viewer = page.getByRole("dialog", { name: "Video attachment" });
+  await expect(viewer).toBeVisible();
+  const fullscreen = viewer.locator("video");
+  // The shared VideoPlayer supplies custom controls instead of native ones.
+  await expect(
+    viewer.getByRole("slider", { name: "Video timeline" }),
+  ).toBeVisible();
+  await expect
+    .poll(() => fullscreen.evaluate((element) => element.readyState))
+    .toBeGreaterThanOrEqual(2);
+  await expect
+    .poll(() =>
+      fullscreen.evaluate(
+        (element) =>
+          element.seekable.length > 0 &&
+          element.seekable.end(element.seekable.length - 1) >=
+            element.duration / 2,
+      ),
+    )
+    .toBe(true);
+  // Native seek controls are browser-owned; observe the real media seek boundary.
+  const seek = await fullscreen.evaluate(async (element) => {
+    element.pause();
+    const seconds = element.duration / 2;
+    const completed = new Promise((resolve) =>
+      element.addEventListener("seeked", resolve, { once: true }),
+    );
+    element.currentTime = seconds;
+    await completed;
+    return { actual: element.currentTime, expected: seconds };
+  });
+  expect(seek.actual).toBeCloseTo(seek.expected, 1);
+  await page.screenshot({ path: testInfo.outputPath("fullscreen.png") });
+  await page.getByRole("button", { name: "Close fullscreen viewer" }).click();
+  await expect(viewer).toHaveCount(0);
+  // Supported file downloads redirect to the objects CDN. Neither engine can
+  // synthesize a redirect through routing, so exercise the redirect origin
+  // directly under the enforced packaged media policy: removing it from
+  // media-src makes this probe fail with a CSP media error.
+  const redirectReady = await panel.evaluate(async (element, source) => {
+    const probe = document.createElement("video");
+    probe.muted = true;
+    probe.preload = "metadata";
+    probe.src = source;
+    element.append(probe);
+    try {
+      await new Promise((resolve, reject) => {
+        probe.addEventListener("loadedmetadata", resolve, { once: true });
+        probe.addEventListener(
+          "error",
+          () => reject(new Error("blocked by media policy")),
+          { once: true },
+        );
+      });
+      return probe.readyState;
+    } finally {
+      probe.remove();
+    }
+  }, redirected);
+  expect(redirectReady).toBeGreaterThanOrEqual(1);
+  for (const width of [800, 480]) {
+    await page.setViewportSize({ width, height: 850 });
+    await panel
+      .getByRole("heading", { name: "After", exact: true })
+      .scrollIntoViewIfNeeded();
+    const overflow = await panel.evaluate((element) =>
+      [...element.querySelectorAll("video, table, img")].map((media) => {
+        const outer = element.getBoundingClientRect(),
+          inner = media.getBoundingClientRect();
+        return {
+          left: inner.left >= outer.left - 1,
+          right: inner.right <= outer.right + 1,
+        };
+      }),
+    );
+    expect(overflow.every(({ left, right }) => left && right)).toBe(true);
+    await page.screenshot({ path: testInfo.outputPath(`panel-${width}.png`) });
+  }
+  const image = panel.getByRole("img", {
+    name: "Example attachment",
+    exact: true,
+  });
+  await image.scrollIntoViewIfNeeded();
+  await expect
+    .poll(() => image.evaluate((element) => element.naturalWidth))
+    .toBeGreaterThan(0);
+  await expect(panel).toContainText("Supporting evidence");
+  await expect(panel).toContainText("Captured after the change.");
+  await expect(
+    panel.getByRole("link", { name: "Source archive" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/user-attachments/files/99/source.zip",
+  );
+  await page.screenshot({ path: testInfo.outputPath("html-evidence.png") });
+  await panel.getByRole("button", { name: "Open image fullscreen" }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Image attachment" })
+      .getByAltText("Example attachment"),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Close fullscreen viewer" }).click();
+});

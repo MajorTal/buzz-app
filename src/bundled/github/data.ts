@@ -3,6 +3,7 @@ import type { GitHubReference } from "./references";
 export type GitHubDetails = {
   title: string;
   body: string;
+  bodyHtml?: string | undefined;
   state: string;
   author: string;
   facts: [string, string | number][];
@@ -11,6 +12,7 @@ type ResponseData = {
   title?: string;
   description?: string | null;
   body?: string | null;
+  body_html?: string | null;
   state?: string;
   draft?: boolean;
   merged?: boolean;
@@ -45,7 +47,7 @@ export async function loadGitHubDetails(
     `https://api.github.com/repos/${reference.repository}${surface}`,
     {
       signal,
-      headers: { Accept: "application/vnd.github+json" },
+      headers: { Accept: "application/vnd.github.full+json" },
       credentials: "omit",
     },
   );
@@ -77,6 +79,7 @@ export async function loadGitHubDetails(
   return {
     title: data.title ?? commitTitle ?? reference.repository,
     body: data.body ?? data.description ?? commitBody.join("\n").trim(),
+    bodyHtml: data.body_html ?? undefined,
     state: data.merged ? "Merged" : data.draft ? "Draft" : (data.state ?? ""),
     author:
       data.user?.login ??

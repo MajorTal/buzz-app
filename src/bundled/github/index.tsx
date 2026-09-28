@@ -12,6 +12,7 @@ import type { PanelProps } from "../../features/panels/service";
 import { parseGitHubReference, type GitHubReference } from "./references";
 import { loadGitHubDetails, type GitHubDetails } from "./data";
 import styles from "./GitHub.module.css";
+import { GitHubBody } from "./GitHubBody";
 
 export const inject = ["panels"];
 export const apply: PluginModule["apply"] = (ctx) => {
@@ -123,7 +124,13 @@ function ObjectPanel({
               ))}
             </dl>
           )}
-          {result.body && <p className={styles.body}>{result.body}</p>}
+          {result.body && (
+            <GitHubBody
+              body={result.body}
+              bodyHtml={result.bodyHtml}
+              url={reference.url}
+            />
+          )}
         </>
       )}
       <p className={styles.note}>

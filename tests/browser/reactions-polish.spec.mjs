@@ -27,7 +27,7 @@ test("reaction pills wrap, preview, toggle, and add from the inline control", as
   const native = row.locator('button[data-reaction="👍"]');
   await expect(custom.locator("img")).toHaveCSS("object-fit", "contain");
   await expect(custom.locator("img")).toHaveCSS("width", "14px");
-  await expect(native.locator("span").first()).toHaveCSS("font-size", "12px");
+  await expect(native.locator("span").first()).toHaveCSS("font-size", "14px");
   await expect(custom).toHaveCSS("height", "28px");
   const plus = row.getByRole("button", { name: "Add reaction" });
   await expect(plus).toHaveCSS("width", "28px");

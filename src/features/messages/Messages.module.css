@@ -198,11 +198,11 @@
 }
 .reactionNativeEmoji {
   display: inline-block;
-  min-width: 12px;
+  min-width: 18px;
   max-width: 96px;
-  height: 12px;
-  font-size: var(--text-caption);
-  line-height: 1;
+  height: 18px;
+  font-size: var(--text-body-sm);
+  line-height: 18px;
   text-align: center;
   overflow: hidden;
   text-overflow: ellipsis;

@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 // Actual conversation UI/session and folded events; no live identity or relay.
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
@@ -40,29 +41,31 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Missing fixture root");
 createRoot(root).render(
   <StrictMode>
-    <div
-      style={{
-        height: 700,
-        maxWidth: 1100,
-        display: "flex",
-        flexDirection: "column",
-      }}
-    >
-      <ChannelTimeline
-        scope="image-scroll"
-        channelId="images"
-        queries={owner.session}
-        window={{
-          channelId: "images",
-          rows,
-          status: "ready",
-          hasMore: false,
-          loadingOlder: false,
-          error: undefined,
-          freshness: "fresh",
+    <ToastProvider>
+      <div
+        style={{
+          height: 700,
+          maxWidth: 1100,
+          display: "flex",
+          flexDirection: "column",
         }}
-        onOpenLink={() => false}
-      />
-    </div>
+      >
+        <ChannelTimeline
+          scope="image-scroll"
+          channelId="images"
+          queries={owner.session}
+          window={{
+            channelId: "images",
+            rows,
+            status: "ready",
+            hasMore: false,
+            loadingOlder: false,
+            error: undefined,
+            freshness: "fresh",
+          }}
+          onOpenLink={() => false}
+        />
+      </div>
+    </ToastProvider>
   </StrictMode>,
 );

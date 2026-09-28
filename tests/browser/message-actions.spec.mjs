@@ -50,12 +50,20 @@ test("message actions reveal, copy, restore focus and reply across responsive la
   await page
     .getByRole("menuitem", { name: "Copy message", exact: true })
     .click();
-  await expect(row.getByRole("status")).toHaveText("Message copied");
+  await expect(
+    page
+      .getByRole("region", { name: "App notifications" })
+      .getByText("Message copied", { exact: true }),
+  ).toBeVisible();
   expect(await page.evaluate(() => window.copiedMessages)).toEqual([
     event.content,
   ]);
   await row.getByRole("button", { name: "Copy link", exact: true }).click();
-  await expect(row.getByRole("status")).toHaveText("Link copied");
+  await expect(
+    page
+      .getByRole("region", { name: "App notifications" })
+      .getByText("Link copied", { exact: true }),
+  ).toBeVisible();
   const copiedLink = await page.evaluate(() => window.copiedMessages.at(-1));
   expect(copiedLink).toBe(`buzz://message?channel=alpha&id=${event.id}`);
   await row.getByRole("button", { name: "Reply", exact: true }).click();
@@ -185,7 +193,11 @@ test("copied Buzz links and the desktop alias reveal their destination from a co
   );
   await row.hover();
   await row.getByRole("button", { name: "Copy link", exact: true }).click();
-  await expect(row.getByRole("status")).toHaveText("Link copied");
+  await expect(
+    page
+      .getByRole("region", { name: "App notifications" })
+      .getByText("Link copied", { exact: true }),
+  ).toBeVisible();
   const copiedLink = await page.evaluate(() => window.copiedMessageLink);
   expect(copiedLink).toBe(`buzz://message?channel=alpha&id=${event.id}`);
   const sharedConversation = page

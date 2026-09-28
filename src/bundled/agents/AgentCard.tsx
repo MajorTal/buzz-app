@@ -10,13 +10,16 @@ import {
 } from "../../shared/design-system/ui/Menu";
 import { ChoiceRow } from "../../shared/design-system/ui/ChoiceRow";
 import { useAvatarPreview } from "../../features/profiles/use-avatar-preview";
-import {
-  DotsThreeIcon,
-  UsersIcon,
-} from "../../shared/design-system/icons/index";
+import { DotsThreeIcon } from "../../shared/design-system/icons/index";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
-import { Accordion } from "../../shared/design-system/ui/Accordion";
+import { Button } from "../../shared/design-system/ui/Button";
+import {
+  PopoverRoot,
+  PopoverTrigger,
+  PopoverPopup,
+  PopoverTitle,
+} from "../../shared/design-system/ui/Popover";
 import { avatarSource } from "../../shared/avatar-source";
 import { usePresenceStatus } from "../../features/presence/react";
 import type { AgentLibrary } from "../../features/agents/library";
@@ -85,7 +88,7 @@ export function AgentCard({
   return (
     <article
       aria-label={`Agent ${name}`}
-      className="relative flex min-w-0 flex-col gap-4 rounded-2xl border border-primary p-4"
+      className={`relative flex min-w-0 flex-col gap-4 rounded-2xl border border-primary ${children ? "p-4" : "px-4 py-8"}`}
     >
       {onEdit && (
         <div className="absolute right-2 top-2">
@@ -177,62 +180,60 @@ export function AgentCard({
         className={
           children
             ? "flex min-w-0 items-center gap-3 pr-6"
-            : "flex flex-1 flex-col gap-4"
+            : "flex flex-col items-center gap-6 text-center"
         }
       >
-        <div
-          className={
-            children
-              ? "shrink-0"
-              : "flex min-h-36 items-center justify-center py-5"
-          }
-        >
+        <div className={children ? "shrink-0" : "size-20 shrink-0"}>
           <Avatar
             alt={name}
             fallback={name}
             src={picture ?? null}
-            size="large"
+            size={children ? "large" : "fill"}
             shape="squircle"
             statusBadge={presence === "unknown" ? undefined : presence}
           />
         </div>
-        <h3 className="m-0 min-w-0 truncate text-label" title={name}>
+        <h3 className="m-0 min-w-0 max-w-full truncate text-label" title={name}>
           {name}
         </h3>
       </div>
       {children}
       {identities.length && !children ? (
-        <Accordion
-          items={[
-            {
-              value: "identities",
-              title: (
-                <span className="flex items-center gap-2">
-                  <UsersIcon size={16} aria-hidden="true" />
-                  <span className="sr-only">{name}: </span>
-                  {identities.length}{" "}
-                  {identities.length === 1 ? "identity" : "identities"}
-                </span>
-              ),
-              content: (
-                <ul className="mt-2 space-y-3 border-t border-primary pt-3">
-                  {identities.map((identity) => (
-                    <li key={identity.pubkey}>
-                      <span className="font-semibold text-primary">
-                        {identityLabel(identity)}
-                      </span>
-                      <p className="m-0 mt-1 select-all break-all text-mono-sm">
-                        {npubEncode(identity.pubkey)}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              ),
-            },
-          ]}
-        />
+        <div className="-mt-3 flex justify-center">
+          <PopoverRoot>
+            <PopoverTrigger
+              render={
+                <Button
+                  variant="link"
+                  size="xs"
+                  aria-label={`${name}: ${identities.length} ${identities.length === 1 ? "identity" : "identities"}`}
+                >
+                  <span className="text-caption text-subtle underline underline-offset-4">
+                    {identities.length}{" "}
+                    {identities.length === 1 ? "identity" : "identities"}
+                  </span>
+                </Button>
+              }
+            />
+            <PopoverPopup align="center">
+              <PopoverTitle>{name} identities</PopoverTitle>
+              <ul className="m-0 mt-3 list-none space-y-3 p-0">
+                {identities.map((identity) => (
+                  <li key={identity.pubkey}>
+                    <span className="text-label-sm">
+                      {identityLabel(identity)}
+                    </span>
+                    <p className="m-0 mt-1 select-all break-all text-mono-sm text-subtle">
+                      {npubEncode(identity.pubkey)}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            </PopoverPopup>
+          </PopoverRoot>
+        </div>
       ) : !children ? (
-        <p className="m-0 mt-1 text-body-sm text-secondary">
+        <p className="m-0 -mt-3 text-center text-caption text-subtle">
           No linked identity
         </p>
       ) : null}

@@ -132,3 +132,45 @@ test("sent spoilers hide content and links behind a keyboard-accessible reduced-
   ).toBe("none");
   expect(await transform()).toBe("none");
 });
+
+// Browser-only: flex sizing and native horizontal overflow are not modeled by jsdom.
+test("formatting keeps composer and send control geometry stable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 863, height: 863 });
+  await page.goto("/tests/fixtures/product-ui.html");
+  const playground = page.getByRole("region", { name: "Composer playground" });
+  const toggle = playground.getByRole("button", {
+    name: "Toggle formatting",
+    exact: true,
+  });
+  await expect(toggle).toBeVisible();
+  const form = playground.getByRole("form");
+  const send = form.getByRole("button", { name: "Send message", exact: true });
+  // The catalogue page itself scrolls when editor focus returns. Compare document
+  // coordinates so this assertion measures layout, not that native focus scroll.
+  const box = (locator) =>
+    locator.evaluate((element) => {
+      const rect = element.getBoundingClientRect();
+      return {
+        x: rect.x + window.scrollX,
+        y: rect.y + window.scrollY,
+        width: rect.width,
+        height: rect.height,
+      };
+    });
+  const before = await box(form);
+  const sendBefore = await box(send);
+  await toggle.click();
+  const close = playground.getByRole("button", {
+    name: "Close formatting",
+    exact: true,
+  });
+  await expect(close).toBeVisible();
+  await expect.poll(() => box(form)).toEqual(before);
+  await expect.poll(() => box(send)).toEqual(sendBefore);
+  await close.click();
+  await expect(toggle).toBeVisible();
+  await expect.poll(() => box(form)).toEqual(before);
+  await expect.poll(() => box(send)).toEqual(sendBefore);
+});

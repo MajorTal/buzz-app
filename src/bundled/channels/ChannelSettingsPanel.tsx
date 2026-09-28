@@ -36,7 +36,6 @@ export function ChannelSettingsPanel({
     >
       <div className={styles.settingsPanel}>
         <PanelHeader
-          variant="compact"
           title="Channel Settings"
           actions={
             <IconButton

@@ -22,7 +22,7 @@
   border: 1px solid var(--border-standard);
   min-width: 0;
   flex: 0 0 auto;
-  width: 15rem;
+  width: 18rem;
   height: calc(var(--size-control) + 2 * var(--space-half) + 2px);
   position: relative;
   max-width: 100%;
@@ -91,6 +91,11 @@
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);
   color: var(--text-subtle);
+}
+.hint {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .error {
   color: var(--text-error);

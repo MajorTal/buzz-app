@@ -5,6 +5,7 @@
   flex-direction: column;
   width: 100%;
   min-height: 0;
+  flex: 1;
   padding: var(--space-3);
   gap: var(--space-2);
 }
@@ -21,6 +22,7 @@
   letter-spacing: var(--text-caption--letter-spacing);
 }
 .mentionChoices {
+  flex: 1;
   grid-auto-rows: max-content;
   align-content: start;
   min-height: 0;

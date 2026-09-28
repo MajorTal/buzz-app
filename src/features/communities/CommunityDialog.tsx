@@ -1,5 +1,5 @@
 import { profileDefault } from "./profile-default";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { Dialog } from "../../shared/design-system/ui/Dialog";
 import { Field } from "../../shared/design-system/ui/Field";
 import { Input } from "../../shared/design-system/ui/Input";
@@ -45,6 +45,7 @@ export function CommunityDialog({
   close(): void;
   onJoined?: (id: string) => void;
 }) {
+  const formId = useId();
   const client = communities.snapshot();
   const unavailable =
     client.status !== "ready" || (mode === "join" && !client.relayAvailable);
@@ -248,6 +249,58 @@ export function CommunityDialog({
         if (!next) close();
       }}
       preventClose={busy}
+      description={
+        step === "destination" && !unavailable
+          ? "Use your identity across communities. Your profile and conversations stay separate in each one."
+          : undefined
+      }
+      leadingActions={
+        !unavailable && (
+          <Button
+            type="button"
+            disabled={busy || uploading}
+            onClick={() => {
+              if (step === "destination" || mode === "profile") close();
+              else {
+                setError("");
+                setStep(step === "profile" ? "access" : "destination");
+                setAgreed(false);
+                setAdult(false);
+              }
+            }}
+          >
+            Back
+          </Button>
+        )
+      }
+      actions={
+        !unavailable && (
+          <Button
+            variant="prominent"
+            type="submit"
+            form={formId}
+            disabled={
+              busy ||
+              uploading ||
+              (step === "access" && !allowed) ||
+              (step === "profile" &&
+                (keepsProfile
+                  ? !profile.name.trim()
+                  : !canSaveProfile(profile)))
+            }
+          >
+            {busy
+              ? "Working…"
+              : step === "profile"
+                ? mode === "profile"
+                  ? "Save profile"
+                  : keepsProfile
+                    ? "Open community"
+                    : "Publish profile & open"
+                : "Continue"}
+          </Button>
+        )
+      }
       title={
         mode === "profile"
           ? "Your profile"
@@ -257,6 +310,8 @@ export function CommunityDialog({
       }
     >
       <form
+        id={formId}
+        noValidate
         className="space-y-6"
         onSubmit={(event) => {
           event.preventDefault();
@@ -277,39 +332,34 @@ export function CommunityDialog({
         ) : (
           <>
             {step === "destination" && (
-              <>
-                <p>
-                  Use your identity across communities. Your profile and
-                  conversations stay separate in each one.
-                </p>
-                <Field
-                  label="Relay URL"
-                  description="Enter a wss:// or https:// relay address without a path. Continue contacts this relay using your Buzz identity; joining or publishing a profile requires a later step."
-                >
-                  <Input
-                    type="url"
-                    required
-                    autoComplete="url"
-                    autoCapitalize="none"
-                    spellCheck={false}
-                    placeholder="wss://relay.example.com"
-                    maxLength={2048}
-                    disabled={busy}
-                    value={url}
-                    onChange={(e) => {
-                      setUrl(e.target.value);
-                      setDestination(undefined);
-                      setCode("");
-                      setAgreed(false);
-                      setAdult(false);
-                      setInfo(undefined);
-                      setOriginal(undefined);
-                      setProfile(client.profile);
-                      setError("");
-                    }}
-                  />
-                </Field>
-              </>
+              <Field
+                label="Relay URL"
+                error={error || undefined}
+                description="Enter a wss:// or https:// relay address without a path. Continue contacts this relay using your Buzz identity; joining or publishing a profile requires a later step."
+              >
+                <Input
+                  type="url"
+                  required
+                  autoComplete="url"
+                  autoCapitalize="none"
+                  spellCheck={false}
+                  placeholder="wss://relay.example.com"
+                  maxLength={2048}
+                  disabled={busy}
+                  value={url}
+                  onChange={(e) => {
+                    setUrl(e.target.value);
+                    setDestination(undefined);
+                    setCode("");
+                    setAgreed(false);
+                    setAdult(false);
+                    setInfo(undefined);
+                    setOriginal(undefined);
+                    setProfile(client.profile);
+                    setError("");
+                  }}
+                />
+              </Field>
             )}
             {step === "access" && (
               <>
@@ -390,51 +440,11 @@ export function CommunityDialog({
                 />
               </>
             )}
-            {error && (
+            {error && step !== "destination" && (
               <p role="alert" className={styles.error}>
                 {error}
               </p>
             )}
-            <footer className="buzz-dialog-actions justify-between">
-              <Button
-                type="button"
-                disabled={busy || uploading}
-                onClick={() => {
-                  if (step === "destination" || mode === "profile") close();
-                  else {
-                    setError("");
-                    setStep(step === "profile" ? "access" : "destination");
-                    setAgreed(false);
-                    setAdult(false);
-                  }
-                }}
-              >
-                Back
-              </Button>
-              <Button
-                variant="prominent"
-                type="submit"
-                disabled={
-                  busy ||
-                  uploading ||
-                  (step === "access" && !allowed) ||
-                  (step === "profile" &&
-                    (keepsProfile
-                      ? !profile.name.trim()
-                      : !canSaveProfile(profile)))
-                }
-              >
-                {busy
-                  ? "Working…"
-                  : step === "profile"
-                    ? mode === "profile"
-                      ? "Save profile"
-                      : keepsProfile
-                        ? "Open community"
-                        : "Publish profile & open"
-                    : "Continue"}
-              </Button>
-            </footer>
           </>
         )}
       </form>

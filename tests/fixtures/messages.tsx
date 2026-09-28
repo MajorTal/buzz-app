@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 // A second source consumer: ordinary prop changes, no caller remount keys.
 // Real React/session/outbox; local ephemeral signed events, never a live broker.
 import { StrictMode, useRef, useState } from "react";
@@ -391,6 +392,8 @@ const container = document.getElementById("root");
 if (!container) throw new Error("Missing fixture container");
 createRoot(container).render(
   <StrictMode>
-    <Fixture />
+    <ToastProvider>
+      <Fixture />
+    </ToastProvider>
   </StrictMode>,
 );

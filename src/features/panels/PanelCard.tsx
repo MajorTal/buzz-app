@@ -29,7 +29,6 @@ export function PanelCard({
       <Panel as="div">
         <div className={styles.card}>
           <PanelHeader
-            variant="compact"
             title={panel.title}
             actions={
               <IconButton

@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 // Local signed fixture through real session history/thread/live owners. No relay writes.
 import { Context } from "@deepseek-ai/cordis";
 import { useEffect, useState, useSyncExternalStore } from "react";
@@ -225,4 +226,9 @@ function Preview() {
   );
 }
 const element = document.getElementById("root");
-if (element) createRoot(element).render(<Preview />);
+if (element)
+  createRoot(element).render(
+    <ToastProvider>
+      <Preview />
+    </ToastProvider>,
+  );

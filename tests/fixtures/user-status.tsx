@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 // Real UI and signed session traffic; all state and publications stay in this fixture.
 import { createRoot } from "react-dom/client";
 import { ProfileButton } from "../../src/app/shell/ProfileButton";
@@ -144,125 +145,130 @@ function remote(text: string, emoji = "🏠") {
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing fixture root");
 createRoot(root).render(
-  <main className="mx-auto max-w-4xl p-8">
-    <div className="flex justify-between">
-      <h1>Custom statuses</h1>
-      <ProfileButton
-        communities={communities}
-        accountActions={accountActions}
-        settingsSelected={false}
-        onSettings={() => {}}
-      />
-    </div>
-    <div className="grid grid-cols-2 gap-8">
-      <section
-        aria-label="Navigation"
-        className="rounded-2xl border border-line p-4"
-      >
-        <h2>Navigation</h2>
-        <ChannelSidebarItem
-          channel={{
-            id: "status-dm",
-            name: new URLSearchParams(location.search).get("name") ?? "Bob",
-            channelType: "dm",
-            participants: [other.pubkey],
-          }}
-          session={first}
-          working={false}
-          selected={undefined}
-          collapsed
-          onToggle={() => {}}
-          draft={false}
-          draftSelected={false}
-          sessions={[]}
-          onSelect={() => {}}
-          onNewSession={() => {}}
-          onOpenThread={() => {}}
+  <ToastProvider>
+    <main className="mx-auto max-w-4xl p-8">
+      <div className="flex justify-between">
+        <h1>Custom statuses</h1>
+        <ProfileButton
+          communities={communities}
+          accountActions={accountActions}
+          settingsSelected={false}
+          onSettings={() => {}}
         />
-      </section>
-      <section aria-label="Chat" className="rounded-2xl border border-line p-4">
-        <h2>Chat</h2>
-        {(
-          [
-            [viewer.pubkey, "Alice"],
-            [other.pubkey, "Bob"],
-          ] as const
-        ).map(([authorId, name]) => (
-          <MessageRow
-            key={authorId}
-            row={{
-              id: name,
-              channelId: "status-dm",
-              authorId: authorId,
-              content: "A message",
-              createdAt: remoteTime,
-              mentions: [],
-              participants: [],
-              attachments: [],
-              reactions: [],
-              replyCount: 0,
+      </div>
+      <div className="grid grid-cols-2 gap-8">
+        <section
+          aria-label="Navigation"
+          className="rounded-2xl border border-line p-4"
+        >
+          <h2>Navigation</h2>
+          <ChannelSidebarItem
+            channel={{
+              id: "status-dm",
+              name: new URLSearchParams(location.search).get("name") ?? "Bob",
+              channelType: "dm",
+              participants: [other.pubkey],
             }}
-            profile={{ name: name }}
             session={first}
-            scope={scope}
-            media={first.media}
-            day={false}
-            retry={undefined}
-            onOpenLink={() => false}
+            working={false}
+            selected={undefined}
+            collapsed
+            onToggle={() => {}}
+            draft={false}
+            draftSelected={false}
+            sessions={[]}
+            onSelect={() => {}}
+            onNewSession={() => {}}
+            onOpenThread={() => {}}
           />
-        ))}
-      </section>
-      <section
-        aria-label="Second device"
-        className="rounded-2xl border border-line p-4"
-      >
-        <h2>Second device</h2>
-        Alice <UserStatusDisplay session={second} userId={viewer.pubkey} />
-      </section>
-      <section
-        aria-label="Profile"
-        className="rounded-2xl border border-line p-4"
-      >
-        <h2>Profile</h2>
-        <UserStatusDisplay session={first} userId={viewer.pubkey} />
-        <UserStatusDisplay session={first} userId={other.pubkey} />
-      </section>
-    </div>
-    <div className="mt-6 flex gap-2">
-      <button
-        type="button"
-        onClick={() => {
-          reject = true;
-        }}
-      >
-        Reject next save
-      </button>
-      <button type="button" onClick={() => remote("Working remotely")}>
-        Update Bob
-      </button>
-      <button type="button" onClick={() => remote("Celebrating", ":party:")}>
-        Custom Bob
-      </button>
-      <button type="button" onClick={() => remote("Buzzy", "")}>
-        Text-only Bob
-      </button>
-      <button type="button" onClick={() => remote("", "")}>
-        Clear Bob
-      </button>
-      <button
-        type="button"
-        onClick={() => {
-          const stale = signed(other, {
-            kind: 30315,
-            created_at: remoteTime - 1,
-            content: "Stale",
-            tags: [["d", "general"]],
-          });
-          for (const listener of listeners) listener.receive([stale]);
-        }}
-      >
-        Replay older Bob
-      </button>
-    </div>
-  </main>,
+        </section>
+        <section
+          aria-label="Chat"
+          className="rounded-2xl border border-line p-4"
+        >
+          <h2>Chat</h2>
+          {(
+            [
+              [viewer.pubkey, "Alice"],
+              [other.pubkey, "Bob"],
+            ] as const
+          ).map(([authorId, name]) => (
+            <MessageRow
+              key={authorId}
+              row={{
+                id: name,
+                channelId: "status-dm",
+                authorId: authorId,
+                content: "A message",
+                createdAt: remoteTime,
+                mentions: [],
+                participants: [],
+                attachments: [],
+                reactions: [],
+                replyCount: 0,
+              }}
+              profile={{ name: name }}
+              session={first}
+              scope={scope}
+              media={first.media}
+              day={false}
+              retry={undefined}
+              onOpenLink={() => false}
+            />
+          ))}
+        </section>
+        <section
+          aria-label="Second device"
+          className="rounded-2xl border border-line p-4"
+        >
+          <h2>Second device</h2>
+          Alice <UserStatusDisplay session={second} userId={viewer.pubkey} />
+        </section>
+        <section
+          aria-label="Profile"
+          className="rounded-2xl border border-line p-4"
+        >
+          <h2>Profile</h2>
+          <UserStatusDisplay session={first} userId={viewer.pubkey} />
+          <UserStatusDisplay session={first} userId={other.pubkey} />
+        </section>
+      </div>
+      <div className="mt-6 flex gap-2">
+        <button
+          type="button"
+          onClick={() => {
+            reject = true;
+          }}
+        >
+          Reject next save
+        </button>
+        <button type="button" onClick={() => remote("Working remotely")}>
+          Update Bob
+        </button>
+        <button type="button" onClick={() => remote("Celebrating", ":party:")}>
+          Custom Bob
+        </button>
+        <button type="button" onClick={() => remote("Buzzy", "")}>
+          Text-only Bob
+        </button>
+        <button type="button" onClick={() => remote("", "")}>
+          Clear Bob
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            const stale = signed(other, {
+              kind: 30315,
+              created_at: remoteTime - 1,
+              content: "Stale",
+              tags: [["d", "general"]],
+            });
+            for (const listener of listeners) listener.receive([stale]);
+          }}
+        >
+          Replay older Bob
+        </button>
+      </div>
+    </main>
+  </ToastProvider>,
 );

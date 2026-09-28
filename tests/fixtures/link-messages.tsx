@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 import { Context } from "@deepseek-ai/cordis";
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
@@ -303,7 +304,11 @@ function Preview() {
 }
 const mount = document.getElementById("root");
 if (!mount) throw new Error("Missing root");
-createRoot(mount).render(<Preview />);
+createRoot(mount).render(
+  <ToastProvider>
+    <Preview />
+  </ToastProvider>,
+);
 import.meta.hot?.dispose(() => {
   choicesLifetime.abort();
   library.dispose();

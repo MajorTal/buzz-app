@@ -4,6 +4,7 @@
   min-height: 0;
 }
 .card {
+  --space-panel-inset: var(--space-5);
   height: 100%;
   min-width: 0;
   min-height: 0;

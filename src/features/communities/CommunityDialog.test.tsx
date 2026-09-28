@@ -64,6 +64,11 @@ it("publishes a description-only edit to an existing community profile", async (
   render(
     <CommunityDialog communities={communities} mode="join" close={() => {}} />,
   );
+  expect(
+    screen.getByRole("dialog", { name: "Add a community" }),
+  ).toHaveAccessibleDescription(
+    "Use your identity across communities. Your profile and conversations stay separate in each one.",
+  );
   await user.type(screen.getByLabelText("Relay URL"), "wss://relay.example");
   await user.click(screen.getByRole("button", { name: "Continue" }));
   const description = await screen.findByLabelText(
@@ -346,3 +351,45 @@ it("keeps join unavailable after native identity hydration, but still saves a lo
     localStorage.clear();
   }
 });
+
+it.each([
+  "",
+  "not-a-relay",
+  "http://relay.example",
+  "wss://relay.example/path",
+])(
+  "shows inline relay validation for %j without contacting a relay",
+  async (value) => {
+    const user = userEvent.setup();
+    const fetch = vi.fn();
+    vi.stubGlobal("fetch", fetch);
+    const communities = {
+      snapshot: () => ({
+        status: "ready",
+        relayAvailable: true,
+        profile: { name: "Local", picture: "" },
+      }),
+    } as unknown as Communities;
+    render(
+      <CommunityDialog
+        communities={communities}
+        mode="join"
+        close={() => {}}
+      />,
+    );
+    const input = screen.getByLabelText("Relay URL");
+    if (value) await user.type(input, value);
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Enter a wss:// or https:// relay URL",
+    );
+    expect(input).toHaveAttribute("aria-invalid", "true");
+    expect(input).toHaveAccessibleDescription(
+      /Enter a wss:\/\/ or https:\/\/ relay URL/,
+    );
+    expect(fetch).not.toHaveBeenCalled();
+    await user.clear(input);
+    await user.type(input, "wss://relay.example");
+    expect(screen.queryByRole("alert")).toBeNull();
+  },
+);

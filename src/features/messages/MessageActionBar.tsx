@@ -14,6 +14,7 @@ import {
   MenuIcon,
   MenuSeparator,
 } from "../../shared/design-system/ui/Menu";
+import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import styles from "./Messages.module.css";
 
 export function MessageActionBar({
@@ -140,12 +141,12 @@ export function MessageActionBar({
         </MenuRoot>
       </div>
       {notice && (
-        <p
-          className={styles.messageActionNotice}
-          role={notice.error ? "alert" : "status"}
-        >
-          {notice.text}
-        </p>
+        <ToastNotice
+          title={notice.text}
+          tone={notice.error ? "error" : "success"}
+          timeout={notice.error ? 0 : 4000}
+          onDismiss={() => setNotice(undefined)}
+        />
       )}
     </>
   );

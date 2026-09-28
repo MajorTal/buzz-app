@@ -1,3 +1,4 @@
+import { createPortal } from "react-dom";
 import { useIdentityNames } from "../../features/identity-names/react";
 import { useEffect, useSyncExternalStore } from "react";
 import { ArrowsClockwiseIcon } from "../../shared/design-system/icons/index";
@@ -6,7 +7,13 @@ import type { RelaySession } from "../../features/relay/session";
 import { Button } from "../../shared/design-system/ui/Button";
 import { AgentCard } from "./AgentCard";
 
-export function AgentLibrary({ session }: { session: RelaySession }) {
+export function AgentLibrary({
+  session,
+  headerActions,
+}: {
+  session: RelaySession;
+  headerActions: HTMLElement | null;
+}) {
   const resolveName = useIdentityNames(session.names);
   const library = session.agentLibrary;
   const archives = session.archives;
@@ -42,18 +49,19 @@ export function AgentLibrary({ session }: { session: RelaySession }) {
   const loading = snapshot.status === "loading";
   return (
     <div className="mx-auto mt-2 max-w-6xl space-y-section-gap">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="m-0 text-body text-secondary">Your agents from Buzz.</p>
-        <Button
-          variant="quiet"
-          size="compact"
-          disabled={loading || snapshot.status === "unavailable"}
-          onClick={refresh}
-        >
-          <ArrowsClockwiseIcon size={16} aria-hidden="true" />
-          {snapshot.status === "error" ? "Retry" : "Refresh agents"}
-        </Button>
-      </div>
+      {headerActions &&
+        createPortal(
+          <Button
+            variant="quiet"
+            size="compact"
+            disabled={loading || snapshot.status === "unavailable"}
+            onClick={refresh}
+          >
+            <ArrowsClockwiseIcon size={16} aria-hidden="true" />
+            {snapshot.status === "error" ? "Retry" : "Refresh agents"}
+          </Button>,
+          headerActions,
+        )}
       {loading && (
         <p className="text-body" role="status">
           Reading your Buzz library…
@@ -77,7 +85,10 @@ export function AgentLibrary({ session }: { session: RelaySession }) {
       )}
       {snapshot.status === "ready" && (
         <>
-          <section aria-label="Library templates" className="space-y-3">
+          <section
+            aria-label="Library templates"
+            className="flex flex-col gap-4"
+          >
             <h2 className="m-0 flex items-center gap-2 text-heading">
               Library templates{" "}
               <span className="rounded-md bg-surface-inset px-2 py-0.5 text-body-sm font-normal text-secondary">
@@ -103,7 +114,7 @@ export function AgentLibrary({ session }: { session: RelaySession }) {
             </div>
           </section>
           {!!custom.length && (
-            <section aria-label="Custom agents" className="space-y-3">
+            <section aria-label="Custom agents" className="flex flex-col gap-4">
               <h2 className="m-0 text-heading">Custom agents</h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,180px),1fr))] gap-4">
                 {custom.map((identity) => (
@@ -120,7 +131,10 @@ export function AgentLibrary({ session }: { session: RelaySession }) {
             </section>
           )}
           {!!unknown.length && (
-            <section aria-label="Unknown agents" className="space-y-3">
+            <section
+              aria-label="Unknown agents"
+              className="flex flex-col gap-4"
+            >
               <h2 className="m-0 text-heading">Other identities</h2>
               <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,180px),1fr))] gap-4">
                 {unknown.map((identity) => (

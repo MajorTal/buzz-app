@@ -47,10 +47,15 @@ test("Old Buzz library reads the existing library with exact linked keys and ses
     await agents
       .getByRole("button", { name: "A Brain: 2 identities", exact: true })
       .click();
+    const identities = page.getByRole("dialog", {
+      name: "A Brain identities",
+      exact: true,
+    });
     for (const npub of npubs)
-      await expect(agents.getByText(npub, { exact: true })).toBeVisible();
+      await expect(identities.getByText(npub, { exact: true })).toBeVisible();
     for (const key of keys)
-      await expect(agents.getByText(key, { exact: true })).toHaveCount(0);
+      await expect(identities.getByText(key, { exact: true })).toHaveCount(0);
+    await page.keyboard.press("Escape");
     await expect(
       page.getByText(/current Buzz library, read-only/),
     ).toBeVisible();
@@ -184,8 +189,10 @@ test("Old Buzz library reads the existing library with exact linked keys and ses
     await agents
       .getByRole("button", { name: "A Brain: 2 identities", exact: true })
       .click();
+
     for (const npub of npubs)
-      await expect(agents.getByText(npub, { exact: true })).toBeVisible();
+      await expect(identities.getByText(npub, { exact: true })).toBeVisible();
+    await page.keyboard.press("Escape");
     await expect(page.getByText(/Archive visibility is unknown/)).toBeVisible();
     await page
       .getByRole("button", { name: "Toggle missing archive", exact: true })

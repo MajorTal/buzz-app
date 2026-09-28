@@ -148,7 +148,16 @@ export function MessageReactionControls(props: Props) {
             reaction.events.some((event) => event.authorId === session.viewer),
         );
         return (
-          <span key={content} className={styles.quickReaction}>
+          <span
+            key={content}
+            className={styles.quickReaction}
+            onPointerEnter={(event) => {
+              event.currentTarget.style.setProperty(
+                "--reaction-hover-rotation",
+                `${Math.random() * 20 - 10}deg`,
+              );
+            }}
+          >
             <IconButton
               size="sm"
               variant="ghost"
@@ -157,16 +166,18 @@ export function MessageReactionControls(props: Props) {
               aria-pressed={mine}
               onClick={() => select(content)}
               icon={
-                <ReactionLabel
-                  row={row}
-                  inline={inline}
-                  session={session}
-                  reaction={{
-                    content,
-                    ...(emoji ? { emoji } : {}),
-                    events: [],
-                  }}
-                />
+                <span className={styles.quickReactionGlyph}>
+                  <ReactionLabel
+                    row={row}
+                    inline={inline}
+                    session={session}
+                    reaction={{
+                      content,
+                      ...(emoji ? { emoji } : {}),
+                      events: [],
+                    }}
+                  />
+                </span>
               }
             />
           </span>

@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 // Real avatar consumers with local display-only data, no session/broker/network reads.
 import "../../src/shared/styles/globals.css";
 import { useState } from "react";
@@ -123,4 +124,8 @@ function Fixture() {
 }
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing fixture root");
-createRoot(root).render(<Fixture />);
+createRoot(root).render(
+  <ToastProvider>
+    <Fixture />
+  </ToastProvider>,
+);

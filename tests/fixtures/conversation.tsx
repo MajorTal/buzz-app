@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 // Automated boundary proof only. No live broker, persistent messages or real keys.
 import { Context } from "@deepseek-ai/cordis";
 import {
@@ -359,7 +360,9 @@ const root = document.getElementById("root");
 if (!root) throw new Error("Missing fixture root");
 createRoot(root).render(
   <StrictMode>
-    <Fixture />
+    <ToastProvider>
+      <Fixture />
+    </ToastProvider>
   </StrictMode>,
 );
 window.addEventListener("pagehide", () => {

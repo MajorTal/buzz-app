@@ -119,7 +119,7 @@ export function MentionPicker({
           initialFocus={searchInput}
           style={{
             width: 380,
-            maxHeight: "min(360px, var(--available-height))",
+            height: "min(360px, var(--available-height))",
             overflow: "hidden",
             display: "flex",
           }}
@@ -197,9 +197,6 @@ export function MentionPicker({
             {model.directory.loading && (
               <p role="status">Searching community…</p>
             )}
-            {model.directory.more && (
-              <p>Narrow your search to find more community people.</p>
-            )}
             {model.directory.error && (
               <>
                 <p role="status">{model.directory.error}</p>
@@ -231,19 +228,19 @@ export function MentionPicker({
             )}
             {error && <p role="status">{error}</p>}
             {!draftRoster && list.error && (
-              <p role="alert">Could not refresh channel membership.</p>
+              <>
+                <p role="alert">Could not refresh channel membership.</p>
+                <Button
+                  disabled={disabled}
+                  type="button"
+                  onClick={() => session.channels.refreshList?.()}
+                >
+                  Retry channel membership
+                </Button>
+              </>
             )}
             {!draftRoster && (!inviteAgents || !!channel) && !members && (
               <p role="status">Channel membership unavailable.</p>
-            )}
-            {!draftRoster && (
-              <Button
-                disabled={disabled}
-                type="button"
-                onClick={() => session.channels.refreshList?.()}
-              >
-                Refresh members
-              </Button>
             )}
             <div className={`${styles.mentionChoices} buzz-thin-scrollbar`}>
               {candidates.map(

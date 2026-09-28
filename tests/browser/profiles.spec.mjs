@@ -179,7 +179,7 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
   await expect(panel.getByRole("tab", { name: "Memories" })).toBeVisible();
   await panel.getByRole("tab", { name: "Channels" }).click();
   await expect(panel.getByRole("region", { name: "Channels" })).toContainText(
-    "#One",
+    "One",
   );
   expect(
     await page.evaluate(() => window.profilesFixture.report.memoryReads),

@@ -90,8 +90,8 @@ it("shows only exact verified visible memberships, handles partial lists and ope
       { id: "archived", name: "Archived", archived: true, members: [person] },
     ],
   });
-  expect(screen.getByRole("button", { name: /#Visible/ })).toBeTruthy();
-  expect(screen.getByRole("button", { name: /#Forum/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^Visible$/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^Forum$/ })).toBeTruthy();
   expect(
     screen.getByText(/Some memberships for this identity are unclassified/),
   ).toBeTruthy();
@@ -99,7 +99,7 @@ it("shows only exact verified visible memberships, handles partial lists and ope
     screen.queryByText(/Unrelated|Unknown type|Hidden|Archived|Direct|Child/),
   ).toBeNull();
   expect(screen.getByText(/More channels may exist/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: /#Visible/ }));
+  fireEvent.click(screen.getByRole("button", { name: /^Visible$/ }));
   expect(f.open).toHaveBeenCalledWith({
     version: 1,
     kind: "conversation",
@@ -199,7 +199,7 @@ it("keeps classified roster rows but omits unclassified conversations after meta
     ],
   });
   expect(screen.getByRole("alert")).toBeTruthy();
-  expect(screen.getByRole("button", { name: /#Known/ })).toBeTruthy();
+  expect(screen.getByRole("button", { name: /^Known$/ })).toBeTruthy();
   expect(
     screen.getByText(/Some memberships for this identity are unclassified/),
   ).toBeTruthy();

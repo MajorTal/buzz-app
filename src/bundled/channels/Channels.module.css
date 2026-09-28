@@ -412,6 +412,7 @@
   letter-spacing: var(--text-body-sm--letter-spacing);
 }
 .panelStack {
+  border-radius: var(--radius-panel);
   grid-column: 2;
   min-width: 0;
   min-height: 0;

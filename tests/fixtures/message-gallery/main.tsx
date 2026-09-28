@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../../src/shared/design-system/ui/Toast";
 import "../../../src/shared/styles/globals.css";
 import "@fontsource-variable/inter/wght.css";
 import "@fontsource/jetbrains-mono/400.css";
@@ -258,6 +259,8 @@ const container = document.getElementById("root");
 if (!container) throw new Error("Missing message gallery root");
 createRoot(container).render(
   <StrictMode>
-    <Gallery />
+    <ToastProvider>
+      <Gallery />
+    </ToastProvider>
   </StrictMode>,
 );

@@ -3,11 +3,14 @@ import { afterEach, expect, it, vi } from "vitest";
 import {
   cleanup,
   fireEvent,
-  render,
+  render as rtlRender,
   screen,
   waitFor,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactElement } from "react";
+import { ToastProvider } from "../../shared/design-system/ui/Toast";
+const render = (ui: ReactElement) => rtlRender(ui, { wrapper: ToastProvider });
 import { MessageActionBar } from "./MessageActionBar";
 import { MenuItem } from "../../shared/design-system/ui/Menu";
 afterEach(() => {
@@ -58,16 +61,13 @@ it("copies the message, shows failure, and allows retry", async () => {
   await user.click(
     await screen.findByRole("menuitem", { name: "Copy message" }),
   );
-  expect((await screen.findByRole("alert")).textContent).toContain(
-    "Couldn’t copy",
-  );
+  await screen.findByText("Couldn’t copy. Try again from the message menu.");
   await user.click(trigger);
   await user.click(
     await screen.findByRole("menuitem", { name: "Copy message" }),
   );
-  expect((await screen.findByRole("status")).textContent).toContain(
-    "Message copied",
-  );
+  const copied = await screen.findByText("Message copied");
+  expect(copied.closest(".buzz-toast")).not.toBeNull();
   expect(write).toHaveBeenLastCalledWith("Hello");
 });
 it("prevents duplicate clipboard writes until the first settles", async () => {
@@ -99,6 +99,6 @@ it("prevents duplicate clipboard writes until the first settles", async () => {
   } finally {
     finish();
   }
-  await screen.findByRole("status");
+  await screen.findByText("Link copied");
   expect(link.hasAttribute("disabled")).toBe(false);
 });

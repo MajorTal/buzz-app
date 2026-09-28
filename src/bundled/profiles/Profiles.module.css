@@ -80,15 +80,10 @@
 }
 
 .channelList {
-  overflow: hidden;
-  border: 1px solid var(--border-standard);
-  border-radius: var(--radius-card);
+  min-width: 0;
 }
 .channelNote {
   padding: var(--space-4);
-}
-.channelRow {
-  border-top: 1px solid var(--border-standard);
 }
 [data-profile-channel-link] {
   display: flex;

@@ -2,7 +2,8 @@
   display: flex;
   flex: 1;
   min-width: 0;
-  min-height: var(--size-control-sm);
+  position: relative;
+  min-height: calc(var(--size-control-sm) + var(--space-1));
   align-items: center;
   gap: var(--space-1);
 }

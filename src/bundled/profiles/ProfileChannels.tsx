@@ -4,7 +4,8 @@ import type { Navigation } from "../../features/navigation/controller";
 import { useChannelList } from "../../features/relay/react";
 import type { RelaySession } from "../../features/relay/session";
 import { Button } from "../../shared/design-system/ui/Button";
-import { ArrowUpRightIcon } from "../../shared/design-system/icons/index";
+import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
+import { channelIcon } from "../../features/channels/channel-icon";
 import styles from "./Profiles.module.css";
 
 /** Only the viewer's listed channels with an exact roster match are evidence. */
@@ -94,30 +95,30 @@ export function ProfileChannels({
           </p>
         )}
         {!!channels.length && (
-          <ul className="m-0 list-none p-2">
-            {channels.map((channel) => (
-              <li key={channel.id} className={styles.channelRow}>
-                {communityOrigin && navigation && viewer ? (
-                  <Button
-                    variant="ghost"
-                    data-profile-channel-link=""
-                    onClick={() =>
-                      void navigation.open({
-                        version: 1,
-                        kind: "conversation",
-                        channelId: channel.id,
-                        scope: { viewer, communityOrigin },
-                      })
-                    }
-                  >
-                    <span>#{channel.name}</span>
-                    <ArrowUpRightIcon size={16} aria-hidden="true" />
-                  </Button>
-                ) : (
-                  <span>{channel.name}</span>
-                )}
-              </li>
-            ))}
+          <ul className="m-0 flex list-none flex-col gap-1 p-0">
+            {channels.map((channel) => {
+              const Icon = channelIcon(channel);
+              return (
+                <li key={channel.id}>
+                  {communityOrigin && navigation && viewer ? (
+                    <NavigationItem
+                      label={channel.name}
+                      icon={<Icon size={20} aria-hidden="true" />}
+                      onClick={() =>
+                        void navigation.open({
+                          version: 1,
+                          kind: "conversation",
+                          channelId: channel.id,
+                          scope: { viewer, communityOrigin },
+                        })
+                      }
+                    />
+                  ) : (
+                    <span>{channel.name}</span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         )}
       </div>

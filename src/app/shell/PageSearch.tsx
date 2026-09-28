@@ -153,7 +153,13 @@ export function PageSearch({
           trigger.current?.focus();
           begin();
         }}
-        icon={<MagnifyingGlassIcon size={16} aria-hidden="true" />}
+        icon={
+          <MagnifyingGlassIcon
+            size={20}
+            style={{ width: "var(--space-5)", height: "var(--space-5)" }}
+            aria-hidden="true"
+          />
+        }
       />
       <Dialog
         open={open}

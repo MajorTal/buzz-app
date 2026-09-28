@@ -157,13 +157,18 @@ test("avatar shapes paint at every size and preserve pointer/keyboard profile co
     await threadControl.hover();
     const threadShape = await threadControl.evaluate((element) => ({
       control: getComputedStyle(element).maskImage,
+      radius: getComputedStyle(element).borderRadius,
       background: getComputedStyle(element, "::before").maskImage,
       avatar: getComputedStyle(
         element.querySelector('[data-avatar-shape="squircle"]'),
       ).maskImage,
     }));
     expect(threadShape.control).toBe("none");
-    expect(threadShape.background.startsWith(threadShape.avatar)).toBe(true);
+    expect(threadShape.background).toBe("none");
+    expect(parseFloat(threadShape.radius)).toBeGreaterThanOrEqual(
+      (await threadControl.boundingBox()).height / 2,
+    );
+    expect(threadShape.avatar).not.toBe("none");
     await threadControl.screenshot({
       path: testInfo.outputPath("agent-first-thread-hover.png"),
     });

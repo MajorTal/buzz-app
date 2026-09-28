@@ -1,3 +1,4 @@
+import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 // No broker, credentials or remote writes: real UI/session, ephemeral signed fixture events.
 import { Context } from "@deepseek-ai/cordis";
 import { createPluginManager } from "../../src/plugins/manager";
@@ -398,4 +399,8 @@ function Fixture() {
 }
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing fixture root");
-createRoot(container).render(<Fixture />);
+createRoot(container).render(
+  <ToastProvider>
+    <Fixture />
+  </ToastProvider>,
+);

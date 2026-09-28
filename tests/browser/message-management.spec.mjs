@@ -5,12 +5,16 @@ import { npubEncode } from "nostr-tools/nip19";
 test.use({
   productionBroker: true,
   dmLabels: true,
+  readState: true,
   historyCounts: { alpha: 2, beta: 1 },
 });
 
 // Real shared-row/portal integration, keyboard focus and responsive geometry;
 // failure, retry, identity and permission matrices stay in lower-layer tests.
-test("manage a channel message and its thread", async ({ page, app }) => {
+test("manage a channel message, peer unread state, and its thread", async ({
+  page,
+  app,
+}) => {
   await open(page, app);
   const mention = `[@Morgarita](nostr:${npubEncode("b".repeat(64))})`;
   const event = app.append("primary", "alpha", `${mention} whats your name`);
@@ -68,6 +72,34 @@ test("manage a channel message and its thread", async ({ page, app }) => {
   await expect(page.getByText("Editing message", { exact: true })).toHaveCount(
     0,
   );
+  // Own messages are excluded from notification unread; use a peer row for the toggle.
+  const peer = app.append(
+    "primary",
+    "alpha",
+    "Peer unread target",
+    true,
+    false,
+  );
+  const peerRow = page.locator(
+    `[data-channel-timeline] [data-message-id="${peer.id}"]`,
+  );
+  await expect(peerRow).toBeVisible();
+  await peerRow.hover();
+  const peerTrigger = peerRow.getByRole("button", {
+    name: "More message actions",
+  });
+  await peerTrigger.click();
+  const toggle = page.getByRole("menuitem", { name: /^Mark (read|unread)$/ });
+  const initial = await toggle.textContent();
+  await toggle.click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await peerRow.hover();
+  await peerTrigger.click();
+  await expect(toggle).toHaveText(
+    initial === "Mark read" ? "Mark unread" : "Mark read",
+  );
+  await toggle.click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
   await row.hover();
   await row.getByRole("button", { name: "Reply", exact: true }).click();
   const thread = page.getByRole("complementary", {
@@ -209,7 +241,9 @@ test("DM menus edit own messages but never expose destructive actions for peers"
   const peerRow = timeline.locator(`[data-message-id="${peer.id}"]`);
   await peerRow.hover();
   await peerRow.getByRole("button", { name: "More message actions" }).click();
-  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: /^Mark (read|unread)$/ }),
+  ).toBeVisible();
   await expect(
     page.getByRole("menuitem", { name: "Edit message", exact: true }),
   ).toHaveCount(0);

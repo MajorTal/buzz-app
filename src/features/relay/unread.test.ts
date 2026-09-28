@@ -3,6 +3,7 @@ import { createRelaySession } from "./session";
 import { foldMessages } from "./fold";
 import {
   readJournal,
+  newReadJournal,
   type ReadJournal,
   type ReadStateStorage,
 } from "./read-state-storage";
@@ -27,12 +28,18 @@ const owners: ReturnType<typeof createRelaySession>[] = [];
 afterEach(() => {
   for (const owner of owners.splice(0)) owner.dispose();
 });
-function setup(options: ChannelStoreOptions = {}) {
+function setup(
+  options: ChannelStoreOptions = {},
+  signer = true,
+  preloaded?: (journal: ReadJournal) => ReadJournal,
+) {
   const viewer = keypair(),
     relay = keypair(),
     alice = keypair();
-  let journal: ReadJournal | undefined;
+  let journal: ReadJournal | undefined = preloaded?.(newReadJournal());
   let hold: Promise<void> | undefined;
+  let started: (() => void) | undefined;
+  let failNextSave = false;
   let failure: Error | undefined;
   const storage: ReadStateStorage = {
     async update(change) {
@@ -44,7 +51,13 @@ function setup(options: ChannelStoreOptions = {}) {
       if (hold) {
         const wait = hold;
         hold = undefined;
+        started?.();
+        started = undefined;
         await wait;
+      }
+      if (failNextSave) {
+        failNextSave = false;
+        throw new Error("Storage update rejected");
       }
       journal = readJournal(change(journal), viewer.pubkey);
       return journal;
@@ -71,7 +84,7 @@ function setup(options: ChannelStoreOptions = {}) {
       relayAuthor: relay.pubkey,
       query,
       media: () => undefined,
-      readState: host,
+      readState: signer ? host : { decode: host.decode },
       subscribe(callbacks) {
         incoming = callbacks.receive;
         return { update() {}, retry() {}, dispose() {} };
@@ -103,6 +116,21 @@ function setup(options: ChannelStoreOptions = {}) {
     target,
     snapshot: () => owner.session.unread.snapshot(target),
     journal: () => journal,
+    failNextSave() {
+      failNextSave = true;
+    },
+    holdSaveStarted() {
+      let release = () => {};
+      let signal = () => {};
+      const startedPromise = new Promise<void>((resolve) => {
+        signal = resolve;
+      });
+      started = signal;
+      hold = new Promise<void>((resolve) => {
+        release = resolve;
+      });
+      return { started: startedPromise, release };
+    },
     failSave() {
       failure = new Error("disk full");
     },
@@ -1088,6 +1116,297 @@ it("attention fails closed after deletion or access loss, and viewing cannot sur
   expect(h.session.unread.attention("room", row.id).viewing).toBe(false);
 });
 
+it("reports an own row's force independently of channel intent and never counts it as unread", async () => {
+  const h = setup();
+  h.grant("room");
+  const own = message(h.viewer, "room", "own", 11);
+  const peer = message(h.alice, "room", "peer", 12);
+  h.emit([own, peer]);
+  await h.session.unread.enterChannel("room");
+  await h.session.unread.markThrough(
+    { kind: "message", channelId: "room", messageId: peer.id },
+    peer.id,
+  );
+  await h.session.unread.markUnreadLocal(h.target);
+  await h.session.unread.markMessageUnread("room", own.id);
+  expect(h.session.unread.attention("room", own.id)).toMatchObject({
+    status: "ineligible",
+    unread: false,
+    forced: true,
+  });
+  const ownTarget = {
+    kind: "message" as const,
+    channelId: "room",
+    messageId: own.id,
+  };
+  expect(h.session.unread.snapshot(ownTarget).manual).toBe("local-only");
+  expect(h.session.unread.attention("room", peer.id).forced).toBe(false);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 0,
+    manual: "local-only",
+  });
+  await h.session.unread.markMessageRead("room", own.id);
+  expect(h.session.unread.attention("room", own.id)).toMatchObject({
+    status: "ineligible",
+    unread: false,
+    forced: false,
+  });
+  expect(h.session.unread.snapshot(ownTarget).manual).toBe("none");
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 0,
+    manual: "local-only",
+  });
+  expect(h.journal()?.localUnread["message-force:room"]).toBeUndefined();
+  expect(h.journal()?.localUnread.room).toBeGreaterThan(0);
+  h.session.unread.leaveChannel("room");
+  expect(h.session.unread.attention("room", own.id).forced).toBe(false);
+});
+
+it("forces loaded reply subtrees independently and preserves channel manual intent across visits", async () => {
+  const h = setup();
+  h.grant("room");
+  const a = message(h.alice, "room", "a", 11);
+  const aChild = message(h.alice, "room", "a child", 12, [
+    ["e", a.id, "", "reply"],
+  ]);
+  const b = message(h.alice, "room", "b", 13);
+  h.emit([a, aChild, b]);
+  await h.session.unread.enterChannel("room");
+  for (const row of [a, aChild, b])
+    await h.session.unread.markThrough(
+      { kind: "message", channelId: "room", messageId: row.id },
+      row.id,
+    );
+  expect(h.snapshot().observedCount).toBe(0);
+  await h.session.unread.markMessageUnread("room", a.id);
+  await h.session.unread.markMessageUnread("room", b.id);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 3,
+    manual: "local-only",
+  });
+  expect(h.session.unread.attention("room", aChild.id).unread).toBe(true);
+  await h.session.unread.markMessageRead("room", a.id);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 1,
+    manual: "local-only",
+  });
+  await h.session.unread.markUnreadLocal(h.target);
+  await h.session.unread.markMessageRead("room", b.id);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 0,
+    manual: "local-only",
+  });
+  h.session.unread.leaveChannel("room");
+  await h.session.unread.enterChannel("room");
+  expect(h.snapshot().manual).toBe("local-only"); // Independent channel action survives.
+});
+
+it("leaves only the sidebar hint after channel leave and reconciles it on reopen", async () => {
+  const h = setup();
+  h.grant("room");
+  const row = message(h.alice, "room", "read", 11);
+  h.emit([row]);
+  await h.session.unread.enterChannel("room");
+  await h.session.unread.markThrough(
+    { kind: "message", channelId: "room", messageId: row.id },
+    row.id,
+  );
+  await h.session.unread.markMessageUnread("room", row.id);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 1,
+    manual: "local-only",
+  });
+  h.session.unread.leaveChannel("room");
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 0,
+    manual: "local-only",
+  });
+  await h.session.unread.enterChannel("room");
+  expect(h.snapshot()).toMatchObject({ observedCount: 0, manual: "none" });
+});
+
+it("manual message intent participates in shared counts and is cleared by explicit subtree read", async () => {
+  const h = setup();
+  h.grant("room");
+  const row = message(h.alice, "room", "read", 11);
+  h.emit([row]);
+  const target = {
+    kind: "message" as const,
+    channelId: "room",
+    messageId: row.id,
+  };
+  await h.session.unread.markThrough(target, row.id);
+  await h.session.unread.markUnreadLocal(target);
+  expect(h.snapshot().observedCount).toBe(1);
+  expect(h.session.unread.attention("room", row.id).unread).toBe(true);
+  await h.session.unread.markMessageRead("room", row.id);
+  expect(h.snapshot().observedCount).toBe(0);
+  expect(h.journal()?.localUnread[`msg:${row.id}`]).toBeUndefined();
+});
+
+it("revocation rejects an unread action before its intent is saved", async () => {
+  const h = setup();
+  h.grant("room");
+  const row = message(h.alice, "room", "read", 11);
+  h.emit([row]);
+  const target = {
+    kind: "message" as const,
+    channelId: "room",
+    messageId: row.id,
+  };
+  await h.session.unread.markThrough(target, row.id);
+  const failed = h.session.unread.markMessageUnread("room", row.id);
+  h.emit([roster(h.relay, "room", [], 20)]);
+  await expect(failed).rejects.toThrow();
+  expect(h.session.unread.attention("room", row.id).status).toBe("unknown");
+});
+
+it("revocation during a held subtree read keeps the previously saved force and frontiers", async () => {
+  const h = setup();
+  h.grant("room");
+  const a = message(h.alice, "room", "a", 11);
+  const b = message(h.alice, "room", "b", 12, [["e", a.id, "", "reply"]]);
+  h.emit([a, b]);
+  await h.session.unread.enterChannel("room");
+  for (const row of [a, b])
+    await h.session.unread.markThrough(
+      { kind: "message", channelId: "room", messageId: row.id },
+      row.id,
+    );
+  await h.session.unread.markMessageUnread("room", a.id);
+  expect(h.snapshot().observedCount).toBe(2);
+  const { started, release } = h.holdSaveStarted();
+  const pending = h.session.unread.markMessageRead("room", a.id);
+  await started;
+  try {
+    h.emit([roster(h.relay, "room", [], 20)]);
+  } finally {
+    release();
+  }
+  await expect(pending).rejects.toThrow();
+  h.emit([roster(h.relay, "room", [h.viewer.pubkey], 21)]);
+  h.emit([a, b]);
+  expect(h.journal()?.localUnread["message-force:room"]).toBeGreaterThan(0);
+  expect(h.journal()?.state.frontiers[`msg:${a.id}`]).toBe(11);
+});
+
+it("rejected storage update preserves the entire subtree and permits a clean retry", async () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.alice, "room", "root", 11);
+  const child = message(h.alice, "room", "child", 12, [
+    ["e", root.id, "", "reply"],
+  ]);
+  h.emit([root, child]);
+  await h.session.unread.enterChannel("room");
+  await h.session.unread.markMessageUnread("room", root.id);
+  const before = h.journal();
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 2,
+    manual: "local-only",
+  });
+  h.failNextSave();
+  await expect(
+    h.session.unread.markMessageRead("room", root.id),
+  ).rejects.toThrow("Storage update rejected");
+  expect(h.journal()).toBe(before);
+  expect(h.journal()?.state.frontiers[`msg:${root.id}`]).toBeUndefined();
+  expect(h.journal()?.state.frontiers[`msg:${child.id}`]).toBeUndefined();
+  expect(h.journal()?.localUnread["message-force:room"]).toBeGreaterThan(0);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 2,
+    manual: "local-only",
+  });
+  expect(h.session.unread.attention("room", child.id).unread).toBe(true);
+  await h.session.unread.markMessageRead("room", root.id);
+  expect(h.snapshot()).toMatchObject({ observedCount: 0, manual: "none" });
+  expect(h.journal()?.state.frontiers[`msg:${root.id}`]).toBe(11);
+  expect(h.journal()?.state.frontiers[`msg:${child.id}`]).toBe(12);
+  expect(h.journal()?.localUnread["message-force:room"]).toBeUndefined();
+});
+
+it("serializes independent subtree reads and rejects stale unread after leaving", async () => {
+  const h = setup();
+  h.grant("room");
+  const a = message(h.alice, "room", "a", 11);
+  const b = message(h.alice, "room", "b", 12);
+  h.emit([a, b]);
+  await h.session.unread.enterChannel("room");
+  const unread = h.session.unread.markMessageUnread("room", a.id);
+  const read = h.session.unread.markMessageRead("room", a.id);
+  const second = h.session.unread.markMessageUnread("room", b.id);
+  await Promise.all([unread, read, second]);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 1,
+    manual: "local-only",
+  });
+  const pending = h.session.unread.markMessageUnread("room", a.id);
+  h.session.unread.leaveChannel("room");
+  await expect(pending).rejects.toThrow("visit expired");
+  expect(h.session.unread.attention("room", a.id).unread).toBe(false);
+});
+
+it("without a signer, clears a pre-read forced subtree but rejects fresh evidence", async () => {
+  const old = message(keypair(), "room", "old", 11);
+  // The fixture supplies a real, previously saved frontier and checks it is not modified.
+  const h = setup({}, false, (journal) => ({
+    ...journal,
+    state: { ...journal.state, frontiers: { [`msg:${old.id}`]: 11 } },
+  }));
+  h.grant("room");
+  const fresh = message(h.alice, "room", "fresh", 12);
+  h.emit([old, fresh]);
+  await h.session.unread.markMessageUnread("room", old.id);
+  await h.session.unread.markMessageRead("room", old.id);
+  expect(h.session.unread.attention("room", old.id).unread).toBe(false);
+  expect(h.journal()?.state.frontiers[`msg:${old.id}`]).toBe(11);
+  await expect(
+    h.session.unread.markMessageRead("room", fresh.id),
+  ).rejects.toThrow("unsupported");
+  expect(h.session.unread.attention("room", fresh.id).unread).toBe(true);
+});
+
+it("reopening waits for the prior visit's queued unread and reconciles its sidebar hint", async () => {
+  const h = setup();
+  h.grant("room");
+  const row = message(h.alice, "room", "old", 11);
+  h.emit([row]);
+  await h.session.unread.enterChannel("room");
+  const { started, release } = h.holdSaveStarted();
+  const pending = h.session.unread.markMessageUnread("room", row.id);
+  await started; // The storage update has begun and is held before the visit changes.
+  try {
+    h.session.unread.leaveChannel("room");
+  } finally {
+    release();
+  }
+  await expect(pending).rejects.toThrow("Reading observation expired");
+  await h.session.unread.enterChannel("room");
+  expect(h.snapshot().manual).toBe("none");
+});
+
+it("without a signer, own descendants do not require read frontiers to clear a forced peer subtree", async () => {
+  const peer = message(keypair(), "room", "peer", 11);
+  const h = setup({}, false, (journal) => ({
+    ...journal,
+    state: { ...journal.state, frontiers: { [`msg:${peer.id}`]: 11 } },
+  }));
+  h.grant("room");
+  const own = message(h.viewer, "room", "own reply", 12, [
+    ["e", peer.id, "", "reply"],
+  ]);
+  h.emit([peer, own]);
+  await h.session.unread.markMessageUnread("room", peer.id);
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 1,
+    manual: "local-only",
+  });
+  await h.session.unread.markMessageRead("room", peer.id);
+  expect(h.snapshot()).toMatchObject({ observedCount: 0, manual: "none" });
+  expect(h.journal()?.state.frontiers[`msg:${own.id}`]).toBeUndefined();
+  expect(h.journal()?.state.frontiers[`msg:${peer.id}`]).toBe(11);
+});
+
 it("channel read atomically clears owned marks through the latest reply, preserving other channels and later arrivals", async () => {
   const h = setup();
   h.grant("room");
@@ -1224,3 +1543,202 @@ it("failed channel read saves neither frontier nor clears, and an explicit retry
   await h.session.unread.markChannelRead("room");
   expect(h.snapshot()).toMatchObject({ observedCount: 0, manual: "none" });
 });
+
+it("channel read clears own-message force only after saving and preserves later message intent", async () => {
+  const h = setup();
+  h.grant("room");
+  h.grant("other");
+  const own = message(h.viewer, "room", "own", 11);
+  const other = message(h.alice, "other", "other", 12);
+  h.emit([own, other]);
+  const unread = h.session.unread;
+  await unread.enterChannel("room");
+  await unread.markMessageUnread("room", own.id);
+  await unread.markMessageUnread("other", other.id);
+  h.failSave();
+  await expect(unread.markChannelRead("room")).rejects.toThrow("disk full");
+  expect(unread.attention("room", own.id)).toMatchObject({
+    forced: true,
+    unread: false,
+  });
+  expect(h.journal()?.localUnread["message-force:room"]).toBeGreaterThan(0);
+
+  const held = h.holdSaveStarted();
+  const reading = unread.markChannelRead("room");
+  await held.started;
+  expect(unread.attention("room", own.id).forced).toBe(true);
+  held.release();
+  await reading;
+  expect(unread.attention("room", own.id)).toMatchObject({
+    forced: false,
+    unread: false,
+  });
+  expect(h.snapshot()).toMatchObject({ observedCount: 0, manual: "none" });
+  expect(h.journal()?.localUnread["message-force:room"]).toBeUndefined();
+  expect(unread.attention("other", other.id).forced).toBe(true);
+  expect(h.journal()?.localUnread["message-force:other"]).toBeGreaterThan(0);
+
+  // A message unread action invoked after channel read must win, even while its save waits.
+  const next = h.holdSaveStarted();
+  const secondRead = unread.markChannelRead("room");
+  await next.started;
+  const laterForce = unread.markMessageUnread("room", own.id);
+  next.release();
+  await Promise.all([secondRead, laterForce]);
+  expect(unread.attention("room", own.id)).toMatchObject({
+    forced: true,
+    unread: false,
+  });
+  expect(h.snapshot()).toMatchObject({
+    observedCount: 0,
+    manual: "local-only",
+  });
+  expect(h.journal()?.localUnread["message-force:room"]).toBeGreaterThan(0);
+});
+
+it.each(["channel", "thread", "message"] as const)(
+  "preserves a later %s unread choice behind pending message and channel reads",
+  async (kind) => {
+    const h = setup();
+    h.grant("room");
+    const row = message(h.alice, "room", "root", 11);
+    h.emit([row]);
+    const unread = h.session.unread;
+    await unread.enterChannel("room");
+    const target =
+      kind === "channel"
+        ? h.target
+        : kind === "thread"
+          ? { kind, channelId: "room", rootId: row.id }
+          : { kind, channelId: "room", messageId: row.id };
+    const key =
+      kind === "channel"
+        ? "room"
+        : `${kind === "thread" ? "thread" : "msg"}:${row.id}`;
+    const held = h.holdSaveStarted();
+    const messageRead = unread.markMessageRead("room", row.id);
+    const pending = [messageRead];
+    try {
+      await held.started;
+      pending.push(unread.markChannelRead("room"));
+      pending.push(unread.markUnreadLocal(target));
+    } finally {
+      held.release();
+    }
+    await Promise.all(pending);
+    expect(h.journal()?.state.frontiers.room).toBe(11);
+    expect(h.journal()?.localUnread[key]).toBeGreaterThan(0);
+    expect(unread.snapshot(target).manual).toBe("local-only");
+  },
+);
+
+it.each(["markThrough", "clearUnreadLocal", "markChannelRead"] as const)(
+  "%s preserves a final explicit read after queued local unread",
+  async (action) => {
+    const h = setup();
+    h.grant("room");
+    const row = message(h.alice, "room", "root", 11);
+    h.emit([row]);
+    const unread = h.session.unread;
+    await unread.enterChannel("room");
+    const held = h.holdSaveStarted();
+    const messageRead = unread.markMessageRead("room", row.id);
+    const pending = [messageRead];
+    try {
+      await held.started;
+      pending.push(unread.markUnreadLocal(h.target));
+      pending.push(
+        action === "markThrough"
+          ? unread.markThrough(h.target, row.id)
+          : action === "clearUnreadLocal"
+            ? unread.clearUnreadLocal(h.target)
+            : unread.markChannelRead("room"),
+      );
+    } finally {
+      held.release();
+    }
+    await Promise.all(pending);
+    expect(h.journal()?.localUnread.room).toBeUndefined();
+    expect(h.snapshot().manual).toBe("none");
+  },
+);
+
+it.each(
+  (["clearCache", "dispose", "revoke-regrant"] as const).flatMap((action) =>
+    (["markUnreadLocal", "markMessageRead", "markMessageUnread"] as const).map(
+      (markAction) => ({ action, markAction }),
+    ),
+  ),
+)(
+  "queued $markAction stays invalid after $action",
+  async ({ action, markAction }) => {
+    const h = setup();
+    h.grant("room");
+    const row = message(h.alice, "room", "root", 11);
+    h.emit([row]);
+    await h.session.unread.enterChannel("room");
+    const held = h.holdSaveStarted();
+    const messageRead = h.session.unread.markMessageRead("room", row.id);
+    const rejectedRead = expect(messageRead).rejects.toThrow();
+    const pending = [rejectedRead];
+    try {
+      await held.started;
+      const mark =
+        markAction === "markUnreadLocal"
+          ? h.session.unread.markUnreadLocal(h.target)
+          : h.session.unread[markAction]("room", row.id);
+      pending.push(expect(mark).rejects.toThrow());
+      if (action === "revoke-regrant") {
+        h.emit([roster(h.relay, "room", [], 20)]);
+        h.grant("room", 21);
+      } else await h[action]();
+      if (action !== "dispose") {
+        h.grant("room", 22);
+        h.emit([row]); // Restored evidence must not revive pre-invalidation intent.
+      }
+    } finally {
+      held.release();
+    }
+    await Promise.all(pending);
+    expect(h.journal()?.localUnread.room).toBeUndefined();
+    expect(h.journal()?.localUnread["message-force:room"]).toBeUndefined();
+    expect(h.journal()?.state.frontiers[`msg:${row.id}`]).toBeUndefined();
+  },
+);
+
+it("queued message read does not consume a reply arriving after the click", async () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.alice, "room", "root", 11);
+  h.emit([root]);
+  const unread = h.session.unread;
+  await unread.enterChannel("room");
+  const held = h.holdSaveStarted();
+  const prior = unread.markUnreadLocal(h.target);
+  let clicked: Promise<unknown> | undefined;
+  const late = message(h.alice, "room", "late reply", 13, [
+    ["e", root.id, "", "reply"],
+    ["p", h.viewer.pubkey],
+  ]);
+  try {
+    await held.started;
+    clicked = unread.markMessageRead("room", root.id);
+    h.emit([late]);
+    expect(unread.attention("room", late.id).unread).toBe(true);
+  } finally {
+    held.release();
+  }
+  await Promise.all([prior, clicked]);
+  expect(h.journal()?.state.frontiers[`msg:${root.id}`]).toBe(11);
+  expect(h.journal()?.state.frontiers[`msg:${late.id}`]).toBeUndefined();
+  expect(unread.attention("room", late.id).unread).toBe(true);
+});
+
+it.each(["markMessageRead", "markMessageUnread"] as const)(
+  "%s rejects invalid targets asynchronously",
+  async (action) => {
+    const h = setup();
+    h.grant("room");
+    await expect(h.session.unread[action]("room", "missing")).rejects.toThrow();
+  },
+);

@@ -101,6 +101,11 @@ test("reload restores the selected conversation/groups before handshake and upda
     await expect(page.getByText("Reconnecting…")).toBeVisible();
     await expect(composer).toBeDisabled();
     await expect(composer).toHaveText("Keep this draft");
+    await expect(
+      page
+        .getByRole("alert")
+        .filter({ hasText: "Unread channel visit expired" }),
+    ).toHaveCount(0);
     const placeholder = history.locator(
       '[class*="attachmentImage"][aria-hidden="true"]',
     );

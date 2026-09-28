@@ -32,6 +32,7 @@ const Management = createContext<
         done?: () => void,
         focus?: () => HTMLElement | null,
       ): void;
+      report(error: string | undefined): void;
       operations: readonly OutgoingEvent[];
       session: RelaySession;
       channelId?: string | undefined;
@@ -76,18 +77,74 @@ export function MessageManagement({
   useEffect(() => {
     if (!available) setSelection(undefined);
   }, [available]);
+  const visitChannelId = channels.channels.find(
+    (channel) =>
+      channel.id === channelId &&
+      !channel.cached &&
+      !!session.viewer &&
+      channel.members?.includes(session.viewer),
+  )?.id;
+  const [notice, setNotice] = useState<{
+    visit: {
+      session: RelaySession;
+      channelId: string | undefined;
+      visitChannelId: string | undefined;
+    };
+    error?: string | undefined;
+  }>(() => ({ visit: { session, channelId, visitChannelId } }));
+  const { visit } = notice;
+  const currentVisit =
+    visit.session === session &&
+    visit.channelId === channelId &&
+    visit.visitChannelId === visitChannelId;
+  if (!currentVisit)
+    setNotice({
+      visit: { session, channelId, visitChannelId },
+      error: undefined,
+    });
+  // Captured reporters cannot overwrite errors from a later visit, even to
+  // the same channel. Reset during render so stale alerts never reach children.
+  const report = (error: string | undefined) =>
+    setNotice((current) =>
+      current.visit === visit ? { ...current, error } : current,
+    );
+  useEffect(() => {
+    const { session, visitChannelId } = visit;
+    let active = true;
+    if (visitChannelId)
+      void session.unread.enterChannel(visitChannelId).catch((cause) => {
+        if (active)
+          setNotice((current) =>
+            current.visit === visit
+              ? {
+                  ...current,
+                  error:
+                    cause instanceof Error
+                      ? cause.message
+                      : "Could not restore unread state.",
+                }
+              : current,
+          );
+      });
+    return () => {
+      active = false;
+      if (visitChannelId) session.unread.leaveChannel(visitChannelId);
+    };
+  }, [visit]);
   return (
     <Management.Provider
       value={{
         session,
         channelId,
         operations,
+        report,
         remove(row, done, focus) {
           setSelection({ row, done, focus });
         },
       }}
     >
       <MessageEditScope>{children}</MessageEditScope>
+      {currentVisit && notice.error && <p role="alert">{notice.error}</p>}
       {selection && available && (
         <DeleteMessageDialog
           key={selection.row.id}
@@ -117,6 +174,15 @@ export function MessageManagementItems({
     session.channels.subscribeList,
     session.channels.list,
   );
+  const target = {
+    kind: "message" as const,
+    channelId: row.channelId,
+    messageId: row.id,
+  };
+  useSyncExternalStore(
+    (listener) => session.unread.subscribe(target, listener),
+    () => session.unread.snapshot(target),
+  );
   if (
     !management ||
     row.membership ||
@@ -137,11 +203,13 @@ export function MessageManagementItems({
   const own = row.authorId === session.viewer && !member.archived;
   const canEdit = own && editor && lastEditableMessage(session, [row]);
   const canDelete = own && session.outbox?.supports(5);
+  const attention = session.unread.attention(row.channelId, row.id);
+  const unread = attention.unread || attention.forced;
   const act = (action: () => void) =>
     afterClose ? afterClose(action) : action();
   return (
     <>
-      {separated && (canEdit || canDelete) && <MenuSeparator />}
+      {separated && <MenuSeparator />}
       {canEdit && (
         <MenuItem
           disabled={
@@ -184,6 +252,24 @@ export function MessageManagementItems({
           Delete message
         </MenuItem>
       )}
+      <MenuItem
+        onClick={() => {
+          management.report(undefined);
+          void (
+            unread
+              ? session.unread.markMessageRead(row.channelId, row.id)
+              : session.unread.markMessageUnread(row.channelId, row.id)
+          ).catch((cause) =>
+            management.report(
+              cause instanceof Error
+                ? cause.message
+                : "Could not update unread state. Try again.",
+            ),
+          );
+        }}
+      >
+        {unread ? "Mark read" : "Mark unread"}
+      </MenuItem>
     </>
   );
 }

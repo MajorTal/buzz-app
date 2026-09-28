@@ -26,6 +26,7 @@ export function mentionCandidates(
     .list()
     .channels.find((c) => c.id === channelId);
   const members = roster?.map((p) => p.pubkey) ?? channel?.members ?? [];
+  const memberKeys = new Set(members);
   const agents = session.agentChoices.snapshot().identities;
   const profiles = session.profiles.snapshot();
   const known = knownAgentPubkeys(profiles, {
@@ -66,7 +67,7 @@ export function mentionCandidates(
     )
     .map((recipient) => ({
       recipient,
-      member: members.includes(recipient.pubkey),
+      member: memberKeys.has(recipient.pubkey),
       agent:
         known.has(recipient.pubkey) ||
         directory.some((p) => p.pubkey === recipient.pubkey && p.isAgent),

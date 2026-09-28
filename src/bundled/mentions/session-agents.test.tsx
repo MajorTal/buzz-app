@@ -42,6 +42,7 @@ import { createMessages } from "../../features/relay/messages";
 import type { Outbox } from "../../features/relay/outbox";
 import { MessageMarkdown } from "../../features/messages/MessageMarkdown";
 import { profileTarget } from "../../features/profiles/target";
+import { npubEncode } from "nostr-tools/nip19";
 afterEach(() => {
   cleanup();
   vi.useRealTimers();
@@ -110,6 +111,7 @@ function setup(parent: boolean | null = true, archived = false) {
       subscribe: () => () => {},
       snapshot: () => 0,
       resolve: (_key: string, fallback: string) => fallback,
+      scope: () => () => undefined,
     },
     agentLibrary: library.queries,
     agentChoices: createAgentChoices({
@@ -1632,6 +1634,10 @@ it("uses base matches and visible lexical ties for Fizz in both chooser surfaces
     names: {
       ...names,
       resolve: (key: string) => rows.find((row) => row.key === key)?.label,
+      scope: () => (key: string) => {
+        const name = rows.find((row) => row.key === key)?.label;
+        return name ? { name, source: "agent-directory" as const } : undefined;
+      },
     },
   } satisfies RelaySession;
   const expected = [rows[5], rows[4], rows[1], rows[2], rows[3], rows[0]].map(
@@ -1885,5 +1891,83 @@ it("the persistent toolbar picker reads an empty search again after close and re
       screen.getByRole("button", { name: `Zed ${"9".repeat(64)}` }),
     ).toBeTruthy(),
   );
+  t.library.dispose();
+});
+
+it("names the choice set only while the picker is shown, and qualifies namesakes in both menus", async () => {
+  const t = setup();
+  const member = "a".repeat(64),
+    namesake = "c".repeat(64);
+  const profiles = new Map([
+    [member, { name: "Larry" }],
+    [namesake, { name: "Larry" }],
+  ]);
+  const list = {
+    status: "ready" as const,
+    channels: [
+      {
+        id: "parent",
+        name: "Parent",
+        channelType: "stream" as const,
+        members: [member, namesake],
+      },
+    ],
+  };
+  const session = {
+    ...t.session,
+    profiles: { ...t.session.profiles, snapshot: () => profiles },
+    channels: { ...t.session.channels, list: () => list },
+  };
+  const names = bindNames(
+    { profiles: session.profiles, agentLibrary: t.library.queries },
+    { snapshot: () => [createAgentDirectory()], subscribe: () => () => {} },
+  );
+  const scope = vi.spyOn(names, "scope");
+  const labels = [member, namesake].map(
+    (key) => `Larry · ${npubEncode(key).slice(-4)}`,
+  );
+  const picker = (disabled: boolean) => (
+    <MentionPicker
+      scope="test"
+      session={{ ...session, names }}
+      channelId="parent"
+      disabled={disabled}
+      select={() => true}
+    />
+  );
+  const view = render(picker(false));
+  view.rerender(picker(false));
+  expect(scope).not.toHaveBeenCalled();
+  await userEvent
+    .setup()
+    .click(screen.getByRole("button", { name: "Mention a member" }));
+  for (const [index, key] of [member, namesake].entries())
+    expect(
+      await screen.findByRole("button", { name: `${labels[index]} ${key}` }),
+    ).toBeInTheDocument();
+  view.rerender(picker(true));
+  scope.mockClear();
+  view.rerender(picker(true));
+  expect(scope).not.toHaveBeenCalled();
+  view.unmount();
+  const publish = vi.fn();
+  render(
+    <MentionCompletion
+      session={{ ...session, names }}
+      scope="test"
+      channelId="parent"
+      observation={{ revision: 1, text: "@Larry", start: 6, end: 6 }}
+      query={{ start: 0, end: 6, query: "Larry" }}
+      publish={publish}
+    />,
+  );
+  await waitFor(() =>
+    expect(
+      (publish.mock.lastCall?.[0] as CompletionResult | undefined)?.items
+        .map((item) => item.label)
+        .sort(),
+    ).toEqual([...labels].sort()),
+  );
+  names.dispose();
   t.library.dispose();
 });

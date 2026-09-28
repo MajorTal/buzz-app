@@ -30,19 +30,15 @@ export type NameSource = {
 };
 export type NameProvider = {
   id: string;
-  resolve(
+  /** Resolve keys against one candidate scope; the requested key always joins it. */
+  scope(
     source: NameSource,
-    pubkey: string,
     candidates?: readonly string[],
     displayFacts?: readonly NamingIdentity[],
-  ): string | undefined;
+  ): (
+    pubkey: string,
+  ) => { name: string; qualifier?: string | undefined } | undefined;
   activate(source: NameSource): undefined | (() => void);
-  qualifier?(
-    source: NameSource,
-    pubkey: string,
-    candidates?: readonly string[],
-    displayFacts?: readonly NamingIdentity[],
-  ): string | undefined;
   subscribe?(listener: () => void): () => void;
 };
 export type IdentityName = Readonly<{
@@ -56,6 +52,11 @@ export interface IdentityNameView {
     candidates?: readonly string[],
     displayFacts?: readonly NamingIdentity[],
   ): IdentityName | undefined;
+  /** Normalize one candidate scope once for many lookups. */
+  scope(
+    candidates?: readonly string[],
+    displayFacts?: readonly NamingIdentity[],
+  ): (pubkey: string) => IdentityName | undefined;
   resolve(
     pubkey: string,
     fallback?: string,
@@ -148,29 +149,37 @@ export function bindNames(
   const stops = [source.profiles.subscribe(emit)];
   if (providers) stops.push(providers.subscribe(select));
   select();
+  const scope = (
+    candidates?: readonly string[],
+    displayFacts?: readonly NamingIdentity[],
+  ) => {
+    let owner: NameProvider | undefined;
+    let local: ReturnType<NameProvider["scope"]> | undefined;
+    return (pubkey: string): IdentityName | undefined => {
+      if (closed) return undefined;
+      if (owner !== provider) {
+        owner = provider;
+        local = provider?.scope(source, candidates, displayFacts);
+      }
+      const label = local?.(pubkey);
+      if (label?.name)
+        return {
+          name: label.name,
+          qualifier: label.qualifier,
+          source: "agent-directory",
+        };
+      const name = source.profiles.snapshot().get(pubkey.toLowerCase())?.name;
+      return name ? { name, source: "public-profile" } : undefined;
+    };
+  };
   const lookup = (
     pubkey: string,
     candidates?: readonly string[],
     displayFacts?: readonly NamingIdentity[],
-  ): IdentityName | undefined => {
-    if (closed) return undefined;
-    const local = provider?.resolve(source, pubkey, candidates, displayFacts);
-    if (local)
-      return {
-        name: local,
-        qualifier: provider?.qualifier?.(
-          source,
-          pubkey,
-          candidates,
-          displayFacts,
-        ),
-        source: "agent-directory",
-      };
-    const name = source.profiles.snapshot().get(pubkey.toLowerCase())?.name;
-    return name ? { name, source: "public-profile" } : undefined;
-  };
+  ) => scope(candidates, displayFacts)(pubkey);
   return {
     lookup,
+    scope,
     resolve(pubkey, fallback, candidates, displayFacts) {
       return lookup(pubkey, candidates, displayFacts)?.name ?? fallback;
     },

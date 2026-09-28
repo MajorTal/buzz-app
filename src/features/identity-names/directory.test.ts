@@ -2,7 +2,12 @@ import { expect, it, vi } from "vitest";
 import type { AgentControlState, AgentView } from "../agents/control";
 import { bindNames, type NameSource } from "./service";
 import { npubEncode } from "nostr-tools/nip19";
-import { agentDirectory, createAgentDirectory } from "./testing";
+import {
+  agentDirectory,
+  createAgentDirectory,
+  defaultNamingPolicy,
+} from "./testing";
+import { createNameProvider } from "./directory";
 
 it("scopes native names to the session community and follows edits and disposal", () => {
   const key = "a".repeat(64);
@@ -67,11 +72,12 @@ it("scopes native names to the session community and follows edits and disposal"
   for (const listener of listeners) listener();
   expect(changed).toHaveBeenCalledOnce();
   expect(names.resolve(key)).toBe("Edited");
-  expect(provider.resolve({ ...source, relayUrl: undefined }, key)).toBe(
+  expect(provider.scope({ ...source, relayUrl: undefined })(key)?.name).toBe(
     "Legacy",
   );
   expect(
-    provider.resolve({ ...source, relayUrl: "https://unrelated.example" }, key),
+    provider.scope({ ...source, relayUrl: "https://unrelated.example" })(key)
+      ?.name,
   ).toBe("Legacy");
   state = { ...state, status: "error" };
   expect(names.resolve(key)).toBe("Legacy");
@@ -109,14 +115,14 @@ it("suffixes equal names across profiles, without merging keys or suffixing uniq
     },
   };
   for (const key of [a, b, c, d]) {
-    expect(agentDirectory.resolve(source, key)).toBe(
+    expect(agentDirectory.scope(source)(key)?.name).toBe(
       `Bad Janet · ${npubEncode(key).slice(-4)}`,
     );
   }
-  expect(agentDirectory.resolve(source, e)).toBe("Larry");
+  expect(agentDirectory.scope(source)(e)?.name).toBe("Larry");
   library = { ...library, identities: identities.slice(0, 2) };
-  expect(agentDirectory.resolve(source, a)).toBe("Bad Janet");
-  expect(agentDirectory.resolve(source, b)).toBeUndefined();
+  expect(agentDirectory.scope(source)(a)?.name).toBe("Bad Janet");
+  expect(agentDirectory.scope(source)(b)?.name).toBeUndefined();
 });
 
 it("recomputes collisions for native edits, community scope, and profile fallbacks", () => {
@@ -183,7 +189,7 @@ it("recomputes collisions for native edits, community scope, and profile fallbac
   expect(names.resolve(a)).toBe("Native Larry");
   expect(names.resolve(b)).toBe("Legacy");
   expect(
-    provider.resolve({ ...source, relayUrl: "https://other.test" }, a),
+    provider.scope({ ...source, relayUrl: "https://other.test" })(a)?.name,
   ).toBe(`Legacy · ${npubEncode(a).slice(-4)}`);
   expect(agent.name).toBe("Native Larry");
 
@@ -244,18 +250,18 @@ it("includes native-only identities but ignores other-community and unready nati
     refresh: async () => {},
   });
   for (const key of [a, b])
-    expect(provider.resolve(source, key)).toBe(
+    expect(provider.scope(source)(key)?.name).toBe(
       `Larry · ${npubEncode(key).slice(-4)}`,
     );
   expect(
-    provider.resolve({ ...source, relayUrl: "https://elsewhere.test" }, a),
+    provider.scope({ ...source, relayUrl: "https://elsewhere.test" })(a)?.name,
   ).toBe("Larry");
   expect(
-    provider.resolve({ ...source, relayUrl: "https://elsewhere.test" }, b),
+    provider.scope({ ...source, relayUrl: "https://elsewhere.test" })(b)?.name,
   ).toBeUndefined();
   native = { ...native, status: "error" };
-  expect(provider.resolve(source, a)).toBe("Larry");
-  expect(provider.resolve(source, b)).toBeUndefined();
+  expect(provider.scope(source)(a)?.name).toBe("Larry");
+  expect(provider.scope(source)(b)?.name).toBeUndefined();
 });
 
 it("applies viewer and owner metadata through the shared view and follows owner edits", () => {
@@ -296,7 +302,7 @@ it("applies viewer and owner metadata through the shared view and follows owner 
   });
   expect(names.resolve(a)).toBe("Honey");
   expect(names.resolve(b)).toBe("Wes’s Honey");
-  expect(provider.resolve({ ...source, viewer: other }, a)).toBe(
+  expect(provider.scope({ ...source, viewer: other })(a)?.name).toBe(
     "Logan’s Honey",
   );
   expect(names.resolve(a)).toBe("Honey");
@@ -307,4 +313,73 @@ it("applies viewer and owner metadata through the shared view and follows owner 
   expect(changed).toHaveBeenCalledOnce();
   expect(names.resolve(b)).toBe("Wesley’s Honey");
   names.dispose();
+});
+
+it("reuses one policy run per candidate scope across mixed case, outside keys, and updates", () => {
+  const [a, b, c, d] = ["a", "b", "c", "d"].map((key) => key.repeat(64));
+  if (!a || !b || !c || !d) throw new Error("Missing fixture keys");
+  let profiles = new Map([
+    [a, { name: "Alex" }],
+    [b, { name: "Alex" }],
+    [c, { name: "Alex" }],
+    [d, { name: "Dana" }],
+  ]);
+  const library = {
+    status: "ready",
+    definitions: [],
+    identities: [],
+  } as const;
+  const listeners = new Set<() => void>();
+  const source: NameSource = {
+    profiles: {
+      snapshot: () => profiles,
+      subscribe: (listener) => {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+      ensure: async () => {},
+    },
+    agentLibrary: {
+      snapshot: () => library,
+      subscribe: () => () => {},
+      refresh: async () => {},
+      retain: () => () => {},
+    },
+  };
+  const resolve = vi.fn(defaultNamingPolicy.resolve);
+  const names = bindNames(source, {
+    snapshot: () => [createNameProvider({ id: "spy", resolve })],
+    subscribe: () => () => {},
+  });
+  const suffixed = (key: string) => `Alex · ${npubEncode(key).slice(-4)}`;
+  const candidates = [a.toUpperCase(), b, d];
+  const scoped = names.scope(candidates);
+  expect(scoped(a)?.name).toBe(suffixed(a));
+  expect(scoped(b.toUpperCase())).toEqual({
+    name: suffixed(b),
+    qualifier: npubEncode(b).slice(-4),
+    source: "agent-directory",
+  });
+  expect(scoped(d)?.name).toBe("Dana");
+  expect(names.lookup(b, candidates)).toEqual(scoped(b));
+  // Interleaved unscoped lookups keep their own cached scope.
+  expect(names.resolve(d)).toBe("Dana");
+  expect(scoped(a)?.name).toBe(suffixed(a));
+  expect(resolve).toHaveBeenCalledTimes(2);
+  // An outside historical reference joins the scope only for its own lookup.
+  expect(names.scope([d])(a)?.name).toBe("Alex");
+  expect(scoped(c)?.name).toBe(suffixed(c));
+  expect(scoped(a)?.name).toBe(suffixed(a));
+  expect(resolve).toHaveBeenCalledTimes(4);
+  // A hot scope survives a stream of distinct historical lookups.
+  for (const digit of "01234567") {
+    expect(names.scope([digit.repeat(64)])(a)?.name).toBe("Alex");
+    expect(scoped(a)?.name).toBe(suffixed(a));
+  }
+  expect(resolve).toHaveBeenCalledTimes(12);
+  profiles = new Map([...profiles, [b, { name: "Blake" }]]);
+  for (const listener of listeners) listener();
+  expect(scoped(a)?.name).toBe("Alex");
+  expect(scoped(b)?.name).toBe("Blake");
+  expect(resolve).toHaveBeenCalledTimes(13);
 });

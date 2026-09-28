@@ -113,7 +113,11 @@ it("rebinds a live name view on plugin replacement and disable", async () => {
 it("ignores competing providers and cannot reactivate a disposed view", () => {
   const f = fixture();
   const activate = vi.fn();
-  const provider = { ...agentDirectory, activate, resolve: () => "Override" };
+  const provider = {
+    ...agentDirectory,
+    activate,
+    scope: () => () => ({ name: "Override" }),
+  };
   let entries = [provider, provider];
   let update = () => {};
   const view = bindNames(f.source, {

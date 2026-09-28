@@ -31,7 +31,7 @@ it("updates a mounted profile from the shared name view without replacing its id
               activate() {
                 return undefined;
               },
-              resolve: () => name,
+              scope: () => () => ({ name }),
             },
           ],
           subscribe(listener) {

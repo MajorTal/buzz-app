@@ -94,9 +94,10 @@ export function useMentionChoices(
     ];
     // Directory pages are menu-local, not cached profiles. Name them only when no
     // other source knows the key, so namesakes in this choice set are qualified.
+    const known = session.names?.scope();
     const facts = [
       ...people
-        .filter((person) => !session.names?.resolve(person.pubkey))
+        .filter((person) => !known?.(person.pubkey))
         .map(({ pubkey, name, isAgent }) => ({
           pubkey,
           name,
@@ -104,15 +105,11 @@ export function useMentionChoices(
         })),
       ...selected,
     ];
+    // One naming scope per choice set, not one normalization per row.
+    const name = session.names?.scope(keys, facts);
     return candidates.map((choice) => ({
       ...choice,
-      label:
-        session.names?.resolve(
-          choice.recipient.pubkey,
-          choice.recipient.name,
-          keys,
-          facts,
-        ) ?? choice.recipient.name,
+      label: name?.(choice.recipient.pubkey)?.name ?? choice.recipient.name,
     }));
   }, [session, channelId, invite, roster, selected, people]);
   const { candidates, local } = useMemo(() => {
@@ -122,6 +119,8 @@ export function useMentionChoices(
     void agents;
     void archives;
     void resolve;
+    // A closed or disabled chooser shows nothing, so it names nothing.
+    if (!open) return { candidates: [], local: new Set<string>() };
     return {
       candidates: current(),
       // Keys known without the directory search: members and agent choices.
@@ -132,6 +131,7 @@ export function useMentionChoices(
       ),
     };
   }, [
+    open,
     current,
     session,
     channelId,

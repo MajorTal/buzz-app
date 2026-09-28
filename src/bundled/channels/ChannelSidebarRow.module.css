@@ -79,10 +79,12 @@
 .label,
 .childLabel {
   display: block;
-  width: 100%;
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
+}
+.label:only-child {
+  width: 100%;
 }
 .label[data-overflowing],
 .childLabel[data-overflowing] {
@@ -124,6 +126,7 @@
 }
 .childLabel {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: var(--space-2);
 }

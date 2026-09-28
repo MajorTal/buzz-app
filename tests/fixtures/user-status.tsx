@@ -163,7 +163,7 @@ createRoot(root).render(
         <ChannelSidebarItem
           channel={{
             id: "status-dm",
-            name: "Bob",
+            name: new URLSearchParams(location.search).get("name") ?? "Bob",
             channelType: "dm",
             participants: [other.pubkey],
           }}

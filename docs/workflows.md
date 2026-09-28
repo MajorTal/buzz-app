@@ -47,7 +47,7 @@ See the [capability contract](../src/features/workflows/types.ts).
   it and never enters the outbox journal, operation errors or logs. The hook
   URL needs the relay HTTP base the host advertises; without it the dialog
   shows the relative `/hooks/{id}` route only.
-- Confirmed deletion request, manual run, and on-demand run/trace history in
+- Destructive deletion confirmation, manual run, and on-demand run/trace history in
   20-row pages with the relay's exact `(before,beforeId)` cursor.
 - No approval UI, lifecycle negotiation, alternative signed-host adapter,
   plugin command-replay API or JSON trigger inputs.
@@ -66,6 +66,26 @@ only after durable dismissal; it neither undoes nor repeats a command. Exact
 readback does not retire a pending one-time-secret receipt, and a missing receipt
 does not undo verified configuration success. Unknown
 runs stay unknown: only a returned run ID identifies a requested run.
+
+An empty successful deletion receipt is reconciled only by a fresh read started
+after that receipt: the workflow's owner/channel/UUID must be absent from a
+complete channel result. Grid deletion confirms on the grid without mounting an
+editor. Confirming deletion in detail discards the local draft and returns to the
+grid immediately, including on a synchronous submission error. The session/outbox
+continues delivery; the landing remains mounted across channel/editor navigation
+and owns readback and recovery. There is no deletion progress in the editor.
+
+Pending cards remain visible with **Deleting…** and disabled actions. Confirmed
+removal refreshes the landing without resubmitting deletion. Rejection restores
+card actions. Submission errors, rejection, and unconfirmed outcomes use the
+existing toast stack; uncertain results offer **Check saved configuration**, which
+also resumes a paused read. Missing receipts, partial/failed reads, and retained
+legacy definitions never establish removal. Explicit **Dismiss notice** confirms
+that dismissal does not confirm, cancel, or repeat deletion; actions stay locked
+until durable dismissal succeeds, and persistence errors remain recoverable.
+Session clear/access loss purges copied data and recovery UI. Work already running
+may continue. The compact **Refresh workflows** icon keeps the old app's label and
+rereads definitions for the known channels; it does not rediscover project channels.
 
 Saving a configured enabled flag does not prove runtime activation or cancellation.
 Legacy deletion can retain a visible definition; accepted delivery is not proof

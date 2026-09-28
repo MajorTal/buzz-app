@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { RelayData } from "../../features/relay/service";
 import type { RelaySession } from "../../features/relay/session";
 import type { WorkflowDefinition } from "../../features/workflows/types";
@@ -8,6 +8,7 @@ import {
   ArrowsClockwiseIcon,
 } from "../../shared/design-system/icons";
 import { Button } from "../../shared/design-system/ui/Button";
+import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import { WorkflowEditor } from "./WorkflowEditor";
 import { DEFAULT_FORM_STATE, formStateToYaml } from "./workflowFormTypes";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
@@ -16,7 +17,7 @@ import { Select } from "../../shared/design-system/ui/Select";
 import { WorkflowChannelPicker } from "./WorkflowChannelPicker";
 import { WorkflowChannel } from "./WorkflowChannel";
 import { WorkflowWebhookSecrets } from "./WorkflowWebhookSecrets";
-import { WorkflowLanding } from "./WorkflowLanding";
+import { WorkflowLanding, workflowOperationLocked } from "./WorkflowLanding";
 import "./workflows.css";
 
 export function WorkflowsPage({ relay }: { relay: RelayData }) {
@@ -74,12 +75,12 @@ export function WorkflowCommunity({
   const [selectedDefinition, setSelectedDefinition] = useState<
     WorkflowDefinition | "new" | undefined
   >();
-  const [initialAction, setInitialAction] = useState<
-    "run" | "delete" | undefined
-  >();
+  const [initialAction, setInitialAction] = useState<"run" | undefined>();
   const [refreshRequest, setRefreshRequest] = useState(0);
   const [saveReadback, setSaveReadback] =
     useState<Pick<WorkflowDefinition, "channelId" | "revision">>();
+  const deleting = useRef(false);
+  const [deleteError, setDeleteError] = useState<string>();
   const [createOpen, setCreateOpen] = useState(false);
   const channel = channels.channels.find((item) => item.id === selected);
   useEffect(() => {
@@ -105,7 +106,7 @@ export function WorkflowCommunity({
   const openChannel = (
     next: string,
     definition?: WorkflowDefinition | "new",
-    action?: "run" | "delete",
+    action?: "run",
   ) => {
     setInitialAction(action);
     setSelectedDefinition(definition);
@@ -116,6 +117,36 @@ export function WorkflowCommunity({
     openChannel(next);
   };
   const beginCreate = () => setCreateOpen(true);
+  const deleteWorkflow = (definition: WorkflowDefinition) => {
+    if (deleting.current) return;
+    const locked = workflowOperationLocked(
+      capability.operations.snapshot(),
+      definition,
+    );
+    if (locked) {
+      setDeleteError(
+        "Another workflow change is still being confirmed. Refresh and try again.",
+      );
+      openChannel("");
+      return;
+    }
+    if (definition.owner !== viewer || !capability.availability.delete) return;
+    deleting.current = true;
+    try {
+      capability.delete(definition);
+      setDeleteError(undefined);
+    } catch (cause) {
+      setDeleteError(
+        cause instanceof Error
+          ? cause.message
+          : "Try again from the workflow menu.",
+      );
+    } finally {
+      deleting.current = false;
+      // Confirmation deliberately discards the editor draft, even if submission throws.
+      openChannel("");
+    }
+  };
 
   return (
     <>
@@ -175,12 +206,13 @@ export function WorkflowCommunity({
       {channels.coverage === "partial" && (
         <p className="text-secondary">The channel list is partial.</p>
       )}
-      {(!channel || selectedDefinition !== undefined) &&
-        channels.channels.length > 0 && (
+      {channels.channels.length > 0 && (
+        <div hidden={!!channel && selectedDefinition === undefined}>
           <WorkflowLanding
             capability={capability}
             channels={channels.channels}
             onCreate={beginCreate}
+            onDelete={deleteWorkflow}
             onOpen={(definition, nextChannel, action) =>
               openChannel(nextChannel.id, definition, action)
             }
@@ -188,7 +220,15 @@ export function WorkflowCommunity({
             saveReadback={saveReadback}
             viewer={viewer}
           />
-        )}
+        </div>
+      )}
+      {deleteError && (
+        <ToastNotice
+          title="Couldn't start deletion"
+          description={deleteError}
+          onDismiss={() => setDeleteError(undefined)}
+        />
+      )}
       {channel ? (
         <WorkflowChannel
           key={`${channel.id}:${
@@ -202,6 +242,7 @@ export function WorkflowCommunity({
           initialSelection={selectedDefinition}
           initialAction={initialAction}
           onSaveReadback={setSaveReadback}
+          onDelete={deleteWorkflow}
           viewer={viewer}
           {...(selectedDefinition === undefined
             ? {}

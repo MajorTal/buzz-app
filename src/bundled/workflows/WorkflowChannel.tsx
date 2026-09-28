@@ -52,18 +52,20 @@ export function WorkflowChannel({
   onDraftRiskChange,
   onSaveReadback,
   onClose,
+  onDelete,
 }: {
   capability: WorkflowCapability;
   channelId: string;
   channelName: string;
   initialSelection?: WorkflowDefinition | "new" | undefined;
-  initialAction?: "run" | "delete" | undefined;
+  initialAction?: "run" | undefined;
   viewer: string;
   onDraftRiskChange?: (atRisk: boolean) => void;
   onSaveReadback?: (
     saved: Pick<WorkflowDefinition, "channelId" | "revision">,
   ) => void;
   onClose?: () => void;
+  onDelete: (definition: WorkflowDefinition) => void;
 }) {
   const { snapshot, refresh } = useWorkflowView(
     useCallback(
@@ -85,9 +87,7 @@ export function WorkflowChannel({
   const [pendingSelection, setPendingSelection] = useState<
     WorkflowDefinition | "new" | "close" | null
   >(null);
-  const [confirmDelete, setConfirmDelete] = useState(
-    initialAction === "delete",
-  );
+  const [confirmDelete, setConfirmDelete] = useState(false);
   const [confirmRun, setConfirmRun] = useState(initialAction === "run");
   const [error, setError] = useState<string | null>(null);
   const [readRuns, setReadRuns] = useState(false);
@@ -105,7 +105,9 @@ export function WorkflowChannel({
   const atRisk = dirty || !!draft?.operationId;
   const unresolvedWrite = ownOperations.some(
     (item) =>
-      (item.outcome === "pending" || item.outcome === "unknown") &&
+      (item.outcome === "pending" ||
+        item.outcome === "unknown" ||
+        (item.action === "delete" && item.outcome === "succeeded")) &&
       (draft?.original
         ? item.workflow.id === draft.original.id &&
           item.workflow.owner === draft.original.owner
@@ -224,22 +226,15 @@ export function WorkflowChannel({
       draft.operationId
     )
       return;
-    try {
-      submission.current = "submitting";
-      const operationId = capability.delete(draft.original);
-      submission.current = operationId;
-      setDraft({ ...draft, operationId });
-      setConfirmDelete(false);
-      setError(null);
-    } catch (cause) {
-      submission.current = null;
-      setError(
-        cause instanceof Error
-          ? cause.message
-          : "Deletion could not be submitted. Your draft is retained.",
-      );
-    }
+    // The page owns submission and recovery after this editor is discarded.
+    const definition = draft.original;
+    setDraft(null);
+    setLocalDraftAtRisk(false);
+    setPendingSelection(null);
+    setConfirmDelete(false);
+    onDelete(definition);
   };
+
   const trigger = () => {
     if (
       !draft?.original ||
@@ -277,13 +272,11 @@ export function WorkflowChannel({
     blocked = "Saving is unavailable from this host.";
   else if (unresolvedWrite && !draft?.operationId)
     blocked =
-      "Review the unresolved request in Recent activity before continuing.";
+      "Check saved configuration or review Recent activity before continuing.";
   else if (draft?.operationId)
     blocked =
       operation?.outcome === "succeeded"
-        ? operation.action === "delete"
-          ? "Deletion request accepted, not verified runtime deletion. The configuration may remain visible. Review Recent activity to continue."
-          : "Configuration saved; waiting for a readback of this exact revision."
+        ? "Configuration saved; waiting for a readback of this exact revision. Check saved configuration or review the current version in Recent activity."
         : operation?.outcome === "rejected"
           ? "Draft retained. Review the error below before continuing."
           : undefined;
@@ -456,7 +449,7 @@ export function WorkflowChannel({
                 )}
                 {!capability.availability.delete && (
                   <p className="text-body-sm text-secondary">
-                    Delete requests are unavailable from this host.
+                    You can't delete workflows here.
                   </p>
                 )}
                 {error && (
@@ -483,10 +476,10 @@ export function WorkflowChannel({
                   />
                 )}
                 <WorkflowOperations
-                  operations={ownOperations}
-                  definitions={
-                    snapshot.status === "ready" ? snapshot.data.items : []
-                  }
+                  operations={ownOperations.filter(
+                    (item) => item.action !== "delete",
+                  )}
+                  snapshot={snapshot}
                   onCheckSaved={refresh}
                   onReviewSaved={select}
                   onDismiss={dismiss}
@@ -540,9 +533,12 @@ export function WorkflowChannel({
             )}
             {confirmDelete && (
               <ConfirmAction
-                title="Request deletion of this workflow?"
-                description="The existing backend may retain a visible saved configuration. An accepted request does not confirm runtime deletion or cancellation of work already running. Submit this deletion request?"
-                action="Request deletion"
+                title="Delete this workflow?"
+                description="The saved workflow may remain visible. Work already running may continue."
+                action="Delete workflow"
+                cancel="Cancel"
+                destructive
+                error={error}
                 onConfirm={remove}
                 onCancel={() => setConfirmDelete(false)}
               />
@@ -551,8 +547,8 @@ export function WorkflowChannel({
         )}
       {!draft && (
         <WorkflowOperations
-          operations={ownOperations}
-          definitions={snapshot.status === "ready" ? snapshot.data.items : []}
+          operations={ownOperations.filter((item) => item.action !== "delete")}
+          snapshot={snapshot}
           onCheckSaved={refresh}
           onReviewSaved={select}
           onDismiss={dismiss}

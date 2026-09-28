@@ -67,6 +67,7 @@ function Fixture() {
               <WorkflowWebhookSecrets capability={fixture.capability} />
               <WorkflowChannel
                 capability={fixture.capability}
+                onDelete={(definition) => fixture.capability.delete(definition)}
                 channelId={fixtureChannel}
                 channelName="Fixture channel"
                 viewer={fixtureViewer}

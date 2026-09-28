@@ -232,17 +232,10 @@ export function createWorkflowFixture() {
           )
         )
           throw new Error("Still pending");
-        const previous = operations.find(
-          (operation) => operation.eventId === id,
-        );
-        // Match the outbox: remove/notify before persistence, restore on failure.
-        publish(operations.filter((operation) => operation.eventId !== id));
+        // Match the durable outbox: persistence completes before removal/notification.
         await dismissGate;
-        if (dismissError) {
-          if (previous && definitionState.status !== "unavailable")
-            publish([...operations, previous]);
-          throw new Error(dismissError);
-        }
+        if (dismissError) throw new Error(dismissError);
+        publish(operations.filter((operation) => operation.eventId !== id));
       },
     },
   };

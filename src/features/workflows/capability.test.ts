@@ -402,6 +402,190 @@ it("evicts only overlapping aggregate definition cache entries after completed r
   expect(h.read).toHaveBeenCalledTimes(5);
 });
 
+it("an empty deletion receipt reconciles only after a complete fresh read without its coordinate", async () => {
+  const h = setup();
+  const operation = h.capability.delete(h.definition);
+  await flush();
+  h.settle("");
+  await flush();
+  expect(h.capability.operations.snapshot()[0]?.outcome).toBe("unknown");
+  await h.capability.definitions(channelId).refresh();
+  expect(h.read).toHaveBeenCalledWith(
+    [{ kinds: [30620], "#h": [channelId], limit: 100 }],
+    expect.objectContaining({ fresh: true }),
+  );
+  expect(h.capability.operations.snapshot()[0]).toMatchObject({
+    eventId: operation,
+    action: "delete",
+    delivery: "accepted",
+    outcome: "succeeded",
+  });
+  expect(h.capability.operations.snapshot()[0]?.error).toBeUndefined();
+  expect(h.publish).toHaveBeenCalledTimes(1);
+  expect(h.sign).toHaveBeenCalledTimes(1);
+});
+
+it.each([
+  "retained",
+  "partial",
+  "other-channel",
+  "failed-read",
+  "lost-receipt",
+  "echo-only",
+  "rejected",
+  "malformed-receipt",
+  "revoked",
+  "disposed",
+])("does not confirm deletion from %s", async (scenario) => {
+  const h = setup();
+  h.capability.delete(h.definition);
+  await flush();
+  const event = h.publish.mock.calls[0]?.[0];
+  if (!event) throw new Error("missing deletion");
+  if (scenario === "echo-only") h.outbox.observe([event]);
+  if (scenario === "lost-receipt" || scenario === "echo-only")
+    h.reject(new Error("Lost receipt"));
+  else if (scenario === "rejected")
+    h.reject(new PublishRejected("Deletion rejected"));
+  else h.settle(scenario === "malformed-receipt" ? "response:{" : "");
+  await flush();
+  const view = h.capability.definitions(
+    scenario === "other-channel" ? runId : channelId,
+  );
+  const retained = {
+    ...event,
+    kind: 30620,
+    content: yaml,
+    tags: [
+      ["h", channelId],
+      ["d", id],
+    ],
+  };
+  if (scenario === "retained") h.read.mockResolvedValue([retained]);
+  if (scenario === "partial")
+    h.read.mockResolvedValue(
+      Array.from({ length: 100 }, (_, index) => ({
+        ...retained,
+        id: index.toString(16).padStart(64, "0"),
+        tags: [
+          ["h", channelId],
+          ["d", runId],
+        ],
+      })),
+    );
+  if (scenario === "failed-read")
+    h.read.mockRejectedValue(new Error("Offline"));
+  let release!: () => void;
+  if (scenario === "revoked" || scenario === "disposed")
+    h.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([]);
+        }),
+    );
+  const reading = view.refresh();
+  await flush();
+  try {
+    if (scenario === "revoked") h.revoke();
+    if (scenario === "disposed") view.dispose();
+  } finally {
+    release?.();
+  }
+  await reading;
+  expect(
+    h.capability.operations.snapshot().some((op) => op.outcome === "succeeded"),
+  ).toBe(false);
+  expect(h.publish).toHaveBeenCalledTimes(1);
+});
+
+it("a read started before deletion acceptance cannot reconcile absence; a later read can", async () => {
+  const h = setup();
+  h.capability.delete(h.definition);
+  await flush();
+  let release!: () => void;
+  h.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = () => resolve([]);
+      }),
+  );
+  const view = h.capability.definitions(channelId);
+  const reading = view.refresh();
+  await flush();
+  try {
+    h.settle("");
+    await flush();
+  } finally {
+    release();
+  }
+  await reading;
+  expect(h.capability.operations.snapshot()[0]?.outcome).toBe("unknown");
+  await view.refresh();
+  expect(h.capability.operations.snapshot()[0]?.outcome).toBe("succeeded");
+  expect(h.publish).toHaveBeenCalledTimes(1);
+});
+
+it("refresh during an older in-flight read queues deletion readback after that read", async () => {
+  const h = setup();
+  h.capability.delete(h.definition);
+  await flush();
+  let release!: () => void;
+  h.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = () => resolve([]);
+      }),
+  );
+  const view = h.capability.definitions(channelId);
+  const oldRead = view.refresh();
+  await flush();
+  let readback: Promise<void> | undefined;
+  try {
+    h.settle("");
+    await flush();
+    readback = view.refresh();
+    expect(h.read).toHaveBeenCalledTimes(1);
+    expect(h.capability.operations.snapshot()[0]?.outcome).toBe("unknown");
+  } finally {
+    release();
+  }
+  await Promise.all([oldRead, readback]);
+  expect(h.read).toHaveBeenCalledTimes(2);
+  expect(h.capability.operations.snapshot()[0]?.outcome).toBe("succeeded");
+  expect(h.publish).toHaveBeenCalledTimes(1);
+});
+
+it.each(["clear", "interrupt"] as const)(
+  "%s fences queued deletion readback without starting another read",
+  async (action) => {
+    const h = setup();
+    h.capability.delete(h.definition);
+    await flush();
+    let release!: () => void;
+    h.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([]);
+        }),
+    );
+    const view = h.capability.definitions(channelId);
+    const oldRead = view.refresh();
+    await flush();
+    h.settle("");
+    await flush();
+    const queued = view.refresh();
+    try {
+      h[action]();
+    } finally {
+      release();
+    }
+    await Promise.all([oldRead, queued]);
+    expect(h.read).toHaveBeenCalledTimes(1);
+    expect(h.capability.operations.snapshot()[0]?.outcome).toBe("unknown");
+    expect(view.snapshot().status).toBe(action === "clear" ? "idle" : "error");
+  },
+);
+
 it.each([true, false])(
   "fresh exact saved configuration resolves a lost save receipt without replay (echo=%s)",
   async (echo) => {

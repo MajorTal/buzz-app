@@ -117,6 +117,7 @@ export function createWorkflows({
     outcome: WorkflowOperation["outcome"];
     runId?: string;
     error?: string;
+    deletionAccepted?: boolean;
   };
   const results = new Map<string, Result>();
   // One-time webhook secrets, keyed by save event ID, live here and nowhere
@@ -199,6 +200,7 @@ export function createWorkflows({
     load: (signal: AbortSignal) => Promise<T>,
     accept?: (data: T) => void,
     cached?: { data: T; isFresh(): boolean },
+    needsFreshRead?: () => boolean,
   ): WorkflowView<T> {
     const channelIds =
       typeof channelId === "string" ? [channelId] : [...new Set(channelId)];
@@ -266,7 +268,7 @@ export function createWorkflows({
       },
     };
     views.add(owner);
-    return Object.freeze({
+    const ownerView = Object.freeze({
       snapshot: () => snapshot,
       subscribe(listener: () => void) {
         if (closed || disposed) return () => {};
@@ -275,14 +277,21 @@ export function createWorkflows({
           subscribers.delete(listener);
         };
       },
-      refresh({ ifStale = false } = {}) {
+      refresh({ ifStale = false } = {}): Promise<void> {
         if (closed || disposed || !available) return Promise.resolve();
         if (!accessible()) {
           clear();
           emit();
           return Promise.resolve();
         }
-        if (pending) return pending;
+        if (pending) {
+          const signal = controller?.signal;
+          return needsFreshRead?.()
+            ? pending.then(() =>
+                signal?.aborted ? undefined : ownerView.refresh(),
+              )
+            : pending;
+        }
         if (ifStale && snapshot.status === "ready" && cached?.isFresh())
           return Promise.resolve();
         const owned = new AbortController();
@@ -324,8 +333,7 @@ export function createWorkflows({
             snapshot = Object.freeze({
               status: "error",
               data: empty,
-              error:
-                "Workflow read unavailable. Retry; this is not proof of deletion.",
+              error: "Couldn't read workflow data. Try again.",
             });
             emit();
           })
@@ -341,6 +349,7 @@ export function createWorkflows({
       },
       dispose: owner.dispose,
     });
+    return ownerView;
   }
   function assertOperation(kind: number) {
     const enabled =
@@ -391,6 +400,7 @@ export function createWorkflows({
       const cacheKey = aggregate ? [...channelIds].sort().join(":") : "";
       const cached = aggregate ? cachedDefinitions(cacheKey) : undefined;
       let readVersion = definitionCacheVersion;
+      let acceptedDeletions = new Set<string>();
       return view<WorkflowDefinitions>(
         channelId,
         !!reader,
@@ -401,6 +411,12 @@ export function createWorkflows({
         async (signal) => {
           if (!reader) throw new Error("Workflow definitions unavailable");
           readVersion = definitionCacheVersion;
+          // Only receipts received before this read can use absence as readback.
+          acceptedDeletions = new Set(
+            operations
+              .filter((op) => results.get(op.eventId)?.deletionAccepted)
+              .map((op) => op.eventId),
+          );
           const coordinates = new Map<string, WorkflowDefinition>();
           let cursor: { until: number; before_id: string } | undefined;
           let partial = false;
@@ -465,11 +481,31 @@ export function createWorkflows({
         (data) => {
           if (aggregate)
             retainDefinitions(cacheKey, channelIds, data, readVersion);
-          const { items } = data;
+          const { items, partialChannelIds } = data;
           // Only a fresh, verified exact configuration head resolves an unknown
           // save. An echo, another revision, or run history cannot do so.
           let changed = false;
           for (const op of operations) {
+            if (
+              op.action === "delete" &&
+              op.outcome === "unknown" &&
+              acceptedDeletions.has(op.eventId) &&
+              channelIds.includes(op.workflow.channelId) &&
+              !partialChannelIds?.includes(op.workflow.channelId) &&
+              !items.some(
+                (row) =>
+                  row.owner === op.workflow.owner &&
+                  row.channelId === op.workflow.channelId &&
+                  row.id === op.workflow.id,
+              )
+            ) {
+              results.set(op.eventId, {
+                outcome: "succeeded",
+                deletionAccepted: true,
+              });
+              changed = true;
+              continue;
+            }
             if (
               op.action !== "save" ||
               op.outcome !== "unknown" ||
@@ -497,6 +533,13 @@ export function createWorkflows({
                 Date.now() - cached.readAt < WORKFLOW_DEFINITION_CACHE_FRESH_MS,
             }
           : undefined,
+        () =>
+          operations.some(
+            (op) =>
+              channelIds.includes(op.workflow.channelId) &&
+              results.get(op.eventId)?.deletionAccepted &&
+              !acceptedDeletions.has(op.eventId),
+          ),
       );
     },
     runs(workflow, cursor) {
@@ -586,6 +629,7 @@ export function createWorkflows({
       };
       try {
         assertAccess(workflowReference(event));
+        if (event.kind === 5 && message === "") result.deletionAccepted = true;
         if (message?.startsWith("response:")) {
           const value: unknown = JSON.parse(message.slice(9));
           const reference = workflowReference(event);
@@ -614,7 +658,7 @@ export function createWorkflows({
             )
               result = { outcome: "succeeded", runId: value.run_id };
             else if (event.kind === 5 && value.deleted === true)
-              result = { outcome: "succeeded" };
+              result = { outcome: "succeeded", deletionAccepted: true };
           }
         }
       } catch {

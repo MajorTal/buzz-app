@@ -9,6 +9,7 @@ export function ConfirmAction({
   onConfirm,
   onCancel,
   pending = false,
+  destructive = false,
   error,
 }: {
   title: string;
@@ -18,6 +19,7 @@ export function ConfirmAction({
   onConfirm: () => void;
   onCancel: () => void;
   pending?: boolean;
+  destructive?: boolean;
   error?: string | null;
 }) {
   return (
@@ -31,7 +33,11 @@ export function ConfirmAction({
           <Button disabled={pending} onClick={onCancel}>
             {cancel}
           </Button>
-          <Button variant="prominent" disabled={pending} onClick={onConfirm}>
+          <Button
+            variant={destructive ? "destructive" : "prominent"}
+            disabled={pending}
+            onClick={onConfirm}
+          >
             {action}
           </Button>
         </>

@@ -12,10 +12,12 @@ export const confirmations = {
     action: "Leave draft",
   },
   delete: {
-    title: "Request deletion of this workflow?",
+    title: "Delete this workflow?",
     description:
-      "The existing backend may retain a visible saved configuration. An accepted request does not confirm runtime deletion or cancellation of work already running. Submit this deletion request?",
-    action: "Request deletion",
+      "The saved workflow may remain visible. Work already running may continue.",
+    action: "Delete workflow",
+    cancel: "Cancel",
+    destructive: true,
   },
   enable: {
     title: "Save this workflow enabled?",
@@ -26,7 +28,7 @@ export const confirmations = {
   dismiss: {
     title: "Dismiss this notice?",
     description:
-      "Dismissal only clears this notice and its editor lock. It does not undo, cancel or repeat a command, and it does not prove an unknown command failed. Review the saved configuration before saving again; a new run request may run the workflow again. Your unsaved draft is kept.",
+      "Dismissal only clears this notice and its editor lock. It does not undo, cancel, or repeat a command, or confirm its outcome. Review the saved configuration before saving again; a new run request may run the workflow again. Your unsaved draft is kept.",
     action: "Dismiss notice and continue",
   },
   secret: {
@@ -100,7 +102,7 @@ export const dialogs = [
     path: "Workflows → saved workflow → Delete",
     source: "src/bundled/workflows/WorkflowChannel.tsx",
     frame: "ConfirmAction → AlertDialog",
-    note: "Current deletion confirmation uses a prominent neutral action. Backend uncertainty is part of its current copy.",
+    note: "Destructive confirmation with direct wording. Deletion does not confirm cancellation of running work.",
   },
   {
     id: "enable",

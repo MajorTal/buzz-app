@@ -10,6 +10,7 @@ import {
   signed,
 } from "../../features/relay/testing";
 import type { RelayEvent } from "../../features/relay/events";
+import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { Button } from "../../shared/design-system/ui/Button";
 import { useKeyboardFocusVisibility } from "../../shared/design-system/useKeyboardFocusVisibility";
 import type { LiveCallbacks } from "../../features/relay/live";
@@ -34,6 +35,7 @@ let metadataSequence = 0;
 let heldDefinitionRelease: (() => void) | undefined;
 let heldDefinitionReject: (() => void) | undefined;
 let definitionHoldReleased = false;
+let holdEditorRead = false;
 let finishPublish: ((value: string) => void) | undefined;
 let failPublish: ((error: Error) => void) | undefined;
 let lastPublished: RelayEvent | undefined;
@@ -105,21 +107,27 @@ function session(scope: string) {
           }
         : {}),
       async query(filters, signal) {
+        const candidates = [...events];
         if (filters.some((filter) => filter.kinds?.includes(30620))) {
           definitionQueries++;
           for (const filter of filters)
             for (const channelId of filter["#h"] ?? [])
               definitionChannels.add(channelId);
           if (
-            fixtureParams.has("hold") &&
             !definitionHoldReleased &&
-            filters.some((filter) =>
-              filter["#h"]?.includes(
-                manyChannels
-                  ? (extraChannels[126] ?? secondChannel)
-                  : secondChannel,
-              ),
-            )
+            ((fixtureParams.has("hold-editor") &&
+              holdEditorRead &&
+              !heldDefinitionRelease &&
+              filters.length === 1 &&
+              filters[0]?.["#h"]?.includes(fixtureChannel)) ||
+              (fixtureParams.has("hold") &&
+                filters.some((filter) =>
+                  filter["#h"]?.includes(
+                    manyChannels
+                      ? (extraChannels[126] ?? secondChannel)
+                      : secondChannel,
+                  ),
+                )))
           )
             await new Promise<void>((resolve, reject) => {
               const abort = () => {
@@ -143,7 +151,7 @@ function session(scope: string) {
               signal?.addEventListener("abort", abort, { once: true });
             });
         }
-        return events.filter((event) =>
+        return candidates.filter((event) =>
           filters.some(
             (filter) =>
               (!filter.kinds || filter.kinds.includes(event.kind)) &&
@@ -180,6 +188,9 @@ Object.assign(window, {
     switchCommunity: switchScope,
     revokeSelectedChannel,
     publications: () => publishCount,
+    echoPublished: () => {
+      if (lastPublished) incoming?.([lastPublished]);
+    },
     state: (status: "connected" | "retrying") =>
       traffic.state({ status, routes: [] }),
     settle: () =>
@@ -195,8 +206,24 @@ Object.assign(window, {
         })}`,
       );
     },
-    settleDelete: () => {
+    settleDelete: (removeDefinition = false) => {
+      if (lastPublished?.kind !== 5) return;
       const coordinate = lastPublished?.tags.find(([key]) => key === "a")?.[1];
+      if (removeDefinition) {
+        for (let index = activeEvents.length - 1; index >= 0; index--) {
+          const event = activeEvents[index];
+          if (
+            event?.kind === 30620 &&
+            event.tags.some(
+              ([key, value]) =>
+                key === "d" && coordinate === `30620:${event.pubkey}:${value}`,
+            )
+          )
+            activeEvents.splice(index, 1);
+        }
+        finishPublish?.("");
+        return;
+      }
       finishPublish?.(
         `response:${JSON.stringify({
           workflow_id: coordinate?.split(":").at(-1),
@@ -209,6 +236,9 @@ Object.assign(window, {
     definitionQueries: () => definitionQueries,
     definitionChannelCount: () => definitionChannels.size,
     definitionReadHeld: () => heldDefinitionRelease !== undefined,
+    holdNextEditorRead: () => {
+      holdEditorRead = true;
+    },
     failDefinitionRead: () => {
       definitionHoldReleased = true;
       heldDefinitionReject?.();
@@ -327,6 +357,8 @@ const root = document.getElementById("root");
 if (root)
   createRoot(root).render(
     <StrictMode>
-      <Fixture />
+      <ToastProvider>
+        <Fixture />
+      </ToastProvider>
     </StrictMode>,
   );

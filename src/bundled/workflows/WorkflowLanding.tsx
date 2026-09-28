@@ -36,6 +36,7 @@ import {
   MenuItem,
 } from "../../shared/design-system/ui/Menu";
 import { Switch } from "../../shared/design-system/ui/Switch";
+import { WorkflowDeletionNotices } from "./WorkflowDeletionNotices";
 import { ConfirmAction } from "./ConfirmAction";
 import { getWorkflowActivationWarning } from "./workflowActivationWarning";
 import {
@@ -66,7 +67,7 @@ type DefinitionsSnapshot = ReturnType<
   WorkflowView<WorkflowDefinitions>["snapshot"]
 >;
 
-function workflowOperationLocked(
+export function workflowOperationLocked(
   operations: readonly WorkflowOperation[],
   definition: WorkflowDefinition,
 ) {
@@ -367,7 +368,10 @@ function useLandingDefinitions(
     )
       store.refresh([saveReadback.channelId], true);
   }, [saveReadback, store]);
-  return useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot);
+  return {
+    ...useSyncExternalStore(store.subscribe, store.snapshot, store.snapshot),
+    refresh: store.refresh,
+  };
 }
 
 function WorkflowIcon({ kind }: { kind: WorkflowCardIcon }) {
@@ -384,6 +388,7 @@ function WorkflowCard({
   viewer,
   onError,
   onOpen,
+  onDelete,
 }: {
   capability: WorkflowCapability;
   channel: ChannelSummary;
@@ -392,12 +397,24 @@ function WorkflowCard({
   operations: readonly WorkflowOperation[];
   viewer: string;
   onError: (message: string | null) => void;
+  onDelete: (definition: WorkflowDefinition) => void;
   onOpen: (
     definition: WorkflowDefinition,
     channel: ChannelSummary,
-    action?: "run" | "delete",
+    action?: "run",
   ) => void;
 }) {
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deletion = [...operations]
+    .reverse()
+    .find(
+      (operation) =>
+        operation.action === "delete" &&
+        operation.outcome !== "rejected" &&
+        operation.workflow.id === definition.id &&
+        operation.workflow.owner === definition.owner &&
+        operation.workflow.channelId === definition.channelId,
+    );
   const [confirmEnable, setConfirmEnable] = useState(false);
   const [submitted, setSubmitted] = useState<string | null>(null);
   const fields = readWorkflowDocumentFields(definition.yaml);
@@ -452,6 +469,7 @@ function WorkflowCard({
         <Button
           aria-label={`Open ${name}`}
           data-workflow-card-open=""
+          disabled={!!deletion}
           onClick={() => onOpen(definition, channel)}
           variant="ghost"
         >
@@ -517,7 +535,10 @@ function WorkflowCard({
                   }
                 />
                 <MenuPopup size="compact">
-                  <MenuItem onClick={() => onOpen(definition, channel)}>
+                  <MenuItem
+                    disabled={!!deletion}
+                    onClick={() => onOpen(definition, channel)}
+                  >
                     {readonly ? "View workflow" : "Edit workflow"}
                   </MenuItem>
                   <MenuItem
@@ -539,7 +560,7 @@ function WorkflowCard({
                       awaitingReadback ||
                       !capability.availability.delete
                     }
-                    onClick={() => onOpen(definition, channel, "delete")}
+                    onClick={() => setConfirmDelete(true)}
                   >
                     Delete workflow
                   </MenuItem>
@@ -554,6 +575,13 @@ function WorkflowCard({
             <div className="workflow-card-identity">
               <strong className="text-standard">#{channel.name}</strong>
               <span>{name}</span>
+              {deletion && (
+                <span role="status">
+                  {deletion.outcome === "pending"
+                    ? "Deleting…"
+                    : "Deletion unconfirmed"}
+                </span>
+              )}
             </div>
             <time
               dateTime={new Date(definition.createdAt * 1000).toISOString()}
@@ -573,6 +601,20 @@ function WorkflowCard({
           )}
         </div>
       </article>
+      {confirmDelete && (
+        <ConfirmAction
+          title="Delete this workflow?"
+          description="The saved workflow may remain visible. Work already running may continue."
+          action="Delete workflow"
+          cancel="Cancel"
+          destructive
+          onCancel={() => setConfirmDelete(false)}
+          onConfirm={() => {
+            setConfirmDelete(false);
+            onDelete(definition);
+          }}
+        />
+      )}
       {confirmEnable && (
         <ConfirmAction
           title={warning?.title ?? "Turn on this workflow?"}
@@ -600,16 +642,18 @@ function WorkflowChannelCards({
   snapshot,
   viewer,
   onOpen,
+  onDelete,
 }: {
   capability: WorkflowCapability;
   channel: ChannelSummary;
   operations: readonly WorkflowOperation[];
   snapshot: DefinitionsSnapshot | undefined;
   viewer: string;
+  onDelete: (definition: WorkflowDefinition) => void;
   onOpen: (
     definition: WorkflowDefinition,
     channel: ChannelSummary,
-    action?: "run" | "delete",
+    action?: "run",
   ) => void;
 }) {
   const [error, setError] = useState<string | null>(null);
@@ -638,6 +682,7 @@ function WorkflowChannelCards({
             locked={workflowOperationLocked(operations, definition)}
             onError={setError}
             onOpen={onOpen}
+            onDelete={onDelete}
             operations={operations}
             viewer={viewer}
           />
@@ -660,6 +705,7 @@ export function WorkflowLanding({
   viewer,
   onCreate,
   onOpen,
+  onDelete,
 }: {
   capability: WorkflowCapability;
   channels: readonly ChannelSummary[];
@@ -667,10 +713,11 @@ export function WorkflowLanding({
   saveReadback?: Pick<WorkflowDefinition, "channelId" | "revision"> | undefined;
   viewer: string;
   onCreate: () => void;
+  onDelete: (definition: WorkflowDefinition) => void;
   onOpen: (
     definition: WorkflowDefinition,
     channel: ChannelSummary,
-    action?: "run" | "delete",
+    action?: "run",
   ) => void;
 }) {
   const operations = useSyncExternalStore(
@@ -682,15 +729,15 @@ export function WorkflowLanding({
   const operationRefreshKey = operations
     .filter(
       (operation) =>
-        operation.action === "save" &&
+        (operation.action === "save" || operation.action === "delete") &&
         (operation.outcome === "unknown" || operation.outcome === "succeeded"),
     )
     .map(
       (operation) =>
-        `${operation.workflow.channelId}/${operation.eventId}/${operation.outcome}`,
+        `${operation.workflow.channelId}/${operation.eventId}/${operation.outcome}${operation.action === "delete" ? `/${operation.delivery}/${!!operation.error}` : ""}`,
     )
     .join(":");
-  const { snapshots, paused } = useLandingDefinitions(
+  const { snapshots, paused, refresh } = useLandingDefinitions(
     capability,
     channels,
     refreshRequest,
@@ -700,6 +747,14 @@ export function WorkflowLanding({
   );
   return (
     <>
+      <WorkflowDeletionNotices
+        operations={operations}
+        snapshots={snapshots}
+        onCheck={refresh}
+        onDismiss={(operation) =>
+          capability.operations.dismiss(operation.eventId)
+        }
+      />
       <div className="workflow-page-notice">
         <p className="text-body-sm text-secondary">
           Saved configuration only. Turning off does not confirm runs have
@@ -747,6 +802,7 @@ export function WorkflowLanding({
             channel={channel}
             key={channel.id}
             onOpen={onOpen}
+            onDelete={onDelete}
             operations={operations}
             snapshot={snapshots[channel.id]}
             viewer={viewer}

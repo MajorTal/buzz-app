@@ -87,6 +87,7 @@ function mount(
         saveReadback={saveReadback}
         viewer={fixtureViewer}
         onCreate={() => {}}
+        onDelete={() => {}}
         onOpen={() => {}}
       />
     </StrictMode>

@@ -1,7 +1,9 @@
 import { parseDocument, isMap } from "yaml";
 import type {
   WorkflowDefinition,
+  WorkflowDefinitions,
   WorkflowOperation,
+  WorkflowView,
 } from "../../features/workflows/types";
 import type { WorkflowFormState } from "./workflowFormTypes";
 
@@ -147,4 +149,50 @@ export function exactSaveReadback(
       definition.owner === operation.workflow.owner &&
       definition.channelId === operation.workflow.channelId,
   );
+}
+
+type DefinitionSnapshot = ReturnType<
+  WorkflowView<WorkflowDefinitions>["snapshot"]
+>;
+
+/** A successful receipt alone does not establish removal of saved configuration. */
+export function confirmedDeletion(
+  operation: WorkflowOperation,
+  snapshot: DefinitionSnapshot | undefined,
+): boolean {
+  return (
+    operation.action === "delete" &&
+    operation.outcome === "succeeded" &&
+    snapshot?.status === "ready" &&
+    !snapshot.data.partial &&
+    !snapshot.data.items.some(
+      (row) =>
+        row.id === operation.workflow.id &&
+        row.owner === operation.workflow.owner &&
+        row.channelId === operation.workflow.channelId,
+    )
+  );
+}
+
+export function deletionStatus(
+  operation: WorkflowOperation,
+  snapshot: DefinitionSnapshot | undefined,
+): string {
+  if (operation.outcome === "pending") return "Deleting…";
+  if (operation.outcome === "rejected")
+    return "Couldn't delete this workflow. Review the delivery details.";
+  if (confirmedDeletion(operation, snapshot))
+    return "Saved workflow deleted. Work already running may continue.";
+  if (snapshot?.status === "loading") return "Checking deletion…";
+  if (
+    snapshot?.status === "ready" &&
+    snapshot.data.items.some(
+      (row) =>
+        row.id === operation.workflow.id &&
+        row.owner === operation.workflow.owner &&
+        row.channelId === operation.workflow.channelId,
+    )
+  )
+    return "This workflow is still in saved configuration. Check again before deleting.";
+  return "Couldn't confirm deletion. Check saved configuration before deleting again.";
 }

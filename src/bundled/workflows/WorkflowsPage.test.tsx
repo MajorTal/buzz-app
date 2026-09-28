@@ -13,6 +13,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 import { formStateToYaml, yamlToFormState } from "./workflowFormTypes";
 import type { RelaySession } from "../../features/relay/session";
+import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { WorkflowCommunity } from "./WorkflowsPage";
 import {
   createWorkflowFixture,
@@ -45,17 +46,23 @@ function mount(initialYaml = fixtureYaml, owner = fixtureViewer, save = true) {
     channels: [{ id: fixtureChannel, name: "Fixture channel" }],
   };
   const session = {
-    workflows: {
-      ...fixture.capability,
-      availability: { ...fixture.capability.availability, save },
-    },
+    workflows: save
+      ? fixture.capability
+      : {
+          ...fixture.capability,
+          availability: { ...fixture.capability.availability, save: false },
+        },
     channels: {
       list: () => list,
       ensureList: () => {},
       subscribeList: () => () => {},
     },
   } as unknown as RelaySession;
-  render(<WorkflowCommunity session={session} viewer={fixtureViewer} />);
+  render(
+    <ToastProvider>
+      <WorkflowCommunity session={session} viewer={fixtureViewer} />
+    </ToastProvider>,
+  );
   return fixture;
 }
 
@@ -395,4 +402,342 @@ it("discards form-only state on same-revision review and re-arms the next draft'
   );
   expect(warnsOnUnload()).toBe(false);
   expect(fixture.calls.save).toBe(1);
+});
+
+async function confirmDeletion(from: "grid" | "detail" = "grid") {
+  const user = userEvent.setup();
+  if (from === "detail") {
+    await user.click(
+      await screen.findByRole("button", { name: "Open Message helper" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Workflow actions" }));
+  } else {
+    await user.click(
+      await screen.findByRole("button", { name: "Actions for Message helper" }),
+    );
+  }
+  await user.click(
+    await screen.findByRole("menuitem", { name: "Delete workflow" }),
+  );
+  const dialog = await screen.findByRole("alertdialog", {
+    name: "Delete this workflow?",
+  });
+  expect(
+    within(dialog).getByRole("button", { name: "Delete workflow" }),
+  ).toHaveAttribute("data-variant", "destructive");
+  await user.click(
+    within(dialog).getByRole("button", { name: "Delete workflow" }),
+  );
+}
+
+it("confirms on the grid without mounting detail, cancels safely, and removes only after readback", async () => {
+  const fixture = mount();
+  const user = userEvent.setup();
+  await user.click(
+    await screen.findByRole("button", { name: "Actions for Message helper" }),
+  );
+  await user.click(
+    await screen.findByRole("menuitem", { name: "Delete workflow" }),
+  );
+  expect(screen.queryByRole("dialog", { name: "Edit workflow" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(fixture.calls.delete).toBe(0);
+  await confirmDeletion();
+  expect(fixture.calls.delete).toBe(1);
+  expect(screen.queryByRole("dialog", { name: "Edit workflow" })).toBeNull();
+  expect(screen.getByText("Deleting…")).toBeVisible();
+  await act(async () => {
+    fixture.definitions.update({
+      status: "ready",
+      data: { items: [], partial: false },
+    });
+  });
+  expect(screen.getByText("Deleting workflow…")).toBeVisible();
+  expect(screen.queryByText("Deleting…")).toBeNull();
+  expect(screen.queryByRole("button", { name: /delete/i })).toBeNull();
+  expect(screen.queryByRole("button", { name: /dismiss/i })).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Open Message helper" }),
+  ).toBeNull();
+  await act(async () => {
+    fixture.finish("succeeded");
+  });
+  expect(screen.queryByText("Deleting workflow…")).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Open Message helper" }),
+  ).toBeNull();
+  expect(screen.queryByText(/Couldn't confirm deletion/)).toBeNull();
+  expect(fixture.calls.delete).toBe(1);
+});
+
+it("recovers on the grid when detail deletion is refused by an unresolved save", async () => {
+  const fixture = mount();
+  const user = userEvent.setup();
+  await user.click(
+    await screen.findByRole("switch", {
+      name: "Enabled in configuration: Message helper",
+    }),
+  );
+  await user.click(screen.getByRole("button", { name: "Turn on" }));
+  await act(async () => {
+    fixture.finish("succeeded");
+    fixture.definitions.update({
+      status: "ready",
+      data: { items: [fixtureDefinition], partial: false },
+    });
+  });
+  await confirmDeletion("detail");
+  expect(fixture.calls.delete).toBe(0);
+  expect(screen.queryByRole("dialog", { name: "Edit workflow" })).toBeNull();
+  expect(await screen.findByText("Couldn't start deletion")).toBeVisible();
+  expect(
+    screen.getByText(
+      "Another workflow change is still being confirmed. Refresh and try again.",
+    ),
+  ).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Open Message helper" }),
+  ).toBeEnabled();
+});
+
+it.each(["grid", "detail"] as const)(
+  "returns to the grid on synchronous %s submission errors and permits a deliberate retry",
+  async (from) => {
+    const fixture = mount();
+    const remove = vi
+      .spyOn(fixture.capability, "delete")
+      .mockImplementationOnce(() => {
+        throw new Error("Connection unavailable. Try again.");
+      });
+    await confirmDeletion(from);
+    expect(screen.queryByRole("dialog", { name: "Edit workflow" })).toBeNull();
+    expect(await screen.findByText("Couldn't start deletion")).toBeVisible();
+    expect(
+      screen.getByText("Connection unavailable. Try again."),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Open Message helper" }),
+    ).toBeEnabled();
+    await confirmDeletion();
+    expect(remove).toHaveBeenCalledTimes(2);
+    expect(fixture.calls.delete).toBe(1);
+  },
+);
+
+it("returns to the grid before completion, then shows rejection and restores actions", async () => {
+  const fixture = mount();
+  await confirmDeletion("detail");
+  expect(fixture.capability.operations.snapshot()[0]?.outcome).toBe("pending");
+  expect(screen.queryByRole("dialog", { name: "Edit workflow" })).toBeNull();
+  expect(
+    screen.queryByRole("alertdialog", { name: "Leave this draft?" }),
+  ).toBeNull();
+  expect(
+    window.dispatchEvent(new Event("beforeunload", { cancelable: true })),
+  ).toBe(true);
+  await act(async () => {
+    fixture.finish("rejected");
+  });
+  expect(
+    await screen.findByText("Couldn't delete Message helper"),
+  ).toBeVisible();
+  expect(
+    screen.getByText("Fixture conflict").closest("details"),
+  ).not.toHaveAttribute("open");
+  expect(
+    screen.getByRole("button", { name: "Open Message helper" }),
+  ).toBeEnabled();
+  expect(
+    screen.getByRole("switch", {
+      name: "Enabled in configuration: Message helper",
+    }),
+  ).toBeEnabled();
+  await confirmDeletion();
+  expect(fixture.calls.delete).toBe(2);
+  await waitFor(() =>
+    expect(screen.queryByText("Couldn't delete Message helper")).toBeNull(),
+  );
+  await act(async () => {
+    fixture.definitions.update({
+      status: "ready",
+      data: { items: [], partial: false },
+    });
+    fixture.finish("succeeded");
+  });
+  expect(
+    screen.queryByRole("button", { name: "Open Message helper" }),
+  ).toBeNull();
+  expect(screen.queryByText(/^Couldn't delete/)).toBeNull();
+});
+
+it.each(["unknown", "succeeded"] as const)(
+  "keeps %s deletion actionable on the grid without resubmitting",
+  async (outcome) => {
+    const fixture = mount();
+    await confirmDeletion();
+    await act(async () => {
+      fixture.finish(outcome);
+    });
+    expect(
+      await screen.findByText("Couldn't confirm deletion of Message helper"),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Open Message helper" }),
+    ).toBeDisabled();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Check saved configuration" }),
+    );
+    expect(fixture.calls.delete).toBe(1);
+    expect(screen.queryByRole("dialog", { name: "Edit workflow" })).toBeNull();
+    act(() =>
+      fixture.definitions.update({
+        status: "loading",
+        data: { items: [fixtureDefinition], partial: false },
+      }),
+    );
+    expect(
+      screen.getByRole("button", { name: "Checking deletion…" }),
+    ).toBeDisabled();
+    act(() =>
+      fixture.definitions.update({
+        status: "ready",
+        data: { items: [], partial: true },
+      }),
+    );
+    expect(screen.getByText("Couldn't confirm deletion")).toBeVisible();
+    expect(screen.queryByText(/Saved workflow deleted/)).toBeNull();
+    await act(async () => {
+      fixture.definitions.update({
+        status: "ready",
+        data: { items: [], partial: false },
+      });
+      fixture.finish("succeeded");
+    });
+    await waitFor(() =>
+      expect(screen.queryByText(/^Couldn't confirm deletion/)).toBeNull(),
+    );
+  },
+);
+
+it("purges deletion recovery on access loss", async () => {
+  const fixture = mount();
+  await confirmDeletion();
+  await act(async () => {
+    fixture.finish("unknown");
+  });
+  expect(
+    await screen.findByText("Couldn't confirm deletion of Message helper"),
+  ).toBeVisible();
+  act(() => fixture.revoke());
+  await waitFor(() =>
+    expect(screen.queryByText(/^Couldn't confirm deletion/)).toBeNull(),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Open Message helper" }),
+  ).toBeNull();
+});
+
+it("resumes a paused read from the deletion toast and never republishes", async () => {
+  const fixture = mount();
+  await confirmDeletion();
+  await act(async () => {
+    fixture.finish("unknown");
+  });
+  act(() =>
+    fixture.definitions.update({
+      status: "error",
+      error: "Read unavailable",
+      data: { items: [fixtureDefinition], partial: false },
+    }),
+  );
+  expect(screen.getByText(/Workflow discovery paused/)).toBeVisible();
+  const original = fixture.capability.definitions;
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reads = vi
+    .spyOn(fixture.capability, "definitions")
+    .mockImplementation((ids) => {
+      const view = original(ids);
+      return {
+        ...view,
+        refresh: async () => {
+          fixture.definitions.update({
+            status: "loading",
+            data: { items: [fixtureDefinition], partial: false },
+          });
+          await gate;
+          fixture.definitions.update({
+            status: "ready",
+            data: { items: [], partial: false },
+          });
+          fixture.finish("succeeded");
+        },
+      };
+    });
+  try {
+    await userEvent.click(
+      screen.getByRole("button", { name: "Check saved configuration" }),
+    );
+    expect(reads).toHaveBeenCalledOnce();
+    expect(
+      screen.getByRole("button", { name: "Checking deletion…" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Open Message helper" }),
+    ).toBeDisabled();
+  } finally {
+    await act(async () => release());
+  }
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("button", { name: "Open Message helper" }),
+    ).toBeNull(),
+  );
+  expect(screen.queryByText(/^Couldn't confirm deletion/)).toBeNull();
+  expect(fixture.calls.delete).toBe(1);
+});
+
+it("keeps uncertain deletion locked through durable dismissal and recovers from persistence errors", async () => {
+  const fixture = mount();
+  await confirmDeletion();
+  await act(async () => {
+    fixture.finish("unknown");
+  });
+  const user = userEvent.setup();
+  await user.click(
+    await screen.findByRole("button", { name: "Dismiss notice" }),
+  );
+  fixture.holdDismiss();
+  fixture.setDismissError("Storage unavailable. Try again.");
+  try {
+    await user.click(
+      screen.getByRole("button", { name: "Dismiss notice and continue" }),
+    );
+    expect(fixture.calls.dismiss).toHaveLength(1);
+    expect(fixture.capability.operations.snapshot()).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Dismissing…" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "Open Message helper", hidden: true }),
+    ).toBeDisabled();
+  } finally {
+    await act(async () => fixture.releaseDismiss());
+  }
+  expect(screen.getByRole("alert")).toHaveTextContent(
+    "Storage unavailable. Try again.",
+  );
+  expect(fixture.capability.operations.snapshot()).toHaveLength(1);
+  fixture.setDismissError();
+  await user.click(
+    screen.getByRole("button", { name: "Dismiss notice and continue" }),
+  );
+  await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+  expect(
+    screen.getByRole("button", { name: "Open Message helper" }),
+  ).toBeEnabled();
+  expect(fixture.calls.delete).toBe(1);
+  await user.click(screen.getByRole("button", { name: "Open Message helper" }));
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+  expect(screen.queryByText("Deleting…")).toBeNull();
 });

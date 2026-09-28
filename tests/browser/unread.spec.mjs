@@ -2,11 +2,14 @@ import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open, settle } from "./timeline.mjs";
 
+const alphaId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 test.use({
   productionBroker: true,
   readState: true,
   pluginFixtures: true, // Existing read-only session exposure for owner barriers.
-  historyCounts: { alpha: 640, beta: 20 },
+  channelIds: [alphaId, "beta"],
+  channelNames: { [alphaId]: "Alpha" },
+  historyCounts: { [alphaId]: 640, beta: 20 },
 });
 const history = (page) =>
   page.getByRole("region", { name: "Channel message history" });
@@ -56,7 +59,13 @@ async function options(page) {
   });
   const opening = (await trigger.getAttribute("aria-expanded")) === "false";
   await trigger.click();
-  if (opening) await page.getByText("Diagnostics", { exact: true }).click();
+  if (opening) {
+    // Finish the shared Settings permission read before checking diagnostic alerts.
+    await expect(
+      page.getByRole("button", { name: "Leave channel", exact: true }),
+    ).toBeVisible();
+    await page.getByText("Diagnostics", { exact: true }).click();
+  }
 }
 
 // The real startup composition must order optional catalog reads after channel
@@ -151,7 +160,7 @@ test("built sidebar → visible dwell → durable journal → encrypted broker p
   );
   await page.clock.resume();
   const stored = await journal(page);
-  expect(stored.state.frontiers.alpha).toBeUndefined();
+  expect(stored.state.frontiers[alphaId]).toBeUndefined();
   // The normal debounce, signing, NIP-44, NIP-98 and publication/readback all run.
   await expect
     .poll(() => app.report.readPublications.length, { timeout: 12000 })
@@ -162,7 +171,7 @@ test("built sidebar → visible dwell → durable journal → encrypted broker p
   const { event, blob } = app.report.readPublications[0];
   expect(blob.contexts).toEqual(stored.state.frontiers);
   expect(event.content).not.toContain(ids[0]);
-  expect(blob.contexts.alpha).toBeUndefined();
+  expect(blob.contexts[alphaId]).toBeUndefined();
   await page.reload();
   await openPage(page, "Messages");
   await composer(page).waitFor();
@@ -227,14 +236,14 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
   await expect
     .poll(() =>
       page.evaluate(
-        (ids) =>
+        ({ ids, alphaId }) =>
           ids.every(
             (id) =>
               window.fixtureRelay
                 .snapshot()
-                .session.unread.attention("alpha", id).viewing,
+                .session.unread.attention(alphaId, id).viewing,
           ),
-        ids,
+        { ids, alphaId },
       ),
     )
     .toBe(true);
@@ -249,7 +258,7 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
   // This durable action is ordered behind any erroneous dwell mutation in the
   // same read-state queue; a separate IndexedDB read alone is not a barrier.
   await expect
-    .poll(async () => (await journal(page)).localUnread.alpha)
+    .poll(async () => (await journal(page)).localUnread[alphaId])
     .toBeGreaterThan(0);
   expect((await journal(page)).state.frontiers).toEqual({});
   await options(page);
@@ -263,7 +272,7 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await history(page).focus();
   await page.clock.runFor(1000);
-  expect((await journal(page)).localUnread.alpha).toBeGreaterThan(0);
+  expect((await journal(page)).localUnread[alphaId]).toBeGreaterThan(0);
   await expect(
     alpha(page).getByRole("img", {
       name: "Marked unread on this device only",
@@ -289,11 +298,11 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
     })
     .click();
   await expect
-    .poll(async () => (await journal(page)).localUnread.alpha)
+    .poll(async () => (await journal(page)).localUnread[alphaId])
     .toBeUndefined();
   await expect
-    .poll(async () => (await journal(page)).state.frontiers.alpha)
-    .toBe(app.histories.get("primary/alpha").at(-1).created_at);
+    .poll(async () => (await journal(page)).state.frontiers[alphaId])
+    .toBe(app.histories.get(`primary/${alphaId}`).at(-1).created_at);
   await expect(alpha(page).getByRole("img")).toHaveCount(0);
 });
 
@@ -356,9 +365,9 @@ test.describe("explicit mark-through with membership activity", () => {
         : "chat followed by membership activity clears manual unread through the newest chat",
       async ({ page, app }) => {
         // Model only upstream signed history; the app must load and verify it.
-        const loaded = app.histories.get("primary/alpha").slice(-4);
+        const loaded = app.histories.get(`primary/${alphaId}`).slice(-4);
         app.histories.set(
-          "primary/alpha",
+          `primary/${alphaId}`,
           activityOnly
             ? loaded.filter((event) => event.kind === 40099)
             : loaded,
@@ -398,14 +407,14 @@ test.describe("explicit mark-through with membership activity", () => {
             "Load a verified message before marking through it.",
           );
           const after = await journal(page);
-          expect(after.localUnread.alpha).toBe(before.localUnread.alpha);
+          expect(after.localUnread[alphaId]).toBe(before.localUnread[alphaId]);
           expect(after.state.frontiers).toEqual(before.state.frontiers);
           expect(after.revision).toBe(before.revision);
         } else {
           await expect
-            .poll(async () => (await journal(page)).state.frontiers.alpha)
+            .poll(async () => (await journal(page)).state.frontiers[alphaId])
             .toBe(lastChat.created_at);
-          expect((await journal(page)).localUnread.alpha).toBeUndefined();
+          expect((await journal(page)).localUnread[alphaId]).toBeUndefined();
           await expect(alpha(page).getByRole("img")).toHaveCount(0);
           await expect(page.getByRole("alert")).toHaveCount(0);
         }

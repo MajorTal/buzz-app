@@ -15,7 +15,7 @@ afterEach(() => {
 });
 function fixture() {
   let ids = ["existing"];
-  // Only the roster read is consumed by this UI handoff provider.
+  // This UI handoff provider consumes only the roster, never a command writer.
   const session = () =>
     ({
       channels: { list: () => ({ channels: ids.map((id) => ({ id })) }) },
@@ -99,6 +99,10 @@ it("resets transient handoffs and rejects retired callbacks on session replaceme
   act(() => {
     view.result.current?.prepareDm(["peer"]);
     view.result.current?.updateDraftParents(() => ["parent"]);
+    view.result.current.openLifecycle(
+      { id: "channel", name: "Channel" },
+      "leave",
+    );
   });
   const retired = view.result.current;
   retired.activityThread.current = {
@@ -108,12 +112,39 @@ it("resets transient handoffs and rejects retired callbacks on session replaceme
   };
   act(() => h.replace());
   expect(view.result.current.preparingDm).toBeUndefined();
+  expect(view.result.current.lifecycleDialog).toBeUndefined();
   expect(view.result.current.activityThread.current).toBeUndefined();
   expect(view.result.current.draftParents).toEqual(["parent"]);
   act(() => {
     retired.prepareDm(["late"]);
     retired.updateDraftParents(() => ["late"]);
+    retired.openLifecycle({ id: "late", name: "Late" }, "leave");
   });
   expect(view.result.current.preparingDm).toBeUndefined();
   expect(view.result.current.draftParents).toEqual(["parent"]);
+  expect(view.result.current.lifecycleDialog).toBeUndefined();
+});
+
+it("hands both entrances to one confirmation and preserves its origin until closed", () => {
+  const h = fixture();
+  const view = mount(h.relay);
+  const channel = { id: "channel", name: "Channel" };
+  const trigger = document.createElement("button");
+  act(() => view.result.current.openLifecycle(channel, "leave", trigger));
+  expect(view.result.current.lifecycleDialog).toEqual({
+    channel,
+    action: "leave",
+    trigger,
+  });
+  act(() =>
+    view.result.current.openLifecycle({ id: "other", name: "Other" }, "delete"),
+  );
+  expect(view.result.current.lifecycleDialog?.channel).toBe(channel);
+  act(() => view.result.current.closeLifecycle());
+  expect(view.result.current.lifecycleDialog).toBeUndefined();
+  act(() => view.result.current.openLifecycle(channel, "archive"));
+  expect(view.result.current.lifecycleDialog).toEqual({
+    channel,
+    action: "archive",
+  });
 });

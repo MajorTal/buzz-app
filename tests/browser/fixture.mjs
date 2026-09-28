@@ -44,6 +44,7 @@ export const test = base.extend({
   sortingSidebar: [false, { option: true }],
   initialSidebarSort: [{}, { option: true }],
   channelLifecycle: [false, { option: true }],
+  lifecycleRole: ["owner", { option: true }],
   lifecycleVisibility: [{ archived: [], hidden: [] }, { option: true }],
   sidebarIcons: [false, { option: true }],
   channelNames: [{}, { option: true }],
@@ -81,6 +82,7 @@ export const test = base.extend({
       sortingSidebar,
       initialSidebarSort,
       channelLifecycle,
+      lifecycleRole,
       lifecycleVisibility,
       sidebarIcons,
       channelNames,
@@ -119,7 +121,7 @@ export const test = base.extend({
     ) =>
       sign(
         40099,
-        [["h", "alpha"]],
+        [["h", channels[0]]],
         JSON.stringify({
           type,
           actor:
@@ -415,7 +417,7 @@ export const test = base.extend({
       exact = { root, target, replies, edit, reaction, deletion };
     }
     if (membershipActivity) {
-      const history = histories.get("primary/alpha");
+      const history = histories.get(`primary/${channels[0]}`);
       history.push(
         membershipEvent("member_joined", 0, 1700000740),
         membershipEvent("member_joined", 1, 1700000741),
@@ -666,14 +668,17 @@ export const test = base.extend({
             ]
           : [];
       if (filter.kinds?.includes(39001))
-        return lifecycleRows
-          .filter((row) => filter["#d"]?.includes(row.id))
-          .map((row) =>
+        return rosterIds
+          .filter((id) => !filter["#d"] || filter["#d"].includes(id))
+          .map((id) =>
             sign(
               39001,
               [
-                ["d", row.id],
-                ["p", viewer, "owner"],
+                ["d", id],
+                ...(lifecycleRows.some((row) => row.id === id) &&
+                lifecycleRole === "owner"
+                  ? [["p", viewer, "owner"]]
+                  : []),
               ],
               "",
               relayKey,
@@ -690,7 +695,9 @@ export const test = base.extend({
                 "p",
                 viewer,
                 "",
-                lifecycleRows.some((row) => row.id === id) ? "owner" : "member",
+                lifecycleRows.some((row) => row.id === id)
+                  ? lifecycleRole
+                  : "member",
               ],
               ...(dmLabels && id === "dm-peer"
                 ? [["p", participants[0], "", "member"]]
@@ -716,15 +723,16 @@ export const test = base.extend({
                     lifecycleRows.find((row) => row.id === id)?.name ??
                     (id === "alpha" ? "Alpha" : id === "beta" ? "Beta" : id),
                 ],
-                ...lifecycleRows
-                  .filter((row) => row.id === id)
-                  .map((row) => ["t", row.type]),
+                [
+                  "t",
+                  lifecycleRows.find((row) => row.id === id)?.type ??
+                    (dmIds.includes(id) ? "dm" : "stream"),
+                ],
                 ...(archivedIds.has(id) ? [["archived", "true"]] : []),
-                ...(id === "open" ? [["public"], ["t", "stream"]] : []),
-                ...(dmIds.includes(id) ? [["t", "dm"], ["hidden"]] : []),
+                ...(id === "open" ? [["public"]] : []),
+                ...(dmIds.includes(id) ? [["hidden"]] : []),
                 ...(sessionChannels.includes(id)
                   ? [
-                      ["t", "stream"],
                       ["private"],
                       [
                         "about",
@@ -1553,7 +1561,7 @@ export const test = base.extend({
           forged = false,
           deliver = true,
         ) {
-          const history = histories.get("primary/alpha");
+          const history = histories.get(`primary/${channels[0]}`);
           const event = membershipEvent(
             type,
             targetIndex,
@@ -1566,7 +1574,7 @@ export const test = base.extend({
           if (relay) relay.publish("primary", event);
           else
             for (const client of streams.get("primary") ?? [])
-              if (client.channels.includes("alpha"))
+              if (client.channels.includes(channels[0]))
                 client.response.write(`data: ${JSON.stringify(event)}\n\n`);
           return event;
         },

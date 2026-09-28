@@ -310,6 +310,15 @@ permission reads show neither a loading row nor a lifecycle separator; the
 separator appears with the resolved actions or unavailable/retry section, and is
 omitted when there are no lifecycle items. Actions appear only after verification.
 
+Channel Settings also offers **Leave channel** in its tools area after a fresh
+lifecycle permission check. Forbidden Leave is omitted, just as in the row menu;
+failed checks offer retry and unsupported connections explain unavailability.
+DMs, sessions and read-only views have no channel Leave entry. This control hands
+off to the same persistent sidebar confirmation/navigation owner, so confirmed
+membership removal can unmount Settings without cancelling its completion.
+Cancellation returns focus to the Settings Leave button (or the sidebar fallback
+if that entry has gone away). Metadata and member-role editing remain separate.
+
 Each command has explicit confirmation; Delete additionally requires the channel
 name. The lifecycle owner rechecks authority before signing and again before
 publication, validates the returned command, and confirms relay-owned state before

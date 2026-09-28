@@ -11,6 +11,8 @@ import {
 import { useRelayConnection } from "../relay/react";
 import type { RelayData } from "../relay/service";
 import type { RelaySession } from "../relay/session";
+import type { ChannelSummary } from "../relay/contracts";
+import type { ChannelLifecycleAction } from "../relay/channel-lifecycle-protocol";
 import { readView, writeView } from "../../shared/view-state";
 
 type PreparingDm = { existing: Set<string>; members: Set<string | undefined> };
@@ -19,6 +21,13 @@ type State = {
   scope: string;
   draftParents: string[];
   preparingDm: PreparingDm | undefined;
+  lifecycleDialog:
+    | {
+        channel: ChannelSummary;
+        action: ChannelLifecycleAction;
+        trigger?: HTMLElement;
+      }
+    | undefined;
 };
 type ActivityThread = {
   channelId: string;
@@ -30,6 +39,12 @@ type Handoff = State & {
   updateDraftParents(update: (previous: string[]) => string[]): void;
   prepareDm(members: readonly string[]): void;
   clearPreparingDm(): void;
+  openLifecycle(
+    channel: ChannelSummary,
+    action: ChannelLifecycleAction,
+    trigger?: HTMLElement,
+  ): void;
+  closeLifecycle(): void;
 };
 const ChannelNavigationContext = createContext<Handoff | undefined>(undefined);
 export const useChannelNavigation = () => useContext(ChannelNavigationContext);
@@ -94,6 +109,23 @@ export function ChannelNavigationProvider({
           },
         }));
       },
+      openLifecycle(channel, action, trigger) {
+        update((previous) =>
+          previous.lifecycleDialog
+            ? previous
+            : {
+                ...previous,
+                lifecycleDialog: {
+                  channel,
+                  action,
+                  ...(trigger ? { trigger } : {}),
+                },
+              },
+        );
+      },
+      closeLifecycle() {
+        update((previous) => ({ ...previous, lifecycleDialog: undefined }));
+      },
       clearPreparingDm,
     }),
     [state, connection.session, connection.viewer, update, clearPreparingDm],
@@ -110,6 +142,7 @@ function restore(session: RelaySession, scope: string): State {
     session,
     scope,
     preparingDm: undefined,
+    lifecycleDialog: undefined,
     draftParents: Array.isArray(saved)
       ? saved.filter((id): id is string => typeof id === "string")
       : [],

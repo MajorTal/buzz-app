@@ -18,6 +18,7 @@ import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { useChannelPanels } from "./useChannelPanels";
 import { ChannelSettingsPanel } from "./ChannelSettingsPanel";
+import { ChannelLeaveButton } from "./ChannelLeaveButton";
 import type { PageNavigation } from "../../features/navigation/service";
 import type { Navigation } from "../../features/navigation/controller";
 import {
@@ -1152,6 +1153,19 @@ function ChannelWorkspace({
                       />
                     )}
                     {kitError && <p role="alert">{kitError}</p>}
+                    {handoff &&
+                      !current.readOnly &&
+                      current.channelType !== "dm" &&
+                      current.channelType !== "session" && (
+                        <ChannelLeaveButton
+                          key={current.id}
+                          channelId={current.id}
+                          lifecycle={queries.channelLifecycle}
+                          choose={(trigger) =>
+                            handoff.openLifecycle(current, "leave", trigger)
+                          }
+                        />
+                      )}
                   </div>
                 )
               }

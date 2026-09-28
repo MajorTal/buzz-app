@@ -7,7 +7,6 @@ test.use({
   // Navigation can publish read positions through the real broker.
   readState: true,
   developmentReact: true,
-  historyCounts: { alpha: 1, beta: 1 },
 });
 
 const channelActivity = (page) =>
@@ -390,7 +389,13 @@ for (const mode of ["light", "dark"]) {
   });
 }
 
-const it = test.extend({ readState: true });
+const profileChannelId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const it = test.extend({
+  readState: true,
+  channelIds: [profileChannelId, "beta"],
+  channelNames: { [profileChannelId]: "Alpha" },
+  historyCounts: { [profileChannelId]: 1, beta: 1 },
+});
 it("profile activity opens the exact agent and originating channel before its first frame", async ({
   page,
   app,
@@ -401,6 +406,9 @@ it("profile activity opens the exact agent and originating channel before its fi
   await page
     .getByRole("button", { name: "Channel settings", exact: true })
     .click();
+  await expect(
+    page.getByRole("button", { name: "Leave channel", exact: true }),
+  ).toBeVisible();
   await page.getByText("Diagnostics", { exact: true }).click();
   await page
     .getByRole("button", {
@@ -419,7 +427,7 @@ it("profile activity opens the exact agent and originating channel before its fi
   const message = finalizeEvent(
     {
       kind: 9,
-      tags: [["h", "alpha"]],
+      tags: [["h", profileChannelId]],
       content: "Contextual agent entry",
       created_at: Math.floor(Date.now() / 1000),
     },
@@ -463,7 +471,7 @@ it("profile activity opens the exact agent and originating channel before its fi
   await expect(panel.locator("code").first()).toHaveText(agent);
   await expect(
     panel.getByRole("combobox", { name: "Channel", exact: true }),
-  ).toHaveText(/Alpha.*alpha/);
+  ).toHaveText(`Alpha · ${profileChannelId}`);
   await expect(
     panel.getByText(
       /Waiting for live records for this identity in this channel/,
@@ -476,11 +484,14 @@ it("profile activity opens the exact agent and originating channel before its fi
     sessionId: null,
     timestamp: new Date().toISOString(),
   });
-  app.observer(item("acp_read", "alpha", "other-agent"), generateSecretKey());
+  app.observer(
+    item("acp_read", profileChannelId, "other-agent"),
+    generateSecretKey(),
+  );
   app.observer(item("acp_write", "beta", "other-channel"), agentKey);
   app.observer(item("session_resolved", null, "unscoped"), agentKey);
   const expected = app.observer(
-    item("turn_liveness", "alpha", "wanted"),
+    item("turn_liveness", profileChannelId, "wanted"),
     agentKey,
   );
   const row = panel.getByRole("button", { name: /turn_liveness/ });
@@ -520,7 +531,7 @@ it("profile activity opens the exact agent and originating channel before its fi
     JSON.parse(expected.plaintext).timestamp,
   );
   const update = (value) => ({
-    ...item("acp_read", "alpha", "wanted"),
+    ...item("acp_read", profileChannelId, "wanted"),
     payload: { method: "session/update", params: { update: value } },
   });
   app.observer(
@@ -616,7 +627,7 @@ it("profile activity opens the exact agent and originating channel before its fi
     .getByRole("switch", { name: "Enable Agent Activity", exact: true })
     .click();
   await page.getByRole("button", { name: "Go back", exact: true }).click();
-  await page.locator('[data-channel-id="alpha"]').click();
+  await page.locator(`[data-channel-id="${profileChannelId}"]`).click();
   await avatar.click();
   await expect(profile).toBeVisible();
   await expect(

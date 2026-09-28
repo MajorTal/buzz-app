@@ -13,7 +13,7 @@ use std::sync::{Arc, Mutex};
 #[serde(rename_all = "camelCase")]
 pub(crate) struct Snapshot {
     #[serde(flatten)]
-    data: ControlSnapshot,
+    pub(crate) data: ControlSnapshot,
     import_available: bool,
     create_available: bool,
     avatar_editing_available: bool,
@@ -45,6 +45,8 @@ struct HarnessOption {
     label: &'static str,
     available: bool,
     status: &'static str,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    install_supported: Option<bool>,
     default_args: &'static [&'static str],
     providers: &'static [ProviderOption],
 }
@@ -138,6 +140,7 @@ fn harness_options() -> Vec<HarnessOption> {
             label: "Buzz Agent",
             available: true,
             status: "ready",
+            install_supported: None,
             default_args: &[],
             providers: &[ProviderOption {
                 value: "databricks_v2",
@@ -156,6 +159,7 @@ fn harness_options() -> Vec<HarnessOption> {
             } else {
                 "cli-needed"
             },
+            install_supported: Some(cfg!(any(target_os = "macos", target_os = "linux"))),
             default_args: &["acp"],
             providers: GOOSE_PROVIDERS,
         },
@@ -167,6 +171,7 @@ fn harness_options() -> Vec<HarnessOption> {
             label: "Pi",
             available: pi_status == "ready",
             status: pi_status,
+            install_supported: None,
             default_args: &[],
             providers: &[
                 ProviderOption {
@@ -403,11 +408,24 @@ impl AgentHost {
             .with(|host| host.controller.launch_ids())
             .unwrap_or_default();
         for id in ids {
-            let _ = start(self.clone(), id, Action::Start, true, None).await;
+            let _ = start(self.clone(), id, Action::Start, true, None, false).await;
         }
     }
     pub(crate) fn ensure_open(&self) -> Result<(), String> {
         self.with(|_| Ok(()))
+    }
+    #[cfg(any(target_os = "macos", target_os = "linux", test))]
+    pub(crate) fn waiting_for_goose(&self) -> Result<Vec<String>, String> {
+        self.with(|host| {
+            Ok(host
+                .controller
+                .snapshot()?
+                .agents
+                .iter()
+                .filter(|agent| crate::harness_setup::waiting_for_goose(agent))
+                .map(|agent| agent.id.clone())
+                .collect())
+        })
     }
     pub(crate) fn disconnect(&self, workspace: &str) -> Result<(), String> {
         let workspace = buzz_agent_controller::connection::origin(workspace)?;
@@ -557,18 +575,32 @@ pub(crate) async fn agent_control_action(
     if matches!(action, Action::Stop) {
         return run(owner, move |host| host.action(&id, action)).await;
     }
-    start(owner, id, action, false, replay_floor).await
+    start(owner, id, action, false, replay_floor, false).await
 }
-async fn start(
+pub(crate) const NOT_WAITING_FOR_GOOSE: &str = "Agent no longer waiting for Goose";
+pub(crate) async fn start(
     owner: AgentHost,
     id: String,
     action: Action,
     restore: bool,
     replay_floor: Option<u64>,
+    from_goose_install: bool,
 ) -> Result<Snapshot, String> {
     let prepared = owner.with(|host| {
         if restore && (host.acted.contains(&id) || !host.controller.launch_ids()?.contains(&id)) {
             return Err("Agent disabled before restore".into());
+        }
+        // Re-check while holding the controller, not just at install start:
+        // Stop or Edit may have changed this agent while the download ran.
+        if from_goose_install
+            && !host
+                .controller
+                .snapshot()?
+                .agents
+                .iter()
+                .any(|agent| agent.id == id && crate::harness_setup::waiting_for_goose(agent))
+        {
+            return Err(NOT_WAITING_FOR_GOOSE.into());
         }
         host.starts.remove(&id);
         if !restore {

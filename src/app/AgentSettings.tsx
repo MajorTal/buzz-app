@@ -40,6 +40,11 @@ export function AgentSettings({
   const [copyMessage, setCopyMessage] = useState("");
   const copyAttempt = useRef(0);
   const state = useSyncExternalStore(control.subscribe, control.snapshot);
+  const {
+    installing,
+    report: installResult,
+    error: installError,
+  } = state.gooseInstall ?? { installing: false, report: null, error: null };
   useEffect(() => {
     if (active) void control.refresh();
   }, [active, control]);
@@ -48,6 +53,7 @@ export function AgentSettings({
     options?.find((option) => option.label === name),
   );
   const available = harnesses.every((option) => !!option?.status);
+  const goose = harnesses[1];
   const pi = harnesses[2];
   const change = (enabled: boolean) =>
     setError(setRememberAgentsPreference(enabled));
@@ -86,7 +92,9 @@ export function AgentSettings({
           <Button
             size="sm"
             type="button"
-            disabled={state.status === "unavailable" || state.busy}
+            disabled={
+              state.status === "unavailable" || state.busy || installing
+            }
             loading={checking}
             onClick={() => {
               setChecking(true);
@@ -128,12 +136,60 @@ export function AgentSettings({
                   className="flex flex-wrap items-center justify-between gap-2 py-3 text-body-sm"
                 >
                   <span>{option?.label}</span>
-                  <span className="text-secondary">
-                    {option?.status ? labels[option.status] : "Unknown"}
+                  <span className="flex items-center gap-2">
+                    <span className="text-secondary">
+                      {option?.status ? labels[option.status] : "Unknown"}
+                    </span>
+                    {option?.label === "Goose" &&
+                      option.status === "cli-needed" &&
+                      option.installSupported &&
+                      control.installGoose &&
+                      !installResult?.ready && (
+                        <Button
+                          size="sm"
+                          type="button"
+                          loading={installing}
+                          disabled={
+                            state.status !== "ready" || state.busy || installing
+                          }
+                          onClick={() => {
+                            void control.installGoose?.().catch(() => {});
+                          }}
+                        >
+                          Install
+                        </Button>
+                      )}
                   </span>
                 </li>
               ))}
             </ul>
+            {installing && <p role="status">Installing Goose…</p>}
+            {!installing &&
+              installResult?.ready &&
+              goose?.status === "ready" && (
+                <p role="status">
+                  Goose installed. Restarted {installResult.restarted} waiting
+                  agents.
+                  {installResult.restartFailures > 0 &&
+                    ` ${installResult.restartFailures} agents could not restart; check Agents.`}
+                </p>
+              )}
+            {!installing && (installResult?.error || installError) && (
+              <div role="alert" className="text-body-sm">
+                <p>{installResult?.error || installError}</p>
+                {installResult && (
+                  <details>
+                    <summary>Goose install log</summary>
+                    <p className="break-all">{installResult.logPath}</p>
+                    <pre
+                      className={`${styles.command} whitespace-pre-wrap break-all`}
+                    >
+                      {installResult.output || "No output was recorded."}
+                    </pre>
+                  </details>
+                )}
+              </div>
+            )}
             {pi?.status !== "ready" && (
               <div className="space-y-3 text-body-sm">
                 <p className="m-0 text-secondary">

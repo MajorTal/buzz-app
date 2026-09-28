@@ -17,6 +17,7 @@ use identity::{identity_create, identity_export, identity_import, identity_resto
 mod terminal;
 use agent_models::{agent_models_begin, agent_models_cancel, agent_models_run, ModelHost};
 mod goose_models;
+mod harness_setup;
 mod pi_models;
 use agents::{
     agent_control_action, agent_control_create_commit, agent_control_create_prepare,
@@ -30,6 +31,7 @@ use buzzodz_plugins::{
 };
 use deep_links::{deep_link_take, deep_link_watch, DeepLinks};
 use dock::{dock_permission, unread_indicator_set};
+use harness_setup::{goose_install, HarnessSetup};
 use host_command::plugin_host_run_command;
 use host_request::plugin_host_request;
 use notifications::{notification_show, Notifications};
@@ -362,6 +364,7 @@ fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         agent_control_snapshot,
         agent_control_log_challenge,
         agent_control_read_log,
+        goose_install,
         agent_control_save,
         agent_control_delete,
         agent_control_action,
@@ -439,6 +442,7 @@ pub fn run() {
     builder
         .manage(IdentityHost::default())
         .manage(Imports::default())
+        .manage(HarnessSetup::default())
         .manage(Terminals::default())
         .manage(Notifications::default())
         .manage(DeepLinks::default())
@@ -475,6 +479,7 @@ pub fn run() {
                 }
             }
             if matches!(event, tauri::RunEvent::Exit) {
+                app.state::<HarnessSetup>().shutdown();
                 browser::shutdown();
                 if let Err(error) = app.state::<Terminals>().shutdown() {
                     eprintln!("Terminal shutdown failed: {error}");

@@ -11,7 +11,11 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
-import { createAgentControl } from "../features/agents/control";
+import {
+  createAgentControl,
+  type AgentControlHost,
+  type GooseInstallReport,
+} from "../features/agents/control";
 import { controlFixture } from "../features/agents/control-testing";
 import { AgentSettings } from "./AgentSettings";
 import {
@@ -81,8 +85,16 @@ it("does not prefill when storage cannot be read", () => {
   expect(rememberAgentsPreference()).toBe(false);
 });
 
-function setupHarnesses(piStatus: "ready" | "cli-needed" | "adapter-needed") {
+function setupHarnesses(
+  piStatus: "ready" | "cli-needed" | "adapter-needed",
+  goose: {
+    status?: "ready" | "cli-needed";
+    installSupported?: boolean;
+    installGoose?: NonNullable<AgentControlHost["installGoose"]>;
+  } = {},
+) {
   const fixture = controlFixture();
+  if (goose.installGoose) fixture.host.installGoose = goose.installGoose;
   fixture.data.harnessOptions = [
     {
       command: "buzz-agent",
@@ -94,8 +106,11 @@ function setupHarnesses(piStatus: "ready" | "cli-needed" | "adapter-needed") {
     {
       command: "goose",
       label: "Goose",
-      available: false,
-      status: "cli-needed",
+      available: goose.status === "ready",
+      status: goose.status ?? "cli-needed",
+      ...(goose.installSupported !== undefined
+        ? { installSupported: goose.installSupported }
+        : {}),
       providers: [],
     },
     {
@@ -208,7 +223,11 @@ it("Check again re-reads the native snapshot without restarting the app", async 
 
 it("keeps the last statuses and offers Check again after a failed read", async () => {
   const user = userEvent.setup();
-  const { fixture } = setupHarnesses("ready");
+  const installGoose = vi.fn();
+  const { fixture } = setupHarnesses("ready", {
+    installSupported: true,
+    installGoose,
+  });
   expect(await screen.findByText("CLI needed")).toBeVisible();
   const original = fixture.host.snapshot.bind(fixture.host);
   fixture.host.snapshot = vi
@@ -217,9 +236,135 @@ it("keeps the last statuses and offers Check again after a failed read", async (
     .mockImplementation(original);
   await user.click(screen.getByRole("button", { name: "Check again" }));
   expect(await screen.findByRole("alert")).toHaveTextContent("last check");
+  expect(screen.getByRole("button", { name: "Install" })).toBeDisabled();
+  expect(installGoose).not.toHaveBeenCalled();
   expect(
     within(screen.getByRole("list")).getAllByRole("listitem")[0],
   ).toHaveTextContent("Buzz AgentReady");
   await user.click(screen.getByRole("button", { name: "Check again" }));
   await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+  expect(screen.getByRole("button", { name: "Install" })).toBeEnabled();
+});
+
+it.each([
+  ["cli-needed", true, true],
+  ["cli-needed", false, false], // Native Windows host keeps guidance but not the bash installer.
+  ["ready", true, false],
+] as const)(
+  "shows Goose Install only for missing CLI on a supported OS (%s, %s)",
+  async (status, installSupported, visible) => {
+    setupHarnesses("ready", {
+      status,
+      installSupported,
+      installGoose: vi.fn(),
+    });
+    const row = within(await screen.findByRole("list")).getAllByRole(
+      "listitem",
+    )[1];
+    if (!row) throw new Error("Missing Goose row");
+    expect(
+      within(row).queryByRole("button", { name: "Install" }) !== null,
+    ).toBe(visible);
+    expect(row).toHaveTextContent(
+      status === "ready" ? "GooseReady" : "GooseCLI needed",
+    );
+  },
+);
+
+it("installs once, then re-detects Goose as Ready after the install settles", async () => {
+  const user = userEvent.setup();
+  let finish!: (report: GooseInstallReport) => void;
+  const pending = new Promise<GooseInstallReport>((resolve) => {
+    finish = resolve;
+  });
+  const installGoose = vi.fn(() => pending);
+  const { fixture, control } = setupHarnesses("ready", {
+    installSupported: true,
+    installGoose,
+  });
+  const button = await screen.findByRole("button", { name: "Install" });
+  await user.click(button);
+  expect(screen.getByRole("status")).toHaveTextContent("Installing Goose");
+  expect(button).toBeDisabled();
+  expect(installGoose).toHaveBeenCalledTimes(1);
+  expect(
+    fixture.calls.filter((call) => call.action === "snapshot"),
+  ).toHaveLength(1);
+  cleanup();
+  render(<AgentSettings control={control} />, { wrapper: ToastProvider });
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "Installing Goose",
+  );
+  await waitFor(() =>
+    expect(
+      fixture.calls.filter((call) => call.action === "snapshot"),
+    ).toHaveLength(2),
+  );
+  const goose = fixture.data.harnessOptions?.[1];
+  if (!goose) throw new Error("Missing Goose fixture");
+  goose.available = true;
+  goose.status = "ready";
+  finish({
+    ready: true,
+    restarted: 2,
+    restartFailures: 0,
+    logPath: "/fixture/goose-install.log",
+    output: "done",
+    error: null,
+  });
+  expect(
+    await screen.findByText("Goose installed. Restarted 2 waiting agents."),
+  ).toBeVisible();
+  expect(
+    within(screen.getByRole("list")).getAllByRole("listitem")[1],
+  ).toHaveTextContent("GooseReady");
+  expect(screen.queryByRole("button", { name: "Install" })).toBeNull();
+  expect(
+    fixture.calls.filter((call) => call.action === "snapshot"),
+  ).toHaveLength(3);
+  cleanup();
+  render(<AgentSettings control={control} />, { wrapper: ToastProvider });
+  expect(
+    await screen.findByText("Goose installed. Restarted 2 waiting agents."),
+  ).toBeVisible();
+});
+
+it("keeps Install available and shows the recorded output on failure", async () => {
+  const user = userEvent.setup();
+  let fail!: (report: GooseInstallReport) => void;
+  const pending = new Promise<GooseInstallReport>((resolve) => {
+    fail = resolve;
+  });
+  const { control } = setupHarnesses("ready", {
+    installSupported: true,
+    installGoose: vi.fn(() => pending),
+  });
+  await user.click(await screen.findByRole("button", { name: "Install" }));
+  cleanup();
+  render(<AgentSettings control={control} />, { wrapper: ToastProvider });
+  expect(await screen.findByRole("status")).toHaveTextContent(
+    "Installing Goose",
+  );
+  fail({
+    ready: false,
+    restarted: 0,
+    restartFailures: 0,
+    logPath: "/fixture/goose-install.log",
+    output: "curl failed to fetch the installer",
+    error: "Goose installer failed. See the install log.",
+  });
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Goose installer failed",
+  );
+  await user.click(screen.getByText("Goose install log"));
+  expect(screen.getByText("curl failed to fetch the installer")).toBeVisible();
+  expect(screen.getByText("/fixture/goose-install.log")).toBeVisible();
+  expect(screen.getByRole("button", { name: "Install" })).toBeEnabled();
+  cleanup();
+  render(<AgentSettings control={control} />, { wrapper: ToastProvider });
+  expect(await screen.findByRole("alert")).toHaveTextContent(
+    "Goose installer failed",
+  );
+  await user.click(screen.getByText("Goose install log"));
+  expect(screen.getByText("curl failed to fetch the installer")).toBeVisible();
 });

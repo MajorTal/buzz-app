@@ -1,5 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { canStopAgent, createAgentControl } from "./control";
+import {
+  canStopAgent,
+  createAgentControl,
+  type GooseInstallReport,
+} from "./control";
 import { controlFixture } from "./control-testing";
 import * as communityApi from "../communities/api";
 import { agentDraft, agentEdit } from "../../bundled/agents/agent-edit";
@@ -905,3 +909,190 @@ for (const boundary of ["dispose", "newer write"] as const) {
     control.dispose();
   });
 }
+it("re-detects after a pending Stop settles without undoing its evidence", async () => {
+  const fixture = controlFixture();
+  fixture.data.harnessOptions?.push({
+    command: "goose",
+    label: "Goose",
+    status: "cli-needed",
+    providers: [],
+  });
+  const install = deferred<GooseInstallReport>();
+  const stop = deferred<typeof fixture.data>();
+  fixture.host.installGoose = () => install.promise;
+  vi.spyOn(fixture.host, "action").mockReturnValue(stop.promise);
+  const control = createAgentControl(fixture.host);
+  await control.refresh();
+  const installing = control.installGoose?.();
+  const stopping = control.action(fixture.agent.id, "stop");
+  expect(control.snapshot().busy).toBe(true);
+  const reads = fixture.calls.filter(
+    (call) => call.action === "snapshot",
+  ).length;
+  install.resolve({
+    ready: true,
+    restarted: 0,
+    restartFailures: 0,
+    logPath: "/fixture/goose-install.log",
+    output: "",
+    error: null,
+  });
+  await installing;
+  expect(control.snapshot().gooseInstall?.report?.ready).toBe(true);
+  expect(
+    fixture.calls.filter((call) => call.action === "snapshot"),
+  ).toHaveLength(reads);
+  fixture.agent.enabled = false;
+  fixture.agent.status = "stopped";
+  const goose = fixture.data.harnessOptions?.find(
+    (option) => option.label === "Goose",
+  );
+  if (!goose) throw new Error("Missing Goose fixture");
+  goose.status = "ready";
+  stop.resolve(structuredClone(fixture.data));
+  await stopping;
+  await vi.waitFor(() =>
+    expect(
+      fixture.calls.filter((call) => call.action === "snapshot"),
+    ).toHaveLength(reads + 1),
+  );
+  expect(control.snapshot().data?.agents[0]?.enabled).toBe(false);
+  expect(
+    control
+      .snapshot()
+      .data?.harnessOptions?.find((option) => option.label === "Goose")?.status,
+  ).toBe("ready");
+  control.dispose();
+});
+
+it("waits out an earlier snapshot before reading the installed CLI again", async () => {
+  const fixture = controlFixture();
+  fixture.data.harnessOptions?.push({
+    command: "goose",
+    label: "Goose",
+    status: "cli-needed",
+    providers: [],
+  });
+  const install = deferred<GooseInstallReport>();
+  fixture.host.installGoose = () => install.promise;
+  const control = createAgentControl(fixture.host);
+  await control.refresh();
+  const stale = deferred<typeof fixture.data>();
+  const snapshot = fixture.host.snapshot.bind(fixture.host);
+  const read = vi
+    .spyOn(fixture.host, "snapshot")
+    .mockImplementationOnce(() => stale.promise)
+    .mockImplementation(snapshot);
+  const pendingRead = control.refresh();
+  await vi.waitFor(() => expect(read).toHaveBeenCalledTimes(1));
+  const installing = control.installGoose?.();
+  install.resolve({
+    ready: true,
+    restarted: 0,
+    restartFailures: 0,
+    logPath: "/fixture/goose-install.log",
+    output: "",
+    error: null,
+  });
+  const goose = fixture.data.harnessOptions?.find(
+    (option) => option.label === "Goose",
+  );
+  if (!goose) throw new Error("Missing Goose fixture");
+  goose.status = "ready";
+  stale.resolve({ ...structuredClone(fixture.data), harnessOptions: [] });
+  await pendingRead;
+  await installing;
+  expect(read).toHaveBeenCalledTimes(2);
+  expect(
+    control
+      .snapshot()
+      .data?.harnessOptions?.find((option) => option.label === "Goose")?.status,
+  ).toBe("ready");
+  control.dispose();
+});
+
+it("clears the previous Goose install report on retry and rejects a busy agent lane", async () => {
+  const fixture = controlFixture();
+  const retry = deferred<GooseInstallReport>();
+  const install = vi
+    .fn()
+    .mockResolvedValueOnce({
+      ready: false,
+      restarted: 0,
+      restartFailures: 0,
+      logPath: "/fixture/goose-install.log",
+      output: "failure",
+      error: "Failed",
+    })
+    .mockImplementationOnce(() => retry.promise);
+  fixture.host.installGoose = install;
+  const control = createAgentControl(fixture.host);
+  await control.refresh();
+  await control.installGoose?.();
+  expect(control.snapshot().gooseInstall?.report?.error).toBe("Failed");
+  const action = deferred<typeof fixture.data>();
+  vi.spyOn(fixture.host, "action").mockReturnValue(action.promise);
+  const stopping = control.action(fixture.agent.id, "stop");
+  await expect(control.installGoose?.()).rejects.toThrow("Refresh");
+  expect(install).toHaveBeenCalledTimes(1);
+  action.resolve(structuredClone(fixture.data));
+  await stopping;
+  const installing = control.installGoose?.();
+  expect(control.snapshot().gooseInstall).toEqual({
+    installing: true,
+    report: null,
+    error: null,
+  });
+  retry.resolve({
+    ready: true,
+    restarted: 1,
+    restartFailures: 0,
+    logPath: "/fixture/goose-install.log",
+    output: "done",
+    error: null,
+  });
+  await installing;
+  expect(control.snapshot().gooseInstall?.report?.restarted).toBe(1);
+  control.dispose();
+});
+
+it("keeps Stop available while Goose installs and refreshes once it settles", async () => {
+  const fixture = controlFixture();
+  const install = deferred<{
+    ready: boolean;
+    restarted: number;
+    restartFailures: number;
+    logPath: string;
+    output: string;
+    error: string | null;
+  }>();
+  fixture.host.installGoose = () => install.promise;
+  const control = createAgentControl(fixture.host);
+  await control.refresh();
+  const installing = control.installGoose?.();
+  expect(control.snapshot().gooseInstall?.installing).toBe(true);
+  expect(control.snapshot().busy).toBe(false);
+  expect(canStopAgent(control.snapshot(), "fixture-agent")).toBe(true);
+  await control.action("fixture-agent", "stop");
+  expect(fixture.calls).toContainEqual(
+    expect.objectContaining({ action: "stop" }),
+  );
+  expect(control.snapshot().gooseInstall?.installing).toBe(true);
+  await expect(control.installGoose?.()).rejects.toThrow("in progress");
+  const reads = fixture.calls.filter((c) => c.action === "snapshot").length;
+  install.resolve({
+    ready: true,
+    restarted: 0,
+    restartFailures: 0,
+    logPath: "/fixture/goose-install.log",
+    output: "",
+    error: null,
+  });
+  await installing;
+  expect(control.snapshot().gooseInstall?.report?.ready).toBe(true);
+  expect(fixture.calls.filter((c) => c.action === "snapshot")).toHaveLength(
+    reads + 1,
+  );
+  expect(control.snapshot().data?.agents[0]?.enabled).toBe(false);
+  control.dispose();
+});

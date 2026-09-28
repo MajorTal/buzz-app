@@ -191,3 +191,66 @@ test.describe("public search destination", () => {
     ).toBe(true);
   });
 });
+
+test("keyboard selection follows its action while recent conversations arrive above it", async ({
+  page,
+  app,
+}) => {
+  await page.goto(app.origin);
+  const rail = page.getByRole("button", {
+    name: "Switch to Primary",
+    exact: true,
+  });
+  await expect(rail).toBeVisible();
+  // Hold the membership read across a reload so the channel list arrives after
+  // the palette has opened, as it can after a restored conversation. Other
+  // reads continue, so the held read stays well inside its own deadline.
+  const held = [];
+  let holding = true;
+  await page.route("**/api/relay/*/query", async (route) => {
+    const filters = route.request().postDataJSON();
+    if (holding && filters.some(({ kinds }) => kinds?.includes(39002)))
+      await new Promise((resolve) => held.push(resolve));
+    await route.continue();
+  });
+  try {
+    await page.reload();
+    await expect(rail).toBeVisible();
+    await button(page, "Search Buzz").click();
+    const dialog = page.getByRole("dialog", {
+      name: "Search Buzz",
+      exact: true,
+    });
+    const input = dialog.getByRole("combobox", { name: "Search Buzz" });
+    const recent = dialog
+      .getByRole("group", { name: "Recent activity" })
+      .getByRole("option");
+    const projects = dialog
+      .getByRole("group", { name: "Actions" })
+      .getByRole("option", { name: "Projects", exact: true });
+    await expect(projects).toBeVisible();
+    // The connected palette is mounted, but its channel list is still held.
+    await expect(
+      dialog.getByText("Connecting to this community…", { exact: true }),
+    ).toHaveCount(0);
+    await expect(recent).toHaveCount(0);
+    const id = await projects.getAttribute("id");
+    while ((await input.getAttribute("aria-activedescendant")) !== id)
+      await input.press("ArrowDown");
+    const before = await projects.boundingBox();
+    holding = false;
+    for (const resolve of held.splice(0)) resolve();
+    await expect(recent.first()).toBeVisible();
+    // The arrivals moved the action; the selection stays with it.
+    expect((await projects.boundingBox()).y).toBeGreaterThan(before.y);
+    await expect(input).toHaveAttribute("aria-activedescendant", id);
+    await input.press("Enter");
+    await expect(dialog).toHaveCount(0);
+    await expect(
+      page.getByRole("heading", { name: "Projects", exact: true }),
+    ).toBeVisible();
+  } finally {
+    holding = false;
+    for (const resolve of held.splice(0)) resolve();
+  }
+});

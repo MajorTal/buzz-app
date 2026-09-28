@@ -129,7 +129,7 @@ test("companion remains usable while Channels connection is pending", async ({
   });
   try {
     await page.goto(app.origin);
-    await openPage(page, "Messages");
+    await openPage(page, "Messages", { connected: false });
     await expect(
       page.getByText("Connecting to your relay…", { exact: true }),
     ).toBeVisible();

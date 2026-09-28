@@ -48,7 +48,7 @@ test("Retry navigation reconnects the failed target session", async ({
     return route.continue();
   });
   await page.goto(app.origin);
-  await openPage(page, "Messages");
+  await openPage(page, "Messages", { connected: false });
   await expect(
     page.getByRole("heading", { name: "This destination couldn’t open" }),
   ).toBeVisible();

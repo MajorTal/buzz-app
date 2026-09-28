@@ -42,9 +42,10 @@ export function MessageTimestamp({
     timeStyle: "long",
   });
   return (
-    <Tooltip content={fullDate}>
+    <Tooltip content={fullDate} delay={500}>
       <time
         dateTime={date.toISOString()}
+        style={{ cursor: "default" }}
         className={compact ? styles.continuationTime : undefined}
       >
         <span aria-hidden="true">{label}</span>

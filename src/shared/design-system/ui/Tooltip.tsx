@@ -12,6 +12,7 @@ import {
 export function Tooltip({
   children,
   content,
+  delay = 0,
   disableHoverablePopup = false,
   side = "top",
 }: {
@@ -19,6 +20,7 @@ export function Tooltip({
     Pick<AriaAttributes, "aria-describedby" | "aria-expanded">
   >;
   content: ReactNode;
+  delay?: number;
   disableHoverablePopup?: boolean;
   side?: "top" | "right";
 }) {
@@ -39,7 +41,7 @@ export function Tooltip({
       disableHoverablePopup={disableHoverablePopup}
     >
       <BaseTooltip.Trigger
-        delay={0}
+        delay={delay}
         // Base UI merges render-element props last. Put the combined link on
         // that element so its original description cannot replace the hint.
         render={cloneElement(children, { "aria-describedby": describedBy })}

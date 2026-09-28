@@ -158,7 +158,7 @@ async fn actual_http_query_publish_and_verified_readback() {
         &client(),
         &profile(&origin),
         &Secret::parse(KEY, PUB).unwrap(),
-        || Ok(()),
+        || async { Ok(()) },
     )
     .await
     .unwrap();
@@ -212,7 +212,7 @@ async fn refused_malformed_or_unbounded_reads_and_wrong_receipts_do_not_succeed(
             &client(),
             &profile(&origin),
             &Secret::parse(KEY, PUB).unwrap(),
-            || {
+            || async {
                 if mode == "revision" {
                     Err("revision changed".into())
                 } else {
@@ -252,7 +252,7 @@ async fn native_owner_blocks_overlap_during_held_post_and_keeps_newer_save_pendi
         }
         _ => json_reply(json!([saved.clone()])),
     });
-    let (guard, mut profile, _) = owner.begin_profile(&id).unwrap();
+    let (guard, mut profile, _) = owner.begin_profile(&id).await.unwrap();
     profile.url = format!("{origin}/events");
     let copy = owner.clone();
     let target = id.clone();
@@ -262,6 +262,7 @@ async fn native_owner_blocks_overlap_during_held_post_and_keeps_newer_save_pendi
     posted_rx.await.unwrap();
     assert!(owner
         .begin_profile(&id)
+        .await
         .err()
         .unwrap()
         .contains("already in progress"));
@@ -269,11 +270,11 @@ async fn native_owner_blocks_overlap_during_held_post_and_keeps_newer_save_pendi
     owner
         .with(|host| host.controller.save(&id, 1, edit).map(|_| ()))
         .unwrap();
-    assert!(owner.begin_profile(&id).is_err());
+    assert!(owner.begin_profile(&id).await.is_err());
     release.send(()).unwrap();
     assert!(task.await.unwrap().err().unwrap().contains("changed"));
     worker.join().unwrap();
-    let (guard, profile, _) = owner.begin_profile(&id).unwrap();
+    let (guard, profile, _) = owner.begin_profile(&id).await.unwrap();
     assert_eq!(profile.revision, 2);
     assert_eq!(
         profile.picture.as_deref(),

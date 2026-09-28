@@ -53,11 +53,11 @@ async fn current(
         .map_err(|_| "Invalid current profile response".into())
 }
 
-pub(super) async fn publish(
+pub(super) async fn publish<F: std::future::Future<Output = Result<()>>>(
     client: &reqwest::Client,
     profile: &CreationProfile,
     key: &Secret,
-    before_send: impl FnOnce() -> Result<()>,
+    before_send: impl FnOnce() -> F,
 ) -> Result<()> {
     let event = profile.event(key, &current(client, profile, key).await?)?;
     let event_id = event
@@ -66,7 +66,7 @@ pub(super) async fn publish(
         .ok_or("Invalid profile")?;
     let bytes = serde_json::to_vec(&event).map_err(|_| "Could not encode profile")?;
     let authorization = authorization(profile.authenticate(key, &bytes)?)?;
-    before_send()?;
+    before_send().await?;
     let response = client
         .post(&profile.url)
         .header("Content-Type", "application/json")

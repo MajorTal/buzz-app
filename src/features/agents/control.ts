@@ -276,8 +276,8 @@ export function createAgentControl(
       update({ status: "loading", error: null });
     const pending = Promise.resolve()
       .then(async () => {
-        // Only read-only native startup/contention failures are transient. Keep
-        // the coalesced read loading for up to twenty 250ms waits, not a UI error.
+        // Only read-only native startup is transient. Keep the coalesced read
+        // loading for up to twenty 250ms waits, not a UI error.
         for (let attempt = 0; !disposed && current === generation; attempt++) {
           try {
             return await host.snapshot();
@@ -285,8 +285,7 @@ export function createAgentControl(
             if (disposed || current !== generation) return;
             if (
               attempt === 20 ||
-              (error !== "Agent runtime is initializing; retry shortly" &&
-                error !== "Another native agent operation is in progress")
+              error !== "Agent runtime is initializing; retry shortly"
             )
               throw error;
             await new Promise<void>((resolve) => setTimeout(resolve, 250));

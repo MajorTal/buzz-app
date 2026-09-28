@@ -252,11 +252,13 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
             .and_then(|n| n.to_str())
             == Some("buzz-pi-acp")
     }) {
-        let prepared = controller.pi_model_context(
-            request.id.as_deref(),
-            request.expected_revision,
-            request.edit.clone().unwrap(),
-        );
+        let prepared = controller
+            .pi_model_context(
+                request.id.as_deref(),
+                request.expected_revision,
+                request.edit.clone().unwrap(),
+            )
+            .await;
         return host
             .run(ticket, async move {
                 if request.action == Operation::Disconnect {
@@ -295,17 +297,14 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
                 })
                 .await;
         }
-        let prepared = request
-            .edit
-            .clone()
-            .ok_or_else(|| "Agent draft is required for model lookup".to_owned())
-            .and_then(|edit| {
-                controller.goose_model_context(
-                    request.id.as_deref(),
-                    request.expected_revision,
-                    edit,
-                )
-            });
+        let prepared = match request.edit.clone() {
+            Some(edit) => {
+                controller
+                    .goose_model_context(request.id.as_deref(), request.expected_revision, edit)
+                    .await
+            }
+            None => Err("Agent draft is required for model lookup".to_owned()),
+        };
         return host
             .run(ticket, async move {
                 let context = prepared?;
@@ -332,6 +331,7 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
     let prepared = if request.action == Operation::Disconnect {
         controller
             .ensure_open()
+            .await
             .and_then(|_| origin(&request.host))
             .and_then(|workspace| {
                 host.cache(&workspace)
@@ -339,13 +339,15 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
             })
     } else {
         // Short settings read only; never hold the controller across network waits.
-        request
-            .edit
-            .clone()
-            .ok_or_else(|| "Agent draft is required for model lookup".to_owned())
-            .and_then(|edit| {
-                controller.model_context(request.id.as_deref(), request.expected_revision, edit)
-            })
+        let context = match request.edit.clone() {
+            Some(edit) => {
+                controller
+                    .model_context(request.id.as_deref(), request.expected_revision, edit)
+                    .await
+            }
+            None => Err("Agent draft is required for model lookup".to_owned()),
+        };
+        context
             .and_then(|context| {
                 resolve(&request, &context)
                     .map(|(workspace, filter)| (context.model_overridden, workspace, filter))
@@ -359,7 +361,7 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
     host.run(ticket, async move {
         let (model_overridden, workspace, filter, cache) = prepared?;
         if request.action == Operation::Disconnect {
-            controller.disconnect(&workspace)?;
+            controller.disconnect(&workspace).await?;
             return Ok(Catalog {
                 host: workspace,
                 models: vec![],

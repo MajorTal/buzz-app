@@ -119,53 +119,7 @@ it("mention replay floor is transient IPC input on the existing Start command", 
   });
 });
 
-it("retries only transient host contention for the same one-use log proof", async () => {
-  vi.useFakeTimers();
-  vi.mocked(isTauri).mockReturnValue(true);
-  const commands: string[] = [];
-  let challenges = 0;
-  let reads = 0;
-  vi.mocked(invoke).mockImplementation(async (name) => {
-    commands.push(name);
-    if (name === "agent_control_log_challenge") {
-      if (++challenges < 3)
-        throw "Another native agent operation is in progress";
-      return "nonce-fixture" as never;
-    }
-    if (name === "agent_control_read_log") {
-      if (++reads < 2) throw "Another native agent operation is in progress";
-      return "retained output" as never;
-    }
-    throw new Error(`Unexpected ${name}`);
-  });
-  const authorize = vi.fn(async () => "signature-fixture");
-  const host = nativeAgentControlHost();
-  if (!host?.readLog) throw new Error("Missing fixture host");
-  try {
-    const read = host.readLog({
-      id: "exact-id",
-      pubkey: "a".repeat(64),
-      relayUrl: "wss://relay.example",
-      authorize,
-    });
-    await vi.advanceTimersByTimeAsync(750);
-    expect(await read).toBe("retained output");
-    expect(challenges).toBe(3);
-    expect(reads).toBe(2);
-    expect(authorize).toHaveBeenCalledTimes(1);
-    expect(commands).toEqual([
-      "agent_control_log_challenge",
-      "agent_control_log_challenge",
-      "agent_control_log_challenge",
-      "agent_control_read_log",
-      "agent_control_read_log",
-    ]);
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-it("does not retry failed authorization or non-contention native errors", async () => {
+it("does not retry failed authorization or native log errors", async () => {
   vi.mocked(isTauri).mockReturnValue(true);
   vi.mocked(invoke).mockReset();
   vi.mocked(invoke).mockRejectedValueOnce("Owner authorization is unavailable");
@@ -191,34 +145,4 @@ it("does not retry failed authorization or non-contention native errors", async 
   await expect(host.readLog(target)).rejects.toBe("Log authorization expired");
   expect(invoke).toHaveBeenCalledTimes(2);
   expect(authorize).toHaveBeenCalledTimes(1);
-});
-
-it("bounds lock-contention retries and never requests a signer when challenge stays busy", async () => {
-  vi.useFakeTimers();
-  vi.mocked(isTauri).mockReturnValue(true);
-  vi.mocked(invoke).mockReset();
-  vi.mocked(invoke).mockRejectedValue(
-    "Another native agent operation is in progress",
-  );
-  const host = nativeAgentControlHost();
-  if (!host?.readLog) throw new Error("Missing fixture host");
-  const authorize = vi.fn(async () => "signature-fixture");
-  try {
-    const read = host.readLog({
-      id: "exact-id",
-      pubkey: "a".repeat(64),
-      relayUrl: "wss://relay.example",
-      authorize,
-    });
-    // Attach the rejection observer before the fake clock can settle the read.
-    const outcome = expect(read).rejects.toBe(
-      "Another native agent operation is in progress",
-    );
-    await vi.advanceTimersByTimeAsync(5_000);
-    await outcome;
-    expect(invoke).toHaveBeenCalledTimes(21);
-    expect(authorize).not.toHaveBeenCalled();
-  } finally {
-    vi.useRealTimers();
-  }
 });

@@ -1206,32 +1206,29 @@ it("retries the same saved profile even if the runtime becomes unavailable", asy
   expect(profile.mock.calls).toEqual([["created"], ["created"]]);
 });
 
-for (const error of [
-  "Agent runtime is initializing; retry shortly",
-  "Another native agent operation is in progress",
-]) {
-  it(`shows agents without manual Retry after a transient native read: ${error}`, async () => {
-    vi.useFakeTimers();
-    let snapshot!: ReturnType<typeof vi.spyOn>;
-    setup("ready", (f) => {
-      snapshot = vi.spyOn(f.host, "snapshot").mockRejectedValueOnce(error);
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(screen.getByText("Reading local agent status…")).toBeVisible();
-    expect(screen.queryByRole("button", { name: "Retry status" })).toBeNull();
-    expect(snapshot).toHaveBeenCalledTimes(1);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(250);
-    });
-    expect(
-      screen.getAllByRole("article", { name: "Agent Fixture agent" }),
-    ).toHaveLength(2);
-    expect(screen.queryByRole("button", { name: "Retry status" })).toBeNull();
-    expect(snapshot).toHaveBeenCalledTimes(2);
+it("shows agents without manual Retry after native startup", async () => {
+  vi.useFakeTimers();
+  let snapshot!: ReturnType<typeof vi.spyOn>;
+  setup("ready", (f) => {
+    snapshot = vi
+      .spyOn(f.host, "snapshot")
+      .mockRejectedValueOnce("Agent runtime is initializing; retry shortly");
   });
-}
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(0);
+  });
+  expect(screen.getByText("Reading local agent status…")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Retry status" })).toBeNull();
+  expect(snapshot).toHaveBeenCalledTimes(1);
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(250);
+  });
+  expect(
+    screen.getAllByRole("article", { name: "Agent Fixture agent" }),
+  ).toHaveLength(2);
+  expect(screen.queryByRole("button", { name: "Retry status" })).toBeNull();
+  expect(snapshot).toHaveBeenCalledTimes(2);
+});
 it("keeps persistent read failures visible and recovers on the next periodic read", async () => {
   vi.useFakeTimers();
   const { f } = setup("ready", (f) => {

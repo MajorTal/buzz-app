@@ -1,22 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { createAgentControl, type AgentControlHost } from "./control";
 
-// Mirror snapshot refresh's bounded busy wait without retrying a failed proof.
-const HOST_BUSY = "Another native agent operation is in progress";
-async function logInvoke<T>(
-  command: string,
-  args: Record<string, string>,
-): Promise<T> {
-  for (let attempt = 0; ; attempt++) {
-    try {
-      return await invoke<T>(command, args);
-    } catch (error) {
-      if (error !== HOST_BUSY || attempt === 20) throw error;
-      await new Promise<void>((resolve) => setTimeout(resolve, 250));
-    }
-  }
-}
-
 export function nativeAgentControlHost(): AgentControlHost | null {
   if (!isTauri()) return null;
   return {
@@ -34,13 +18,13 @@ export function nativeAgentControlHost(): AgentControlHost | null {
       invoke("agent_control_start_on_app_launch", { id, enabled }),
     snapshot: () => invoke("agent_control_snapshot"),
     readLog: async ({ id, pubkey, relayUrl, authorize }) => {
-      const nonce = await logInvoke<string>("agent_control_log_challenge", {
+      const nonce = await invoke<string>("agent_control_log_challenge", {
         id,
         pubkey,
         relayUrl,
       });
       const signature = await authorize({ id, pubkey, relayUrl }, nonce);
-      return logInvoke<string>("agent_control_read_log", {
+      return invoke<string>("agent_control_read_log", {
         id,
         pubkey,
         relayUrl,

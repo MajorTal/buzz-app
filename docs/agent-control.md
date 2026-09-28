@@ -291,6 +291,12 @@ containment on non-Unix platforms.
   Unmount clears the timer, not enabled intent or processes.
 - Native host owns persistent state, credential custody, process groups, lock and
   duplicate ownership checks, source import validation and sanitized diagnostics.
+  Critical sections wait in arrival order through the host's async admission gate
+  and execute on blocking workers; a status read does not reject a concurrent
+  command as busy. The worker retains admission until it finishes, even if its
+  caller disappears. Credential and network waits release admission so recovery
+  Stop can still invalidate pending launches. Shutdown is checked again after
+  acquiring native state. Failed commands are never automatically replayed.
   It must bound IPC operations and reject with deliberately user-facing strings;
   raw child/OS/parser errors must never cross into these snapshots or rejections.
 

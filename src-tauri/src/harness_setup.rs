@@ -299,7 +299,7 @@ pub(crate) async fn goose_install<R: tauri::Runtime>(
         if buzz_agent_controller::installed("goose").is_some() {
             return Err("Goose is already installed; click Check again".into());
         }
-        let waiting = agents.waiting_for_goose()?;
+        let waiting = agents.waiting_for_goose().await?;
         let path = app
             .path()
             .app_data_dir()

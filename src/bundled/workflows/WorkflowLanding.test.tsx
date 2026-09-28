@@ -142,9 +142,7 @@ it("reads 500 mixed member channels in four serial batches and never rereads on 
       expect(fixture.reads).toHaveLength(i + 1);
       await fixture.finish(i);
     }
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Workflow scan finished.",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded.");
     expect(fixture.reads.map((r) => r.ids.length)).toEqual([
       128, 128, 128, 116,
     ]);
@@ -213,9 +211,7 @@ it("purges globally without automatic reads and recovers remaining channels on m
     expect(fixture.reads).toHaveLength(3);
     fixture.refresh();
     await fixture.finish(3);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Workflow scan finished.",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded.");
   } finally {
     fixture.close();
   }
@@ -274,9 +270,7 @@ it("finishes paging before the next batch, resets its cursor, and retains loaded
       screen.getAllByRole("button", { name: "Open Message helper" }),
     ).toHaveLength(3);
     expect(screen.queryByText(/returned a partial workflow list/)).toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Workflow scan finished.",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded.");
     expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
   } finally {
     fixture.close();
@@ -431,9 +425,7 @@ for (const interrupt of [false, true]) {
       expect(fixture.reads.slice(2).flatMap((r) => r.ids)).toEqual(
         expected.map((c) => c.id),
       );
-      expect(screen.getByRole("status")).toHaveTextContent(
-        "Workflow scan finished.",
-      );
+      expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded.");
       expect(
         screen.getByRole("button", { name: "Open Message helper" }),
       ).toBeVisible();
@@ -461,9 +453,7 @@ it("reports synchronous view admission failure once and retries its unread roste
     expect(fixture.reads.map((r) => r.ids)).toEqual([
       [channel(1).id, channel(2).id],
     ]);
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Workflow scan finished.",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded.");
   } finally {
     for (const view of blockers) view.dispose();
     fixture.close();
@@ -524,9 +514,7 @@ it("drops queued readback for a removed membership without restoring its card", 
     expect(
       screen.queryByRole("button", { name: "Open Message helper" }),
     ).toBeNull();
-    expect(screen.getByRole("status")).toHaveTextContent(
-      "Workflow scan finished.",
-    );
+    expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded.");
   } finally {
     fixture.close();
   }
@@ -542,9 +530,7 @@ it("reuses fresh session cache and does not replay readback on landing remount",
     expect(fixture.reads).toHaveLength(1);
     fixture.remount();
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
-        "Workflow scan finished.",
-      ),
+      expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded."),
     );
     expect(fixture.reads).toHaveLength(1);
     expect(
@@ -593,16 +579,12 @@ it("reuses fresh cached results for every completed batch after navigation", asy
     await fixture.finish(0, [event(channel(1).id)]);
     await fixture.finish(1, [event(channel(129).id)]);
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
-        "Workflow scan finished.",
-      ),
+      expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded."),
     );
     expect(fixture.reads.map((read) => read.ids.length)).toEqual([128, 1]);
     fixture.remount();
     await waitFor(() =>
-      expect(screen.getByRole("status")).toHaveTextContent(
-        "Workflow scan finished.",
-      ),
+      expect(screen.getByRole("status")).toHaveTextContent("Workflows loaded."),
     );
     expect(fixture.reads).toHaveLength(2);
     expect(

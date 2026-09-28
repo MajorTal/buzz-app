@@ -1,6 +1,7 @@
 import { WORKFLOW_CHANNEL_BATCH } from "../../features/workflows/queries";
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -410,12 +411,16 @@ function WorkflowCard({
     submitted !== null &&
     definition.revision !== submitted &&
     submittedOperation?.outcome !== "rejected";
-  const toggleDisabled =
-    readonly ||
-    locked ||
-    awaitingReadback ||
-    !fields.editable ||
-    !capability.availability.save;
+  const toggleReason = readonly
+    ? "Only the author can change this workflow."
+    : locked || awaitingReadback
+      ? "Waiting for the submitted change to be resolved."
+      : !fields.editable
+        ? "Correct the YAML before changing the configured state."
+        : !capability.availability.save
+          ? "Saving is unavailable from this host."
+          : undefined;
+  const reasonId = useId();
   const warning = getWorkflowActivationWarning(definition.yaml);
   const name = fields.name || "Unnamed or malformed workflow";
   const toggle = (next: boolean) => {
@@ -488,16 +493,19 @@ function WorkflowCard({
               )}
             </div>
             <div className="workflow-card-switch">
-              <Switch
-                aria-label={`Enabled in configuration: ${name}`}
-                checked={enabled}
-                disabled={toggleDisabled}
-                onCheckedChange={(next) => {
-                  if (next === enabled) return;
-                  if (next && warning) setConfirmEnable(true);
-                  else toggle(next);
-                }}
-              />
+              {fields.editable && (
+                <Switch
+                  aria-label={`Enabled in configuration: ${name}`}
+                  aria-describedby={toggleReason ? reasonId : undefined}
+                  checked={enabled}
+                  disabled={!!toggleReason}
+                  onCheckedChange={(next) => {
+                    if (next === enabled) return;
+                    if (next && warning) setConfirmEnable(true);
+                    else toggle(next);
+                  }}
+                />
+              )}
               <MenuRoot>
                 <MenuTrigger
                   render={
@@ -546,8 +554,6 @@ function WorkflowCard({
             <div className="workflow-card-identity">
               <strong className="text-standard">#{channel.name}</strong>
               <span>{name}</span>
-
-              {readonly && <span>Read-only</span>}
             </div>
             <time
               dateTime={new Date(definition.createdAt * 1000).toISOString()}
@@ -555,6 +561,16 @@ function WorkflowCard({
               {new Date(definition.createdAt * 1000).toLocaleDateString()}
             </time>
           </div>
+          {!fields.editable && (
+            <span className="text-caption text-secondary">
+              Unreadable configuration
+            </span>
+          )}
+          {toggleReason && (
+            <span id={reasonId} hidden>
+              {toggleReason}
+            </span>
+          )}
         </div>
       </article>
       {confirmEnable && (
@@ -684,36 +700,37 @@ export function WorkflowLanding({
   );
   return (
     <>
-      <p className="text-body-sm text-secondary">
-        These switches change configuration, not confirmed runtime state. Saving
-        a disabled configuration does not confirm that automatic runs have
-        stopped or cancel work already running.
-      </p>
-      <p className="text-body-sm text-secondary" role="status">
-        {paused
-          ? "Workflow discovery paused. Some channels could not be checked. Loaded workflows are still shown."
-          : channels.some(
-                (channel) =>
-                  !snapshots[channel.id] ||
-                  snapshots[channel.id]?.status === "loading",
-              )
-            ? "Reading workflows…"
+      <div className="workflow-page-notice">
+        <p className="text-body-sm text-secondary">
+          Saved configuration only. Turning off does not confirm runs have
+          stopped or cancel active runs.
+        </p>
+        <p className="text-body-sm text-secondary" role="status">
+          {paused
+            ? "Workflow discovery paused. Some channels could not be checked. Loaded workflows are still shown."
             : channels.some(
                   (channel) =>
-                    snapshots[channel.id]?.status === "idle" ||
-                    snapshots[channel.id]?.status === "unavailable",
+                    !snapshots[channel.id] ||
+                    snapshots[channel.id]?.status === "loading",
                 )
-              ? "Workflow data cleared or unavailable. Refresh to check access."
-              : "Workflow scan finished. Lists may be limited by the relay."}
-      </p>
-      {paused && (
-        <Button
-          size="sm"
-          onClick={() => setRetryRequest((request) => request + 1)}
-        >
-          Retry
-        </Button>
-      )}
+              ? "Reading workflows…"
+              : channels.some(
+                    (channel) =>
+                      snapshots[channel.id]?.status === "idle" ||
+                      snapshots[channel.id]?.status === "unavailable",
+                  )
+                ? "Workflow data cleared or unavailable. Refresh to check access."
+                : "Workflows loaded."}
+        </p>
+        {paused && (
+          <Button
+            size="sm"
+            onClick={() => setRetryRequest((request) => request + 1)}
+          >
+            Retry
+          </Button>
+        )}
+      </div>
       <div className="workflow-card-grid">
         <Button
           aria-label="New workflow"

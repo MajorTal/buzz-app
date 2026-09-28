@@ -22,6 +22,7 @@
   flex: 0 0 auto;
 }
 .workflow-page-filter,
+.workflow-page-notice,
 .workflow-page-state,
 .workflow-card-grid,
 .workflows-page > section {
@@ -104,6 +105,9 @@
 .workflow-card-meta {
   justify-content: space-between;
   gap: var(--space-3);
+}
+.workflow-card-topline {
+  flex-wrap: wrap;
 }
 .workflow-card-flow {
   min-width: 0;
@@ -217,6 +221,9 @@
   padding-top: var(--space-4);
 }
 .workflow-name {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
   flex: 1 1 240px;
 }
 .workflow-steps {

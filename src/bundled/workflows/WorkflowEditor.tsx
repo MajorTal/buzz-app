@@ -2,10 +2,19 @@ import { Field } from "../../shared/design-system/ui/Field";
 import { Input } from "../../shared/design-system/ui/Input";
 import { Textarea } from "../../shared/design-system/ui/Textarea";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
-import { PencilSimpleIcon } from "../../shared/design-system/icons";
+import {
+  DotsThreeIcon,
+  PencilSimpleIcon,
+} from "../../shared/design-system/icons";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Accordion } from "../../shared/design-system/ui/Accordion";
 import { Button } from "../../shared/design-system/ui/Button";
+import {
+  MenuRoot,
+  MenuTrigger,
+  MenuPopup,
+  MenuCheckboxItem,
+} from "../../shared/design-system/ui/Menu";
 import { Switch } from "../../shared/design-system/ui/Switch";
 import { Tabs } from "../../shared/design-system/ui/Tabs";
 import { ConfirmAction } from "./ConfirmAction";
@@ -55,7 +64,7 @@ export function WorkflowEditor({
   locked?: boolean;
   onCancel?: () => void;
   scope?: ReactNode;
-  actions?: ReactNode;
+  actions?: (enable: ReactNode) => ReactNode;
   details?: ReactNode;
   status?: ReactNode;
   children?: ReactNode;
@@ -142,10 +151,39 @@ export function WorkflowEditor({
     else onSave();
   };
   const disabled = readOnly || busy || locked || chooseChannel;
+  const controlReason = readOnly
+    ? "Only the author can change this workflow."
+    : (blocked ??
+      (busy || locked
+        ? "Review Recent activity before editing."
+        : chooseChannel
+          ? "Choose a channel before editing."
+          : !fields.editable
+            ? "Correct the YAML before changing the name or configuration."
+            : undefined));
+  const enableControl = (
+    <MenuCheckboxItem
+      checked={fields.enabled !== false && fields.editable}
+      disabled={disabled || !fields.editable}
+      aria-describedby={controlReason ? `${id}-control-reason` : undefined}
+      closeOnClick={false}
+      onCheckedChange={(enabled) =>
+        changeHeader(yamlWithWorkflowEnabled(yaml, enabled), { enabled })
+      }
+    >
+      Enable
+    </MenuCheckboxItem>
+  );
   return (
     <Dialog
       open
-      title={create ? "Create workflow" : "Edit workflow"}
+      title={
+        create
+          ? "Create workflow"
+          : readOnly
+            ? "View workflow"
+            : "Edit workflow"
+      }
       closeLabel="Close editor"
       size="expanded"
       onOpenChange={(open) => {
@@ -156,7 +194,23 @@ export function WorkflowEditor({
         setSelection(null);
         return true;
       }}
-      headerActions={actions}
+      headerActions={
+        !create && (
+          <MenuRoot>
+            <MenuTrigger
+              render={
+                <IconButton
+                  aria-label="Workflow actions"
+                  icon={<DotsThreeIcon size={20} aria-hidden="true" />}
+                />
+              }
+            />
+            <MenuPopup align="end">
+              {actions ? actions(enableControl) : enableControl}
+            </MenuPopup>
+          </MenuRoot>
+        )
+      }
       leadingActions={
         <Tabs
           variant="panel"
@@ -184,9 +238,9 @@ export function WorkflowEditor({
         />
       }
       actions={
-        <>
-          {onCancel && <Button onClick={onCancel}>Cancel</Button>}
-          {!readOnly && (
+        !readOnly && (
+          <>
+            {onCancel && <Button onClick={onCancel}>Cancel</Button>}
             <Button
               variant="prominent"
               focusableWhenDisabled={busy || locked}
@@ -215,8 +269,8 @@ export function WorkflowEditor({
                     ? "Create workflow"
                     : "Save changes"}
             </Button>
-          )}
-        </>
+          </>
+        )
       }
     >
       <section aria-label="Workflow editor" className="workflow-editor">
@@ -269,8 +323,14 @@ export function WorkflowEditor({
                 <IconButton
                   ref={nameButton}
                   aria-label="Edit workflow name"
+                  title="Edit workflow name"
                   aria-describedby={
-                    issue?.field === "name" ? `${id}-name-error` : undefined
+                    [
+                      controlReason && `${id}-control-reason`,
+                      issue?.field === "name" && `${id}-name-error`,
+                    ]
+                      .filter(Boolean)
+                      .join(" ") || undefined
                   }
                   icon={<PencilSimpleIcon size={16} aria-hidden="true" />}
                   size="sm"
@@ -292,14 +352,30 @@ export function WorkflowEditor({
               </p>
             )}
           </div>
-          <Switch
-            label="Enabled in configuration"
-            checked={fields.enabled !== false}
-            disabled={disabled || !fields.editable}
-            onCheckedChange={(enabled) =>
-              changeHeader(yamlWithWorkflowEnabled(yaml, enabled), { enabled })
-            }
-          />
+          {readOnly && (
+            <span id={`${id}-control-reason`} hidden>
+              {controlReason}
+            </span>
+          )}
+          {create && fields.editable ? (
+            <Switch
+              label="Enabled in configuration"
+              aria-describedby={
+                controlReason ? `${id}-control-reason` : undefined
+              }
+              checked={fields.enabled !== false}
+              disabled={disabled}
+              onCheckedChange={(enabled) =>
+                changeHeader(yamlWithWorkflowEnabled(yaml, enabled), {
+                  enabled,
+                })
+              }
+            />
+          ) : !fields.editable ? (
+            <span className="text-body-sm text-secondary">
+              Unreadable configuration
+            </span>
+          ) : null}
         </div>
         <div className="workflow-editor-body">
           {modeError && (
@@ -349,13 +425,19 @@ export function WorkflowEditor({
                 {error}
               </p>
             )}
-          {blocked && (
-            <p role="status" className="text-secondary">
-              {blocked}
+        </div>
+        <div className="workflow-editor-status">
+          {!readOnly && controlReason && (
+            <p
+              id={`${id}-control-reason`}
+              role="status"
+              className="text-body-sm text-secondary"
+            >
+              {controlReason}
             </p>
           )}
+          {status}
         </div>
-        {status && <div className="workflow-editor-status">{status}</div>}
         {!chooseChannel && (
           <Accordion
             variant="form"

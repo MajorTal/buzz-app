@@ -9,14 +9,8 @@ import type {
   WorkflowCapability,
   WorkflowDefinition,
 } from "../../features/workflows/types";
-import { DotsThreeIcon, HashIcon } from "../../shared/design-system/icons";
-import { IconButton } from "../../shared/design-system/ui/IconButton";
-import {
-  MenuItem,
-  MenuPopup,
-  MenuRoot,
-  MenuTrigger,
-} from "../../shared/design-system/ui/Menu";
+import { HashIcon } from "../../shared/design-system/icons";
+import { MenuItem, MenuSeparator } from "../../shared/design-system/ui/Menu";
 import { Button } from "../../shared/design-system/ui/Button";
 import { ConfirmAction } from "./ConfirmAction";
 import { WorkflowEditor } from "./WorkflowEditor";
@@ -283,16 +277,16 @@ export function WorkflowChannel({
     blocked = "Saving is unavailable from this host.";
   else if (unresolvedWrite && !draft?.operationId)
     blocked =
-      "Check the saved configuration or review the unresolved request in Recent activity before continuing.";
+      "Review the unresolved request in Recent activity before continuing.";
   else if (draft?.operationId)
     blocked =
       operation?.outcome === "succeeded"
         ? operation.action === "delete"
           ? "Deletion request accepted, not verified runtime deletion. The configuration may remain visible. Review Recent activity to continue."
-          : "Configuration saved; waiting for a readback of this exact revision. Check saved configuration or review the current version in Recent activity."
+          : "Configuration saved; waiting for a readback of this exact revision."
         : operation?.outcome === "rejected"
-          ? "Request rejected. Your draft is retained; review the error before continuing."
-          : "Your draft is retained. Check the saved configuration or review the request in Recent activity to continue.";
+          ? "Draft retained. Review the error below before continuing."
+          : undefined;
   if (!snapshot) return <p role="status">Reading configurations…</p>;
   return (
     <section aria-label={`Workflows in ${channelName}`}>
@@ -319,9 +313,8 @@ export function WorkflowChannel({
       )}
       {!detailOnly && (
         <p className="text-body-sm text-secondary">
-          Configured activation may differ from the existing backend’s runtime
-          state. Saving a disabled configuration does not confirm that automatic
-          runs have stopped or cancel work already running.
+          Saved configuration only. Turning off does not confirm runs have
+          stopped or cancel active runs.
         </p>
       )}
       {snapshot.status === "loading" && (
@@ -401,54 +394,45 @@ export function WorkflowChannel({
                 {channelName}
               </span>
             }
-            actions={
-              draft.original && (
-                <MenuRoot>
-                  <MenuTrigger
-                    render={
-                      <IconButton
-                        aria-label="Workflow actions"
-                        icon={<DotsThreeIcon size={20} aria-hidden="true" />}
-                      />
-                    }
-                  />
-                  <MenuPopup>
+            actions={(enable) => (
+              <>
+                <MenuItem
+                  disabled={!capability.availability.history}
+                  onClick={() => setReadRuns((value) => !value)}
+                >
+                  {readRuns ? "Hide runs" : "Read runs"}
+                </MenuItem>
+                {!readonly && (
+                  <>
                     <MenuItem
-                      disabled={!capability.availability.history}
-                      onClick={() => setReadRuns((value) => !value)}
+                      disabled={
+                        dirty ||
+                        !!draft.operationId ||
+                        unresolvedWrite ||
+                        !capability.availability.trigger
+                      }
+                      onClick={trigger}
                     >
-                      {readRuns ? "Hide runs" : "Read runs"}
+                      Run now
                     </MenuItem>
-                    {!readonly && (
-                      <>
-                        <MenuItem
-                          disabled={
-                            dirty ||
-                            !!draft.operationId ||
-                            unresolvedWrite ||
-                            !capability.availability.trigger
-                          }
-                          onClick={trigger}
-                        >
-                          Run now
-                        </MenuItem>
-                        <MenuItem
-                          tone="danger"
-                          disabled={
-                            !!draft.operationId ||
-                            unresolvedWrite ||
-                            !capability.availability.delete
-                          }
-                          onClick={() => setConfirmDelete(true)}
-                        >
-                          Delete workflow
-                        </MenuItem>
-                      </>
-                    )}
-                  </MenuPopup>
-                </MenuRoot>
-              )
-            }
+                    {enable}
+                    <MenuSeparator />
+                    <MenuItem
+                      tone="danger"
+                      disabled={
+                        !!draft.operationId ||
+                        unresolvedWrite ||
+                        !capability.availability.delete
+                      }
+                      onClick={() => setConfirmDelete(true)}
+                    >
+                      Delete workflow
+                    </MenuItem>
+                  </>
+                )}
+                {readonly && enable}
+              </>
+            )}
             status={
               <>
                 {(snapshot.status === "error" ||
@@ -469,12 +453,6 @@ export function WorkflowChannel({
                       Refresh configurations
                     </Button>
                   </div>
-                )}
-                {readonly && (
-                  <p className="text-secondary">
-                    This definition belongs to another identity. Only its author
-                    can manage it here.
-                  </p>
                 )}
                 {!capability.availability.delete && (
                   <p className="text-body-sm text-secondary">
@@ -518,15 +496,12 @@ export function WorkflowChannel({
             details={
               <>
                 <p className="text-body-sm text-subtle">
-                  Configured activation may differ from the existing backend’s
-                  runtime state. Saving a disabled configuration does not
-                  confirm that automatic runs have stopped or cancel work
-                  already running.
+                  Configuration changes apply on save. Turning off does not
+                  confirm runs have stopped or cancel active runs.
                 </p>
                 <p className="text-body-sm text-subtle">
-                  Drafts stay in this editor only. Leaving the Workflows page or
-                  reloading discards unsaved text, but does not cancel submitted
-                  operations.
+                  Unsaved changes stay in this editor. Leaving or reloading
+                  discards them without cancelling submitted operations.
                 </p>
                 {draft.original && (
                   <details>

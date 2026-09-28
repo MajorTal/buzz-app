@@ -5,13 +5,14 @@ import { schnorr } from "@noble/curves/secp256k1.js";
 import { bytesToHex } from "nostr-tools/utils";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { createAgentControl } from "../../features/agents/control";
 import { controlFixture } from "../../features/agents/control-testing";
 import { createRelaySession } from "../../features/relay/session";
 import type { RelayData } from "../../features/relay/service";
 import { keypair, signed } from "../../features/relay/testing";
 import { profileTarget } from "../../features/profiles/target";
+import type { Navigation } from "../../features/navigation/controller";
 import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { ProfilePanel } from "./ProfilePanel";
 
@@ -46,6 +47,11 @@ function agentProfile(owner = viewer) {
 async function mount({
   head = agentProfile(),
   fixture = controlFixture(),
+  navigation,
+}: {
+  head?: ReturnType<typeof agentProfile>;
+  fixture?: ReturnType<typeof controlFixture>;
+  navigation?: Navigation;
 } = {}) {
   fixture.agent.pubkey = agent.pubkey;
   const control = createAgentControl(fixture.host);
@@ -79,6 +85,7 @@ async function mount({
         target={profileTarget(agent.pubkey) ?? ""}
         close={() => {}}
         control={control}
+        {...(navigation ? { navigation } : {})}
       />
     </ToastProvider>,
   );
@@ -157,6 +164,62 @@ it("shows the verified owner saved configuration and persists start on launch", 
     within(model).getByRole("button", { name: "Edit Provider" }),
   );
   expect(screen.getByRole("dialog", { name: "Edit agent" })).toBeVisible();
+});
+
+it("opens Harnesses from both profile editors and closes a discarded draft after navigation", async () => {
+  const fixture = controlFixture();
+  fixture.data.harnessOptions?.push({
+    command: "goose",
+    label: "Goose",
+    available: false,
+    status: "cli-needed",
+    providers: [],
+  });
+  const open = vi
+    .fn()
+    .mockResolvedValueOnce({ status: "failed", reason: "unavailable" })
+    .mockResolvedValue({ status: "opened" });
+  const navigation = { open } as unknown as Navigation;
+  const { user } = await mount({ fixture, navigation });
+
+  await user.click(
+    await screen.findByRole("button", { name: "Agent instructions" }),
+  );
+  let dialog = screen.getByRole("dialog", { name: "Edit agent" });
+  await user.type(
+    within(dialog).getByRole("textbox", { name: "Name" }),
+    " edited",
+  );
+  expect(dialog).toHaveTextContent("Opening Settings discards unsaved edits.");
+  await user.click(
+    within(dialog).getByRole("button", { name: "Open Harnesses in Settings" }),
+  );
+  expect(dialog).toBeVisible();
+  await user.click(
+    within(dialog).getByRole("button", { name: "Open Harnesses in Settings" }),
+  );
+  await vi.waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Edit agent" })).toBeNull(),
+  );
+  expect(open).toHaveBeenCalledWith({
+    version: 1,
+    kind: "settings",
+    section: "agents",
+  });
+
+  await user.click(await screen.findByRole("tab", { name: "Runtime" }));
+  await user.click(screen.getByRole("button", { name: "Edit Model" }));
+  dialog = screen.getByRole("dialog", { name: "Edit agent" });
+  expect(
+    within(dialog).getByRole("button", { name: "Open Harnesses in Settings" }),
+  ).toBeVisible();
+  await user.click(
+    within(dialog).getByRole("button", { name: "Open Harnesses in Settings" }),
+  );
+  await vi.waitFor(() =>
+    expect(screen.queryByRole("dialog", { name: "Edit agent" })).toBeNull(),
+  );
+  expect(open).toHaveBeenCalledTimes(3);
 });
 
 it("keeps the saved preference and offers recovery when persistence fails", async () => {

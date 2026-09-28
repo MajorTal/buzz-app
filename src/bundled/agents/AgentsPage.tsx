@@ -95,6 +95,17 @@ export function AgentsPage({
                 <AgentControlPanel
                   control={control}
                   editTarget={editTarget}
+                  onOpenHarnesses={
+                    open
+                      ? () => {
+                          void open({
+                            version: 1,
+                            kind: "settings",
+                            section: "agents",
+                          });
+                        }
+                      : undefined
+                  }
                   {...(editTarget && request && connection.status === "ready"
                     ? { editRequest: request }
                     : {})}

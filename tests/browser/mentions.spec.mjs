@@ -4,6 +4,34 @@ import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 
+test("settings-enabled mentions fixture renders the composer and preference", async ({
+  page,
+}) => {
+  // This optional fixture mode mounts the real Vite entry point, not an exported component.
+  const server = await createServer({
+    root: fileURLToPath(new URL("../../", import.meta.url)),
+    configFile: false,
+    optimizeDeps: { entries: ["tests/fixtures/mentions.html"] },
+    envFile: false,
+    plugins: [react()],
+    logLevel: "error",
+    server: { host: "127.0.0.1", port: 0 },
+  });
+  const errors = [];
+  page.on("pageerror", (error) => errors.push(String(error)));
+  try {
+    await server.listen();
+    await page.goto(
+      `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/mentions.html?settings`,
+    );
+    await expect(page.getByRole("textbox")).toBeVisible();
+    await expect(page.getByText("Remember mentioned agents")).toBeVisible();
+    expect(errors).toEqual([]);
+  } finally {
+    await server.close();
+  }
+});
+
 test("actual composer selects namesakes by exact key, publishes channel/reply tags, and blocks removed members", async ({
   page,
 }) => {

@@ -36,14 +36,15 @@ impl Snapshot {
         }
     }
 }
-// Editing suggestions only. Goose availability means an executable was found,
-// not that its provider credentials or ACP session are ready.
+// Editing suggestions and executable presence only. Availability does not
+// establish provider credentials or an ACP session.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct HarnessOption {
     command: String,
     label: &'static str,
     available: bool,
+    status: &'static str,
     default_args: &'static [&'static str],
     providers: &'static [ProviderOption],
 }
@@ -113,17 +114,30 @@ const GOOSE_PROVIDERS: &[ProviderOption] = &[
     },
 ];
 
+fn pi_status(cli: bool, adapter: bool, node: bool) -> &'static str {
+    if !cli || !node {
+        "cli-needed"
+    } else if !adapter {
+        "adapter-needed"
+    } else {
+        "ready"
+    }
+}
+
 fn harness_options() -> Vec<HarnessOption> {
     let goose = installed_goose();
     let pi = buzz_agent_controller::installed("buzz-pi-acp");
-    let pi_available = pi.is_some()
-        && buzz_agent_controller::installed("pi").is_some()
-        && buzz_agent_controller::installed("node").is_some();
+    let pi_status = pi_status(
+        buzz_agent_controller::installed("pi").is_some(),
+        pi.is_some(),
+        buzz_agent_controller::installed("node").is_some(),
+    );
     vec![
         HarnessOption {
             command: "buzz-agent".into(),
             label: "Buzz Agent",
             available: true,
+            status: "ready",
             default_args: &[],
             providers: &[ProviderOption {
                 value: "databricks_v2",
@@ -137,6 +151,11 @@ fn harness_options() -> Vec<HarnessOption> {
             ),
             label: "Goose",
             available: goose.is_some(),
+            status: if goose.is_some() {
+                "ready"
+            } else {
+                "cli-needed"
+            },
             default_args: &["acp"],
             providers: GOOSE_PROVIDERS,
         },
@@ -146,7 +165,8 @@ fn harness_options() -> Vec<HarnessOption> {
                 |p| p.to_string_lossy().into_owned(),
             ),
             label: "Pi",
-            available: pi_available,
+            available: pi_status == "ready",
+            status: pi_status,
             default_args: &[],
             providers: &[
                 ProviderOption {

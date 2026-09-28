@@ -16,8 +16,10 @@ export function AgentCreateDialog({
   owner,
   source,
   onClose,
+  onOpenHarnesses,
 }: {
   control: AgentControl;
+  onOpenHarnesses?: (() => void) | undefined;
   state: AgentControlState;
   destination: string;
   owner: string;
@@ -129,6 +131,8 @@ export function AgentCreateDialog({
               control={control}
               state={state}
               disabled={blocked || !!saved}
+              onOpenHarnesses={onOpenHarnesses}
+              discardEdits={dirty}
               onChange={(patch) => {
                 setDraft({ ...draft, ...patch });
                 setDirty(true);

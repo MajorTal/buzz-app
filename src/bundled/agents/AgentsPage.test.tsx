@@ -786,6 +786,60 @@ it("shows an unavailable Goose harness without allowing selection", async () => 
   expect(within(dialog).getByText(/Install the Goose CLI/)).toBeVisible();
 });
 
+it.each(["Create agent", "Edit agent"] as const)(
+  "%s links a missing Harness to Settings › Agents",
+  async (dialogName) => {
+    const open = vi.fn(async () => ({ status: "opened" as const }));
+    setup(
+      "ready",
+      (fixture) => {
+        fixture.data.harnessOptions?.push({
+          command: "goose",
+          label: "Goose",
+          available: false,
+          status: "cli-needed",
+          providers: [],
+        });
+      },
+      undefined,
+      open,
+    );
+    if (dialogName === "Create agent") {
+      await userEvent.click(
+        await screen.findByRole("button", { name: "Add agent" }),
+      );
+    } else {
+      const [card] = await screen.findAllByRole("article", {
+        name: "Agent Fixture agent",
+      });
+      if (!card) throw Error("Missing managed card");
+      await userEvent.click(
+        within(card).getByRole("button", { name: "Actions for Fixture agent" }),
+      );
+      await userEvent.click(
+        await screen.findByRole("menuitem", { name: "Edit" }),
+      );
+    }
+    const dialog = screen.getByRole("dialog", { name: dialogName });
+    fireEvent.change(within(dialog).getByLabelText("Name"), {
+      target: { value: "Edited before setup" },
+    });
+    expect(
+      within(dialog).getByText("Opening Settings discards unsaved edits."),
+    ).toBeVisible();
+    await userEvent.click(
+      within(dialog).getByRole("button", {
+        name: "Open Harnesses in Settings",
+      }),
+    );
+    expect(open).toHaveBeenCalledWith({
+      version: 1,
+      kind: "settings",
+      section: "agents",
+    });
+  },
+);
+
 it("shows Harness, Provider and Model in order while preserving settings on Save", async () => {
   const { f } = setup();
   const original = structuredClone(f.agent.harness);

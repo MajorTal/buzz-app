@@ -1,0 +1,22 @@
+.card {
+  min-width: 0;
+  padding: var(--space-5);
+  border: 1px solid var(--border-standard);
+  border-radius: var(--radius-card);
+  background: var(--surface-inset);
+}
+
+.rows {
+  margin: var(--space-3) 0;
+  padding: 0;
+  list-style: none;
+}
+
+.rows li + li {
+  border-top: 1px solid var(--border-standard);
+}
+
+.command {
+  overflow-wrap: anywhere;
+  user-select: all;
+}

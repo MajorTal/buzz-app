@@ -71,12 +71,14 @@ export interface AgentView {
 export interface ControlSnapshot {
   agents: AgentView[];
   runtimeAvailable: boolean;
-  /** Native-owned editing suggestions, not installation or execution evidence.
+  /** Native executable presence and editing suggestions, not sign-in or execution evidence.
    * Optional so an older running native host retains editable custom values. */
   harnessOptions?: {
     command: string;
     label: string;
     available?: boolean;
+    /** Executable presence only; Pi also needs Node.js for its adapter. */
+    status?: "ready" | "cli-needed" | "adapter-needed";
     defaultArgs?: string[];
     providers: { value: string; label: string }[];
   }[];

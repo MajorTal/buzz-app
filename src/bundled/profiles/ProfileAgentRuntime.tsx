@@ -1,5 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type { AgentControl } from "../../features/agents/control";
+import type { OpenResult } from "../../features/navigation/controller";
 import { exactProfileAgent } from "../../features/profiles/instance-target";
 import { agentProcessLabel } from "../agents/agent-edit";
 import { AgentEditor } from "../agents/AgentEditor";
@@ -11,12 +12,14 @@ import styles from "./Profiles.module.css";
  * native identity is unambiguous; the caller supplies ownership evidence. */
 export function ProfileAgentRuntime({
   control,
+  onOpenHarnesses,
   scope,
   pubkey,
   instanceId,
   owned = false,
 }: {
   control: AgentControl;
+  onOpenHarnesses?: (() => Promise<OpenResult>) | undefined;
   scope: string;
   pubkey: string;
   instanceId?: string | undefined;
@@ -97,6 +100,15 @@ export function ProfileAgentRuntime({
           control={control}
           state={state}
           onClose={() => setEditing(false)}
+          onOpenHarnesses={
+            onOpenHarnesses
+              ? () => {
+                  void onOpenHarnesses().then((result) => {
+                    if (result.status === "opened") setEditing(false);
+                  });
+                }
+              : undefined
+          }
         />
       )}
     </section>

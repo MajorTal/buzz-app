@@ -142,6 +142,9 @@ function ProfileDetails({
     selection.snapshot,
   );
   const profile = profiles.get(pubkey);
+  const openHarnesses = navigation
+    ? () => navigation.open({ version: 1, kind: "settings", section: "agents" })
+    : undefined;
   const [status, setStatus] = useState<"loading" | "ready" | "error">(
     "loading",
   );
@@ -394,6 +397,7 @@ function ProfileDetails({
                     {control && scope && (
                       <ProfileAgentRuntime
                         control={control}
+                        onOpenHarnesses={openHarnesses}
                         scope={scope}
                         pubkey={pubkey}
                         instanceId={instanceId}
@@ -506,6 +510,7 @@ function ProfileDetails({
                   runtimeAgent ? (
                     <ProfileRuntime
                       control={control}
+                      onOpenHarnesses={openHarnesses}
                       agent={runtimeAgent}
                       session={session}
                       owner={verifiedOwner}

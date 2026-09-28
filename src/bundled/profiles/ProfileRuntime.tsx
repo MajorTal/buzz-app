@@ -13,6 +13,7 @@ import type {
   RestartDiffEntry,
 } from "../../features/agents/control";
 import { useAgentControl } from "../../features/agents/control-react";
+import type { OpenResult } from "../../features/navigation/controller";
 import { exactProfileAgent } from "../../features/profiles/instance-target";
 import { sameCommunityAgents } from "../../features/agents/choices";
 import { useIdentityNames } from "../../features/identity-names/react";
@@ -58,6 +59,7 @@ const noState = () => null;
 /** Owner-only saved and running configuration. The caller verifies ownership. */
 export function ProfileRuntime({
   control,
+  onOpenHarnesses,
   agent,
   session,
   owner,
@@ -66,6 +68,7 @@ export function ProfileRuntime({
   onOpenLog,
 }: {
   control: AgentControl;
+  onOpenHarnesses?: (() => Promise<OpenResult>) | undefined;
   agent: AgentView;
   session: RelaySession;
   owner: string;
@@ -231,6 +234,15 @@ export function ProfileRuntime({
           control={control}
           state={state}
           onClose={() => setEditing(false)}
+          onOpenHarnesses={
+            onOpenHarnesses
+              ? () => {
+                  void onOpenHarnesses().then((result) => {
+                    if (result.status === "opened") setEditing(false);
+                  });
+                }
+              : undefined
+          }
         />
       )}
       {notice && (

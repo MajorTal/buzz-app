@@ -30,8 +30,10 @@ export function AgentEditor({
   state,
   avatar,
   onClose,
+  onOpenHarnesses,
 }: {
   agent: AgentView;
+  onOpenHarnesses?: (() => void) | undefined;
   displayName?: string;
   control: AgentControl;
   state: AgentControlState;
@@ -183,6 +185,8 @@ export function AgentEditor({
                 disabled={state.busy}
                 environmentKeys={agent.harness.environmentKeys}
                 onChange={change}
+                onOpenHarnesses={onOpenHarnesses}
+                discardEdits={dirty}
               />
               <div className="-mx-2">
                 <Accordion

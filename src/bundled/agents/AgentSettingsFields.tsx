@@ -30,8 +30,12 @@ export function AgentSettingsFields({
   disabled,
   environmentKeys = [],
   onChange,
+  onOpenHarnesses,
+  discardEdits = false,
 }: {
   id?: string | undefined;
+  onOpenHarnesses?: (() => void) | undefined;
+  discardEdits?: boolean;
   savedRevision?: number | undefined;
   draft: AgentDraft;
   control: AgentControl;
@@ -114,6 +118,8 @@ export function AgentSettingsFields({
             }
             piProviders={piProviders}
             onChange={change}
+            onOpenHarnesses={onOpenHarnesses}
+            discardEdits={discardEdits}
           />
           {goose && gooseProvider === null && (
             <p role="status" className="text-body-sm text-secondary">

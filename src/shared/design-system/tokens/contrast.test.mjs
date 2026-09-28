@@ -76,7 +76,8 @@ describe("semantic contrast contract", () => {
 
   it.each([
     ["online", "green"],
-    ["away", "amber"],
+    ["avatar-online-border", "green"],
+    ["avatar-away-border", "amber"],
     ["offline", "neutral"],
   ])("checks %s status on supported surfaces in both modes", (role, hue) => {
     const result = check(
@@ -93,6 +94,25 @@ describe("semantic contrast contract", () => {
       `dark: --status-${role} on --surface-popover`,
     );
   });
+
+  it.each([
+    ["online", "green"],
+    ["away", "amber"],
+  ])(
+    "rejects a %s outline that disappears on hover or selection",
+    (role, hue) => {
+      const result = check(
+        tokens.replaceAll(
+          `--status-avatar-${role}-border: var(--${hue}-11);`,
+          `--status-avatar-${role}-border: var(--${hue}-10);`,
+        ),
+      );
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).toContain(
+        `light: --status-avatar-${role}-border on --affordance-selected`,
+      );
+    },
+  );
 
   it.each(["warning", "success", "accent"])(
     "checks %s text against its semantic fill, not only the palette",

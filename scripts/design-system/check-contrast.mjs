@@ -151,7 +151,10 @@ const BOUNDARY_ROLES = [
   "--border-danger",
   "--border-warning",
   "--status-online",
-  "--status-away",
+  // Avatar cores are inset inside a same-status outline. The outline, not
+  // the core, touches the surrounding surface (WCAG 1.4.11 graphic boundary).
+  "--status-avatar-online-border",
+  "--status-avatar-away-border",
   "--status-offline",
 ];
 
@@ -253,7 +256,17 @@ for (const [mode, map] of Object.entries(modes)) {
   for (const [role, fill] of PAIRS) check(role, fill);
   for (const [text, tint] of TINT_PAIRS) check(text, tint);
   for (const role of BOUNDARY_ROLES) {
-    for (const surface of BOUNDARY_SURFACES) {
+    const surfaces = role.startsWith("--status-avatar-")
+      ? [
+          ...BOUNDARY_SURFACES,
+          "--affordance-selected",
+          "--affordance-panel-hover",
+          "--affordance-subtle-hover",
+          "--affordance-floating-hover",
+          "--neutral-4",
+        ]
+      : BOUNDARY_SURFACES;
+    for (const surface of surfaces) {
       const borderColor = resolve(map, role);
       const surfaceColor = resolve(map, surface);
       const ratio =

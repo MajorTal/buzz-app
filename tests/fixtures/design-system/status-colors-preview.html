@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Avatar badge colors</title>
+    <style>
+      body { margin: 0; padding: 24px; background: var(--surface-inset); color: var(--text-standard); }
+      main { max-width: 1120px; margin: auto; }
+      h1 { font-size: 28px; margin: 0 0 8px; }
+      h2 { font-size: 18px; margin: 0 0 16px; }
+      p { margin: 8px 0; }
+      .comparison { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 24px 0; }
+      .panel { padding: 12px; border-radius: 16px; background: var(--surface-panel); color: var(--text-standard); }
+      .panel.before { --status-away: var(--amber-11); --status-avatar-online: var(--green-11); }
+      .avatar-row { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 16px; }
+      .sizes { display: flex; align-items: center; gap: 4px; }
+      .panel.before .buzz-avatar-status-dot::after { content: none; }
+      .example { display: grid; justify-items: center; gap: 8px; }
+      .note { font-size: 14px; }
+      @media (max-width: 650px) { body { padding: 16px; } .comparison { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body><div id="root"></div><script type="module" src="./status-colors-preview.tsx"></script></body>
+</html>

@@ -67,6 +67,12 @@ clipped artwork, and avatars without a badge retain their full shape. The agent
 cutout and badge follow the squircle contour; agent badges use live presence and leave
 unknown status unbadged. All three statuses use solid fills: green for Online,
 yellow for Away, and grey for Offline, with semantic light and dark values.
+Online and Away retain step-10 centers inside a 1px inset, same-hue step-11
+outline. The outline supplies the 3:1 non-text boundary on panel, popup,
+selected and hover surfaces; measure that rendered boundary, not the inset
+center against a surface it does not touch. Offline stays unoutlined. The
+badge footprint and Bézier artwork cutout are unchanged. This establishes
+boundary contrast, not a blanket WCAG conformance claim for presence.
 
 ## Public identity text
 

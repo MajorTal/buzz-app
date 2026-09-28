@@ -504,7 +504,10 @@
   --text-warning: var(--amber-12);
   --text-success: var(--green-12);
   --status-online: var(--green-11);
-  --status-away: var(--amber-11);
+  --status-avatar-online: var(--green-10);
+  --status-avatar-online-border: var(--green-11);
+  --status-away: var(--amber-10);
+  --status-avatar-away-border: var(--amber-11);
   --status-offline: var(--neutral-8);
   --text-accent: var(--purple-12);
   --text-link: var(--blue-12);
@@ -556,7 +559,10 @@
   --text-warning: var(--amber-12);
   --text-success: var(--green-12);
   --status-online: var(--green-11);
-  --status-away: var(--amber-11);
+  --status-avatar-online: var(--green-10);
+  --status-avatar-online-border: var(--green-11);
+  --status-away: var(--amber-10);
+  --status-avatar-away-border: var(--amber-11);
   --status-offline: var(--neutral-10);
   --text-accent: var(--purple-12);
   --text-link: var(--blue-12);

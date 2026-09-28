@@ -1,3 +1,4 @@
+import { messageEditText, validateMessageEdit } from "./message-edit";
 import {
   useEffect,
   useEffectEvent,
@@ -28,9 +29,10 @@ export function lastEditableMessage(
           row.delivery === "seen") &&
         !pending.some(
           (item) =>
-            item.event.kind === 40003 &&
-            item.delivery !== "accepted" &&
-            item.delivery !== "seen" &&
+            ((item.event.kind === 40003 &&
+              item.delivery !== "accepted" &&
+              item.delivery !== "seen") ||
+              item.event.kind === 5) &&
             item.event.tags.some(([name, id]) => name === "e" && id === row.id),
         ),
     );
@@ -47,6 +49,7 @@ export function useMessageEdit(session: RelaySession, restore: () => void) {
   const [target, setTarget] = useState<ChannelMessage>();
   const [operation, setOperation] = useState<string>();
   const submitted = useRef<string | undefined>(undefined);
+  const initial = useRef<string | undefined>(undefined);
   const [error, setError] = useState<string>();
   const pending = useSyncExternalStore(
     session.outbox?.subscribe ?? subscribe,
@@ -62,6 +65,7 @@ export function useMessageEdit(session: RelaySession, restore: () => void) {
     setTarget(undefined);
     setOperation(undefined);
     submitted.current = undefined;
+    initial.current = undefined;
     setError(undefined);
   };
   const finish = useEffectEvent(close);
@@ -85,7 +89,12 @@ export function useMessageEdit(session: RelaySession, restore: () => void) {
     start(row: ChannelMessage) {
       setTarget(row);
       setError(undefined);
-      return source(row);
+      initial.current = messageEditText(
+        row,
+        session.profiles.snapshot(),
+        session.agentLibrary.snapshot().identities,
+      );
+      return initial.current;
     },
     save(body: string, current: ChannelMessage | undefined) {
       if (!target || submitted.current || !body.trim()) return;
@@ -99,14 +108,14 @@ export function useMessageEdit(session: RelaySession, restore: () => void) {
         );
         return;
       }
-      if (body === source(target)) {
+      if (body === initial.current || body === source(target)) {
         close();
         return;
       }
       try {
         const id = session.messages.edit(
           target.id,
-          body,
+          validateMessageEdit(target, source(target), body),
           current.attachmentSourceId ?? current.id,
         );
         submitted.current = id;

@@ -1469,6 +1469,34 @@ test("edit capability signs and publishes canonical replacements, rejecting malf
     });
     expect((await h.post("publish", event)).status).toBe(200);
     expect(h.publications).toEqual([JSON.parse(JSON.stringify(event))]);
+    // Preserve older clients' metadata as well as current upload descriptors.
+    for (const imeta of [
+      [
+        "imeta",
+        "url https://example.com/image.png",
+        "m image/png",
+        "dim 320x200",
+      ],
+      [
+        "imeta",
+        `url ${fixtureRelayUrl}/media/${"a".repeat(64)}.pdf`,
+        "m application/pdf",
+        "size 3",
+        `x ${"a".repeat(64)}`,
+        "filename report.pdf",
+      ],
+    ]) {
+      const caption = { ...template, tags: [...template.tags, imeta] };
+      const signed = await h.post("sign", caption);
+      expect(signed.status).toBe(200);
+      const replacement = await signed.json();
+      expect(verifyEvent(replacement)).toBe(true);
+      expect(replacement.tags).toEqual(caption.tags);
+      expect((await h.post("publish", replacement)).status).toBe(200);
+      expect(h.publications.at(-1)).toEqual(
+        JSON.parse(JSON.stringify(replacement)),
+      );
+    }
     for (const route of ["sign", "publish"]) {
       for (const tags of [
         [["h", "c"]],
@@ -1481,6 +1509,8 @@ test("edit capability signs and publishes canonical replacements, rejecting malf
           ["e", h.event.id, "", "reply"],
         ],
         [...event.tags, ["e", "a".repeat(64)]],
+        [...event.tags, ["p", "a".repeat(64)]],
+        [...event.tags, ["imeta", 42]],
       ])
         expect((await h.post(route, { ...event, tags })).status).toBe(400);
       expect((await h.post(route, { ...event, content: " " })).status).toBe(
@@ -1490,7 +1520,7 @@ test("edit capability signs and publishes canonical replacements, rejecting malf
         (await h.post(route, { ...event, content: "x".repeat(32001) })).status,
       ).toBe(400);
     }
-    expect(h.publications).toHaveLength(1);
+    expect(h.publications).toHaveLength(3);
   } finally {
     await h.close();
   }
@@ -1846,6 +1876,42 @@ test("memory reads use captured relay and owner, not submitted identity/filter a
       transport.readAgentMemories(author, new AbortController().signal),
     ).rejects.toMatchObject({ name: "MemoryDenied" });
     expect(h.calls).toHaveLength(2);
+  } finally {
+    await h.close();
+  }
+});
+
+test("broker advertises, signs and publishes bounded edits through the real HTTP contract", async () => {
+  const h = await harness(() => new Response("[]"));
+  try {
+    await h.start();
+    const session = await (await h.get("session")).json();
+    expect(session.writeKinds).toContain(40003);
+    const template = {
+      kind: 40003,
+      content: "corrected text",
+      created_at: 1700000000,
+      tags: [
+        ["h", "c"],
+        ["e", h.event.id],
+        ["client-id", "edit-test"],
+      ],
+    };
+    const signed = await h.post("sign", template);
+    expect(signed.status).toBe(200);
+    const event = await signed.json();
+    expect(verifyEvent(event)).toBe(true);
+    expect(event.pubkey).toBe(h.event.pubkey);
+    const published = await h.post("publish", event);
+    expect(published.status).toBe(200);
+    expect(h.publications.some((item) => item.id === event.id)).toBe(true);
+    for (const route of ["sign", "publish"]) {
+      const rejected = await h.post(route, {
+        ...event,
+        tags: [...event.tags, ["p", "b".repeat(64)]],
+      });
+      expect(rejected.status).toBe(400);
+    }
   } finally {
     await h.close();
   }

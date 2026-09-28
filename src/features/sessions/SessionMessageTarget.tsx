@@ -12,6 +12,7 @@ import type { PageNavigation } from "../navigation/service";
 import type { RelaySession } from "../relay/session";
 import type { ThreadView } from "../relay/threads";
 import { useRowProfiles } from "../relay/react";
+import { useMessageEditScope } from "../messages/MessageEditScope";
 import { MessageRow } from "../messages/MessageRow";
 import { useMessageReveal } from "../messages/use-message-reveal";
 import { useReading } from "../messages/use-reading";
@@ -97,6 +98,24 @@ function SelectedMessage({
     view.snapshot,
     view.snapshot,
   );
+  const editor = useMessageEditScope();
+  useEffect(() => {
+    if (!editor) return;
+    // Read the exact owner's current projection at edit time, not a captured row
+    // or a timeline insertion. Aborted/deleted targets must stay unavailable.
+    const exactRows = () => {
+      const current = view.snapshot();
+      return !navigation.signal.aborted &&
+        current.targetStatus === "ready" &&
+        current.target
+        ? [current.target]
+        : [];
+    };
+    editor.exactRows = exactRows;
+    return () => {
+      if (editor.exactRows === exactRows) editor.exactRows = undefined;
+    };
+  }, [editor, view, navigation]);
   const target =
     snapshot.targetStatus === "ready" ? snapshot.target : undefined;
   const rows = useMemo(() => (target ? [target] : []), [target]);

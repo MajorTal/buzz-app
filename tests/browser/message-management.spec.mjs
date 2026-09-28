@@ -1,0 +1,370 @@
+import { test, expect } from "./fixture.mjs";
+import { open } from "./timeline.mjs";
+import { npubEncode } from "nostr-tools/nip19";
+
+test.use({
+  productionBroker: true,
+  dmLabels: true,
+  historyCounts: { alpha: 2, beta: 1 },
+});
+
+// Real shared-row/portal integration, keyboard focus and responsive geometry;
+// failure, retry, identity and permission matrices stay in lower-layer tests.
+test("manage a channel message and its thread", async ({ page, app }) => {
+  await open(page, app);
+  const mention = `[@Morgarita](nostr:${npubEncode("b".repeat(64))})`;
+  const event = app.append("primary", "alpha", `${mention} whats your name`);
+  const row = page.locator(
+    `[data-channel-timeline] [data-message-id="${event.id}"]`,
+  );
+  await expect(row).toBeVisible();
+  const trigger = row.getByRole("button", { name: "More message actions" });
+  await row.hover();
+  await trigger.click();
+  await page
+    .getByRole("menuitem", { name: "Edit message", exact: true })
+    .click();
+  const editor = page.getByRole("textbox", {
+    name: "Edit message",
+    exact: true,
+  });
+  await expect(editor).toBeFocused();
+  await expect(page.getByRole("dialog", { name: "Edit message" })).toHaveCount(
+    0,
+  );
+  await expect(editor.locator('.inline-chip[data-kind="person"]')).toHaveText(
+    "@Morgarita",
+  );
+  await expect(editor).not.toContainText("nostr:");
+  await expect(page.getByRole("listbox", { name: /suggestions/i })).toHaveCount(
+    0,
+  );
+  for (const width of [1440, 900, 390]) {
+    await page.setViewportSize({ width, height: 850 });
+    const bounds = await editor.boundingBox();
+    const chip = await editor.locator(".inline-chip").boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    expect(chip.x).toBeGreaterThanOrEqual(bounds.x);
+    expect(chip.x + chip.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+  }
+  await page.setViewportSize({ width: 1440, height: 950 });
+  await editor.press("End");
+  await editor.pressSequentially("? Management corrected");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(row).toContainText("Management corrected");
+  await expect
+    .poll(() =>
+      app.report.publications.some(({ event: item }) => item.kind === 40003),
+    )
+    .toBe(true);
+  const saved = app.report.publications.find(
+    ({ event: item }) => item.kind === 40003,
+  ).event;
+  expect(saved.content).toBe(
+    `${mention} whats your name? Management corrected`,
+  );
+  expect(saved.tags.filter(([name]) => name === "p")).toEqual([]);
+  await expect(page.getByText("Editing message", { exact: true })).toHaveCount(
+    0,
+  );
+  await row.hover();
+  await row.getByRole("button", { name: "Reply", exact: true }).click();
+  const thread = page.getByRole("complementary", {
+    name: "Thread",
+    exact: true,
+  });
+  const root = thread.locator(`[data-message-id="${event.id}"]`);
+  await root.hover();
+  await root.getByRole("button", { name: "More message actions" }).click();
+  await page
+    .getByRole("menuitem", { name: "Edit message", exact: true })
+    .click();
+  const threadEditor = thread.getByRole("textbox", {
+    name: "Edit message",
+    exact: true,
+  });
+  await expect(threadEditor).toBeFocused();
+  await threadEditor.fill("Edited from thread");
+  await thread.getByRole("button", { name: "Save changes" }).click();
+  await expect(root).toContainText("Edited from thread");
+  await expect(row).toContainText("Edited from thread");
+  await page.getByRole("button", { name: "Close thread", exact: true }).click();
+  for (const width of [900, 390]) {
+    await page.setViewportSize({ width, height: 850 });
+    await row.scrollIntoViewIfNeeded();
+    await row.hover();
+    await trigger.click();
+    await page
+      .getByRole("menuitem", { name: "Delete message", exact: true })
+      .click();
+    const confirmation = page.getByRole("alertdialog", {
+      name: "Delete message?",
+    });
+    await expect(confirmation).toBeVisible();
+    const bounds = await confirmation.boundingBox();
+    expect(bounds.x).toBeGreaterThanOrEqual(0);
+    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
+    await confirmation.getByRole("button", { name: "Cancel" }).click();
+    await expect(row).toBeVisible();
+    await expect(trigger).toBeFocused();
+  }
+  await trigger.click();
+  await page
+    .getByRole("menuitem", { name: "Delete message", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(row).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Message #Alpha", exact: true }),
+  ).toBeFocused();
+  const deletion = app.report.publications.find(
+    ({ event: item }) => item.kind === 5,
+  ).event;
+  expect(deletion.tags).toContainEqual(["e", event.id]);
+  expect(deletion.pubkey).toBe(event.pubkey);
+});
+
+test("deleting a thread reply returns focus to the surviving thread composer", async ({
+  page,
+  app,
+}) => {
+  await open(page, app);
+  const root = app.append("primary", "alpha", "Thread deletion root");
+  const channelRow = page.locator(
+    `[data-channel-timeline] [data-message-id="${root.id}"]`,
+  );
+  await expect(channelRow).toBeVisible();
+  await channelRow.hover();
+  await channelRow.getByRole("button", { name: "Reply", exact: true }).click();
+  const thread = page.getByRole("complementary", {
+    name: "Thread",
+    exact: true,
+  });
+  const reply = app.append(
+    "primary",
+    "alpha",
+    "My thread reply",
+    true,
+    true,
+    root.id,
+  );
+  const replyRow = thread.locator(`[data-message-id="${reply.id}"]`);
+  await expect(replyRow).toBeVisible();
+  await replyRow.hover();
+  await replyRow.getByRole("button", { name: "More message actions" }).click();
+  await page
+    .getByRole("menuitem", { name: "Delete message", exact: true })
+    .click();
+  await expect(
+    page.getByRole("alertdialog", { name: "Delete message?" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(replyRow).toHaveCount(0);
+  await expect(
+    thread.getByRole("textbox", { name: "Reply to thread" }),
+  ).toBeFocused();
+  const rootRow = thread.locator(`[data-message-id="${root.id}"]`);
+  await rootRow.hover();
+  await rootRow.getByRole("button", { name: "More message actions" }).click();
+  await page
+    .getByRole("menuitem", { name: "Delete message", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Delete", exact: true }).click();
+  await expect(channelRow).toHaveCount(0);
+  await expect(page.getByRole("alertdialog")).toHaveCount(0);
+  await expect(
+    page.getByRole("textbox", { name: "Message #Alpha", exact: true }),
+  ).toBeFocused();
+});
+
+test("DM menus edit own messages but never expose destructive actions for peers", async ({
+  page,
+  app,
+}) => {
+  await open(page, app);
+  await page
+    .getByRole("navigation", { name: "Subscribed channels" })
+    .getByRole("button", { name: "Alice Fixture", exact: true })
+    .click();
+  const timeline = page.locator("[data-channel-timeline]");
+  const channel = await timeline.getAttribute("data-channel-timeline");
+  const own = app.append("primary", channel, "Own DM message");
+  const row = timeline.locator(`[data-message-id="${own.id}"]`);
+  await row.hover();
+  await row.getByRole("button", { name: "More message actions" }).click();
+  await page
+    .getByRole("menuitem", { name: "Edit message", exact: true })
+    .click();
+  const dmEditor = page.getByRole("textbox", {
+    name: "Edit message",
+    exact: true,
+  });
+  await expect(dmEditor).toBeFocused();
+  await dmEditor.fill("Corrected DM");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(row).toContainText("Corrected DM");
+  const peer = app.append("primary", channel, "Peer DM message", true, false);
+  const peerRow = timeline.locator(`[data-message-id="${peer.id}"]`);
+  await peerRow.hover();
+  await peerRow.getByRole("button", { name: "More message actions" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
+  await expect(
+    page.getByRole("menuitem", { name: "Edit message", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    page.getByRole("menuitem", { name: "Delete message", exact: true }),
+  ).toHaveCount(0);
+});
+
+// The actual composer-to-production-signing boundary previously rejected imeta.
+test("saving an attachment caption preserves its original metadata through the broker", async ({
+  page,
+  app,
+}) => {
+  await open(page, app);
+  const url = "https://fixture.test/media/report.pdf";
+  // Older clients can supply minimal metadata; editing must preserve it verbatim.
+  const imeta = ["imeta", `url ${url}`, "m application/pdf"];
+  const link = `[report.pdf](<${url}>)`;
+  const event = app.append(
+    "primary",
+    "alpha",
+    `Original caption\n\n${link}`,
+    true,
+    true,
+    undefined,
+    undefined,
+    [imeta],
+  );
+  const row = page.locator(
+    `[data-channel-timeline] [data-message-id="${event.id}"]`,
+  );
+  await expect(row).toBeVisible();
+  await row.hover();
+  await row.getByRole("button", { name: "More message actions" }).click();
+  await page
+    .getByRole("menuitem", { name: "Edit message", exact: true })
+    .click();
+  const editor = page.getByRole("textbox", {
+    name: "Edit message",
+    exact: true,
+  });
+  await expect(editor).toBeFocused();
+  await editor.fill(`Corrected caption\n\n${link}`);
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect
+    .poll(
+      () =>
+        app.report.publications.filter(
+          ({ event: item }) =>
+            item.kind === 40003 &&
+            item.tags.some(([name, id]) => name === "e" && id === event.id),
+        ).length,
+    )
+    .toBe(1);
+  const saved = app.report.publications.find(
+    ({ event: item }) =>
+      item.kind === 40003 &&
+      item.tags.some(([name, id]) => name === "e" && id === event.id),
+  ).event;
+  expect(saved.content).toBe(`Corrected caption\n\n${link}`);
+  expect(saved.tags.filter(([name]) => name === "imeta")).toEqual([imeta]);
+  await expect(page.getByText("Editing message", { exact: true })).toHaveCount(
+    0,
+  );
+  await expect(row).toContainText("Corrected caption");
+  await expect(row.getByRole("link", { name: /report.pdf/ })).toHaveAttribute(
+    "href",
+    url,
+  );
+  await expect(page.getByRole("alert")).toHaveCount(0);
+});
+
+// Native tab order and competing portalled modal handlers need a real browser.
+test("media comment deletion keeps keyboard focus in its confirmation", async ({
+  page,
+  app,
+}) => {
+  await page.route("https://fixture.test/media/review.png", (route) => {
+    return route.fulfill({
+      contentType: "image/png",
+      body: Buffer.from(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Y79d4sAAAAASUVORK5CYII=",
+        "base64",
+      ),
+    });
+  });
+  await open(page, app);
+  const url = "https://fixture.test/media/review.png";
+  const root = app.append(
+    "primary",
+    "alpha",
+    `Review image\n\n${url}`,
+    true,
+    true,
+    undefined,
+    undefined,
+    [["imeta", `url ${url}`, "m image/png"]],
+  );
+  const comment = app.append(
+    "primary",
+    "alpha",
+    "My review comment",
+    true,
+    true,
+    root.id,
+  );
+  const row = page.locator(
+    `[data-channel-timeline] [data-message-id="${root.id}"]`,
+  );
+  const opener = row.getByRole("link", { name: "Open image attachment" });
+  await opener.focus();
+  await opener.press("Enter");
+  const viewer = page.getByRole("dialog", { name: "Image viewer" });
+  await expect(viewer).toBeVisible();
+  const commentRow = viewer.locator(`[data-message-id="${comment.id}"]`);
+  const trigger = commentRow.getByRole("button", {
+    name: "More message actions",
+  });
+  const confirmation = page.getByRole("alertdialog", {
+    name: "Delete message?",
+  });
+  for (const cancelWith of ["Escape", "Cancel"]) {
+    await commentRow.hover();
+    await trigger.click();
+    await page
+      .getByRole("menuitem", { name: "Delete message", exact: true })
+      .click();
+    const cancel = confirmation.getByRole("button", {
+      name: "Cancel",
+      exact: true,
+    });
+    const remove = confirmation.getByRole("button", {
+      name: "Delete",
+      exact: true,
+    });
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(remove).toBeFocused();
+    await page.keyboard.press("Tab");
+    await expect(cancel).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(remove).toBeFocused();
+    await page.keyboard.press("Shift+Tab");
+    await expect(cancel).toBeFocused();
+    if (cancelWith === "Escape") await page.keyboard.press("Escape");
+    else await cancel.click();
+    await expect(confirmation).toHaveCount(0);
+    await expect(viewer).toBeVisible();
+    await expect(trigger).toBeFocused();
+    await expect(commentRow).toBeVisible();
+  }
+  // The viewer resumes keyboard ownership after confirmation dismissal.
+  await page.keyboard.press("Escape");
+  await expect(viewer).toHaveCount(0);
+  await expect(
+    row.getByRole("link", { name: "Open image attachment" }),
+  ).toBeFocused();
+});

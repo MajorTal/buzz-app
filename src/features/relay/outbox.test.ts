@@ -349,6 +349,125 @@ it("optimistic edits fold against retained message events and a rejected edit ro
   await flush();
   expect(h.session.channels.window("c").rows[0]?.content).toBe("Original");
 });
+it("rapid edits keep their submission order after acceptance and replay", async () => {
+  const h = setup();
+  await h.open();
+  const original = signed(viewer, {
+    kind: 9,
+    tags: [["h", "c"]],
+    content: "Original",
+  });
+  h.session.channels.refresh?.("c");
+  h.next().respond([
+    original,
+    bounds(relay, "c", "head", { has_more: false, next_cursor: null }),
+  ]);
+  await flush();
+  const now = vi.spyOn(Date, "now").mockReturnValue(1_790_000_000_000);
+  try {
+    h.session.messages.edit(original.id, "First edit", original.id);
+    const first = await h.signNext();
+    h.publications.shift()?.resolve();
+    await flush();
+    h.session.messages.edit(original.id, "Second edit", original.id);
+    const second = await h.signNext();
+    expect(second.created_at).toBe(first.created_at + 1);
+    h.publications.shift()?.resolve();
+    await flush();
+    expect(h.session.channels.window("c").rows[0]?.content).toBe("Second edit");
+    // The same signed events must fold correctly outside the local journal.
+    const replay = setup();
+    await replay.open();
+    replay.session.channels.refresh?.("c");
+    replay
+      .next()
+      .respond([
+        second,
+        original,
+        first,
+        bounds(relay, "c", "head", { has_more: false, next_cursor: null }),
+      ]);
+    await flush();
+    expect(replay.session.channels.window("c").rows[0]?.content).toBe(
+      "Second edit",
+    );
+  } finally {
+    now.mockRestore();
+  }
+});
+
+it("edit timestamps include restored and queued intent, isolate targets, and reject excessive clock lead", async () => {
+  const seconds = 1_790_000_000;
+  const target = "a".repeat(64);
+  const previous = signed(viewer, {
+    kind: 40003,
+    created_at: seconds,
+    content: "Previous",
+    tags: [
+      ["h", "c"],
+      ["e", target],
+    ],
+  });
+  let loaded!: (items: readonly OutgoingEvent[]) => void;
+  const storage: OutboxStorage = {
+    load: () =>
+      new Promise((resolve) => {
+        loaded = resolve;
+      }),
+    save: vi.fn(),
+  };
+  const h = setup(storage);
+  const input = {
+    kind: 40003,
+    content: "Next",
+    tags: [
+      ["h", "c"],
+      ["e", target],
+    ],
+  };
+  const now = vi.spyOn(Date, "now").mockReturnValue(seconds * 1000);
+  try {
+    expect(() => h.outbox.send(input)).toThrow("still loading");
+    loaded([{ event: previous, signed: previous, delivery: "seen" }]);
+    await h.outbox.ready();
+    const first = h.outbox.send(input);
+    const second = h.outbox.send({ ...input, content: "Third" });
+    expect(
+      h.outbox.snapshot().find(({ event }) => event.id === first)?.event
+        .created_at,
+    ).toBe(seconds + 1);
+    expect(
+      h.outbox.snapshot().find(({ event }) => event.id === second)?.event
+        .created_at,
+    ).toBe(seconds + 2);
+    const other = h.outbox.send({
+      ...input,
+      tags: [
+        ["h", "c"],
+        ["e", "b".repeat(64)],
+      ],
+    });
+    const otherChannel = h.outbox.send({
+      ...input,
+      tags: [
+        ["h", "d"],
+        ["e", target],
+      ],
+    });
+    for (const id of [other, otherChannel])
+      expect(
+        h.outbox.snapshot().find(({ event }) => event.id === id)?.event
+          .created_at,
+      ).toBe(seconds);
+    const before = h.outbox.snapshot();
+    now.mockReturnValue((seconds - 60) * 1000);
+    expect(() => h.outbox.send(input)).toThrow("clock changed");
+    expect(h.outbox.snapshot()).toBe(before);
+  } finally {
+    now.mockRestore();
+  }
+});
+
 it("optimistic profile edits reach the shared profile directory without a channel", () => {
   const h = setup();
   h.outbox.send({

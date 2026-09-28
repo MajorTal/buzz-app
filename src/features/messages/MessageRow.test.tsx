@@ -869,3 +869,37 @@ it.each([
     cleanup();
   },
 );
+
+it.each(["sending", "failed"] as const)(
+  "does not leave an orphan menu separator on a %s own message",
+  async (delivery) => {
+    const snapshot = { channels: [], status: "ready" };
+    const session = {
+      viewer: row.authorId,
+      channels: { list: () => snapshot, subscribeList: () => () => {} },
+      messages: {},
+      unread: { subscribe: () => () => {}, snapshot: () => undefined },
+    } as unknown as RelaySession;
+    renderDom(
+      <MessageRow
+        row={{ ...row, delivery }}
+        session={session}
+        profile={undefined}
+        media={() => undefined}
+        onOpenLink={() => false}
+        day={false}
+        retry={undefined}
+      />,
+    );
+    try {
+      fireEvent.click(
+        screen.getByRole("button", { name: "More message actions" }),
+      );
+      await screen.findByRole("menu");
+      expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+      expect(screen.queryByRole("separator")).toBeNull();
+    } finally {
+      cleanup();
+    }
+  },
+);

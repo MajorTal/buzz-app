@@ -125,32 +125,37 @@ export function MentionCompletion({
         ? { status: "Loading recipients…" }
         : model.directory.error
           ? { status: model.directory.error }
-          : model.archives.status === "error"
-            ? { status: "Archive information unavailable. Retry to refresh." }
-            : agents.status === "error" || agents.error
-              ? { status: "Could not load agents. Retry to refresh." }
-              : admitted && membershipMissing
-                ? { status: "Channel membership unavailable." }
-                : admitted && membershipError
-                  ? { status: "Could not refresh channel membership." }
-                  : error || missing
-                    ? {
-                        status:
-                          "Some names unavailable. Exact public keys still identify recipients.",
-                      }
-                    : model.directory.loading
-                      ? { status: "Searching community…" }
-                      : model.directory.more || model.truncated
-                        ? { status: "Narrow your search to see more members." }
-                        : {}),
+          : !admitted
+            ? {}
+            : model.archives.status === "error"
+              ? { status: "Archive information unavailable. Retry to refresh." }
+              : agents.status === "error" || agents.error
+                ? { status: "Could not load agents. Retry to refresh." }
+                : admitted && membershipMissing
+                  ? { status: "Channel membership unavailable." }
+                  : admitted && membershipError
+                    ? { status: "Could not refresh channel membership." }
+                    : error || missing
+                      ? {
+                          status:
+                            "Some names unavailable. Exact public keys still identify recipients.",
+                        }
+                      : model.directory.loading
+                        ? { status: "Searching community…" }
+                        : model.directory.more || model.truncated
+                          ? {
+                              status: "Narrow your search to see more members.",
+                            }
+                          : {}),
       ...(model.directory.error ||
-      model.archives.status === "error" ||
-      agents.status === "error" ||
-      agents.error ||
-      membershipMissing ||
-      membershipError ||
-      error ||
-      missing
+      (admitted &&
+        (model.archives.status === "error" ||
+          agents.status === "error" ||
+          agents.error ||
+          membershipMissing ||
+          membershipError ||
+          error ||
+          missing))
         ? {
             retry: () => {
               model.directory.retry();

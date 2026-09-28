@@ -15,6 +15,10 @@ import {
   useChannelWindow,
   useRelayConnection,
 } from "../../features/relay/react";
+import {
+  MessageManagement,
+  MessageManagementStatus,
+} from "../../features/messages/MessageManagement";
 import { ChannelTimeline } from "../../features/messages/ChannelTimeline";
 import { rejectUnhandledFileDrop } from "../../features/messages/use-file-drop";
 import { MessageComposer } from "../../features/messages/MessageComposer";
@@ -204,7 +208,7 @@ function SessionWork({
     },
     [navigator, targetForLink],
   );
-  return (
+  const workspace = (
     // biome-ignore lint/a11y/noStaticElementInteractions: pane file-drop fallback; the composer provides a keyboard-accessible picker.
     <div
       className={styles.work}
@@ -214,6 +218,7 @@ function SessionWork({
     >
       <SessionHeading channel={channel} parentName={parentName} />
       <SessionColumn>
+        <MessageManagementStatus />
         <div className={styles.timeline}>
           {window.status === "error" && !window.rows.length ? (
             <div className={styles.empty} role="alert">
@@ -257,6 +262,11 @@ function SessionWork({
         />
       </SessionColumn>
     </div>
+  );
+  return (
+    <MessageManagement session={session} channelId={channel.id}>
+      {workspace}
+    </MessageManagement>
   );
 }
 

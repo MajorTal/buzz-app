@@ -195,11 +195,12 @@ describe("cross-client rich content compatibility", () => {
     expect(row?.attachments).toEqual([]);
   });
 
-  it("emits original imeta tags on text edits so old clients retain attachments", () => {
+  it("emits original imeta tags on text edits so old clients retain attachments", async () => {
     const original = message(alice, channel, `Original ${imageUrl}`, 10, [
       imageIMeta(),
     ]);
     const outbox = localOutbox(alice.pubkey);
+    await outbox.ready();
     const messages = createMessages(
       outbox,
       alice.pubkey,

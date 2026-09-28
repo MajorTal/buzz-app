@@ -40,6 +40,7 @@ import { readView, writeView } from "../../shared/view-state";
 import { emojiMatches, type CustomEmoji } from "../relay/emoji";
 import { CustomEmoji as CustomEmojiImage } from "../../bundled/emoji/CustomEmoji";
 import type { ComposerInputElement } from "./composer-dom";
+import { profileTarget } from "../profiles/target";
 import { setRememberAgentsPreference } from "./mention-preferences";
 
 composerDOMFixture();
@@ -2290,21 +2291,74 @@ it.each(["changed", "deleted"])(
   },
 );
 
-it("does not publish blank or unchanged content and preserves attachment source", () => {
-  const h = mount({}, undefined, first.pubkey);
-  const sourceContent =
-    "Caption\n\n[report.pdf](https://files.test/report.pdf)";
-  h.setRows([editableMessage({ content: "Caption", sourceContent })]);
-  fireEvent.keyDown(h.input(), { key: "ArrowUp" });
-  expect(h.input()).toHaveValue(sourceContent);
-  h.fill(" ");
-  h.submit();
-  expect(screen.getByText("Editing message")).toBeVisible();
-  h.fill(sourceContent);
-  h.submit();
-  expect(screen.queryByText("Editing message")).not.toBeInTheDocument();
-  expect(h.messages.edit).not.toHaveBeenCalled();
-});
+it.each([false, true])(
+  "does not publish blank or unchanged content and preserves attachment source (mention: %s)",
+  (mention) => {
+    const h = mount({}, undefined, first.pubkey);
+    h.setProfiles(
+      new Map([[second.pubkey, { id: second.pubkey, name: "Honey" }]]),
+    );
+    const caption = mention ? "@Honey Caption" : "Caption";
+    const sourceContent = `${caption}\n\n[report.pdf](https://files.test/report.pdf)`;
+    h.setRows([
+      editableMessage({
+        content: caption,
+        sourceContent,
+        mentions: mention ? [second.pubkey] : [],
+      }),
+    ]);
+    fireEvent.keyDown(h.input(), { key: "ArrowUp" });
+    const seed = h.input().value;
+    expect(seed).toBe(
+      mention
+        ? sourceContent.replace(
+            "@Honey",
+            `[@Honey](${profileTarget(second.pubkey)})`,
+          )
+        : sourceContent,
+    );
+    h.fill(" ");
+    h.submit();
+    expect(screen.getByText("Editing message")).toBeVisible();
+    h.fill(seed);
+    fireEvent.keyDown(h.input(), { key: "Enter", keyCode: 13 });
+    expect(screen.queryByText("Editing message")).not.toBeInTheDocument();
+    expect(h.input()).toHaveValue("");
+    expect(h.messages.edit).not.toHaveBeenCalled();
+    expect(h.messages.send).not.toHaveBeenCalled();
+  },
+);
+
+it.each(["changed", "deleted"])(
+  "keeps an unchanged mention edit open when the target is %s",
+  (state) => {
+    const h = mount({}, undefined, first.pubkey);
+    h.setProfiles(
+      new Map([[second.pubkey, { id: second.pubkey, name: "Honey" }]]),
+    );
+    const row = editableMessage({
+      content: "@Honey hello",
+      mentions: [second.pubkey],
+    });
+    h.setRows([row]);
+    fireEvent.keyDown(h.input(), { key: "ArrowUp" });
+    const seed = h.input().value;
+    h.setRows(
+      state === "deleted"
+        ? []
+        : [{ ...row, content: "Another client edited this" }],
+    );
+    h.submit();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      state === "deleted"
+        ? "no longer available"
+        : "changed while you were editing",
+    );
+    expect(screen.getByText("Editing message")).toBeVisible();
+    expect(h.input()).toHaveValue(seed);
+    expect(h.messages.edit).not.toHaveBeenCalled();
+  },
+);
 
 it.each([
   { shiftKey: true },
@@ -2348,6 +2402,54 @@ it("does not replace a nonempty draft and confines channel/thread targets to the
   h.retarget({ channelId: "other", threadRootId: "another", editMessages: [] });
   expect(h.input()).toHaveValue("");
   expect(h.messages.edit).not.toHaveBeenCalled();
+});
+
+it.each([false, true])(
+  "renders preserved mention links as chips when editing (already edited: %s)",
+  (edited) => {
+    const h = mount({}, undefined, first.pubkey);
+    h.setProfiles(
+      new Map([[second.pubkey, { id: second.pubkey, name: "Honey" }]]),
+    );
+    const link = `[@Honey](${profileTarget(second.pubkey)})`;
+    const content = `${edited ? link : "@Honey"} whats your name`;
+    h.setRows([
+      editableMessage({
+        content,
+        mentions: [second.pubkey],
+        ...(edited ? { edited: true as const } : {}),
+      }),
+    ]);
+    fireEvent.keyDown(h.input(), { key: "ArrowUp" });
+    expect(h.input()).toHaveTextContent("Honey whats your name");
+    expect(h.input().textContent).not.toContain("nostr:");
+    expect(h.input().value).toBe(`${link} whats your name`);
+    expect(
+      screen.queryByRole("region", { name: "Explicit mentions" }),
+    ).not.toBeInTheDocument();
+    act(() => h.commands().insertText("?"));
+    h.submit();
+    expect(h.messages.edit).toHaveBeenCalledWith(
+      "c".repeat(64),
+      `${link} whats your name?`,
+      "c".repeat(64),
+    );
+    expect(h.messages.send).not.toHaveBeenCalled();
+  },
+);
+
+it.each([
+  (link: string) => `\`${link}\``,
+  (link: string) => `\`\`\`\n${link}\n\`\`\``,
+  () => "[@Honey](nostr:npub1invalid)",
+  () => "@Honey without signed identity",
+])("keeps literal or unbound edit text unchanged", (source) => {
+  const h = mount({}, undefined, first.pubkey);
+  const content = source(`[@Honey](${profileTarget(second.pubkey)})`);
+  h.setRows([editableMessage({ content })]);
+  fireEvent.keyDown(h.input(), { key: "ArrowUp" });
+  expect(h.input().textContent).toBe(content);
+  expect(h.input().querySelector(".inline-chip")).toBeNull();
 });
 
 it("inserts mention links without new notification recipients during edits", () => {

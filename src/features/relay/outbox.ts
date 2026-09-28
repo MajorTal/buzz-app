@@ -663,10 +663,35 @@ export function createOutbox(
         ? input.tags.find(([name]) => name === "h")?.[1]
         : undefined;
       const ms = channelId ? clock.next(channelId) : Date.now();
+      let createdAt = Math.floor(ms / 1000);
+      if (input.kind === 40003) {
+        if (!hydrated)
+          throw new Error("Message history is still loading. Try again.");
+        const target = input.tags.find(([name]) => name === "e")?.[1];
+        const channel = input.tags.find(([name]) => name === "h")?.[1];
+        // Edits use second precision on every client. Preserve retained local
+        // submission order without changing the protocol's event-ID tie-break.
+        for (const { event } of visible) {
+          if (
+            target &&
+            channel &&
+            event.kind === 40003 &&
+            event.pubkey === viewer &&
+            event.tags.some(([name, id]) => name === "e" && id === target) &&
+            event.tags.some(([name, id]) => name === "h" && id === channel)
+          )
+            createdAt = Math.max(createdAt, event.created_at + 1);
+        }
+        // Stay well inside the signer's 15-minute clock-skew allowance.
+        if (createdAt > Math.floor(ms / 1000) + 60)
+          throw new Error(
+            "Edits are arriving too quickly or your clock changed. Wait a moment and try again.",
+          );
+      }
       const template = {
         ...input,
         pubkey: viewer,
-        created_at: Math.floor(ms / 1000),
+        created_at: createdAt,
         tags: [
           ...input.tags.map((tag) => [...tag]),
           ["client-id", crypto.randomUUID()],

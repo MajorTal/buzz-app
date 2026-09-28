@@ -1,5 +1,5 @@
 import { AlertDialog as BaseAlertDialog } from "@base-ui/react/alert-dialog";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 /** Confirmations keep alert-dialog semantics and focus behavior owned by Base UI. */
 export function AlertDialog({
@@ -9,6 +9,7 @@ export function AlertDialog({
   actions,
   onClose,
   pending = false,
+  finalFocus,
 }: {
   title: ReactNode;
   description: ReactNode;
@@ -16,6 +17,7 @@ export function AlertDialog({
   actions: ReactNode;
   onClose(): void;
   pending?: boolean;
+  finalFocus?: ComponentProps<typeof BaseAlertDialog.Popup>["finalFocus"];
 }) {
   return (
     <BaseAlertDialog.Root
@@ -34,6 +36,7 @@ export function AlertDialog({
           data-buzz-ui=""
           className="buzz-dialog"
           aria-modal="true"
+          finalFocus={finalFocus}
         >
           <BaseAlertDialog.Title className="text-heading">
             {title}

@@ -1,3 +1,6 @@
+import { useEffectEvent } from "react";
+import { useMessageEditScope } from "./MessageEditScope";
+import { useMessageDeletion } from "./MessageManagement";
 import { animate, useReducedMotion } from "motion/react";
 import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import { SelectedMentionContext } from "./selected-mention-context";
@@ -282,8 +285,10 @@ function Composer({
     setLinkEdit(null);
     completion.invalidate();
   });
+  const editScope = useMessageEditScope();
   const editableRows = () =>
     editMessages ??
+    editScope?.exactRows?.() ??
     (threadRootId
       ? []
       : (session.channels.window?.(channelId).rows ?? [])
@@ -378,6 +383,44 @@ function Composer({
     input.current?.setSelectionRange(caret.current, caret.current);
     caret.current = undefined;
   });
+  const requestDeletion = useMessageDeletion();
+  const startEdit = useEffectEvent((row: ChannelMessage) => {
+    if (editingDisabled || editDisabled || submission || !input.current) return;
+    const current = editableRows().find((item) => item.id === row.id);
+    if (!current || !lastEditableMessage(session, [current])) {
+      setError("This message is no longer available to edit.");
+      return;
+    }
+    if (editing.target) {
+      setError("Finish or cancel your current edit first.");
+      input.current.focus();
+      return;
+    }
+    completion.invalidate();
+    beforeEdit.current = {
+      value: valueRef.current,
+      restore: input.current.checkpoint(),
+    };
+    const next = mentionDraft(editing.start(current));
+    valueRef.current = next;
+    updateDraft(next);
+    input.current.reset(next);
+    setLinkEdit(null);
+    caret.current = next.text.length;
+    setError(undefined);
+  });
+  useEffect(() => {
+    if (!editScope) return;
+    const start = (row: ChannelMessage) => startEdit(row);
+    editScope.current = start;
+    editScope.input.current = input.current;
+    return () => {
+      if (editScope.current === start) {
+        editScope.current = undefined;
+        editScope.input.current = null;
+      }
+    };
+  }, [editScope]);
   function insert(
     text: string,
     recipient?: MentionRecipient,
@@ -507,11 +550,22 @@ function Composer({
   }
   async function send() {
     if (editing.target) {
-      if (!editDisabled && valueRef.current.text.trim())
-        editing.save(
-          composerMarkdown(valueRef.current),
-          editableRows().find((row) => row.id === editing.target?.id),
-        );
+      if (editDisabled || editing.locked) return;
+      if (!valueRef.current.text.trim()) {
+        if (editing.target.attachments.length) {
+          setError(
+            "Keep attachment links unchanged. To remove this message, use Delete message.",
+          );
+          return;
+        }
+        if (requestDeletion && session.outbox?.supports(5))
+          requestDeletion(editing.target, editing.close);
+        return;
+      }
+      editing.save(
+        composerMarkdown(valueRef.current),
+        editableRows().find((row) => row.id === editing.target?.id),
+      );
       return;
     }
     if (
@@ -811,13 +865,15 @@ function Composer({
           />
         )}
         <div className={styles.composerContent}>
-          <ComposerAttachments
-            media={session.media}
-            items={attachments.items}
-            disabled={editingDisabled}
-            remove={attachments.store.remove}
-            retry={attachments.store.retry}
-          />
+          {!editing.target && (
+            <ComposerAttachments
+              media={session.media}
+              items={attachments.items}
+              disabled={editingDisabled}
+              remove={attachments.store.remove}
+              retry={attachments.store.retry}
+            />
+          )}
           <div className={styles.composerInput}>
             <RichComposerInput
               inviteAgents={agentChoices}
@@ -890,18 +946,7 @@ function Composer({
                   const target = lastEditableMessage(session, editableRows());
                   if (target) {
                     event.preventDefault();
-                    completion.invalidate();
-                    beforeEdit.current = {
-                      value: valueRef.current,
-                      restore: event.currentTarget.checkpoint(),
-                    };
-                    const next = mentionDraft(editing.start(target));
-                    valueRef.current = next;
-                    updateDraft(next);
-                    event.currentTarget.reset(next);
-                    setLinkEdit(null);
-                    caret.current = next.text.length;
-                    setError(undefined);
+                    startEdit(target);
                   }
                   return;
                 }
@@ -989,8 +1034,14 @@ function Composer({
               admitting ||
               sending ||
               submission?.disabled ||
-              attachments.blocked ||
-              (!draft.trim() && !attachments.items.length)
+              (!editing.target && attachments.blocked) ||
+              (!draft.trim() &&
+                !attachments.items.length &&
+                !(
+                  editing.target &&
+                  requestDeletion &&
+                  session.outbox?.supports(5)
+                ))
             }
             icon={<ArrowUpIcon size={16} />}
           />

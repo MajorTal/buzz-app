@@ -34,6 +34,14 @@ export function useModalBoundary(
     }
     initialFocus.current?.focus({ preventScroll: true });
     const keydown = (event: KeyboardEvent) => {
+      // Portalled confirmations own their keyboard handling through Base UI.
+      const modal =
+        event.target instanceof Element
+          ? event.target.closest(
+              '[role="alertdialog"][aria-modal="true"], [role="dialog"][aria-modal="true"]',
+            )
+          : null;
+      if (modal && !container.contains(modal)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current();

@@ -466,6 +466,70 @@ it.each([true, false, null])(
   },
 );
 
+it.each([
+  "Member prose",
+  "Member](nostr:npub1d6t84ajeg9skp2609l2k6axgcme8x7g7u7luj352r03hcwreg7lqnxcsex) whats your name",
+])(
+  "hides recovery UI for completed mention query %s while keeping valid-query recovery",
+  async (staleQuery) => {
+    const test = setup();
+    const choices = {
+      ...test.session.agentChoices.snapshot(),
+      status: "error" as const,
+      error: "Agent directory unavailable",
+      pending: false,
+    };
+    const session = {
+      ...test.session,
+      agentChoices: {
+        ...test.session.agentChoices,
+        snapshot: () => choices,
+      },
+    };
+    let result: CompletionResult | undefined;
+    const props = {
+      session,
+      scope: "test",
+      channelId: "parent",
+      observation: {
+        revision: 1,
+        text: `@${staleQuery}`,
+        start: staleQuery.length + 1,
+        end: staleQuery.length + 1,
+      },
+      query: { start: 0, end: staleQuery.length + 1, query: staleQuery },
+      publish: (next: CompletionResult) => {
+        result = next;
+        return () => {};
+      },
+    };
+    const view = render(<MentionCompletion {...props} />);
+    try {
+      // Community lookup now owns an asynchronous loading state. Only its
+      // completed empty result can refute prose and retire unrelated recovery.
+      await waitFor(() => expect(result?.status).toBeUndefined());
+      expect(result?.items).toHaveLength(0);
+      expect(result?.retry).toBeUndefined();
+
+      view.rerender(
+        <MentionCompletion
+          {...props}
+          observation={{ revision: 2, text: "@Mem", start: 4, end: 4 }}
+          query={{ start: 0, end: 4, query: "Mem" }}
+        />,
+      );
+      await waitFor(() =>
+        expect(result?.status).toBe("Could not load agents. Retry to refresh."),
+      );
+      expect(result?.items).toHaveLength(1);
+      expect(result?.retry).toEqual(expect.any(Function));
+    } finally {
+      view.unmount();
+      test.library.dispose();
+    }
+  },
+);
+
 // Exercise selection, wire text/p tags, and sent rendering, not an already-bound @name.
 it.each(["picker", "completion"] as const)(
   "%s keeps native display labels out of serialized mentions",

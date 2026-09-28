@@ -9,9 +9,16 @@ import type { ThreadSnapshot } from "../relay/threads";
 import type { PageNavigation } from "../navigation/service";
 import { SessionMessageTarget } from "./SessionMessageTarget";
 
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollIntoView",
+);
 beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    configurable: true,
+    value: vi.fn(),
+  });
   // Browser-only APIs are fixture boundaries; actual layout is tested in Playwright.
-  HTMLElement.prototype.scrollIntoView = vi.fn();
   vi.stubGlobal(
     "ResizeObserver",
     class {
@@ -22,8 +29,14 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  if (originalScrollIntoView)
+    Object.defineProperty(
+      HTMLElement.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    );
+  else Reflect.deleteProperty(HTMLElement.prototype, "scrollIntoView");
   vi.unstubAllGlobals();
-  delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
 });
 function setup() {
   const views: ReturnType<typeof makeView>[] = [];
@@ -55,7 +68,9 @@ function setup() {
   }
   const profiles = new Map();
   const channels = { status: "ready", channels: [] };
+  const unread = { manual: "none" };
   const session = {
+    unread: { snapshot: () => unread, subscribe: () => () => {} },
     presence: {
       status: () => "unknown",
       limited: () => false,

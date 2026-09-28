@@ -9,6 +9,7 @@ import { InlineChip } from "../../shared/design-system/ui/InlineChip";
 import type { ConversationExtensions } from "../conversation/contracts";
 import type { CustomEmoji } from "../relay/emoji";
 import type { RelaySession } from "../relay/session";
+import { profileKey } from "../profiles/target";
 import { scanMarkdown } from "../relay/message-content";
 import { MessageMarkdown } from "./MessageMarkdown";
 import type { MentionDraft } from "./mention-draft";
@@ -111,7 +112,7 @@ export function RichComposerInput({
     const context = doc
       ? composerMarkdownContext(doc)
       : { text: draft.text, protected: [] };
-    const { tree, tooDeep } = scanMarkdown(context.text);
+    const { tree, links, tooDeep } = scanMarkdown(context.text);
     const literals: { start: number; end: number }[] = [...context.protected];
     const pending = [tree];
     while (pending.length) {
@@ -163,6 +164,24 @@ export function RichComposerInput({
     };
     for (const recipient of draft.recipients)
       add(recipient.start, recipient.end, recipient.pubkey);
+    // Identity links are display references, not new notification recipients.
+    // Keep their exact source token so editing surrounding prose preserves it.
+    const profileLinks = new Map<number, { pubkey: string; label: string }>();
+    for (const link of links) {
+      const pubkey = link.url && profileKey(link.url);
+      const start = link.position?.start.offset;
+      const end = link.position?.end.offset;
+      if (!pubkey || start === undefined || end === undefined) continue;
+      let label = "";
+      const pending = [...(link.children ?? [])].reverse();
+      while (pending.length) {
+        const node = pending.pop();
+        if (node?.value) label += node.value;
+        else pending.push(...(node?.children ?? []).slice().reverse());
+      }
+      profileLinks.set(start, { pubkey, label: label.replace(/^@/, "") });
+      add(start, end, undefined, true);
+    }
     messageLinkParts(context.text, undefined, (start, end) =>
       add(start, end, undefined, true),
     );
@@ -184,7 +203,9 @@ export function RichComposerInput({
     const decorations = ranges
       .sort((a, b) => a.start - b.start)
       .map(({ start, end, mention, editAsText }) => {
-        const label = draft.text.slice(start + 1, end);
+        const profile = mention ? undefined : profileLinks.get(start);
+        const identity = mention ?? profile?.pubkey;
+        const label = profile?.label ?? draft.text.slice(start + 1, end);
         const resolved = mention ? (labels.get(mention) ?? label) : label;
         const qualifier = mention ? qualifiers.get(mention) : undefined;
         const faceLabel = qualifier
@@ -194,15 +215,15 @@ export function RichComposerInput({
           start,
           end,
           editAsText: !!editAsText,
-          content: mention ? (
+          content: identity ? (
             <InlineChip
               address={{
                 kind:
-                  directory.profiles.get(mention)?.isAgent ||
-                  directory.agents.some((agent) => agent.pubkey === mention)
+                  directory.profiles.get(identity)?.isAgent ||
+                  directory.agents.some((agent) => agent.pubkey === identity)
                     ? "agent"
                     : "person",
-                id: mention,
+                id: identity,
               }}
               face={{
                 label: faceLabel,
@@ -213,7 +234,7 @@ export function RichComposerInput({
                 qualifier
                   ? {
                       text: `· ${qualifier}`,
-                      reveal: reveal.has(mention),
+                      reveal: !!mention && reveal.has(mention),
                       accessibleLabel: `public key ending ${qualifier.split("").join(" ")}`,
                     }
                   : undefined

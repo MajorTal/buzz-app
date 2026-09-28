@@ -1,3 +1,4 @@
+import { MessageEditScope } from "./MessageEditScope";
 import { useReviewSidebarMotion } from "./use-review-sidebar-motion";
 import { readReviewOrigin, useReviewEntrance } from "./use-review-entrance";
 import { VideoPlayer, videoTime } from "./VideoPlayer";
@@ -468,7 +469,7 @@ function ReviewShell({
         >
           <div className={styles.mediaReviewConversationContent}>
             {rootId && source ? (
-              <>
+              <MessageEditScope>
                 <ReviewComments
                   selectedComment={selectedComment}
                   replies={replies}
@@ -504,7 +505,7 @@ function ReviewShell({
                     : {})}
                   hideMediaTimeIndicator
                 />
-              </>
+              </MessageEditScope>
             ) : (
               <p className={styles.empty} role={error ? "alert" : "status"}>
                 {error ?? "Loading comments…"}

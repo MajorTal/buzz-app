@@ -37,9 +37,14 @@ import styles from "./Messages.module.css";
 import { usesLargeEmojiPresentation } from "./emoji-size";
 import { MessageReactionControls, MessageReactions } from "./MessageReactions";
 
+import { MessageManagementItems } from "./MessageManagement";
 import { MessageActionBar } from "./MessageActionBar";
 import { FlagIcon } from "../../shared/design-system/icons";
-import { MenuIcon, MenuItem } from "../../shared/design-system/ui/Menu";
+import {
+  MenuIcon,
+  MenuItem,
+  MenuSeparator,
+} from "../../shared/design-system/ui/Menu";
 import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import { ReportMessageDialog } from "./ReportMessageDialog";
 import { messageCopyLink, messageCopyText } from "./message-copy";
@@ -342,12 +347,26 @@ export const MessageRow = memo(function MessageRow({
                 ) : undefined)
               }
               overflowItems={
-                overflowItems || reportItem ? (
-                  <>
-                    {overflowItems}
-                    {reportItem}
-                  </>
-                ) : undefined
+                <>
+                  {overflowItems != null ? (
+                    <>
+                      <MenuSeparator />
+                      {overflowItems}
+                    </>
+                  ) : session ? (
+                    <MessageManagementItems
+                      row={row}
+                      session={session}
+                      separated
+                    />
+                  ) : undefined}
+                  {reportItem && (
+                    <>
+                      <MenuSeparator />
+                      {reportItem}
+                    </>
+                  )}
+                </>
               }
             />
           )}

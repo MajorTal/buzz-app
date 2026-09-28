@@ -1054,7 +1054,7 @@ export const test = base.extend({
         relay.publish(community, event);
         return;
       }
-      if ([7, 5].includes(event.kind)) {
+      if ([7, 5, 40003].includes(event.kind)) {
         const channel = event.tags.find(([name]) => name === "h")?.[1];
         const history = histories.get(`${community}/${channel}`);
         expect(history).toBeDefined();
@@ -1073,10 +1073,12 @@ export const test = base.extend({
           else {
             expect(target.pubkey).toBe(viewer);
             expect([7, 9]).toContain(target.kind);
-            expect(event.tags).toContainEqual(["k", String(target.kind)]);
+            if (event.kind === 5)
+              expect(event.tags).toContainEqual(["k", String(target.kind)]);
+            else expect(target.kind).toBe(9);
           }
         }
-        if (event.kind === 7) expect(ids).toHaveLength(1);
+        if ([7, 40003].includes(event.kind)) expect(ids).toHaveLength(1);
         if (!history.some((row) => row.id === event.id)) {
           history.push(event);
           targetEvents.push(event);
@@ -1680,12 +1682,14 @@ export const test = base.extend({
           own = true,
           root,
           parent,
+          attachmentTags = [],
         ) {
           const history = histories.get(`${community}/${channel}`);
           const event = sign(
             9,
             [
               ["h", channel],
+              ...attachmentTags,
               ...(root
                 ? parent && parent !== root
                   ? [

@@ -1,4 +1,11 @@
-import { useRef, useState, type ReactNode, type Ref } from "react";
+import {
+  createContext,
+  useContext,
+  useRef,
+  useState,
+  type ReactNode,
+  type Ref,
+} from "react";
 import {
   ChatCircleIcon,
   CopyIcon,
@@ -12,10 +19,14 @@ import {
   MenuPopup,
   MenuItem,
   MenuIcon,
-  MenuSeparator,
 } from "../../shared/design-system/ui/Menu";
 import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import styles from "./Messages.module.css";
+
+const AfterMenuClose = createContext<
+  ((action: () => void) => void) | undefined
+>(undefined);
+export const useAfterMessageMenuClose = () => useContext(AfterMenuClose);
 
 export function MessageActionBar({
   onReply,
@@ -42,6 +53,8 @@ export function MessageActionBar({
   const [copying, setCopying] = useState(false);
   const [notice, setNotice] = useState<{ text: string; error: boolean }>();
   const busy = useRef(false);
+  const afterClose = useRef<(() => void) | undefined>(undefined);
+  const [handingOffFocus, setHandingOffFocus] = useState(false);
   const copy = async (text: () => string, label: string) => {
     if (busy.current) return;
     busy.current = true;
@@ -98,7 +111,20 @@ export function MessageActionBar({
             }}
           />
         </span>
-        <MenuRoot open={open} onOpenChange={setOpen}>
+        <MenuRoot
+          open={open}
+          onOpenChange={(next) => {
+            if (next) setHandingOffFocus(false);
+            setOpen(next);
+          }}
+          onOpenChangeComplete={(opened) => {
+            if (!opened) {
+              const action = afterClose.current;
+              afterClose.current = undefined;
+              action?.();
+            }
+          }}
+        >
           <MenuTrigger
             render={
               <IconButton
@@ -110,33 +136,41 @@ export function MessageActionBar({
               />
             }
           />
-          <MenuPopup align="end" data-message-id={messageId}>
-            <MenuItem
-              disabled={copying}
-              onClick={() => void copy(copyText, "Message")}
-            >
-              <MenuIcon>
-                <CopyIcon />
-              </MenuIcon>
-              Copy message
-            </MenuItem>
-            <MenuItem
-              disabled={!link || copying}
-              onClick={() => {
-                if (link) void copy(() => link, "Link");
+          <MenuPopup
+            align="end"
+            data-message-id={messageId}
+            // A boolean preserves Base UI's safeguard when focus already moved.
+            // A callback returning true would force focus back over a newer action.
+            finalFocus={!handingOffFocus}
+          >
+            <AfterMenuClose.Provider
+              value={(action) => {
+                setHandingOffFocus(true);
+                afterClose.current = action;
               }}
             >
-              <MenuIcon>
-                <LinkIcon />
-              </MenuIcon>
-              Copy link
-            </MenuItem>
-            {overflowItems && (
-              <>
-                <MenuSeparator />
-                {overflowItems}
-              </>
-            )}
+              <MenuItem
+                disabled={copying}
+                onClick={() => void copy(copyText, "Message")}
+              >
+                <MenuIcon>
+                  <CopyIcon />
+                </MenuIcon>
+                Copy message
+              </MenuItem>
+              <MenuItem
+                disabled={!link || copying}
+                onClick={() => {
+                  if (link) void copy(() => link, "Link");
+                }}
+              >
+                <MenuIcon>
+                  <LinkIcon />
+                </MenuIcon>
+                Copy link
+              </MenuItem>
+              {overflowItems}
+            </AfterMenuClose.Provider>
           </MenuPopup>
         </MenuRoot>
       </div>

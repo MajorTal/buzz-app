@@ -401,10 +401,20 @@ export function validMessageTemplate(event) {
     ).length === 1 &&
     (() => {
       const references = event.tags.filter((tag) => tag[0] === "e");
-      if (event.kind === 7 || event.kind === 40003)
+      if (event.kind === 40003)
         return (
           event.content === event.content.trim() &&
-          (event.kind === 40003 || validReactionContent(event.content)) &&
+          references.length === 1 &&
+          references[0].length === 2 &&
+          /^[0-9a-f]{64}$/.test(references[0][1]) &&
+          event.tags.every(([name]) =>
+            ["h", "e", "emoji", "client-id", "imeta"].includes(name),
+          )
+        );
+      if (event.kind === 7)
+        return (
+          event.content === event.content.trim() &&
+          validReactionContent(event.content) &&
           references.length === 1 &&
           references[0].length === 2 &&
           /^[0-9a-f]{64}$/.test(references[0][1])

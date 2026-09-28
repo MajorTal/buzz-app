@@ -67,6 +67,10 @@ import { RelayTimings } from "./RelayTimings";
 import { LiveStatus } from "./LiveStatus";
 import { rejectUnhandledFileDrop } from "../../features/messages/use-file-drop";
 import { MessageComposer } from "../../features/messages/MessageComposer";
+import {
+  MessageManagement,
+  MessageManagementStatus,
+} from "../../features/messages/MessageManagement";
 import { ChannelTimeline } from "../../features/messages/ChannelTimeline";
 import { ThreadPanel } from "../../features/messages/ThreadPanel";
 import { MediaReviewViewer } from "../../features/messages/MediaReviewViewer";
@@ -859,7 +863,7 @@ function ChannelWorkspace({
   const showingPanel =
     !composingMessage &&
     (showingSettings || panel || showingThread || companion || drawer.side);
-  return (
+  const workspace = (
     <div className={`${styles.board} ${showingPanel ? styles.withPanel : ""}`}>
       {current && !current.readOnly && canvasOpen && (
         <ChannelCanvasDialog
@@ -977,6 +981,7 @@ function ChannelWorkspace({
                 />
               )}
               <SessionColumn enabled={flatSession}>
+                <MessageManagementStatus />
                 {!cached && (
                   <LiveStatus
                     live={queries.live}
@@ -1252,6 +1257,11 @@ function ChannelWorkspace({
         </div>
       )}
     </div>
+  );
+  return (
+    <MessageManagement session={queries} channelId={currentId}>
+      {workspace}
+    </MessageManagement>
   );
 }
 

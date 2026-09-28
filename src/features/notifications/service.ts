@@ -83,6 +83,7 @@ export class NotificationsService extends Service implements Notifications {
   }>();
   private readonly seen = new Map<string, number>();
   private closed = false;
+  private readonly lifetime = new AbortController();
   private generation = 0;
   private permissionGeneration = 0;
   private permissionRequest: Promise<void> | undefined;
@@ -136,6 +137,7 @@ export class NotificationsService extends Service implements Notifications {
         window.addEventListener("focus", refresh);
       return () => {
         this.closed = true;
+        this.lifetime.abort();
         this.generation++;
         this.permissionGeneration++;
         for (const item of this.pending) item.cancelled = true;
@@ -364,7 +366,7 @@ export class NotificationsService extends Service implements Notifications {
   private schedule() {
     if (this.closed || this.scheduled) return;
     this.scheduled = true;
-    void afterPresentation()
+    void afterPresentation(undefined, this.lifetime.signal)
       .then(() => {
         this.scheduled = false;
         for (const item of this.pending)

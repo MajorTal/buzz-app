@@ -37,6 +37,7 @@ import {
 import type { ChannelSummary } from "../relay/contracts";
 import { useChannelRowMenu } from "../../bundled/channels/useChannelRowMenu";
 import { ToastNotice } from "../../shared/design-system/ui/Toast";
+import { clientMetrics } from "../developer/client-metrics";
 import {
   BellIcon,
   BellSlashIcon,
@@ -437,6 +438,7 @@ function ReadySidebar({
   const select = useCallback(
     (id: string) => {
       if (!viewer || relay.snapshot().session !== queries) return;
+      clientMetrics.channelIntent(id, window.event);
       writeView(scope, "selected-channel", id);
       void navigator.open({
         version: 1,

@@ -16,7 +16,8 @@ import { EMOJI_SET } from "./emoji.ts";
 
 export const LIVE_CHANNEL_CAPACITY = 1022; // Reserve two of the relay's 1024 slots.
 export const LIVE_REPLAY_LIMIT = 500;
-const SETUP_CONCURRENCY = 4;
+/** Channel REQs awaiting EOSE at once. `dev/live-setup-probe.mjs` compares others. */
+export const SETUP_CONCURRENCY = 4;
 const MAX_QUOTA_RETRIES = 3;
 /** Host-owned server cooldown survives socket/POST replacement.
  * Healthy traffic has no inter-request delay; outstanding work is bounded below. */
@@ -142,7 +143,7 @@ type Route = {
   quotaRetries: number;
   deadline?: ReturnType<typeof setTimeout>;
 };
-const CHANNEL_KINDS = [
+export const CHANNEL_KINDS = [
   9, 40002, 40008, 45001, 45003, 40099, 40100, 40003, 5, 9005, 7, 39000, 39002,
   39005, 20002,
 ];
@@ -155,6 +156,7 @@ export function subscribeRelayTraffic(
   callbacks: LiveCallbacks,
   socketFactory: (url: string) => WebSocket = (url) => new WebSocket(url),
   admission: LiveAdmission = createLiveAdmission(),
+  setupConcurrency = SETUP_CONCURRENCY,
 ): LiveSubscription {
   const log = getLogger("relay-ws");
   const peer = relayLabel(url);
@@ -335,7 +337,7 @@ export function subscribeRelayTraffic(
     for (const route of [...routes.values()].sort(
       (a, b) => rank(a) - rank(b),
     )) {
-      if (active >= SETUP_CONCURRENCY) break;
+      if (active >= setupConcurrency) break;
       if (route.status !== "pending" || route.wire) continue;
       const delay = admission.delay();
       if (delay > 0) {

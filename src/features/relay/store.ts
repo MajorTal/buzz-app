@@ -20,6 +20,7 @@ import { ByteLru, byteSize } from "./budget";
 import type { HeadPersistence, SavedHead } from "./persistence";
 import { createMediaPreparation, saveData } from "./media";
 import { relayDebug } from "./debug";
+import { clientMetrics } from "../developer/client-metrics";
 import { MessageClock } from "./message-order";
 import { yieldToHost } from "./yield";
 
@@ -34,6 +35,9 @@ type WindowState = {
   atHead: boolean;
   generation: number;
   controller?: AbortController | undefined;
+  /** Rows came from IndexedDB and no relay read has replaced them. Freshness
+   * cannot say this: a dropped socket also marks relay rows `cached`. */
+  restored?: boolean;
 };
 type Head = {
   rows: readonly ChannelMessage[];
@@ -42,6 +46,7 @@ type Head = {
   events: readonly RelayEvent[];
   savedAt: number;
   cached: boolean;
+  restored?: true;
 };
 export type ChannelStoreOptions = {
   profiling?: RelayProfiler;
@@ -101,10 +106,14 @@ export function createChannelStore(
     channelId: string,
     author: string,
     events: readonly import("./events").EventData[],
-  ) =>
-    foldMessages(channelId, author, events, {
+  ) => {
+    const started = performance.now();
+    const rows = foldMessages(channelId, author, events, {
       includeReplies: discovery?.isSession(channelId) ?? false,
     });
+    clientMetrics.cpu("fold", performance.now() - started, events.length);
+    return rows;
+  };
   const {
     maxWindows = 3,
     unavailableReason,
@@ -269,6 +278,11 @@ export function createChannelStore(
     )
       return;
     const previousPreview = messagePreview(state.snapshot.rows);
+    if (rows.length && !state.snapshot.rows.length)
+      clientMetrics.channelData(
+        state.channelId,
+        state.restored ? "disk" : "network",
+      );
     state.snapshot = Object.freeze(next);
     notify(windowListeners.get(state.channelId));
     if (previousPreview !== messagePreview(rows)) setList(list);
@@ -573,6 +587,7 @@ export function createChannelStore(
         state.cursor = head.cursor;
         state.events = head.events;
         state.atHead = true;
+        state.restored = head.restored === true;
         setWindow(state, patchFromHead(head));
         return;
       }
@@ -602,6 +617,7 @@ export function createChannelStore(
       state.events = retained;
       state.atHead = !cursor;
       state.cursor = page.cursor;
+      state.restored = false;
       setWindow(state, {
         status: "ready",
         rows,
@@ -679,9 +695,14 @@ export function createChannelStore(
           eventDto(JSON.parse(JSON.stringify(value)));
         const events: RelayEvent[] = [];
         for (let index = 0; index < record.events.length; index += 8) {
-          events.push(
-            ...record.events.slice(index, index + 8).map(verifySaved),
+          const started = performance.now();
+          const batch = record.events.slice(index, index + 8).map(verifySaved);
+          clientMetrics.cpu(
+            "verify.restore",
+            performance.now() - started,
+            batch.length,
           );
+          events.push(...batch);
           await yieldToHost();
           if (
             disposed ||
@@ -713,6 +734,7 @@ export function createChannelStore(
           hasMore: page.hasMore,
           savedAt: record.savedAt,
           cached: true,
+          restored: true,
         };
         const verifiedProfiles: RelayEvent[] = [];
         for (let index = 0; index < record.profiles.length; index += 8) {
@@ -755,6 +777,7 @@ export function createChannelStore(
           state.cursor = head.cursor;
           state.events = head.events;
           state.atHead = true;
+          state.restored = head.restored === true;
           setWindow(state, patchFromHead(head));
         }
       } catch {
@@ -1325,8 +1348,17 @@ export function createChannelStore(
         state.cursor = retained.cursor;
         state.events = retained.events;
         state.atHead = true;
+        state.restored = retained.restored === true;
         setWindow(state, patchFromHead(retained));
       }
+      clientMetrics.channelEnsured(
+        channelId,
+        !state.snapshot.rows.length
+          ? "network"
+          : state.restored
+            ? "disk"
+            : "memory",
+      );
       if (!canReadRemote(channelId)) {
         revalidateCached(channelId);
         return;
@@ -1356,6 +1388,7 @@ export function createChannelStore(
         state.cursor = head.cursor;
         state.events = head.events;
         state.atHead = true;
+        state.restored = head.restored === true;
         setWindow(state, patchFromHead(head));
         prepareMedia(channelId);
       }
@@ -1769,6 +1802,7 @@ export function createChannelStore(
         );
         if (!valid())
           throw new DOMException("Stale live catch-up", "AbortError");
+        retained.restored = false;
         accept(head.events);
         if (!valid())
           throw new DOMException("Stale live catch-up", "AbortError");

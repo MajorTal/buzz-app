@@ -23,6 +23,7 @@
     "buzzodz": "cargo run --quiet --manifest-path crates/plugin-manager/Cargo.toml --bin buzzodz --",
     "test": "node --test tests/integration/*.test.mjs && vitest run && cargo test -p buzzodz-plugins && pnpm test:browser",
     "test:browser": "playwright test --config tests/browser/playwright.config.mjs",
+    "probe:live": "node --experimental-transform-types --no-warnings dev/live-setup-probe.mjs",
     "test:browser:ci": "playwright test --config tests/browser/playwright.ci.config.mjs",
     "test:browser:local-only": "pnpm test:browser --project webkit-measurements --grep @local-webkit --no-deps --workers=1",
     "test:browser:install": "playwright install chromium webkit",

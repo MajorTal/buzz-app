@@ -256,6 +256,27 @@ it("surfaces invalid signatures and terminal auth failure without an automatic p
   owner.dispose();
 });
 
+it("bounds outstanding setup by the supplied concurrency", async () => {
+  const key = keypair();
+  const socket = new Socket();
+  const owner = subscribeRelayTraffic(
+    "wss://relay.test",
+    async (event) => signed(key, event),
+    key.pubkey,
+    { receive() {}, state() {}, established() {}, denied() {} },
+    () => socket as unknown as WebSocket,
+    undefined,
+    16,
+  );
+  owner.update(Array.from({ length: 40 }, (_, i) => `channel-${i}`));
+  await socket.auth();
+  expect(socket.requests()).toHaveLength(16);
+  const first = socket.requests()[0];
+  assert.exists(first);
+  await socket.receive(["EOSE", first[1]]);
+  expect(socket.requests()).toHaveLength(17);
+  owner.dispose();
+});
 it("refills setup immediately on EOSE; quota CLOSED pauses the whole queue and only retries refused routes", async () => {
   vi.useFakeTimers();
   const h = setup(Array.from({ length: 80 }, (_, i) => `channel-${i}`));

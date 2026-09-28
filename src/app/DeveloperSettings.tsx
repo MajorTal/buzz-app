@@ -9,6 +9,8 @@ import {
   subscribeLogLevel,
 } from "../features/developer/logging";
 import type { RelayData } from "../features/relay/service";
+import { clientMetrics } from "../features/developer/client-metrics";
+import { ClientMetricsPanel } from "./ClientMetricsPanel";
 
 type BrokerStats = {
   queries: number;
@@ -162,6 +164,7 @@ export function DeveloperSettings({ relay }: { relay: RelayData }) {
             </p>
           )}
         </div>
+        {clientMetrics.enabled && <ClientMetricsPanel />}
         <div className="space-y-2">
           <h3 className="m-0 text-label-sm">Caches</h3>
           <p className="m-0 text-body-sm text-muted">

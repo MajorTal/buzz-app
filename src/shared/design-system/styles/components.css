@@ -3,13 +3,16 @@
 @layer components {
   .buzz-button {
     position: relative;
-    display: inline-grid;
-    place-items: center;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
     min-width: 0;
+    flex-shrink: 0;
+    white-space: nowrap;
     /* The reference's 32/40/52px heights remain minimums for text scaling. */
     min-height: var(--size-control);
     border: 0;
-    border-radius: var(--radius-pill);
+    border-radius: var(--radius-capsule);
     padding: var(--space-2) var(--space-6);
     background: transparent;
     color: var(--text-standard);
@@ -26,7 +29,6 @@
     justify-content: center;
     min-width: 0;
     gap: var(--space-row-gap);
-    overflow-wrap: anywhere;
   }
   .buzz-button-label > svg,
   .buzz-button-spinner {

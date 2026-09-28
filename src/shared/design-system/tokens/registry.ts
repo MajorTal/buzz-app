@@ -1238,13 +1238,19 @@ export const RADII = [
     token: "radius-control",
     variable: "--radius-control",
     value: "12px",
-    use: "Inputs and compact icon controls. Text buttons use radius-pill.",
+    use: "Inputs and compact icon controls. Text buttons use radius-capsule.",
   },
   {
     token: "radius-panel",
     variable: "--radius-panel",
     value: "24px",
     use: "Every major workspace panel.",
+  },
+  {
+    token: "radius-capsule",
+    variable: "--radius-capsule",
+    value: "26px",
+    use: "Text buttons and similarly sized actions: capsule-shaped through large (52px), bounded on taller controls.",
   },
   {
     token: "radius-pill",

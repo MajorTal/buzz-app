@@ -1,4 +1,3 @@
-import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
@@ -258,9 +257,21 @@ test("thread buttons show observed unread independently, clear only after readin
   await history.focus();
   await expect(first).toHaveAccessibleName("View thread: 23 replies");
   await expect(other).toHaveAccessibleName(/Observed unread replies/);
+  const savedEntry = await page.evaluate(
+    () => window.fixtureNavigation.snapshot().entry,
+  );
   const beforeReload = app.report.queries.length;
   await page.reload();
-  await openPage(page, "Messages");
+  // Reload restores this visit itself. Reopening Messages through Search races
+  // startup results and could hide a broken restoration by starting a new visit.
+  await expect
+    .poll(() =>
+      page.evaluate(() => {
+        const snapshot = window.fixtureNavigation?.snapshot();
+        return snapshot && { status: snapshot.status, entry: snapshot.entry };
+      }),
+    )
+    .toEqual({ status: "opened", entry: savedEntry });
   await expect(first).toHaveAccessibleName("View thread: 23 replies");
   await expect(other).toHaveAccessibleName(/Observed unread replies/);
   // Restoring a joined conversation waits for initial membership discovery;

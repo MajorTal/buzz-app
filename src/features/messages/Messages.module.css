@@ -1516,6 +1516,13 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
 .replyBranchSummary {
   margin-inline-start: var(--size-control);
 }
+/* Summary metadata can reflow as whole avatar/count groups at narrow widths. */
+.replyBranchSummary > button {
+  max-width: 100%;
+}
+.replyBranchSummary > button > [class~="buzz-button-label"] {
+  flex-wrap: wrap;
+}
 .replyBranchPanel {
   padding-inline-start: var(--reply-indent);
 }

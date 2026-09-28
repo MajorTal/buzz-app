@@ -570,7 +570,7 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
       : "Tab";
   await page.keyboard.press(tab);
   await expect(
-    page.getByRole("button", { name: "subtle sm", exact: true }),
+    page.getByRole("button", { name: "subtle xs", exact: true }),
   ).toBeFocused();
   await expect(page.locator("html")).toHaveAttribute(
     "data-keyboard-navigation",
@@ -582,7 +582,7 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
   );
   await page.keyboard.press(tab);
   await expect(
-    page.getByRole("button", { name: "subtle sm", exact: true }),
+    page.getByRole("button", { name: "subtle xs", exact: true }),
   ).toBeFocused();
   await expect(page.locator("html")).toHaveAttribute(
     "data-keyboard-navigation",
@@ -1069,6 +1069,8 @@ test("buttons and icon buttons share size geometry and preserve loading and disa
             )
             .toBe(true);
         } else {
+          // Half the 52px large height; shorter sizes clamp to their own half-height.
+          await expect(button).toHaveCSS("border-radius", "26px");
           await expect(button).toHaveCSS(
             "padding-left",
             size === "sm" ? "16px" : "24px",
@@ -1130,7 +1132,7 @@ test("buttons and icon buttons share size geometry and preserve loading and disa
   }
 });
 
-test("button loading keeps focus and wrapping fits narrow enlarged layouts", async ({
+test("button loading keeps focus and labels stay single-line in constrained layouts", async ({
   page,
   browserName,
 }) => {
@@ -1183,25 +1185,47 @@ test("button loading keeps focus and wrapping fits narrow enlarged layouts", asy
       return color;
     }),
   );
+  await page.evaluate(() => document.fonts.ready);
   for (const width of [390, 800, 1280]) {
     await page.setViewportSize({ width, height: 900 });
-    await page.evaluate(() => {
-      document.documentElement.style.fontSize = "200%";
-    });
-    const long = page.getByRole("button", {
-      name: "Allow notifications for this workspace",
-      exact: true,
-    });
-    await expect
-      .poll(() => long.evaluate((el) => el.scrollWidth <= el.clientWidth))
-      .toBe(true);
-    await expect
-      .poll(() =>
-        page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth,
-        ),
-      )
-      .toBe(true);
+    for (const fontSize of ["100%", "200%"]) {
+      await page.evaluate((size) => {
+        document.documentElement.style.fontSize = size;
+      }, fontSize);
+      for (const name of [
+        "Apply changes",
+        "Allow notifications for this workspace",
+      ]) {
+        const button = page.getByRole("button", { name, exact: true });
+        const label = button.locator(".buzz-button-label");
+        await expect(button).toHaveCSS("flex-shrink", "0");
+        await expect(label).toHaveCSS("white-space", "nowrap");
+        await expect
+          .poll(() =>
+            label.evaluate((el) => {
+              const text = [...el.childNodes].find(
+                (node) =>
+                  node.nodeType === Node.TEXT_NODE && node.textContent?.trim(),
+              );
+              if (!text) return 0;
+              const range = document.createRange();
+              range.selectNodeContents(text);
+              return range.getClientRects().length;
+            }),
+          )
+          .toBe(1);
+        await expect
+          .poll(() => button.evaluate((el) => el.scrollWidth <= el.clientWidth))
+          .toBe(true);
+      }
+      await expect
+        .poll(() =>
+          page.evaluate(
+            () => document.documentElement.scrollWidth <= window.innerWidth,
+          ),
+        )
+        .toBe(true);
+    }
     await page.evaluate(() => {
       document.documentElement.style.removeProperty("font-size");
     });

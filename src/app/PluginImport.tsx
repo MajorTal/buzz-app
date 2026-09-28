@@ -98,7 +98,10 @@ export function PluginImport({
   const previousGrants = existing ? hostGrants(existing.manifest) : [];
   return (
     <div className="mb-4">
-      <div className="flex flex-wrap gap-2">
+      <fieldset
+        aria-label="Load plugins"
+        className="m-0 flex min-w-0 flex-wrap gap-2 overflow-x-auto border-0 p-0"
+      >
         <Button
           type="button"
           disabled={busy || loading}
@@ -114,7 +117,7 @@ export function PluginImport({
         >
           <GitBranchIcon aria-hidden="true" size={17} /> Load from Git
         </Button>
-      </div>
+      </fieldset>
       {gitForm && (
         <form
           className="mt-3 grid gap-3 rounded-2xl border border-line bg-surface p-4"

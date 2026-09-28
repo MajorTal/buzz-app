@@ -45,7 +45,7 @@ export function NotificationSettings({
             : "Buzz sends alerts and badges for new activity in the selected community while it’s running. Manage app permissions in your system settings."
         }
       />
-      <div className="grid gap-5">
+      <div className="grid grid-cols-1 gap-5">
         <div className={styles.preferenceList}>
           {state.categories.map(({ key, label }) => (
             <PreferenceRow

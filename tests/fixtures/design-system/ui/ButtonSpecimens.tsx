@@ -167,7 +167,12 @@ export function ButtonSpecimen() {
         </div>
       </section>
       <section aria-label="Button content" className="component-specimen-group">
-        <h2 className="text-body-sm text-tertiary">Content and wrapping</h2>
+        <h2 className="text-body-sm text-tertiary">Single-line labels</h2>
+        <p className="text-body-sm text-subtle">
+          Labels stay on one line. Let the surrounding layout wrap whole
+          controls or scroll when space is limited, rather than squeezing the
+          label.
+        </p>
         <div className="component-specimen-frame">
           <div className="min-w-0 space-y-4">
             <div className="component-specimen-row">
@@ -179,6 +184,13 @@ export function ButtonSpecimen() {
                 Continue <ArrowRightIcon aria-hidden="true" />
               </Button>
               <Button variant="outline">Choose a workspace</Button>
+            </div>
+            <div className="flex w-full max-w-96 items-center gap-4">
+              <p className="m-0 min-w-0 flex-1 text-body-sm text-secondary">
+                Changes affect future starts and restarts. Running work is never
+                restarted automatically.
+              </p>
+              <Button variant="prominent">Apply changes</Button>
             </div>
             <div className="max-w-48">
               <Button>

@@ -132,10 +132,14 @@
     padding-block: var(--dialog-padding);
   }
   .buzz-dialog-actions {
+    min-width: 0;
+    flex-shrink: 0;
     display: flex;
     flex-wrap: wrap;
-    justify-content: end;
+    /* Oversized controls must start inside the reachable scroll range. */
+    justify-content: safe end;
     gap: var(--space-3);
+    overflow-x: auto;
   }
   /* Opt in for searches and switching views, not content-sized forms. */
   :where(.buzz-dialog[data-height="stable"]) {
@@ -235,7 +239,7 @@
       --dialog-padding: var(--space-4);
     }
     .buzz-dialog-actions > .buzz-button {
-      flex: 1 1 auto;
+      flex: 1 0 auto;
     }
   }
 }

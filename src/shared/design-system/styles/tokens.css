@@ -693,6 +693,8 @@
   --radius-panel: var(--corner-panel);
   --radius-control: var(--corner-control);
   --radius-row: var(--corner-row);
+  /* Half the large (52px) action height; smaller controls clamp naturally. */
+  --radius-capsule: 1.625rem;
   --radius-pill: var(--corner-round);
   /* A chip reads as a chip in running text, so it takes a tighter corner than
      a control and gets its own role rather than borrowing one. */

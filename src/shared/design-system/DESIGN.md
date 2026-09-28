@@ -161,11 +161,20 @@ recipes remain so this temporary visual decision can be reversed in one place.
 Button and IconButton share prominent, subtle, ghost, inverted, destructive,
 outline and link emphasis. Inverted is for an inverse surface; link keeps its
 background clear and underlines on interaction. Its
-32 / 40 / 52px sizes are sm / md / lg at the default scale; labels may wrap and
-increase height at larger text settings. Text buttons use pill corners. Fields
-use the shared control corner. Small buttons use 16px side padding and 16px
-icons; medium and large use 24px side padding and 24px icons. Labels use the
-complete text-label-sm / text-label roles, with an 8px icon gap.
+32 / 40 / 52px sizes are sm / md / lg at the default scale, with minimum
+heights that accommodate larger text. Text buttons use `--radius-capsule`
+(1.625rem / 26px): capsule-shaped through the default 52px large size,
+clamped naturally on shorter controls, and bounded on taller ones. Reuse this
+role for similarly sized actions; `--radius-pill` remains the fully round role
+for circles and pills of any height. Fields retain `--radius-control`.
+
+Button labels stay on one line and do not shrink in flex layouts, following
+shadcn's `whitespace-nowrap shrink-0` behavior without changing Buzz's sizing,
+emphasis, or Base UI interactions. Parents must reflow whole controls or provide
+scrolling when space is limited. Composite reply summaries may reflow whole
+avatar/count groups without wrapping individual labels. Small buttons use 16px
+side padding and 16px icons; medium and large use 24px side padding and 24px icons.
+Labels use the complete text-label-sm / text-label roles, with an 8px icon gap.
 
 IconButton defaults to round and uses the same sm/md/lg sizes. Existing names
 remain compatibility aliases: primary/solid → prominent, quiet → subtle,
@@ -293,7 +302,10 @@ close button agree. It retains the app's explicit dismissal behavior: outside
 clicks do not discard a form. Provide initialFocus for search dialogs and
 finalFocus when a flow has an external trigger or opens a second dialog.
 Editors can supply `headerActions` beside Close and `leadingActions` before the
-trailing footer actions. `onEscape` may return true to consume Escape for an
+trailing footer actions. Footer actions wrap as whole controls, never shrinking
+single-line labels. When one action exceeds the available width, the footer
+scrolls horizontally from a safe start edge so both ends remain reachable.
+`onEscape` may return true to consume Escape for an
 inline layer (such as an inspector) before dismissing the dialog. Nested modal
 layers still use Dialog so Base UI owns their focus trap and dismissal order;
 `placement="right"` and explicit `dismissOnOutsideClick` suit inspector sheets.

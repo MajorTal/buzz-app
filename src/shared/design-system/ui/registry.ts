@@ -339,7 +339,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "button",
     name: "Button",
     purpose:
-      "A capsule-shaped labelled action with shared emphasis, loading and destructive states.",
+      "A bounded capsule-shaped, single-line action with shared emphasis, loading and destructive states.",
     behavior: "Base UI Button",
     variants: [
       "prominent",

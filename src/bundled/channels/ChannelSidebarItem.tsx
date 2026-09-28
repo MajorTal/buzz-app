@@ -12,6 +12,7 @@ import { ChatCircleIcon } from "../../shared/design-system/icons/index";
 import { channelIcon } from "../../features/channels/channel-icon";
 import { ChannelActivityPopover } from "./ChannelActivityPopover";
 import { ChannelSidebarRow } from "./ChannelSidebarRow";
+import { DmTypingBadge } from "./DmTypingBadge";
 import { usePresenceStatus } from "../../features/presence/react";
 import { UnreadBadge } from "./UnreadBadge";
 import styles from "./Channels.module.css";
@@ -91,32 +92,37 @@ export const ChannelSidebarItem = memo(function ChannelSidebarItem({
       channel={channel}
       dmVisualSpacing={channel.channelType === "dm"}
       icon={
-        channel.channelType === "dm" && channel.participants?.length === 1 ? (
-          <span className={styles.dmAvatar} data-dm-identity="">
-            <Avatar
-              src={
-                profile?.picture
-                  ? session.media(profile.picture, "small")
-                  : undefined
-              }
-              alt=""
-              fallback={channel.name}
-              size="fill"
-              shape={profile?.isAgent ? "squircle" : "circle"}
-              statusBadge={presence === "unknown" ? undefined : presence}
-            />
-          </span>
-        ) : channel.channelType === "dm" &&
-          (channel.participants?.length ?? 0) > 1 ? (
-          <span
-            className={styles.dmCount}
-            data-dm-identity=""
-            data-dm-participant-count=""
-            title={`${channel.participants?.length} other participants`}
-            aria-hidden="true"
-          >
-            {channel.participants?.length}
-          </span>
+        channel.channelType === "dm" ? (
+          <DmTypingBadge session={session} channelId={channel.id}>
+            {channel.participants?.length === 1 ? (
+              <span className={styles.dmAvatar} data-dm-identity="">
+                <Avatar
+                  src={
+                    profile?.picture
+                      ? session.media(profile.picture, "small")
+                      : undefined
+                  }
+                  alt=""
+                  fallback={channel.name}
+                  size="fill"
+                  shape={profile?.isAgent ? "squircle" : "circle"}
+                  statusBadge={presence === "unknown" ? undefined : presence}
+                />
+              </span>
+            ) : (channel.participants?.length ?? 0) > 1 ? (
+              <span
+                className={styles.dmCount}
+                data-dm-identity=""
+                data-dm-participant-count=""
+                title={`${channel.participants?.length} other participants`}
+                aria-hidden="true"
+              >
+                {channel.participants?.length}
+              </span>
+            ) : (
+              <Icon size={16} />
+            )}
+          </DmTypingBadge>
         ) : (
           <Icon size={16} />
         )

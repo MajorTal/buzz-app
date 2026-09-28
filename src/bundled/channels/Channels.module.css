@@ -736,6 +736,42 @@
   background: var(--affordance-accent-prominent);
 }
 
+/* Occupies the DM identity box while it replaces the avatar or count; shares
+   the participant-count chip's subtle roles. */
+.typing {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  flex: 0 0 22px;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-half);
+  border-radius: var(--radius-pill);
+  background: var(--affordance-subtle);
+}
+.typing > span {
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--text-subtle);
+}
+@keyframes typing-pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: no-preference) {
+  .typing > span {
+    animation: typing-pulse 1.4s ease-in-out infinite;
+  }
+  .typing > span:nth-child(2) {
+    animation-delay: 0.2s;
+  }
+  .typing > span:nth-child(3) {
+    animation-delay: 0.4s;
+  }
+}
+
 /* Match the adjacent small avatars without creating image/profile demand. */
 .dmAvatar {
   display: inline-grid;

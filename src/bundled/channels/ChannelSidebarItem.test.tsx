@@ -17,6 +17,8 @@ import { ChannelSidebarItem } from "./ChannelSidebarItem";
 
 afterEach(cleanup);
 
+const noTyping = Object.freeze([]);
+
 function owner(profiles = new Map<string, Profile>()) {
   const listeners = new Set<() => void>();
   let snapshot: UnreadSnapshot = {
@@ -40,6 +42,7 @@ function owner(profiles = new Map<string, Profile>()) {
       snapshot: () => profiles,
       subscribe: () => () => {},
     },
+    typing: { snapshot: () => noTyping, subscribe: () => () => {} },
     unread: {
       snapshot: () => snapshot,
       subscribe: (_target: unknown, listener: () => void) => {

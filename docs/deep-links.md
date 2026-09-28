@@ -1,12 +1,14 @@
 # OS deep links
 
-Desktop builds register a URL scheme with the operating system, so a link opened
-outside the app brings it to the front and navigates, at cold start too. Every build
-uses `buzz://`, the same scheme in-app links and **Copy link** use. Windows/Linux
-register on launch; macOS requires the registered bundle itself to run, not
-`just desktop` or another copy with the same app identifier. Builds share this
-scheme (see [current limits](#current-limits)). The browser build has no OS ingress
-and keeps its `#buzz=` address form.
+Packaged desktop builds register a URL scheme with the operating system, so a
+link opened outside the app brings it to the front and navigates, at cold start
+too. Every build uses `buzz://`, the same scheme in-app links and **Copy link**
+use. Ordinary `just desktop` development runs do not register the scheme or
+enforce a single native instance, so linked worktrees can run in parallel. macOS
+requires the registered bundle itself to run, not `just desktop` or another copy
+with the same app identifier. Packaged builds share this scheme (see
+[current limits](#current-limits)). The browser build has no OS ingress and keeps
+its `#buzz=` address form.
 
 ## Accepted links
 
@@ -64,11 +66,14 @@ context for in-app use and remain unsupported at the OS boundary.
 
 ## Testing locally
 
-Write a link by hand, such as `buzz://channel/general` or
-`buzz://message?channel=general&id=<64-hex event id>`. A warm app should come to the
-front and open the conversation. A cold start should launch, show the start page, then open the
-destination once the client is ready. A malformed link such as
-`buzz://join?relay=example` must show the failure notice.
+For OS ingress, use a packaged app or debug bundle. Write a link by hand, such as
+`buzz://channel/general` or `buzz://message?channel=general&id=<64-hex event id>`.
+A warm packaged app should come to the front and open the conversation. A cold
+start should launch, show the start page, then open the destination once the
+client is ready. A malformed link such as `buzz://join?relay=example` must show
+the failure notice. Ordinary `just desktop` keeps in-app Buzz links and
+**Copy link**, but external `buzz://` delivery is not a supported development
+contract.
 
 For entity destinations, use `just web` with the existing authenticated development
 broker, select the owning community, and open Projects or a Buzz entity link in a
@@ -78,11 +83,13 @@ commit must show that exact revision and its diff. Back/Forward and Copy link
 preserve the entity route, including the requested tab and commit.
 
 **Before native testing:** coordinate with anyone using another Buzz copy on the
-machine. Registration can change the installed app's handler, and the shared app
-identifier permits only one active native instance across checkouts. Use a
-disposable machine/profile or explicitly agree which app owns the handler and how
-to restore it. Do not launch/register a test bundle over an active installation
-without that agreement.
+machine. Packaged/debug registration can change the installed app's handler, and
+packaged apps with the shared app identifier permit only one active native
+instance across checkouts. Use a disposable machine/profile or explicitly agree
+which app owns the handler and how to restore it. If an older development launch
+already claimed `buzz://`, launch the intended packaged app/debug bundle once, or
+reinstall it, so that app claims the handler again. Do not launch/register a test
+bundle over an active installation without agreement.
 
 **macOS** only routes a scheme to a bundled app. `just desktop` binaries are never
 registered, so build a debug bundle and launch it once to register it with Launch
@@ -99,38 +106,53 @@ open "buzz://channel/general"
 Quit the app and run the last command again to test a cold start. The bundle lands
 under the workspace `target/` directory because `src-tauri` is a workspace member.
 
-**Windows** registers the launching binary under the current user on every start, so
-a `just desktop` build works without an installer:
+**Windows** packaged/debug builds register the launching binary under the current
+user on every start. Ordinary `just desktop` does not register. `just desktop`
+and `just desktop-bundle --no-bundle` share `target/debug`; if you ran
+`just desktop` after the last debug build, rebuild before launching the executable
+or the registered binary will still have development-mode behavior. Use the
+installed app or build and run a debug binary, then open a link:
 
 ```powershell
+just desktop-bundle --no-bundle
+.\target\debug\buzz-foundation.exe
 start buzz://channel/general
 ```
 
 The NSIS installer registers the installed app as well; whichever build launched
 most recently owns the scheme.
 
-**Linux** writes a `<binary>-handler.desktop` entry and calls `xdg-mime` and
-`update-desktop-database` on every start, so both must be installed. Packaged `.deb`
-and AppImage builds also declare the scheme in their desktop entry.
+**Linux** packaged/debug builds write a `<binary>-handler.desktop` entry and call
+`xdg-mime` and `update-desktop-database` on every start, so both must be
+installed. Ordinary `just desktop` does not register. As on Windows, rerun
+`just desktop-bundle --no-bundle` after any `just desktop` launch before testing
+the shared `target/debug` executable. Packaged `.deb` and AppImage builds also
+declare the scheme in their desktop entry.
 
 ```sh
+just desktop-bundle --no-bundle
+./target/debug/buzz-foundation
 xdg-open "buzz://channel/general"
 ```
 
 ## Current limits
 
-- Development builds register `buzz` like released ones, so on a machine with Buzz
-  installed the two compete for it: Windows and Linux route it to whichever binary
-  started last, and macOS to whichever registered bundle Launch Services picks.
-- Every local bundle keeps the same application identifier, so they share app data
-  and single-instance identity. This is one active native Buzz per machine, not
-  per-worktree isolation; Launch Services can list several bundles under that identity.
-  On macOS, a registered bundle launched while a different copy (including an
-  unbundled dev process) is running can exit before receiving the OS URL. The running
-  copy may gain focus without opening the link. Cross-copy URL handoff is unsupported:
-  quit the other copy and open the link with the intended registered bundle. Cold-start
-  acceptance requires no native copy running; warm acceptance requires that exact
-  registered bundle already running. Windows/Linux use the plugin's argv handoff.
+- Ordinary development runs do not register `buzz` or enforce the packaged
+  single-instance policy. Several worktree apps can run together, but external
+  `buzz://` links have no guaranteed development target.
+- Every local package keeps the same application identifier, so packaged/debug
+  apps share app data and single-instance identity. This is one active packaged
+  native Buzz per machine, not per-worktree isolation; Launch Services can list
+  several bundles under that identity. On macOS, a registered bundle launched
+  while a different copy (including an unbundled dev process) is running can exit
+  before receiving the OS URL. The running copy may gain focus without opening
+  the link. Cross-copy URL handoff is unsupported: quit the other copy and open
+  the link with the intended registered bundle. Cold-start acceptance requires no
+  native copy running; warm acceptance requires that exact registered bundle
+  already running. Windows/Linux use the plugin's argv handoff.
+- Ordinary development worktrees still share app data. The native agent store
+  permits one owner at a time; a second worktree may report owned storage while
+  the rest of the app remains usable.
 - Invite links (`buzz://join`, `https://<relay>/invite/<code>`) and remote push
   are not handled; they end in the
   failure notice or, for HTTPS, never reach the app.

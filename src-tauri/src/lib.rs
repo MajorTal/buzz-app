@@ -395,14 +395,20 @@ fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let builder = tauri::Builder::default()
+    let builder = tauri::Builder::default();
+    let builder = if !tauri::is_dev() {
         // Single instance comes first, as its documentation requires. Its deep-link
         // feature forwards deep-link argv on Windows/Linux. macOS OS URLs reach
         // the registered bundle directly; cross-copy URL handoff is unsupported.
-        // This callback only foregrounds the running window.
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+        // This callback only foregrounds the running window. Development launches
+        // skip this so parallel worktrees can run side by side.
+        builder.plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             deep_links::focus_main(app);
         }))
+    } else {
+        builder
+    };
+    let builder = builder
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())

@@ -4,14 +4,18 @@ import { isBuzzLink } from "../features/navigation/buzz-links";
 
 const read = (path) => readFileSync(new URL(path, import.meta.url), "utf8");
 
-it("registers single-instance ahead of deep-link in the native builder, with argv forwarding enabled", () => {
+it("keeps packaged single-instance ahead of deep-link while development can run in parallel", () => {
   const lib = read("../../src-tauri/src/lib.rs");
+  const guard = lib.indexOf("if !tauri::is_dev()");
   const singleInstance = lib.indexOf(
     ".plugin(tauri_plugin_single_instance::init(",
+    guard,
   );
   const deepLink = lib.indexOf(".plugin(tauri_plugin_deep_link::init())");
+  expect(guard).toBeGreaterThan(-1);
   expect(singleInstance).toBeGreaterThan(-1);
   expect(deepLink).toBeGreaterThan(singleInstance);
+  expect(lib).not.toMatch(/debug_assertions/);
   expect(lib).toMatch(/deep_links::setup\(app\.handle\(\)\)/);
   const cargo = read("../../src-tauri/Cargo.toml");
   expect(cargo).toMatch(/^tauri-plugin-deep-link = "2"$/m);
@@ -20,8 +24,17 @@ it("registers single-instance ahead of deep-link in the native builder, with arg
   );
 });
 
-it("registers exactly the in-app link scheme with the OS, and bundles so installers claim it", () => {
-  // Development, bundled and released apps use the scheme in-app links produce.
+it("leaves OS scheme registration to packaged launches", () => {
+  const deepLinks = read("../../src-tauri/src/deep_links.rs");
+  const guard = deepLinks.indexOf("if !tauri::is_dev()");
+  const registerAll = deepLinks.indexOf("app.deep_link().register_all()");
+  expect(guard).toBeGreaterThan(-1);
+  expect(registerAll).toBeGreaterThan(guard);
+  expect(deepLinks).not.toMatch(/unregister/);
+});
+
+it("declares exactly the in-app link scheme so packages can claim it", () => {
+  // Bundled and released apps use the scheme in-app links produce.
   const config = JSON.parse(read("../../src-tauri/tauri.conf.json"));
   const schemes = config.plugins["deep-link"].desktop.schemes;
   expect(config.plugins["deep-link"]).toEqual({ desktop: { schemes } });

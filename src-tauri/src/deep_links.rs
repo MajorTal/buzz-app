@@ -115,9 +115,12 @@ pub(crate) fn setup<R: tauri::Runtime>(app: &tauri::AppHandle<R>) {
             Ok(None) => {}
             Err(error) => eprintln!("Could not read the launch deep link: {error}"),
         }
-        // Installers register the scheme; portable and development binaries do not.
-        if let Err(error) = app.deep_link().register_all() {
-            eprintln!("Could not register {SCHEME}:// for this binary: {error}");
+        // Installers register the scheme; packaged portable/debug binaries can
+        // repair it on launch. Development runs leave any installed handler alone.
+        if !tauri::is_dev() {
+            if let Err(error) = app.deep_link().register_all() {
+                eprintln!("Could not register {SCHEME}:// for this binary: {error}");
+            }
         }
     }
 }

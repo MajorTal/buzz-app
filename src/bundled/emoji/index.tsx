@@ -10,6 +10,7 @@ import { createReactionPicker } from "./ReactionPicker";
 import { EmojiPicker } from "./EmojiPicker";
 import { CustomEmoji } from "./CustomEmoji";
 import { copyEmoji } from "./copy-emoji";
+import { CustomEmojiSettings } from "./CustomEmojiSettings";
 
 export const inject = ["conversation"];
 const entries = (content: InlineContent) =>
@@ -19,6 +20,17 @@ const entries = (content: InlineContent) =>
       : []
     : (content.message.emoji ?? []);
 export const apply: PluginModule["apply"] = (ctx) => {
+  // Authoring needs a relay host; conversation-only hosts still get the palette.
+  ctx.inject(["relay", "settingsCards"], (scope) => {
+    const relay = scope.relay;
+    scope.settingsCards.register({
+      id: "custom-emoji",
+      title: "Custom emoji",
+      component: ({ active }) => (
+        <CustomEmojiSettings relay={relay} active={active} />
+      ),
+    });
+  });
   ctx.effect(() => {
     if (typeof document === "undefined") return () => {};
     document.addEventListener("copy", copyEmoji);

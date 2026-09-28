@@ -60,6 +60,7 @@ import {
   readActiveSidebarGroups,
 } from "./sidebar-personal-groups";
 import { createEmojiDirectory } from "./emoji-directory";
+import { EMOJI_SET_KIND } from "./emoji";
 import { createProfileDirectory } from "./profile-directory";
 import { createChannelStore, type ChannelStoreOptions } from "./store";
 import { MessageClock } from "./message-order";
@@ -562,7 +563,32 @@ export function createRelaySession(
     notify,
   );
   const profiles = createProfileDirectory(verified, localViews, notify);
-  const emoji = createEmojiDirectory(verified, notify);
+  const emoji = createEmojiDirectory(
+    verified,
+    notify,
+    transport?.viewer,
+    transport &&
+      writer &&
+      uploadAttachment &&
+      (!writer.kinds || writer.kinds.includes(EMOJI_SET_KIND))
+      ? {
+          writer,
+          async upload(file, signal) {
+            const combined = AbortSignal.any([
+              signal,
+              lifetime.signal,
+              uploadLifetime.signal,
+            ]);
+            combined.throwIfAborted();
+            if (closed) throw new UploadError("denied");
+            const result = await uploadAttachment(file, combined);
+            combined.throwIfAborted();
+            if (closed) throw new UploadError("denied");
+            return result;
+          },
+        }
+      : undefined,
+  );
   const statuses = createUserStatuses(
     verified,
     transport?.viewer,

@@ -4,6 +4,8 @@ import {
   EMOJI_SET,
   emojiTags,
   referencedEmoji,
+  suggestShortcode,
+  validEmojiSetTemplate,
   validReactionContent,
 } from "./emoji";
 import { createRelaySession } from "./session";
@@ -459,4 +461,230 @@ it("fold preserves historical message/edit mappings and per-reaction URLs withou
     "https://one.test/p",
     "https://two.test/p",
   ]);
+});
+function authoring(
+  kinds?: readonly number[],
+  upload = vi.fn(async (file: File) => ({
+    name: file.name,
+    url: "https://a.test/media/new.png",
+    type: "image/png",
+    size: 3,
+    sha256: "b".repeat(64),
+  })),
+) {
+  const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
+  const sign = vi.fn(async (template) => signed(viewer, template));
+  const publish = vi.fn(async (_event: RelayEvent) => {});
+  const owner = createRelaySession(
+    {
+      ...wire.transport,
+      writer: { sign, publish, ...(kinds ? { kinds } : {}) },
+      uploadAttachment: upload,
+    },
+    { outboxStorage: { load: () => [], save() {} } },
+  );
+  owners.push(owner);
+  const emoji = owner.session.emoji;
+  const ownRead = () => {
+    const pending = wire.pending.find((p) => p.filters[0]?.authors);
+    if (!pending) throw new Error("No own-set read");
+    wire.pending.splice(wire.pending.indexOf(pending), 1);
+    return pending;
+  };
+  return { ...owner, wire, sign, publish, upload, emoji, ownRead };
+}
+it("adding republishes the viewer's own set, replaces one shortcode and reaches the palette", async () => {
+  const h = authoring();
+  const ready = h.emoji.ensure();
+  h.wire.next().respond([
+    set(member, 1, [["emoji", "wave", "https://a.test/wave.png"]]),
+    set(viewer, 5, [
+      ["emoji", "party", url],
+      ["emoji", "keep", "https://a.test/keep.png"],
+    ]),
+  ]);
+  await ready;
+  expect(h.emoji.snapshot().mine.map((e) => e.shortcode)).toEqual([
+    "party",
+    "keep",
+  ]);
+  const adding = h.emoji.add?.(":Party:", "https://a.test/media/new.png");
+  await vi.waitFor(() => expect(h.wire.pending).toHaveLength(1));
+  const own = h.ownRead();
+  expect(own.filters).toEqual([
+    { kinds: [30030], "#d": [EMOJI_SET], authors: [viewer.pubkey], limit: 1 },
+  ]);
+  own.respond([
+    set(viewer, 5, [
+      ["emoji", "party", url],
+      ["emoji", "keep", "https://a.test/keep.png"],
+    ]),
+  ]);
+  await expect(adding).resolves.toBe("party");
+  const event = h.publish.mock.calls[0]?.[0];
+  expect(event).toMatchObject({ kind: 30030, pubkey: viewer.pubkey });
+  expect(event?.created_at).toBeGreaterThan(5);
+  expect(event?.tags).toEqual([
+    ["d", EMOJI_SET],
+    ["emoji", "keep", "https://a.test/keep.png"],
+    ["emoji", "party", "https://a.test/media/new.png"],
+  ]);
+  expect(h.emoji.snapshot().entries).toEqual([
+    { shortcode: "keep", url: "https://a.test/keep.png" },
+    { shortcode: "party", url: "https://a.test/media/new.png" },
+    { shortcode: "wave", url: "https://a.test/wave.png" },
+  ]);
+  // Use: sends reference the added image by its original URL.
+  const sent = h.session.messages.send("c", "hi :party:");
+  expect(
+    h.session.outbox?.snapshot().find((item) => item.event.id === sent)?.event
+      .tags,
+  ).toContainEqual(["emoji", "party", "https://a.test/media/new.png"]);
+  // Reload: a fresh session reading the relay's stored set shows the addition.
+  const reloaded = authoring();
+  const reread = reloaded.emoji.ensure();
+  reloaded.wire.next().respond(event ? [event] : []);
+  await reread;
+  expect(reloaded.emoji.snapshot().mine).toEqual([
+    { shortcode: "keep", url: "https://a.test/keep.png" },
+    { shortcode: "party", url: "https://a.test/media/new.png" },
+  ]);
+});
+it("rejects invalid names before any read and maps publish failure to reference copy", async () => {
+  const h = authoring();
+  await expect(h.emoji.add?.("bad name", url)).rejects.toThrow(
+    "Invalid emoji name. Use letters, numbers, hyphen, or underscore.",
+  );
+  await expect(h.emoji.add?.("x".repeat(65), url)).rejects.toThrow(
+    /Invalid emoji name/,
+  );
+  expect(h.wire.pending).toHaveLength(0);
+  h.publish.mockRejectedValueOnce(new PublishRejected("blocked: no"));
+  const adding = h.emoji.add?.("party", url);
+  await vi.waitFor(() => expect(h.wire.pending).toHaveLength(1));
+  h.ownRead().respond([]);
+  await expect(adding).rejects.toThrow("Failed to add emoji.");
+  expect(h.emoji.snapshot().mine).toEqual([]);
+  const failedRead = h.emoji.add?.("party", url);
+  await vi.waitFor(() => expect(h.wire.pending).toHaveLength(1));
+  h.ownRead().fail(new Error("offline"));
+  await expect(failedRead).rejects.toThrow("Failed to add emoji.");
+  expect(h.publish).toHaveBeenCalledTimes(1);
+});
+it("maps an add that outlives its deadline to the reference timeout copy", async () => {
+  const deadline = new AbortController();
+  const timeout = vi
+    .spyOn(AbortSignal, "timeout")
+    .mockReturnValue(deadline.signal);
+  try {
+    const h = authoring();
+    const adding = h.emoji.add?.("party", url);
+    await vi.waitFor(() => expect(h.wire.pending).toHaveLength(1));
+    expect(timeout).toHaveBeenCalledWith(12_000);
+    deadline.abort(new DOMException("timed out", "TimeoutError"));
+    await expect(adding).rejects.toThrow("Timed out while adding emoji.");
+    expect(h.publish).not.toHaveBeenCalled();
+    expect(h.emoji.snapshot().mine).toEqual([]);
+  } finally {
+    timeout.mockRestore();
+  }
+});
+it("dispose fails running and queued adds without publishing", async () => {
+  const h = authoring();
+  const running = h.emoji.add?.("one", "https://a.test/1.png");
+  const queued = h.emoji.add?.("two", "https://a.test/2.png");
+  await vi.waitFor(() => expect(h.wire.pending).toHaveLength(1));
+  h.dispose();
+  await expect(running).rejects.toThrow("Failed to add emoji.");
+  await expect(queued).rejects.toThrow("Failed to add emoji.");
+  await expect(h.emoji.add?.("three", url)).rejects.toThrow(
+    "Failed to add emoji.",
+  );
+  expect(h.sign).not.toHaveBeenCalled();
+  expect(h.publish).not.toHaveBeenCalled();
+});
+it("serializes concurrent adds so a stale own-set read cannot drop an earlier addition", async () => {
+  const h = authoring();
+  const first = h.emoji.add?.("one", "https://a.test/1.png");
+  const second = h.emoji.add?.("two", "https://a.test/2.png");
+  await vi.waitFor(() => expect(h.wire.pending).toHaveLength(1));
+  h.ownRead().respond([]);
+  await first;
+  await vi.waitFor(() => expect(h.wire.pending).toHaveLength(1));
+  h.ownRead().respond([]); // the relay has not indexed the first yet
+  await second;
+  expect(h.publish.mock.calls[1]?.[0].tags).toEqual([
+    ["d", EMOJI_SET],
+    ["emoji", "one", "https://a.test/1.png"],
+    ["emoji", "two", "https://a.test/2.png"],
+  ]);
+});
+it("exposes authoring only with upload and 30030 write capability", async () => {
+  const h = authoring();
+  const file = new File(["png"], "party.png", { type: "image/png" });
+  await expect(
+    h.emoji.upload?.(file, new AbortController().signal),
+  ).resolves.toMatchObject({ url: "https://a.test/media/new.png" });
+  expect(h.upload).toHaveBeenCalledWith(file, expect.any(AbortSignal));
+  expect(authoring([7, 9]).emoji.add).toBeUndefined();
+  expect(authoring([30030]).emoji.add).toBeTypeOf("function");
+  expect(session().session.emoji.add).toBeUndefined();
+});
+it("suggests Desktop's file-first shortcode and admits only canonical own sets", () => {
+  expect(suggestShortcode("C:\\pics/Party Parrot!!.GIF")).toBe("party_parrot");
+  expect(suggestShortcode("--wave--.png")).toBe("wave");
+  expect(suggestShortcode("!!!.png")).toBeUndefined();
+  const now = 1700000000;
+  const template = {
+    kind: 30030,
+    created_at: now,
+    content: "",
+    tags: [
+      ["d", EMOJI_SET],
+      ["emoji", "party", url],
+    ],
+  };
+  expect(validEmojiSetTemplate(template, now)).toBe(true);
+  expect(
+    validEmojiSetTemplate({ ...template, tags: [["d", EMOJI_SET]] }, now),
+  ).toBe(true);
+  for (const patch of [
+    { kind: 30315 },
+    { content: "x" },
+    { created_at: now + 301 },
+    { created_at: 1.5 },
+    { tags: [["emoji", "party", url]] },
+    {
+      tags: [
+        ["d", EMOJI_SET],
+        ["emoji", ":party:", url],
+      ],
+    },
+    {
+      tags: [
+        ["d", EMOJI_SET],
+        ["emoji", "party", ""],
+      ],
+    },
+    {
+      tags: [
+        ["d", EMOJI_SET],
+        ["emoji", "party", `https://a.test/${"x".repeat(2048)}`],
+      ],
+    },
+    {
+      tags: [
+        ["d", EMOJI_SET],
+        ["emoji", "party", url],
+        ["emoji", "party", url],
+      ],
+    },
+    {
+      tags: [
+        ["d", EMOJI_SET],
+        ["p", viewer.pubkey],
+      ],
+    },
+  ])
+    expect(validEmojiSetTemplate({ ...template, ...patch }, now)).toBe(false);
 });

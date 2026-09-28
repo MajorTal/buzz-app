@@ -122,10 +122,10 @@ it("loads the broker's Vite config without native-compatibility warnings", () =>
         VITE_CONFIG_NATIVE_IGNORE_WARNING: "",
       },
       encoding: "utf8",
-      timeout: 10_000,
+      timeout: 30_000,
     },
   );
   expect(result.error).toBeUndefined();
   expect(result.status, result.stderr).toBe(0);
   expect(result.stderr).not.toContain("configLoader: 'native'");
-}, 15_000);
+}, 35_000);

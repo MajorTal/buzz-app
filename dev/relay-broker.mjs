@@ -72,7 +72,10 @@ import {
 } from "./sidebar-preferences.mjs";
 import { createHostAdmission } from "../src/features/relay/host-admission.ts";
 import { relayKlipySearchPath } from "../src/features/relay/gifs.ts";
-import { validReactionContent } from "../src/features/relay/emoji.ts";
+import {
+  validEmojiSetTemplate,
+  validReactionContent,
+} from "../src/features/relay/emoji.ts";
 // Dev-only relay broker. Holds the local Buzz identity in this Node process and signs NIP-98 reads
 // for the browser, so no key ever reaches page JavaScript. The dev server loads it whenever
 // BUZZ_DEV_VIEWER is configured; production builds and tests never load it.
@@ -1396,6 +1399,7 @@ export function relayBrokerPlugin({
               directMessages: true,
               writeKinds: [
                 30315,
+                30030,
                 7,
                 9,
                 40003,
@@ -2226,6 +2230,12 @@ export function relayBrokerPlugin({
               if (!validStatusTemplate(filters))
                 return json(res, 400, {
                   error: "Status rejected",
+                  sent: false,
+                });
+            } else if (filters?.kind === 30030) {
+              if (!validEmojiSetTemplate(filters))
+                return json(res, 400, {
+                  error: "Emoji set rejected",
                   sent: false,
                 });
             } else if (filters?.kind === 9001) {

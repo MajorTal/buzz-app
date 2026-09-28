@@ -147,3 +147,18 @@
   letter-spacing: var(--text-caption--letter-spacing);
   text-align: center;
 }
+.emojiPreview {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 64px;
+  border: 1px solid var(--border-standard);
+  border-radius: var(--radius-control);
+}
+.emojiPreview img {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+}

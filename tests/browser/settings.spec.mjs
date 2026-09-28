@@ -220,6 +220,10 @@ test("avatar Settings access dismisses cleanly and exposes Profile and Plugins",
     name: "Personal groups",
     exact: true,
   });
+  const customEmoji = sections.getByRole("button", {
+    name: "Custom emoji",
+    exact: true,
+  });
   const hostedCommunities = sections.getByRole("button", {
     name: "Hosted communities",
     exact: true,
@@ -273,6 +277,8 @@ test("avatar Settings access dismisses cleanly and exposes Profile and Plugins",
     await tab();
     await expect(personalGroups).toBeFocused();
     await tab();
+    await expect(customEmoji).toBeFocused();
+    await tab();
     await expect(hostedCommunities).toBeFocused();
     await tab();
     await expect(invites).toBeFocused();
@@ -325,6 +331,8 @@ test("avatar Settings access dismisses cleanly and exposes Profile and Plugins",
     await expect(pluginContent).toHaveCount(0);
     await tab();
     await expect(personalGroups).toBeFocused();
+    await tab();
+    await expect(customEmoji).toBeFocused();
     await tab();
     await expect(hostedCommunities).toBeFocused();
     await tab();

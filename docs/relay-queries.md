@@ -77,6 +77,18 @@ for shortcode conflicts. The directory retains at most 500 member sets / 2 MiB;
 read caps and overflow expose errors rather than silently evicting replacements.
 An explicit retry after overflow starts a fresh bounded catalog read.
 
+`snapshot().mine` lists the viewer's own set. When the session has an attachment
+uploader and its writer admits kind 30030, the directory also exposes `upload()`
+(the session uploader, fenced by session lifetime) and `add(name, url)`. `add`
+normalizes the shortcode, freshly reads the viewer's own set, replaces that
+shortcode, and republishes the whole set with a strictly newer `created_at`.
+Adds within a session run one at a time, so a stale read cannot drop an earlier
+add. The signed echo must match the template before publishing, the accepted set
+joins the palette immediately, and failures surface as the reference
+`Failed to add emoji.` / `Timed out while adding emoji.` copy. The development
+broker admits kind 30030 only for the canonical own-set template
+(`validEmojiSetTemplate`).
+
 Live kind-30030 updates share the existing profile route, not another socket or
 subscription slot. Global establishment repairs an already requested catalog;
 cache/access clearing and disposal cancel its reads and fence stale results.

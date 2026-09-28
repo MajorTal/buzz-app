@@ -1728,6 +1728,52 @@ test("status signing and publication preserve scoped replacements and explicit c
   }
 });
 
+test("custom emoji sets sign and publish only as one canonical own coordinate", async () => {
+  const h = await harness((call) =>
+    Response.json({ accepted: true, event_id: call.body.id }),
+  );
+  try {
+    await h.start();
+    expect((await (await h.get("session")).json()).writeKinds).toContain(30030);
+    const template = {
+      kind: 30030,
+      created_at: 1700000000,
+      content: "",
+      tags: [
+        ["d", "buzz:custom-emoji"],
+        ["emoji", "party", "https://relay.test/media/party.png"],
+      ],
+    };
+    const response = await h.post("sign", template);
+    expect(response.status).toBe(200);
+    const event = await response.json();
+    expect(verifyEvent(event)).toBe(true);
+    expect(event).toMatchObject(template);
+    expect((await h.post("publish", event)).status).toBe(200);
+    expect(h.publications.at(-1)).toEqual(JSON.parse(JSON.stringify(event)));
+    for (const tags of [
+      [["d", "other"]],
+      [
+        ["d", "buzz:custom-emoji"],
+        ["emoji", "Party", "https://relay.test/p.png"],
+      ],
+      [
+        ["d", "buzz:custom-emoji"],
+        ["emoji", "party", "https://relay.test/a.png"],
+        ["emoji", "party", "https://relay.test/b.png"],
+      ],
+      [
+        ["d", "buzz:custom-emoji"],
+        ["h", "channel"],
+      ],
+    ])
+      expect((await h.post("sign", { ...template, tags })).status).toBe(400);
+    expect(h.publications).toHaveLength(1);
+  } finally {
+    await h.close();
+  }
+});
+
 test("memory reads use captured relay and owner, not submitted identity/filter authority, through HTTP host and transport", async () => {
   const owner = new Uint8Array(32);
   owner[31] = 7;

@@ -8,7 +8,6 @@ export type NotificationPresentation = Readonly<{
   id: string;
   title: string;
   body: string;
-  silent: boolean;
 }>;
 export interface NotificationPlatform {
   readonly label: string;
@@ -115,7 +114,9 @@ export function createBrowserNotifications(
       const notification = new api(item.title, {
         body: item.body,
         tag: item.id,
-        silent: item.silent,
+        // Sound is app-owned: the notifications service plays the selected
+        // bundled sound after delivery, so the banner is always submitted silent.
+        silent: true,
       });
       active.set(item.id, notification);
       notification.onclick = () => {

@@ -42,7 +42,6 @@ it("browser activation focuses and routes once; close/dispose releases callbacks
       id: "one",
       title: "Pinky mentioned you in #Room",
       body: "Hello Wes",
-      silent: true,
     },
     activate,
     vi.fn(),
@@ -51,6 +50,7 @@ it("browser activation focuses and routes once; close/dispose releases callbacks
   expect(t.shown[0]?.options).toEqual({
     body: "Hello Wes",
     tag: "one",
+    // Sound is app-owned; the OS banner is always submitted silent.
     silent: true,
   });
   t.shown[0]?.onclick?.();
@@ -58,7 +58,7 @@ it("browser activation focuses and routes once; close/dispose releases callbacks
   expect(t.host.focus).toHaveBeenCalledTimes(1);
   expect(t.shown[0]?.onclick).toBeNull();
   await t.platform.show(
-    { id: "two", title: "Buzz", body: "New mention", silent: false },
+    { id: "two", title: "Buzz", body: "New mention" },
     activate,
     vi.fn(),
   );
@@ -72,7 +72,7 @@ it("bounded presentation closes the old banner instead of stranding its target",
   const t = setup();
   for (let i = 0; i < 129; i++)
     await t.platform.show(
-      { id: String(i), title: "Buzz", body: "New mention", silent: true },
+      { id: String(i), title: "Buzz", body: "New mention" },
       () => {},
       vi.fn(),
     );
@@ -89,7 +89,7 @@ it("denial and a native WebView never silently use browser notification delivery
   expect(await t.platform.permission()).toBe("denied");
   await expect(
     t.platform.show(
-      { id: "one", title: "Buzz", body: "New mention", silent: true },
+      { id: "one", title: "Buzz", body: "New mention" },
       () => {},
       vi.fn(),
     ),
@@ -107,7 +107,7 @@ it("asynchronous browser errors report once and retire every callback without re
     failed = vi.fn(),
     activate = vi.fn();
   await t.platform.show(
-    { id: "failed", title: "Buzz", body: "New mention", silent: true },
+    { id: "failed", title: "Buzz", body: "New mention" },
     activate,
     failed,
   );

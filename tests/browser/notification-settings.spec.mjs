@@ -46,6 +46,13 @@ test("Notifications keeps settings separated and button labels contained at supp
       section.getByRole("button", { name: "Allow notifications" }),
     ).toBeVisible();
     await expect(section.getByRole("switch")).toHaveCount(6);
+    // The per-event sound controls must be present for the geometry sweep.
+    for (const name of ["Direct messages", "@Mentions", "Thread replies"]) {
+      await expect(section.getByRole("combobox", { name })).toBeVisible();
+    }
+    await expect(
+      section.getByRole("button", { name: "Preview flutter" }),
+    ).toHaveCount(3);
     await page.evaluate(() => document.fonts.ready);
     for (const width of [800, 390]) {
       await page.setViewportSize({ width, height: 900 });

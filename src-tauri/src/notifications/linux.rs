@@ -54,7 +54,9 @@ async fn notify(connection: &Connection, title: &str, body: &str) -> Result<Outc
         title,
         body,
         vec!["default", "Open"],
-        HashMap::<&str, Value<'_>>::new(),
+        // Sound is app-owned: the renderer plays the selected bundled sound
+        // after delivery, so ask the server not to add its own.
+        HashMap::<&str, Value<'_>>::from([("suppress-sound", Value::from(true))]),
         -1i32,
     );
     let reply = proxy.call::<_, _, u32>("Notify", &args);

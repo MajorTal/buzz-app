@@ -13,6 +13,11 @@ import {
   type NotificationPermissionState,
 } from "./platform";
 import { afterPresentation } from "./presentation";
+import {
+  playNotificationSound,
+  resolveCategorySound,
+  type SoundName,
+} from "./sound";
 import type { NotificationText } from "./content";
 
 export type NotificationCategoryDescriptor = Readonly<{
@@ -70,6 +75,12 @@ export class NotificationsService extends Service implements Notifications {
   private readonly contributions;
   private readonly listeners = new Set<() => void>();
   private readonly pending = new Set<Candidate>();
+  // Outstanding audio decisions for submissions awaiting platform acceptance.
+  // Revalidation cancels them stickily; cancellation never affects the banner.
+  private readonly sounding = new Set<{
+    item: Candidate;
+    cancelled: boolean;
+  }>();
   private readonly seen = new Map<string, number>();
   private closed = false;
   private generation = 0;
@@ -84,6 +95,8 @@ export class NotificationsService extends Service implements Notifications {
     private readonly preferences = createNotificationPreferences(),
     private readonly authorized: (target: OpenTarget) => boolean = (target) =>
       !("scope" in target && target.scope),
+    private readonly playSound: (name: SoundName) => void = (name) =>
+      void playNotificationSound(name),
   ) {
     super(ctx, "notifications");
     this.contributions =
@@ -231,6 +244,18 @@ export class NotificationsService extends Service implements Notifications {
         this.pending.delete(item);
       }
     }
+    // Outstanding audio decisions stay under revalidation until the platform
+    // resolves them. Any interval of revoked policy/access/eligibility — or
+    // Sound turned off — cancels the sound for good; restoring the setting
+    // before the submission resolves must not resurrect it.
+    for (const decision of this.sounding) {
+      if (
+        !this.state.preferences.sound ||
+        !this.allowed(decision.item) ||
+        decision.item.eligible() === false
+      )
+        decision.cancelled = true;
+    }
     this.schedule();
   }
   register(category: NotificationCategoryDescriptor) {
@@ -376,24 +401,55 @@ export class NotificationsService extends Service implements Notifications {
       }
       // One attempt. A rejected/unknown OS submission is reported, never retried.
       this.pending.delete(item);
-      await this.platform.show(
-        {
-          id: crypto.randomUUID(),
-          ...item.text(),
-          silent: !this.state.preferences.sound,
-        },
-        () => {
-          if (this.closed || generation !== this.generation) return;
-          // Opening may switch to an already joined community. Navigation owns
-          // current membership/channel access; admission's selected-session gate
-          // must not turn a still-valid prior notification into a dead click.
-          void this.navigation.open(item.target).catch(this.reportError);
-        },
-        (error) => {
-          if (!this.closed && generation === this.generation)
-            this.reportError(error);
-        },
-      );
+      // The item is out of `pending`, so register its audio decision for
+      // sticky cancellation by `revalidate` while the submission is
+      // outstanding. Sound off at submission means no decision at all.
+      const decision = this.state.preferences.sound
+        ? { item, cancelled: false }
+        : null;
+      if (decision) this.sounding.add(decision);
+      try {
+        await this.platform.show(
+          {
+            id: crypto.randomUUID(),
+            ...item.text(),
+          },
+          () => {
+            if (this.closed || generation !== this.generation) return;
+            // Opening may switch to an already joined community. Navigation
+            // owns current membership/channel access; admission's
+            // selected-session gate must not turn a still-valid prior
+            // notification into a dead click.
+            void this.navigation.open(item.target).catch(this.reportError);
+          },
+          (error) => {
+            // Native failure can arrive before `show` resolves. Cancellation is
+            // about this submission's audio decision, not whether its account
+            // still owns visible error reporting.
+            if (decision) decision.cancelled = true;
+            if (!this.closed && generation === this.generation)
+              this.reportError(error);
+          },
+        );
+      } finally {
+        if (decision) this.sounding.delete(decision);
+      }
+      // Banners are always submitted silent; the selected per-category sound
+      // plays here once the platform accepted the presentation — but only if
+      // the decision survived: not stickily cancelled by any intervening
+      // revocation while the submission was outstanding, same account
+      // generation, and still allowed, eligible and Sound-enabled now.
+      if (
+        decision &&
+        !decision.cancelled &&
+        generation === this.generation &&
+        this.state.preferences.sound &&
+        this.allowed(item) &&
+        item.eligible() === true
+      )
+        this.playSound(
+          resolveCategorySound(this.state.preferences.sounds, item.category),
+        );
     } catch (error) {
       this.pending.delete(item);
       this.reportError(error);

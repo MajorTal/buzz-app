@@ -24,6 +24,62 @@
   border-top: 1px solid var(--border-standard);
 }
 
+.soundRows {
+  display: grid;
+  gap: var(--space-1);
+  padding-left: var(--space-4);
+}
+
+.soundRows > * + * {
+  border-top: 1px solid var(--border-standard);
+}
+
+.soundRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding-block: var(--space-2);
+}
+
+.soundRow[data-disabled] {
+  opacity: 0.4;
+}
+
+.soundRowContent {
+  display: grid;
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.soundRowLabel {
+  font-weight: var(--type-weight-medium);
+}
+
+.soundControls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.waveform {
+  width: 60px;
+  height: 24px;
+  flex: 0 1 60px;
+  min-width: 0;
+  background: currentColor;
+  opacity: 0.7;
+  mask-position: center;
+  mask-repeat: no-repeat;
+  mask-size: contain;
+  -webkit-mask-position: center;
+  -webkit-mask-repeat: no-repeat;
+  -webkit-mask-size: contain;
+}
+
 .permission {
   display: flex;
   flex-wrap: wrap;

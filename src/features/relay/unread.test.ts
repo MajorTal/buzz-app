@@ -1037,7 +1037,8 @@ it("projects event attention through the same mention, DM, participation and fro
     status: "eligible",
     category: "direct",
   });
-  expect(attention(mention.id).category).toBe("mention");
+  // DM events p-tag their recipient; direct wins over mention in DM channels.
+  expect(attention(mention.id).category).toBe("direct");
   expect(h.snapshot().attentionCount).toBe(2);
   expect(attention("f".repeat(64)).status).toBe("unknown");
   lease.dispose();

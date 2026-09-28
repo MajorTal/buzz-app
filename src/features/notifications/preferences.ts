@@ -1,3 +1,10 @@
+import {
+  DEFAULT_CATEGORY_SOUNDS,
+  isSoundName,
+  type CategorySounds,
+  type SoundName,
+} from "./sound";
+
 /** Desired account-local policy is separate from system permission. */
 export const NOTIFICATION_CATEGORIES = ["mention", "direct", "thread"] as const;
 export type NotificationCategory = (typeof NOTIFICATION_CATEGORIES)[number];
@@ -5,6 +12,7 @@ export type NotificationPreferences = Readonly<{
   enabled: boolean;
   notifyWhileViewing: boolean;
   sound: boolean;
+  sounds: CategorySounds;
   categories: Readonly<Record<string, boolean>>;
 }>;
 export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences =
@@ -12,9 +20,28 @@ export const DEFAULT_NOTIFICATION_PREFERENCES: NotificationPreferences =
     enabled: true,
     notifyWhileViewing: false,
     sound: true,
+    sounds: DEFAULT_CATEGORY_SOUNDS,
     categories: Object.freeze({ mention: true, direct: true, thread: true }),
   });
 const KEY = "buzz-notification-preferences.v1";
+// Values saved before per-category sounds existed omit `sounds`; they get the
+// defaults rather than failing restore and pausing alerts.
+function parseSounds(raw: unknown): CategorySounds {
+  if (raw === undefined) return DEFAULT_CATEGORY_SOUNDS;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw))
+    throw new Error("Invalid notification sounds");
+  const value = raw as Record<string, unknown>;
+  const sounds: Record<NotificationCategory, SoundName> = {
+    ...DEFAULT_CATEGORY_SOUNDS,
+  };
+  for (const category of NOTIFICATION_CATEGORIES) {
+    const picked = value[category];
+    if (picked === undefined) continue;
+    if (!isSoundName(picked)) throw new Error("Invalid notification sounds");
+    sounds[category] = picked;
+  }
+  return Object.freeze(sounds);
+}
 export function parsePreferences(raw: unknown): NotificationPreferences {
   if (!raw || typeof raw !== "object" || Array.isArray(raw))
     throw new Error("Invalid notification preferences");
@@ -42,6 +69,7 @@ export function parsePreferences(raw: unknown): NotificationPreferences {
     enabled: value.enabled,
     notifyWhileViewing: value.notifyWhileViewing,
     sound: value.sound as boolean,
+    sounds: parseSounds(value.sounds),
     categories: Object.freeze(Object.fromEntries(categories)),
   });
 }

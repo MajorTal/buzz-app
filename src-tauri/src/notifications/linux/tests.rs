@@ -83,7 +83,12 @@ impl Daemon {
             ("Buzz", 0, "Title", "Preview")
         );
         assert_eq!(actions, ["default", "Open"]);
-        assert!(hints.is_empty());
+        // Banners are silent on the server side; the app plays its own sound.
+        assert_eq!(
+            hints.get("suppress-sound").map(|value| &**value),
+            Some(&zbus::zvariant::Value::from(true))
+        );
+        assert_eq!(hints.len(), 1);
         assert_eq!(expire_timeout, -1);
         if matches!(self.scenario, Scenario::Rejected) {
             return Err(zbus::fdo::Error::Failed("Notify rejected".into()));

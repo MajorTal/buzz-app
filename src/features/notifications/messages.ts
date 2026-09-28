@@ -121,9 +121,11 @@ export function bindMessageNotifications(
               message.messageId,
             );
             const sync = owned.unread.sync();
-            // Mentions bypass channel mute, as in the legacy policy. Unknown
-            // preferences must not briefly release ordinary alerts at startup.
-            if (attention.category !== "mention") {
+            // Explicit mentions bypass channel mute, as in the legacy policy —
+            // including p-tagged messages in DM channels, whose category is
+            // "direct". Unknown preferences must not briefly release ordinary
+            // alerts at startup.
+            if (!attention.mentioned) {
               const preferences = owned.sidebarPreferences.snapshot();
               if (preferences.data?.muted.includes(message.channelId))
                 return false;

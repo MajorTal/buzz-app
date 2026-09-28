@@ -39,7 +39,6 @@ const item = () => ({
   id: crypto.randomUUID(),
   title: "Buzz",
   body: "Hello",
-  silent: true,
 });
 function callback(index = 0) {
   const call = calls[index];
@@ -108,6 +107,25 @@ it("accepts a native activation before the command promise resolves", async () =
   await platform.show(item(), activate, vi.fn());
   expect(activate).toHaveBeenCalledOnce();
   expect(callbacks.size).toBe(0);
+  platform.dispose();
+});
+
+it("accepts a native failure before the command promise resolves", async () => {
+  const platform = createNotifications();
+  const failed = vi.fn();
+  invoke.mockImplementationOnce(async (_command, args) => {
+    calls.push(JSON.parse(JSON.stringify(args)));
+    const { call, send } = callback();
+    send({
+      message: { id: call.id, kind: "failed", error: "backend failure" },
+      index: 0,
+    });
+    send({ end: true, index: 1 });
+  });
+  await platform.show(item(), vi.fn(), failed);
+  expect(failed).toHaveBeenCalledExactlyOnceWith(new Error("backend failure"));
+  expect(callbacks.size).toBe(0);
+  expect(invoke).toHaveBeenCalledOnce();
   platform.dispose();
 });
 

@@ -230,6 +230,11 @@ fn show<R: tauri::Runtime>(
             })
             .title(&title)
             .text1(&body)
+            // Sound is app-owned: the renderer plays the selected bundled
+            // sound after delivery. Without this the toast defaults to the
+            // native notification sound (`sound(None)` emits
+            // `<audio silent="true"/>`).
+            .sound(None)
             .on_activated(move |_| {
                 activated.finish(Outcome::Activated);
                 Ok(())

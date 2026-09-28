@@ -51,11 +51,14 @@ function setup() {
     }),
     dispose: vi.fn(),
   };
+  const plays: string[] = [];
   const service = new NotificationsService(
     ctx,
     navigation.navigation,
     platform,
     preferences,
+    undefined,
+    (name) => plays.push(name),
   );
   service.selectViewer(viewer);
   return {
@@ -68,6 +71,7 @@ function setup() {
     failures,
     values,
     host,
+    plays,
     permission(value: NotificationPermissionState) {
       permission = value;
     },
@@ -275,4 +279,118 @@ it("late platform errors report without retry and stay fenced to their account l
   await t.ctx.fiber.dispose();
   t.failures[0]?.(new Error("Disposed failure"));
   expect(t.service.snapshot().error).toBeNull();
+});
+it("plays the selected per-category sound once delivery is accepted", async () => {
+  const t = setup();
+  t.service.updatePreferences({
+    sounds: { mention: "ping", direct: "unison", thread: "doop" },
+  });
+  await t.submit("one");
+  await flush();
+  expect(t.platform.show).toHaveBeenCalledTimes(1);
+  expect(t.plays).toEqual(["ping"]);
+  // Plugin categories have no per-category choice; they use the default sound.
+  await t.service.admit(
+    "updates",
+    "Updates",
+    { sourceKey: "two", target },
+    () => true,
+  );
+  await flush();
+  expect(t.plays).toEqual(["ping", "flutter"]);
+});
+it("sound off delivers silently and a failed submission never plays", async () => {
+  const t = setup();
+  t.service.updatePreferences({ sound: false });
+  await t.submit("one");
+  await flush();
+  expect(t.platform.show).toHaveBeenCalledTimes(1);
+  expect(t.plays).toEqual([]);
+  t.service.updatePreferences({ sound: true });
+  vi.mocked(t.platform.show).mockRejectedValueOnce(
+    new Error("SDK unavailable"),
+  );
+  await t.submit("two");
+  await flush();
+  expect(t.platform.show).toHaveBeenCalledTimes(2);
+  expect(t.plays).toEqual([]);
+  expect(t.service.snapshot().error).toBe("SDK unavailable");
+});
+it("a deferred submission revalidates the sound decision before playing", async () => {
+  const t = setup();
+  const releases: (() => void)[] = [];
+  vi.mocked(t.platform.show).mockImplementation(
+    (_item, activate, failed) =>
+      new Promise<void>((resolve) => {
+        t.clicks.push(activate);
+        t.failures.push(failed);
+        releases.push(resolve);
+      }),
+  );
+  const settle = async () => {
+    releases.shift()?.();
+    await flush();
+  };
+  // Signing out or switching accounts while the submission is outstanding
+  // must not leak the prior account's activity as audio.
+  await t.submit("switched");
+  await flush();
+  t.service.selectViewer("b".repeat(64));
+  await settle();
+  expect(t.plays).toEqual([]);
+  t.service.selectViewer(viewer);
+  // Turning Sound off mid-flight cancels the outstanding decision — stickily:
+  // restoring it before the submission resolves must not resurrect the sound.
+  await t.submit("muted");
+  await flush();
+  t.service.updatePreferences({ sound: false });
+  t.service.updatePreferences({ sound: true });
+  await settle();
+  expect(t.plays).toEqual([]);
+  // Master alerts off → on mid-flight stays cancelled.
+  await t.submit("alerts-toggled");
+  await flush();
+  t.service.updatePreferences({ enabled: false });
+  t.service.updatePreferences({ enabled: true });
+  await settle();
+  expect(t.plays).toEqual([]);
+  // A banner submitted while Sound was off stays silent after off → on.
+  t.service.updatePreferences({ sound: false });
+  await t.submit("resurrected");
+  await flush();
+  t.service.updatePreferences({ sound: true });
+  await settle();
+  expect(t.plays).toEqual([]);
+  // Disabling the category mid-flight cancels the sound, even if re-enabled.
+  await t.submit("category-off");
+  await flush();
+  t.service.updatePreferences({ categories: { mention: false } });
+  t.service.updatePreferences({ categories: { mention: true } });
+  await settle();
+  expect(t.plays).toEqual([]);
+  // Losing eligibility (access/producer revocation) mid-flight cancels it,
+  // even when eligibility is restored before the submission resolves.
+  let eligible: boolean | "wait" = true;
+  await t.submit("revoked", () => eligible);
+  await flush();
+  eligible = false;
+  t.service.revalidate();
+  eligible = true;
+  await settle();
+  expect(t.plays).toEqual([]);
+  // A native failure can arrive before the command promise resolves. It cancels
+  // audio without retrying the accepted candidate.
+  await t.submit("early-failure");
+  await flush();
+  t.failures.at(-1)?.(new Error("Backend rejected notification"));
+  await settle();
+  expect(t.plays).toEqual([]);
+  expect(t.service.snapshot().error).toBe("Backend rejected notification");
+  expect(t.platform.show).toHaveBeenCalledTimes(7);
+  // An undisturbed deferred submission still plays exactly once.
+  await t.submit("intact");
+  await flush();
+  expect(t.plays).toEqual([]);
+  await settle();
+  expect(t.plays).toEqual(["flutter"]);
 });

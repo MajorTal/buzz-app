@@ -31,6 +31,8 @@ export type UnreadSnapshot = Readonly<{
 export type MessageAttention = Readonly<{
   status: "unknown" | "ineligible" | "eligible";
   category?: "mention" | "direct" | "thread";
+  /** The event explicitly p-tags the viewer, even inside DM channels. */
+  mentioned?: boolean;
   rootId?: string;
   unread: boolean;
   viewing: boolean;
@@ -265,10 +267,12 @@ export function createUnread({
     { rootId, mentioned }: Evidence,
     dm: boolean,
   ): MessageAttention["category"] {
-    return mentioned
-      ? "mention"
-      : dm
-        ? "direct"
+    // DM events p-tag the recipient, so a mention check would classify every
+    // direct message as a mention. Direct wins inside DM channels.
+    return dm
+      ? "direct"
+      : mentioned
+        ? "mention"
         : rootId && participants.has(rootId)
           ? "thread"
           : undefined;
@@ -315,6 +319,7 @@ export function createUnread({
           ? "unknown"
           : "ineligible",
       ...(kind ? { category: kind } : {}),
+      ...(entry.mentioned ? { mentioned: true } : {}),
       ...(entry.rootId ? { rootId: entry.rootId } : {}),
       unread: isUnread(entry, reads.state()),
       viewing,

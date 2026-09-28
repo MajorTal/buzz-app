@@ -74,7 +74,7 @@ function harness(
   events: RelayEvent[] = [],
   publish = vi.fn(async (_event: RelayEvent) => {}),
   pickerTools = tools,
-  media?: (url: string) => string | undefined,
+  media?: (url: string, size?: "small") => string | undefined,
 ) {
   const wire = scriptedTransport(viewer.pubkey, relay.pubkey);
   let live!: LiveCallbacks;
@@ -295,6 +295,28 @@ it("uses the picker catalog URL even when an old URL has my reaction", async () 
     await flush();
     await flush();
   });
+});
+
+it("uses the original animated emoji in reaction pills and previews", async () => {
+  const url = "https://a.test/eyes-intensifies.gif";
+  const media = vi.fn((source: string, size?: "small") =>
+    size === "small" ? source.replace(/\.gif$/, ".thumb.jpg") : source,
+  );
+  const h = harness(
+    [customReaction(other, "eyes-intensifies", url)],
+    undefined,
+    tools,
+    media,
+  );
+  render(<h.Controls />);
+  const pill = screen.getByRole("button", {
+    name: ":eyes-intensifies:: 1 person",
+  });
+  expect(pill.querySelector("img")?.getAttribute("src")).toBe(url);
+  fireEvent.mouseEnter(pill);
+  const preview = await screen.findByRole("tooltip", {}, { timeout: 2500 });
+  expect(preview.querySelector("img")?.getAttribute("src")).toBe(url);
+  expect(media).not.toHaveBeenCalledWith(url, "small");
 });
 
 it("loads names for people who only reacted after a preview opens", async () => {

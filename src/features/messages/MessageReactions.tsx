@@ -204,9 +204,7 @@ function ReactionGlyph({
   reaction: MessageReaction;
   session: RelaySession;
 }) {
-  const source = reaction.emoji
-    ? session.media(reaction.emoji.url, "small")
-    : undefined;
+  const source = reaction.emoji ? session.media(reaction.emoji.url) : undefined;
   const [failed, setFailed] = useState<string>();
   return source && source !== failed ? (
     <img

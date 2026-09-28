@@ -2,6 +2,7 @@ import { bindNames } from "../../features/identity-names/service";
 import { createAgentDirectory } from "../../features/identity-names/testing";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { npubEncode } from "nostr-tools/nip19";
 import { afterEach, expect, it, vi } from "vitest";
 import {
   act,
@@ -165,6 +166,11 @@ it("shows one managed card per exact destination and keeps unimported templates 
   );
   fireEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
   const dialog = screen.getByRole("dialog", { name: "Edit agent" });
+  fireEvent.click(
+    within(dialog).getByRole("button", { name: "Technical details" }),
+  );
+  expect(within(dialog).getByText(npubEncode(f.agent.pubkey))).toBeVisible();
+  expect(dialog.textContent).not.toContain(f.agent.pubkey);
   fireEvent.change(within(dialog).getByLabelText("Name"), {
     target: { value: "Exact destination" },
   });

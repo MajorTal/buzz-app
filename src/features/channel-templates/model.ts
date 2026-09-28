@@ -1,3 +1,5 @@
+import { npubEncode } from "nostr-tools/nip19";
+
 /** Private, community-scoped recipes. Never an OG channel-sections writer. */
 export const KIT_TAG = "buzz-channel-kit-v1";
 export const KIT_RECORD_BYTES = 16 * 1024;
@@ -29,7 +31,11 @@ export type KitEntry = {
   eventId: string;
   createdAt: number;
 };
-export type AgentChoice = { pubkey: string; name: string };
+export type AgentChoice = {
+  pubkey: string;
+  name: string;
+  avatar?: string | undefined;
+};
 export const emptyLineup = (): Lineup => ({
   teamIds: [],
   agents: [],
@@ -175,7 +181,7 @@ export function resolveLineup(
     const agent = available.get(pubkey);
     if (!agent)
       throw new Error(
-        `Agent ${pubkey.slice(0, 12)} is unavailable in this community; remove or replace it`,
+        `Agent ${npubEncode(pubkey)} is unavailable in this community; remove or replace it`,
       );
     return agent;
   });

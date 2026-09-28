@@ -2,6 +2,7 @@ import {
   emptyLineup,
   parseLineup,
   type Groups,
+  type Group,
 } from "../../features/channel-templates/model";
 import type {
   TemplateDraft,
@@ -40,6 +41,8 @@ type Props = {
   session: RelaySession;
   providers: TemplateProviders;
   groups: Groups | undefined;
+  destinations?: readonly Pick<Group, "id" | "name">[];
+  groupSource?: "legacy";
   initialGroup: string;
   groupsReady: boolean;
 };
@@ -56,6 +59,8 @@ function OpenCreateChannelDialog({
   session,
   providers,
   groups,
+  destinations = groups?.groups ?? [],
+  groupSource,
   initialGroup,
   groupsReady,
 }: Props) {
@@ -66,7 +71,7 @@ function OpenCreateChannelDialog({
   const provider = available.length === 1 ? available[0] : undefined;
   const [initialProvider] = useState(provider);
   const [initialDefault] = useState(() =>
-    !pending && provider
+    !pending && provider && !groupSource
       ? (groups?.groups.find((g) => g.id === initialGroup)?.defaultTemplateId ??
         "")
       : "",
@@ -96,17 +101,11 @@ function OpenCreateChannelDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [groupId, setGroupId] = useState("");
-  const summary = pending
-    ? pending.setup
-    : draft
-      ? {
-          agents: draft.agents,
-          canvas: draft.lineup.canvas,
-          templateId: draft.templateId,
-          groupId,
-        }
-      : undefined;
-  const group = groups?.groups.find((g) => g.id === groupId);
+  const summary =
+    pending?.setup ?? (draft ? { agents: draft.agents, groupId } : undefined);
+  const group = groupSource
+    ? undefined
+    : groups?.groups.find((g) => g.id === groupId);
   const editing = useRef(false);
   editing.current = !pending && !busy;
   useEffect(() => {
@@ -144,7 +143,7 @@ function OpenCreateChannelDialog({
       if (
         !pending &&
         groupId &&
-        (!groupsReady || !groups?.groups.some((g) => g.id === groupId))
+        (!groupsReady || !destinations.some((g) => g.id === groupId))
       )
         throw new Error(
           "Load the destination group or choose No group before creating.",
@@ -162,7 +161,15 @@ function OpenCreateChannelDialog({
             : {}),
           ...(description.trim() ? { description: description.trim() } : {}),
           ...(templateId || groupId || agents.length || canvas
-            ? { setup: { agents, canvas, groupId, templateId } }
+            ? {
+                setup: {
+                  agents,
+                  canvas,
+                  groupId,
+                  templateId,
+                  ...(groupId && groupSource ? { groupSource } : {}),
+                },
+              }
             : {}),
         },
       );
@@ -178,6 +185,38 @@ function OpenCreateChannelDialog({
       if (mounted.current) setBusy(false);
     }
   };
+
+  const recoverySummary = summary && (
+    <section aria-label="Channel setup summary">
+      <h3 className="text-label">Saved channel setup</h3>
+      <p>
+        {summary.agents.length
+          ? `${summary.agents.length} selected agent${summary.agents.length === 1 ? "" : "s"}.`
+          : "Only you."}
+        {summary.groupId &&
+          ` Destination: ${destinations.find((g) => g.id === summary.groupId)?.name ?? "saved group"}.`}
+      </p>
+      {!pending && (
+        <>
+          <p>
+            Your selected setup is retained. Restore Templates &amp; teams to
+            edit it, or clear it below.
+          </p>
+          <Button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              setEditorGeneration((generation) => generation + 1);
+              setDraft({ templateId: "", lineup: emptyLineup(), agents: [] });
+              setError("");
+            }}
+          >
+            Clear template setup (keep group)
+          </Button>
+        </>
+      )}
+    </section>
+  );
 
   return (
     <Dialog
@@ -214,7 +253,7 @@ function OpenCreateChannelDialog({
             loading={busy}
             disabled={!name.trim()}
           >
-            {pending ? "Resume channel setup" : "Create channel"}
+            {pending ? "Retry channel" : "Create channel"}
           </Button>
         </>
       }
@@ -231,8 +270,9 @@ function OpenCreateChannelDialog({
       >
         {pending && (
           <p role="status">
-            This attempt keeps its original name, destination and setup. Resume
-            checks the same channel; it will not create another.
+            This attempt may already have created a channel. Retry checks it
+            first and, if unconfirmed, resends only the same creation request.
+            It will not create another channel or continue template setup.
           </p>
         )}
         <fieldset
@@ -293,10 +333,10 @@ function OpenCreateChannelDialog({
                   label: "",
                   options: [
                     { value: "", label: "No group" },
-                    ...(groups?.groups.map((g) => ({
+                    ...destinations.map((g) => ({
                       value: g.id,
                       label: g.name,
-                    })) ?? []),
+                    })),
                   ],
                 },
               ]}
@@ -314,6 +354,12 @@ function OpenCreateChannelDialog({
               key={editorGeneration}
               entry={provider}
               registry={providers}
+              fallback={
+                <>
+                  <p role="alert">Template controls could not open.</p>
+                  {recoverySummary}
+                </>
+              }
             >
               {(entry, active) => {
                 const Editor = entry.editor;
@@ -400,57 +446,8 @@ function OpenCreateChannelDialog({
             </RadioGroup>
           </Field>
         </fieldset>
-        {summary && (
-          <section aria-label="Channel setup summary">
-            <h3 className="text-label">
-              {pending ? "Saved setup to resume" : "Selected starting setup"}
-            </h3>
-            <p>
-              Group: {summary.groupId || "None"}. Template:{" "}
-              {summary.templateId || "None"}.
-            </p>
-            <p>
-              Agents:{" "}
-              {summary.agents.length ? summary.agents.join(", ") : "Only you"}.
-              Existing identities; no agent startup.
-            </p>
-            {summary.canvas ? (
-              <details>
-                <summary>Starting Canvas</summary>
-                <pre className="whitespace-pre-wrap">{summary.canvas}</pre>
-              </details>
-            ) : (
-              <p>Empty starting Canvas.</p>
-            )}
-            {!pending && draft?.lineup.teamIds.length ? (
-              <p>Selected teams: {draft.lineup.teamIds.join(", ")}</p>
-            ) : null}
-            {!pending && draft?.problem && <p role="alert">{draft.problem}</p>}
-            {!pending && !provider && (
-              <p>
-                Templates is unavailable. Your accepted setup is retained above;
-                enable it to edit, or explicitly clear it.
-              </p>
-            )}
-            {!pending && (
-              <Button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setEditorGeneration((generation) => generation + 1);
-                  setDraft({
-                    templateId: "",
-                    lineup: emptyLineup(),
-                    agents: [],
-                  });
-                  setError("");
-                }}
-              >
-                Clear template setup (keep group)
-              </Button>
-            )}
-          </section>
-        )}
+        {!pending && draft?.problem && <p role="alert">{draft.problem}</p>}
+        {(pending || !provider) && recoverySummary}
         {error && (
           <p role="alert" className={styles.error}>
             {error}

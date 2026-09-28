@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { npubEncode } from "nostr-tools/nip19";
 import { createServer } from "./vite-server.mjs";
 import config from "../fixtures/agent-control.vite.mjs";
 
@@ -68,8 +69,11 @@ test("local controls preserve drafts, confirm operations and distinguish disable
       .getByRole("button", { name: "Technical details", exact: true })
       .click();
     await expect(
-      editor.getByText("ab".repeat(32), { exact: true }),
+      editor.getByText(npubEncode("ab".repeat(32)), { exact: true }),
     ).toBeVisible();
+    await expect(
+      editor.getByText("ab".repeat(32), { exact: true }),
+    ).toHaveCount(0);
 
     await editor
       .getByRole("textbox", { name: "Agent instructions", exact: true })

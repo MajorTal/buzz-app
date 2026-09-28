@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { npubEncode } from "nostr-tools/nip19";
 import {
   act,
   cleanup,
@@ -64,4 +65,12 @@ it("badges a single agent only while live presence is known", () => {
       expect(badge).toHaveAttribute("data-status", next);
     }
   }
+});
+
+it("presents compatibility identities as npubs, not hex", () => {
+  const pubkey = "ab".repeat(32);
+  render(<AgentCard name="Agent" identities={[{ pubkey, name: "Agent" }]} />);
+  fireEvent.click(screen.getByRole("button", { name: "Agent:1 identity" }));
+  expect(screen.getByText(npubEncode(pubkey))).toBeVisible();
+  expect(document.body.textContent).not.toContain(pubkey);
 });

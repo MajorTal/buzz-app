@@ -75,6 +75,70 @@ it("distinguishes explicit rejection from invalid or missing delivery receipts",
     transport.writer.publish(event, new AbortController().signal),
   ).rejects.toBeInstanceOf(PublishRejected);
 });
+it.each([
+  [
+    "rate-limited: quota exceeded; retry in 17s",
+    false,
+    "rate-limited: quota exceeded; retry in 17s",
+  ],
+  [
+    "rate-limited: shared admission unavailable",
+    false,
+    "rate-limited: shared admission unavailable",
+  ],
+  [
+    "rate-limited: quota exceeded; retry in 17s\nprivate",
+    false,
+    "rate-limited: unrecognized reason",
+  ],
+  [
+    "rate-limited: quota exceeded; retry in 100000s",
+    false,
+    "rate-limited: unrecognized reason",
+  ],
+  [
+    "rate-limited: private response",
+    false,
+    "rate-limited: unrecognized reason",
+  ],
+  ["private response", false, "Relay request failed (503)"],
+  [
+    "rate-limited: quota exceeded; retry in 17s",
+    undefined,
+    "Relay delivery could not be confirmed (503)",
+  ],
+  [
+    "rate-limited: shared admission unavailable",
+    true,
+    "Relay delivery could not be confirmed (503)",
+  ],
+])(
+  "keeps publication quota reporting bounded and separate from delivery evidence: %s, sent=%s",
+  async (error, sent, message) => {
+    const event = signed(key, { kind: 9000, content: "", tags: [["h", "c"]] });
+    const fetcher = vi.fn(async (url: string) =>
+      url.endsWith("/session")
+        ? Response.json({
+            viewer: key.pubkey,
+            relayAuthor: "relay",
+            writeKinds: [9000],
+          })
+        : Response.json({ error, sent }, { status: 503 }),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const transport = await connectBrokerTransport();
+    assert.exists(transport.writer);
+    const result = await transport.writer
+      .publish(event, new AbortController().signal)
+      .catch((reason: unknown) => reason);
+    expect(result).toBeInstanceOf(Error);
+    expect(result instanceof PublishRejected).toBe(sent === false);
+    expect(result).toHaveProperty("message", message);
+    expect(
+      fetcher.mock.calls.filter(([url]) => url.endsWith("/publish")),
+    ).toHaveLength(1);
+  },
+);
 it("the broker advertises and supplies writes through the same connection", async () => {
   const event = signed(key, { kind: 9, content: "hello", tags: [["h", "c"]] });
   const fetcher = vi.fn(async (url: string) => {

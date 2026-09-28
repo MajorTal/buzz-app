@@ -1,4 +1,5 @@
 import { test, expect } from "@playwright/test";
+import { npubEncode } from "nostr-tools/nip19";
 import { createServer } from "./vite-server.mjs";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
@@ -29,6 +30,7 @@ test("Old Buzz library reads the existing library with exact linked keys and ses
       agents.getByRole("heading", { name: "A Brain", exact: true }),
     ).toHaveCount(2);
     const keys = await page.evaluate(() => window.agentFixture.agents);
+    const npubs = keys.map((key) => npubEncode(key));
     await expect
       .poll(() => agents.locator("img").evaluate((image) => image.naturalWidth))
       .toBeGreaterThan(0);
@@ -40,13 +42,15 @@ test("Old Buzz library reads the existing library with exact linked keys and ses
       agents.getByRole("img", { name: "A Brain", exact: true }),
     ).toHaveCount(2);
 
-    for (const key of keys)
-      await expect(agents.getByText(key, { exact: true })).toBeHidden();
+    for (const npub of npubs)
+      await expect(agents.getByText(npub, { exact: true })).toBeHidden();
     await agents
       .getByRole("button", { name: "A Brain: 2 identities", exact: true })
       .click();
+    for (const npub of npubs)
+      await expect(agents.getByText(npub, { exact: true })).toBeVisible();
     for (const key of keys)
-      await expect(agents.getByText(key, { exact: true })).toBeVisible();
+      await expect(agents.getByText(key, { exact: true })).toHaveCount(0);
     await expect(
       page.getByText(/current Buzz library, read-only/),
     ).toBeVisible();
@@ -166,7 +170,7 @@ test("Old Buzz library reads the existing library with exact linked keys and ses
       .getByRole("button", { name: "Refresh agents", exact: true })
       .click();
     await expect(agents.getByRole("article")).toHaveCount(2);
-    await expect(agents.getByText(keys[0], { exact: true })).toHaveCount(0);
+    await expect(agents.getByText(npubs[0], { exact: true })).toHaveCount(0);
     await page
       .getByRole("button", { name: "Toggle archive", exact: true })
       .click();
@@ -180,8 +184,8 @@ test("Old Buzz library reads the existing library with exact linked keys and ses
     await agents
       .getByRole("button", { name: "A Brain: 2 identities", exact: true })
       .click();
-    for (const key of keys)
-      await expect(agents.getByText(key, { exact: true })).toBeVisible();
+    for (const npub of npubs)
+      await expect(agents.getByText(npub, { exact: true })).toBeVisible();
     await expect(page.getByText(/Archive visibility is unknown/)).toBeVisible();
     await page
       .getByRole("button", { name: "Toggle missing archive", exact: true })

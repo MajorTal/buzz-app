@@ -51,16 +51,20 @@ function fixture() {
       return event.id;
     }),
     retry: vi.fn(),
-    dismiss: vi.fn(async () => {}),
+    dismiss: vi.fn(async (id: string) => {
+      const index = events.findIndex((item) => item.event.id === id);
+      if (index >= 0) events.splice(index, 1);
+    }),
   };
   const opts = {
     scope: "setup-test",
+    changed: vi.fn(),
     outbox,
     local: outbox,
     create: vi.fn((id: string, _input: ChannelCreationInput) =>
       outbox.send({ kind: 9007, content: "", tags: [["h", id]] }),
     ),
-    delivered: vi.fn(async (_id: string) => {}),
+    delivered: vi.fn(async (_id: string, _active?: () => boolean) => {}),
     confirm: vi.fn(async (id: string) => {
       if (events.find((e) => e.event.id === id)?.event.kind === 40100)
         canvas = id;
@@ -82,112 +86,250 @@ function fixture() {
   };
 }
 
-it("creates once, seeds Canvas before membership, and places the finished channel without any message", async () => {
-  const f = fixture();
-  const id = await f.setup.run(input, viewer.pubkey);
-  expect(f.events.map((e) => e.event.kind)).toEqual([9007, 40100, 9000]);
-  expect(f.events[2]?.event.tags).toEqual([
-    ["h", id],
-    ["p", agent],
-  ]);
-  expect(f.opts.confirm.mock.calls.map(([eventId]) => eventId)).toEqual(
-    f.events.slice(1).map((e) => e.event.id),
+function receipts() {
+  return Object.keys(localStorage).filter((key) =>
+    key.startsWith("buzz-channel-setup.v2:setup-test:"),
   );
-  expect(f.opts.place).toHaveBeenCalledWith(id, "work");
-  expect(f.setup.snapshot()).toBeUndefined();
-  expect(f.setup.completedId()).toBe(id);
+}
+function firstReceipt() {
+  const key = receipts()[0];
+  assert.exists(key);
+  return key;
+}
+function hold() {
+  let release!: () => void;
+  const promise = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { promise, release };
+}
+
+it("opens after confirmed creation, before Canvas completes; places independently and never sends a message", async () => {
+  const f = fixture();
+  const gate = hold();
+  const reached = hold();
+  const confirm = f.opts.confirm.getMockImplementation();
+  f.opts.confirm.mockImplementation(async (id) => {
+    reached.release();
+    await gate.promise;
+    await confirm?.(id);
+  });
+  const run = f.setup.run(input, viewer.pubkey);
+  const id = await run.admission;
+  await reached.promise;
+  expect(f.opts.place).toHaveBeenCalledWith(id, "work", undefined);
+  expect(f.events.map((e) => e.event.kind)).toEqual([9007, 40100]);
+  expect(receipts()).toHaveLength(1);
+  gate.release();
+  await run.completion;
+  expect(f.opts.confirm).toHaveBeenCalledTimes(2);
+  expect(receipts()).toHaveLength(0);
 });
 
-it("resumes the frozen same-channel operations without replaying accepted membership or checking mutable catalogs", async () => {
+it("keeps partial intent without locking a second Create or replaying the first member", async () => {
   const f = fixture();
   f.opts.refresh.mockImplementation(async (_id, member) => {
     if (member === agent) throw new Error("Roster not confirmed");
   });
-  await expect(f.setup.run(input, viewer.pubkey)).rejects.toThrow(
-    /setup incomplete/,
+  const run = f.setup.run(input, viewer.pubkey);
+  const failure = expect(run.completion).rejects.toThrow(
+    "Roster not confirmed",
   );
-  const id = f.setup.channelId();
-  expect(f.events).toHaveLength(3);
-  const confirmations = f.opts.confirm.mock.calls.length;
-  f.opts.preflight.mockRejectedValue(new Error("Catalog unavailable"));
-  const restored = createChannelSetup(f.opts);
-  await expect(
-    restored.run({ ...input, name: "Changed" }, viewer.pubkey),
-  ).rejects.toThrow(/frozen/);
-  f.opts.refresh.mockResolvedValue();
-  expect(await restored.run(input, viewer.pubkey)).toBe(id);
-  expect(f.events).toHaveLength(3);
-  expect(f.opts.confirm).toHaveBeenCalledTimes(confirmations);
-  expect(f.opts.preflight).toHaveBeenCalledTimes(1);
+  const id = await run.admission;
+  await failure;
+  const frozen = localStorage.getItem(firstReceipt());
+  expect(f.events.map((e) => e.event.kind)).toEqual([9007, 40100, 9000]);
+  const next = f.setup.run(
+    { name: "Second", visibility: "open" },
+    viewer.pubkey,
+  );
+  expect(await next.admission).not.toBe(id);
+  await next.completion;
+  expect(localStorage.getItem(firstReceipt())).toBe(frozen);
+  expect(f.outbox.retry).not.toHaveBeenCalled();
 });
 
-it("keeps unknown creation frozen but permits a fresh attempt after a known failure", async () => {
+it("checks an uncertain attempt without replaying Create or template writes", async () => {
   const f = fixture();
-  f.opts.delivered.mockImplementation(async () => {
-    assert.exists(f.events[0]);
-    f.events[0] = { ...f.events[0], delivery: "unknown" };
-    throw new Error("Unknown delivery");
-  });
-  await expect(f.setup.run(input, viewer.pubkey)).rejects.toThrow(
-    "Unknown delivery",
-  );
+  f.opts.delivered.mockRejectedValueOnce(new Error("Unknown delivery"));
+  const run = f.setup.run(input, viewer.pubkey);
+  await expect(run.admission).rejects.toThrow("Unknown delivery");
+  await expect(run.completion).rejects.toThrow("Unknown delivery");
   expect(f.setup.snapshot()).toEqual(input);
-  expect(f.setup.channelId()).toBeUndefined();
-  expect(f.outbox.dismiss).not.toHaveBeenCalled();
-  f.opts.delivered.mockImplementation(async () => {
-    assert.exists(f.events[0]);
-    f.events[0] = { ...f.events[0], delivery: "failed" };
+  const saved = JSON.parse(localStorage.getItem(firstReceipt()) ?? "null");
+  const next = f.setup.run(input, viewer.pubkey);
+  await expect(next.admission).resolves.toBe(saved.id);
+  await expect(next.completion).rejects.toThrow(
+    "Template setup was not continued",
+  );
+  expect(f.opts.delivered.mock.calls).toEqual([
+    [saved.operations.create],
+    [saved.operations.create, expect.any(Function)],
+  ]);
+  expect(f.setup.snapshot()).toBeUndefined();
+  expect(f.events.map((e) => e.event.kind)).toEqual([9007]);
+  expect(f.outbox.retry).not.toHaveBeenCalled();
+});
+
+it("retires a proven-failed Create so the form can try a new attempt", async () => {
+  const f = fixture();
+  f.opts.delivered.mockImplementationOnce(async (id) => {
+    const index = f.events.findIndex((item) => item.event.id === id);
+    assert.exists(f.events[index]);
+    f.events[index] = { ...f.events[index], delivery: "failed" };
     throw new Error("Rejected");
   });
-  await expect(f.setup.run(input, viewer.pubkey)).rejects.toThrow("Rejected");
+  const run = f.setup.run(input, viewer.pubkey);
+  await expect(run.admission).rejects.toThrow("Rejected");
+  await expect(run.completion).rejects.toThrow("Rejected");
   expect(f.setup.snapshot()).toBeUndefined();
-  assert.exists(f.events[0]);
-  expect(f.outbox.dismiss).toHaveBeenCalledWith(f.events[0].event.id);
+  expect(receipts()).toHaveLength(0);
+  const next = f.setup.run(input, viewer.pubkey);
+  await next.admission;
+  await next.completion;
+  expect(f.opts.create).toHaveBeenCalledTimes(2);
 });
 
-it("stops agents when Canvas confirmation fails, then permits keeping the partial channel without rollback", async () => {
+it("Canvas failure does not lose group placement or turn admission into failure", async () => {
   const f = fixture();
   f.opts.confirm.mockRejectedValue(new Error("Canvas unconfirmed"));
-  await expect(f.setup.run(input, viewer.pubkey)).rejects.toThrow(
-    /setup incomplete/,
-  );
+  const run = f.setup.run(input, viewer.pubkey);
+  const failure = expect(run.completion).rejects.toThrow("Canvas unconfirmed");
+  const id = await run.admission;
+  await failure;
+  expect(f.opts.place).toHaveBeenCalledWith(id, "work", undefined);
   expect(f.events.map((e) => e.event.kind)).toEqual([9007, 40100]);
-  const id = f.setup.channelId();
-  expect(await f.setup.keepPartial()).toBe(id);
-  expect(f.setup.snapshot()).toBeUndefined();
-  assert.exists(f.events[0]);
-  expect(f.outbox.dismiss).toHaveBeenCalledWith(f.events[0].event.id);
-  expect(f.events).toHaveLength(2);
+  expect(receipts()).toHaveLength(1);
 });
 
-it("blocks continuation when seeded Canvas was changed, storage is corrupt, or another window holds the lock", async () => {
+it("group failure does not skip Canvas and members; retains the incomplete destination", async () => {
   const f = fixture();
-  f.opts.refresh.mockImplementation(async (_id, member) => {
-    if (member === agent) throw new Error("Roster pending");
-  });
-  await expect(f.setup.run(input, viewer.pubkey)).rejects.toThrow();
-  f.setCanvas("f".repeat(64));
-  await expect(f.setup.run(input, viewer.pubkey)).rejects.toThrow(
-    /Canvas changed after seeding/,
-  );
-  const count = f.events.length;
+  f.opts.place.mockRejectedValue(new Error("Group unavailable"));
+  const run = f.setup.run(input, viewer.pubkey);
+  const failure = expect(run.completion).rejects.toThrow("Group unavailable");
+  await run.admission;
+  await failure;
+  expect(f.events.map((e) => e.event.kind)).toEqual([9007, 40100, 9000]);
+  expect(receipts()).toHaveLength(1);
+});
+
+it("leaves historical/corrupt records untouched and never lets them occupy a fresh form", async () => {
+  const f = fixture();
   localStorage.setItem("buzz-channel-setup.v1:setup-test", "broken");
-  await expect(f.setup.run(input, viewer.pubkey)).rejects.toThrow(
-    /storage needs attention/,
+  localStorage.setItem(
+    "buzz-channel-setup.v1:setup-test:channel:old",
+    "frozen old intent",
   );
+  const run = f.setup.run({ name: "Fresh", visibility: "open" }, viewer.pubkey);
+  await run.admission;
+  await run.completion;
+  expect(localStorage.getItem("buzz-channel-setup.v1:setup-test")).toBe(
+    "broken",
+  );
+  expect(
+    localStorage.getItem("buzz-channel-setup.v1:setup-test:channel:old"),
+  ).toBe("frozen old intent");
+});
+
+it("bounds record count and UTF-8 bytes before enqueue without evicting unresolved intent", async () => {
+  const f = fixture();
+  for (let i = 0; i < 256; i++)
+    localStorage.setItem(`buzz-channel-setup.v2:setup-test:${i}`, "old");
+  const run = f.setup.run(input, viewer.pubkey);
+  await expect(run.admission).rejects.toThrow("Too many unfinished");
+  await expect(run.completion).rejects.toThrow("Too many unfinished");
+  expect(f.events).toHaveLength(0);
+  expect(receipts()).toHaveLength(256);
   localStorage.clear();
-  Object.defineProperty(navigator, "locks", {
-    configurable: true,
-    value: {
-      request: async (
-        _key: string,
-        _opts: unknown,
-        run: (lock: null) => unknown,
-      ) => run(null),
-    },
-  });
-  await expect(f.setup.run(input, viewer.pubkey)).rejects.toThrow(
-    /Another window/,
+  localStorage.setItem(
+    "buzz-channel-setup.v2:setup-test:old",
+    "é".repeat(1024 * 1024),
   );
-  expect(f.events).toHaveLength(count);
+  const next = f.setup.run(input, viewer.pubkey);
+  await expect(next.admission).rejects.toThrow("Too many unfinished");
+  await expect(next.completion).rejects.toThrow("Too many unfinished");
+  expect(f.events).toHaveLength(0);
+  expect(receipts()).toHaveLength(1);
+});
+
+it("checks saved growth and preserves the last receipt when storage fails", async () => {
+  const f = fixture();
+  const original = Storage.prototype.setItem;
+  let saved: string | undefined;
+  vi.spyOn(Storage.prototype, "setItem").mockImplementation(function (
+    this: Storage,
+    key,
+    value,
+  ) {
+    if (saved) throw new Error("Storage full");
+    saved = value;
+    original.call(this, key, value);
+  });
+  const run = f.setup.run(input, viewer.pubkey);
+  await expect(run.admission).rejects.toThrow("Storage full");
+  await expect(run.completion).rejects.toThrow("Storage full");
+  expect(localStorage.getItem(firstReceipt())).toBe(saved);
+  expect(f.opts.delivered).not.toHaveBeenCalled();
+  expect(f.events.map((e) => e.event.kind)).toEqual([9007]);
+  expect(f.outbox.dismiss).not.toHaveBeenCalled();
+});
+
+it("does not retire intent if Outbox dismissal did not actually remove the operation", async () => {
+  const f = fixture();
+  vi.mocked(f.outbox.dismiss).mockResolvedValue();
+  const run = f.setup.run(input, viewer.pubkey);
+  const failure = expect(run.completion).rejects.toThrow(
+    "could not be retired",
+  );
+  await run.admission;
+  await failure;
+  expect(receipts()).toHaveLength(1);
+});
+
+it("shares one admission while preflight is pending, including concurrent submits", async () => {
+  const f = fixture();
+  const gate = hold();
+  f.opts.preflight.mockImplementationOnce(() => gate.promise);
+  const run = f.setup.run(input, viewer.pubkey);
+  const concurrent = f.setup.run(input, viewer.pubkey);
+  expect(concurrent).toBe(run);
+  gate.release();
+  expect(await concurrent.admission).toBe(await run.admission);
+  await run.completion;
+  expect(f.opts.create).toHaveBeenCalledOnce();
+});
+
+it("releases a pending attempt when read-only confirmation proves it failed", async () => {
+  const f = fixture();
+  f.opts.delivered.mockRejectedValueOnce(new Error("Timed out"));
+  const run = f.setup.run(input, viewer.pubkey);
+  await expect(run.admission).rejects.toThrow("Timed out");
+  await expect(run.completion).rejects.toThrow("Timed out");
+  f.opts.delivered.mockImplementationOnce(async (id) => {
+    const index = f.events.findIndex((item) => item.event.id === id);
+    assert.exists(f.events[index]);
+    f.events[index] = { ...f.events[index], delivery: "failed" };
+    throw new Error("Rejected");
+  });
+  const check = f.setup.run(input, viewer.pubkey);
+  await expect(check.admission).rejects.toThrow("Rejected");
+  await expect(check.completion).rejects.toThrow("Rejected");
+  expect(f.setup.snapshot()).toBeUndefined();
+  expect(receipts()).toHaveLength(0);
+  expect(f.opts.create).toHaveBeenCalledOnce();
+});
+
+it("keeps admitted partial receipts out of a restarted Create without resuming them", async () => {
+  const f = fixture();
+  f.opts.confirm.mockRejectedValueOnce(new Error("Canvas unavailable"));
+  const run = f.setup.run(input, viewer.pubkey);
+  const id = await run.admission;
+  await expect(run.completion).rejects.toThrow("Canvas unavailable");
+  const frozen = localStorage.getItem(firstReceipt());
+  const restarted = createChannelSetup(f.opts);
+  expect(restarted.owns(id)).toBe(true);
+  expect(restarted.snapshot()).toBeUndefined();
+  expect(localStorage.getItem(firstReceipt())).toBe(frozen);
+  expect(f.events.map((e) => e.event.kind)).toEqual([9007, 40100]);
+  expect(f.outbox.retry).not.toHaveBeenCalled();
 });

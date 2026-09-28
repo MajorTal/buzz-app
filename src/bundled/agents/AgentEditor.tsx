@@ -1,3 +1,4 @@
+import { npubEncode } from "nostr-tools/nip19";
 import { AvatarEditor } from "../../features/profiles/AvatarEditor";
 import { useAvatarPreview } from "../../features/profiles/use-avatar-preview";
 import { avatarPictureError } from "../../features/profiles/avatar-upload";
@@ -253,10 +254,10 @@ export function AgentEditor({
                           <dl className="space-y-4">
                             <div className="space-y-1">
                               <dt className="text-body-sm text-subtle">
-                                Public key
+                                Public key (npub)
                               </dt>
                               <dd className="break-all text-mono select-all">
-                                {agent.pubkey}
+                                {npubEncode(agent.pubkey)}
                               </dd>
                             </div>
                             <div className="space-y-1">

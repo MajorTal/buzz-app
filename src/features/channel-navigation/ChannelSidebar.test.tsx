@@ -7,8 +7,9 @@ import {
   render,
   screen,
   within,
+  waitFor,
 } from "@testing-library/react";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi, assert } from "vitest";
 import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { createRelaySession } from "../relay/session";
 import { createSidebarPreferencesStore } from "../relay/sidebar-preferences-store";
@@ -73,8 +74,9 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllGlobals();
 });
+const noProviders: [] = [];
 const providers = {
-  snapshot: () => [],
+  snapshot: () => noProviders,
   subscribe: () => () => {},
   register: () => {},
 };
@@ -138,7 +140,7 @@ function fixture(
       />
     </ChannelNavigationProvider>
   );
-  return { view, navigator, snapshot, list };
+  return { view, navigator, snapshot, list, session };
 }
 
 it("does not rebuild unchanged rows on channel switches and refreshes session action eligibility", async () => {
@@ -296,5 +298,73 @@ it("opens Inbox and Bestie in the ready community", () => {
       scope: { viewer: "viewer", communityOrigin: "https://relay.test" },
       route: { version: 1, params: name },
     });
+  }
+});
+
+it("opens creation from a legacy subgroup + with that destination selected and retained in the create input", async () => {
+  const preferences = createSidebarPreferencesStore(
+    async () => ({
+      sections: [{ id: "laptop", name: "Laptop", order: 0 }],
+      assignments: { beta: "laptop" },
+      starred: [],
+      muted: [],
+    }),
+    true,
+    async () => ({
+      sections: [{ id: "laptop", name: "Laptop", order: 0 }],
+      assignments: {},
+    }),
+    async () => [],
+  );
+  await preferences.queries.ensure();
+  const h = fixture(preferences.queries);
+  const create = vi.fn(async () => "new-channel");
+  h.session.channelKit = {
+    ...h.session.channelKit,
+    available: true,
+    ensure() {},
+  };
+  h.session.channelCreation = {
+    ...h.session.channelCreation,
+    available: true,
+    create,
+  };
+  try {
+    render(h.view("alpha"));
+    await screen.findByRole("button", { name: /Laptop/ });
+    // Scope to the section header rather than the Channels +.
+    const header = screen.getByRole("button", { name: /Laptop/ }).parentElement;
+    assert.exists(header);
+    fireEvent.click(
+      within(header).getByRole("button", { name: "Create channel" }),
+    );
+    expect(
+      screen.getByRole("combobox", { name: "Destination group" }),
+    ).toHaveTextContent("Laptop");
+    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+      target: { value: "New laptop channel" },
+    });
+    fireEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Create a channel" }),
+      ).getByRole("button", {
+        name: "Create channel",
+      }),
+    );
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({
+        name: "New laptop channel",
+        visibility: "open",
+        setup: {
+          agents: [],
+          canvas: "",
+          templateId: "",
+          groupId: "laptop",
+          groupSource: "legacy",
+        },
+      }),
+    );
+  } finally {
+    preferences.dispose();
   }
 });

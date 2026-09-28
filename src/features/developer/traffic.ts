@@ -49,6 +49,38 @@ export function filterSummary(filters: unknown): string {
     ) + (filters.length > 4 ? ` (+${filters.length - 4} filters)` : "")
   );
 }
+/** Negative OK text is untrusted. Preserve only fixed public protocol reasons. */
+export function publicationRefusal(reason: string): string {
+  const known = [
+    "rate-limited: shared admission unavailable",
+    "invalid: event timestamp too far from server time",
+    "invalid: event pubkey does not match authenticated identity",
+    "restricted: channel-scoped tokens cannot publish global events",
+    "restricted: community writes are fenced",
+    "restricted: insufficient scope (need users:write)",
+    "restricted: insufficient scope (need admin:channels)",
+    "error: internal server error",
+    "invalid: policy:owner_only — agent has no owner set",
+    "invalid: policy:owner_only — only the agent owner can add this agent",
+    "invalid: policy:nobody — this agent has disabled external channel additions",
+    "invalid: actor not authorized",
+    "invalid: channel not found",
+    "invalid: channel is archived",
+    "restricted: not a channel member",
+  ];
+  const quota = /^rate-limited: quota exceeded; retry in \d{1,5}s$/.exec(
+    reason,
+  );
+  if (known.includes(reason) || quota?.[0] === reason) return reason;
+  const category =
+    /^(invalid|blocked|restricted|auth-required|rate-limited|error|conflict|forbidden):/.exec(
+      reason,
+    );
+  return category
+    ? `${category[1]}: unrecognized reason`
+    : "unrecognized reason";
+}
+
 const log = getLogger("relay-ws");
 const frameTypes = new Set([
   "AUTH",

@@ -1,3 +1,4 @@
+import { npubEncode } from "nostr-tools/nip19";
 import { Fragment, useRef, type ReactNode } from "react";
 import {
   MenuRoot,
@@ -104,7 +105,7 @@ export function AgentCard({
                                 {agent.relayUrl}
                               </span>
                               <span className="block break-all text-mono-sm text-secondary">
-                                {agent.pubkey}
+                                {npubEncode(agent.pubkey)}
                               </span>
                             </>
                           }
@@ -204,7 +205,7 @@ export function AgentCard({
                         {identityLabel(identity)}
                       </span>
                       <p className="m-0 mt-1 select-all break-all text-mono-sm">
-                        {identity.pubkey}
+                        {npubEncode(identity.pubkey)}
                       </p>
                     </li>
                   ))}

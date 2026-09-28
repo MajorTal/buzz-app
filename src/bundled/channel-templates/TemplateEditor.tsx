@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import {
   emptyLineup,
   resolveLineup,
@@ -10,7 +10,6 @@ import type {
 } from "../../features/channel-templates/provider";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Select } from "../../shared/design-system/ui/Select";
-import { TemplateFields } from "./TemplateFields";
 import { useTemplateCatalog } from "./useTemplateCatalog";
 
 export function TemplateEditor({
@@ -22,7 +21,6 @@ export function TemplateEditor({
   active,
 }: TemplateEditorProps) {
   const catalog = useTemplateCatalog(session);
-  const [customize, setCustomize] = useState(false);
   const automatic = useRef(initialDefault);
   const templates = catalog.kit.entries.flatMap((e) =>
     !e.record.deleted && e.record.value.type === "template"
@@ -158,39 +156,6 @@ export function TemplateEditor({
           </Button>
         </div>
       ) : null}
-      <Button
-        type="button"
-        variant="ghost"
-        onClick={() => setCustomize(!customize)}
-      >
-        {customize
-          ? "Hide setup details"
-          : "Review / customize teams, agents & Canvas"}
-      </Button>
-      {customize && (
-        <TemplateFields
-          value={value?.lineup ?? emptyLineup()}
-          entries={catalog.kit.entries}
-          agents={catalog.agents}
-          acceptedAgents={value?.agents ?? []}
-          onChange={(lineup) => {
-            automatic.current = "";
-            if (
-              value &&
-              JSON.stringify([lineup.teamIds, lineup.agents]) ===
-                JSON.stringify([value.lineup.teamIds, value.lineup.agents])
-            ) {
-              if (active()) onChange({ ...value, lineup });
-            } else publish(value?.templateId ?? "", lineup);
-          }}
-        />
-      )}
-      {!!value?.lineup.teamIds.length && (
-        <p className="text-secondary">
-          Access uses the accepted team expansion, not later saved-team edits.
-          Refresh team membership explicitly to use those edits.
-        </p>
-      )}
       {value && (value.problem || value.lineup.teamIds.length > 0) && (
         <Button
           type="button"

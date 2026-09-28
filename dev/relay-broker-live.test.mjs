@@ -1,3 +1,8 @@
+import {
+  getLogger,
+  logLevel,
+  setLogLevel,
+} from "../src/features/developer/logging.ts";
 import { fixtureRelayUrl, fixtureAliases } from "../tests/relay-config.ts";
 import { createServer } from "node:http";
 import { setTimeout as delay } from "node:timers/promises";
@@ -928,12 +933,31 @@ test("production interest controls preserve socket/global routes and pending wri
 });
 
 test.each([
-  ["restricted: not a member", true],
-  ["error: internal server error", false],
-  ["unknown: failure", false],
+  ["restricted: not a member", true, "Relay request failed (503)"],
+  [
+    "error: internal server error",
+    false,
+    "Relay delivery could not be confirmed (503)",
+  ],
+  ["unknown: failure", false, "Relay delivery could not be confirmed (503)"],
+  [
+    "rate-limited: quota exceeded; retry in 17s",
+    true,
+    "rate-limited: quota exceeded; retry in 17s",
+  ],
+  [
+    "rate-limited: shared admission unavailable",
+    true,
+    "rate-limited: shared admission unavailable",
+  ],
+  [
+    "rate-limited: private-agent-policy\nforged-line",
+    true,
+    "rate-limited: unrecognized reason",
+  ],
 ])(
   "real broker preserves rejection versus uncertain command outcome: %s",
-  async (reason, rejected) => {
+  async (reason, rejected, message) => {
     const h = await harness();
     let traffic;
     try {
@@ -950,6 +974,12 @@ test.each([
       const error = await result;
       expect(error).toBeInstanceOf(Error);
       expect(error instanceof PublishRejected).toBe(rejected);
+      expect(error.message).toBe(message);
+      expect(h.publications).toHaveLength(1);
+      // A WS refusal must not pause the independent HTTP API admission lane.
+      await expect(
+        transport.query([{ kinds: [0], limit: 1 }]),
+      ).resolves.toEqual([]);
       expect(h.upstream.some((url) => url.endsWith("/events"))).toBe(false);
     } finally {
       traffic?.dispose();
@@ -1475,3 +1505,217 @@ test.each(["disconnect", "close"])(
     }
   },
 );
+
+test.each([
+  [
+    "invalid: policy:nobody — this agent has disabled external channel additions",
+    false,
+    "invalid: policy:nobody — this agent has disabled external channel additions",
+  ],
+  ["error: internal server error", true, "error: internal server error"],
+  [
+    "rate-limited: quota exceeded; retry in 17s",
+    false,
+    "rate-limited: quota exceeded; retry in 17s",
+  ],
+  [
+    "rate-limited: shared admission unavailable",
+    false,
+    "rate-limited: shared admission unavailable",
+  ],
+  [
+    "rate-limited: quota exceeded; retry in 17s\nprivate",
+    false,
+    "rate-limited: unrecognized reason",
+  ],
+  [
+    "invalid: private-agent-policy\nforged-line",
+    false,
+    "invalid: unrecognized reason",
+  ],
+])(
+  "publication diagnostics correlate a membership refusal and expose only safe quota text: %s",
+  async (reason, sent, summary) => {
+    const logger = getLogger("relay-broker");
+    const reporters = [...logger.options.reporters];
+    const previousLevel = logLevel();
+    const lines = [];
+    logger.setReporters([{ log: (entry) => lines.push(entry.args.join(" ")) }]);
+    setLogLevel("info");
+    const h = await harness();
+    let traffic;
+    try {
+      browserFetch(h.base);
+      const transport = await connectBrokerTransport(h.base);
+      traffic = transport.subscribe(callbacks);
+      await until(() => h.requests.length >= 1 && !!traffic.identity());
+      const event = await transport.writer.sign(
+        {
+          kind: 9000,
+          content: "",
+          created_at: Math.floor(Date.now() / 1000),
+          tags: [
+            ["h", "00000000-0000-4000-8000-000000000001"],
+            ["p", "a".repeat(64)],
+          ],
+        },
+        new AbortController().signal,
+      );
+      const result = fetch(`${h.base}/api/relay/publish`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Buzz-Live-ID": traffic.identity(),
+        },
+        body: JSON.stringify(event),
+      });
+      await until(() => h.publications.length === 1);
+      // An unmatched negative OK must neither finish nor contaminate this operation.
+      await h.sockets[0].receive([
+        "OK",
+        "f".repeat(64),
+        false,
+        "invalid: private-unmatched",
+      ]);
+      await h.sockets[0].receive(["OK", event.id, false, reason]);
+      const response = await result;
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: summary.startsWith("rate-limited:")
+          ? summary
+          : "Socket publication could not be confirmed",
+        ...(!sent ? { sent: false } : {}),
+      });
+      expect(lines).toContain(
+        `publication id=${event.id} kind=9000 stage=socket sent=${sent} reason=Relay publication not confirmed refusal=${summary}`,
+      );
+      const output = lines.join("\n");
+      for (const secret of [
+        event.sig,
+        "a".repeat(64),
+        traffic.identity(),
+        "private",
+        "forged-line",
+      ])
+        expect(output).not.toContain(secret);
+      expect(h.publications).toHaveLength(1);
+    } finally {
+      traffic?.dispose();
+      vi.unstubAllGlobals();
+      await h.close();
+      logger.setReporters(reporters);
+      setLogLevel(previousLevel);
+    }
+  },
+);
+
+test("publication diagnostics distinguish missing and mismatched live owner without dispatch", async () => {
+  const logger = getLogger("relay-broker");
+  const reporters = [...logger.options.reporters];
+  const previousLevel = logLevel();
+  const lines = [];
+  logger.setReporters([{ log: (entry) => lines.push(entry.args.join(" ")) }]);
+  setLogLevel("info");
+  const h = await harness();
+  let traffic;
+  try {
+    browserFetch(h.base);
+    const transport = await connectBrokerTransport(h.base);
+    traffic = transport.subscribe(callbacks);
+    await until(() => !!traffic.identity());
+    const event = await outgoing(transport, "private-event-body");
+    for (const [path, liveId, stage] of [
+      ["/api/relay/publish", "missing-owner", "owner-missing"],
+      ["/api/relay/secondary/publish", traffic.identity(), "owner-mismatch"],
+    ]) {
+      const response = await fetch(`${h.base}${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Buzz-Live-ID": liveId,
+        },
+        body: JSON.stringify(event),
+      });
+      expect(response.status).toBe(503);
+      expect(await response.json()).toEqual({
+        error: "Publication socket unavailable",
+        sent: false,
+      });
+      expect(lines).toContain(
+        `publication id=${event.id} kind=9 stage=${stage} sent=false`,
+      );
+    }
+    expect(h.publications).toHaveLength(0);
+    for (const secret of [
+      event.content,
+      event.sig,
+      traffic.identity(),
+      "missing-owner",
+    ])
+      expect(lines.join("\n")).not.toContain(secret);
+  } finally {
+    traffic?.dispose();
+    vi.unstubAllGlobals();
+    await h.close();
+    logger.setReporters(reporters);
+    setLogLevel(previousLevel);
+  }
+});
+
+test("publication diagnostics separate local unsent duplicates from lost socket receipts", async () => {
+  const logger = getLogger("relay-broker");
+  const reporters = [...logger.options.reporters];
+  const previousLevel = logLevel();
+  const lines = [];
+  logger.setReporters([{ log: (entry) => lines.push(entry.args.join(" ")) }]);
+  setLogLevel("info");
+  const h = await harness();
+  let traffic;
+  try {
+    browserFetch(h.base);
+    const transport = await connectBrokerTransport(h.base);
+    traffic = transport.subscribe(callbacks);
+    await until(() => h.requests.length >= 1 && !!traffic.identity());
+    const event = await outgoing(transport, "private-event-body");
+    const publish = () =>
+      fetch(`${h.base}/api/relay/publish`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Buzz-Live-ID": traffic.identity(),
+        },
+        body: JSON.stringify(event),
+      });
+    const first = publish();
+    await until(() => h.publications.length === 1);
+    const duplicate = await publish();
+    expect(duplicate.status).toBe(503);
+    expect(await duplicate.json()).toEqual({
+      error: "Socket publication could not be confirmed",
+      sent: false,
+    });
+    expect(lines).toContain(
+      `publication id=${event.id} kind=9 stage=socket sent=false reason=Publication already in flight`,
+    );
+    h.sockets[0].close();
+    const interrupted = await first;
+    expect(interrupted.status).toBe(503);
+    expect(await interrupted.json()).toEqual({
+      error: "Socket publication could not be confirmed",
+    });
+    expect(lines).toContain(
+      `publication id=${event.id} kind=9 stage=socket sent=true reason=Socket connection interrupted`,
+    );
+    const output = lines.join("\n");
+    expect(output).not.toContain("refusal=");
+    for (const secret of [event.content, event.sig, traffic.identity()])
+      expect(output).not.toContain(secret);
+    expect(h.publications).toHaveLength(1);
+  } finally {
+    traffic?.dispose();
+    vi.unstubAllGlobals();
+    await h.close();
+    logger.setReporters(reporters);
+    setLogLevel(previousLevel);
+  }
+});

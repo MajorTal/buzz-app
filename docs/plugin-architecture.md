@@ -139,21 +139,27 @@ backend exists.
 one optional composition provider. With zero or multiple active providers, no
 optional controls are selected. This host-matched preview is not a workflow API:
 The sidebar owns creation form/draft data and final dispatch; the session owns signing,
-membership, Canvas writes, exact receipts and partial-setup recovery. Settings and
+membership, Canvas writes, exact receipts and setup completion notices. Settings and
 provider components must check `active()` before accepting delayed work or starting
 new writes; this lifecycle fence is not a sandbox or a replacement for access checks.
 
-Disabling preserves saved group default references but does not apply them to new
-intent. Accepted drafts remain visibly summarized, with an explicit Clear action;
+Normal Create selects a saved template without a customization disclosure or raw
+setup dump. Templates & teams settings retain lineup/Canvas editing. Disabling
+preserves saved group default references but does not apply them to new intent.
+Accepted drafts get a compact summary and Clear action only when the provider is
+unavailable or fails;
 re-enable does not overwrite edits or automatically apply an unresolved old default.
-Frozen setup stays visible/resumable without any template/agent catalog. Disabling
-is not cancellation of already accepted writes. Group-only and Canvas-only setup
+Accepted setup runs independently of the template/agent catalogs after admission.
+Failures preserve frozen setup receipts and Outbox delivery evidence; dismissing a
+completion notice only hides that notice. There is no template Resume, automatic
+resend or startup continuation. Disabling is not cancellation of already accepted
+writes. Group-only and Canvas-only setup
 require no agent-library readiness; real agent selections still receive fresh host
 validation. Template-specific library demand belongs to mounted plugin controls;
 shared group/catalog storage remains session-owned.
 
 Colocated regressions cover app registration, exact-contribution revocation,
-accepted-draft retention and session/outbox recovery. They are not live cross-window
+accepted-draft retention, completion notices and preserved delivery evidence. They are not live cross-window
 or packaged/native acceptance; validation results and remaining gates belong in the
 pull request. Updating the native bundled catalog requires a desktop rebuild/restart;
 frontend hot reload alone cannot add the entry.

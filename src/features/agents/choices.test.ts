@@ -29,12 +29,14 @@ it("merges exact keys, preserves namesakes and includes stopped native-only agen
   });
   await choices.refresh();
   expect(choices.snapshot().identities).toEqual([
-    { ...duplicate, managed: true },
+    { ...duplicate, managed: true, managedName: "Calvin" },
     { ...namesake, managed: false },
   ]);
   expect(
     templateAgentChoices(choices.snapshot(), { status: "ready", channels: [] }),
-  ).toEqual([{ ...duplicate, managed: true }]);
+  ).toEqual([
+    { ...duplicate, name: "Calvin", managed: true, managedName: "Calvin" },
+  ]);
   const elsewhere = createAgentChoices({
     scope: `https://elsewhere.test:${viewer}`,
     library: createAgentLibrary(undefined).queries,
@@ -90,6 +92,12 @@ it.each(["loading", "failed", "partial"])(
     const profiles = new Map([[unknownLegacy, { name: "Legacy B" }]]);
     expect(state.status).toBe("ready");
     expect(state.complete).toBe(false);
+    expect(state.templates).toMatchObject({
+      status: "ready",
+      complete: true,
+      pending: false,
+    });
+    expect(state.templates.error).toBeUndefined();
     expect(() =>
       sessionRecipients(channel, profiles, state, viewer, []),
     ).toThrow(/still loading/);
@@ -148,6 +156,19 @@ it("revokes failed native evidence without dropping ready legacy candidates, the
   expect(choices.snapshot().identities).toEqual([
     { ...legacy, managed: false },
   ]);
+  expect(
+    templateAgentChoices(choices.snapshot(), {
+      status: "ready",
+      channels: [{ id: "test", name: "Test", members: [legacy.pubkey] }],
+    }),
+  ).toEqual([]);
+  expect(choices.snapshot().templates).toMatchObject({
+    status: "error",
+    complete: false,
+    pending: false,
+    identities: [],
+    error: expect.stringContaining("Could not refresh local agents"),
+  });
   expect(choices.snapshot().error).toContain("Could not refresh local agents");
   expect(choices.snapshot().error).not.toContain("private native");
   failed = false;
@@ -161,4 +182,103 @@ it("revokes failed native evidence without dropping ready legacy candidates, the
   stop();
   library.dispose();
   native.dispose();
+});
+
+it("uses legacy roster choices only on hosts without native controls", async () => {
+  const legacy = { pubkey: "bc".repeat(32), name: "Carl" };
+  const library = createAgentLibrary(async () => ({
+    definitions: [],
+    identities: [legacy],
+  }));
+  const fixture = controlFixture();
+  const native = createAgentControl(fixture.host);
+  const lifetime = new AbortController();
+  const channels = {
+    status: "ready" as const,
+    channels: [{ id: "test", name: "Test", members: [legacy.pubkey] }],
+  };
+  const choices = createAgentChoices({
+    scope,
+    library: library.queries,
+    native,
+    signal: lifetime.signal,
+  });
+  try {
+    await library.queries.refresh();
+    // Native idle is not evidence that the old library is the active inventory.
+    expect(choices.snapshot().templates).toMatchObject({
+      status: "idle",
+      pending: true,
+      complete: false,
+    });
+    expect(templateAgentChoices(choices.snapshot(), channels)).toEqual([]);
+    await native.refresh();
+    expect(
+      templateAgentChoices(choices.snapshot(), channels).map((a) => a.pubkey),
+    ).toEqual([fixture.agent.pubkey]);
+    fixture.data.agents.length = 0;
+    await native.refresh();
+    expect(templateAgentChoices(choices.snapshot(), channels)).toEqual([]);
+    const fallback = createAgentChoices({
+      scope,
+      library: library.queries,
+      signal: lifetime.signal,
+    });
+    expect(templateAgentChoices(fallback.snapshot(), channels)).toEqual([
+      { ...legacy, managed: false },
+    ]);
+    expect(
+      templateAgentChoices(fallback.snapshot(), {
+        status: "ready",
+        channels: [],
+      }),
+    ).toEqual([]);
+  } finally {
+    lifetime.abort();
+    library.dispose();
+    native.dispose();
+  }
+});
+
+it("refreshes the selected template source without loading the unused legacy inventory", async () => {
+  const fixture = controlFixture();
+  const native = createAgentControl(fixture.host);
+  let reads = 0;
+  const library = createAgentLibrary(async () => {
+    reads++;
+    return { definitions: [], identities: [] };
+  });
+  const lifetime = new AbortController();
+  const choices = createAgentChoices({
+    scope,
+    library: library.queries,
+    native,
+    signal: lifetime.signal,
+  });
+  try {
+    await choices.refresh("templates");
+    expect(reads).toBe(0);
+    expect(choices.snapshot().templates).toMatchObject({
+      status: "ready",
+      complete: true,
+      pending: false,
+    });
+    expect(library.queries.snapshot().status).toBe("idle");
+    const legacy = createAgentChoices({
+      scope,
+      library: library.queries,
+      signal: lifetime.signal,
+    });
+    await legacy.refresh("templates");
+    expect(reads).toBe(1);
+    expect(legacy.snapshot().templates).toMatchObject({
+      status: "ready",
+      complete: true,
+      pending: false,
+    });
+  } finally {
+    lifetime.abort();
+    library.dispose();
+    native.dispose();
+  }
 });

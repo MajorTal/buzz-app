@@ -277,15 +277,14 @@ it("resumes frozen setup with the plugin off and unavailable catalogs without re
   );
   expect(
     screen.getByRole("region", { name: "Channel setup summary" }),
-  ).toHaveTextContent("ab".repeat(32));
+  ).toHaveTextContent("1 selected agent.");
+  expect(document.body.textContent).not.toContain("ab".repeat(32));
   expect(screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
   expect(
     screen.queryByRole("button", {
       name: "Review / customize teams, agents & Canvas",
     }),
   ).not.toBeInTheDocument();
-  await user.click(
-    screen.getByRole("button", { name: "Resume channel setup" }),
-  );
+  await user.click(screen.getByRole("button", { name: "Retry channel" }));
   await waitFor(() => expect(onCreate).toHaveBeenCalledWith(pending));
 });

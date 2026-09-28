@@ -2337,11 +2337,18 @@ export function relayBrokerPlugin({
             return json(res, 400, { error: "Read filter rejected" });
           if (publishing || readPublishing) {
             const stream = streams.get(req.headers["x-buzz-live-id"]);
-            if (!stream || stream.relay !== relay)
+            // This route has already validated the signed event. Do not log its
+            // content, tags, signature, or the browser's private stream handle.
+            const publication = `publication id=${filters.id} kind=${filters.kind}`;
+            if (!stream || stream.relay !== relay) {
+              log.warn(
+                `${publication} stage=${stream ? "owner-mismatch" : "owner-missing"} sent=false`,
+              );
               return json(res, 503, {
                 error: "Publication socket unavailable",
                 sent: false,
               });
+            }
             try {
               const message = await stream.traffic.publish(
                 filters,
@@ -2353,8 +2360,19 @@ export function relayBrokerPlugin({
                 message,
               });
             } catch (error) {
+              // SocketRequestError messages are local constants; arbitrary errors
+              // and remote refusal text must never escape into terminal output.
+              const failure =
+                error instanceof SocketRequestError ? error : undefined;
+              log.warn(
+                `${publication} stage=socket sent=${failure ? failure.sent : "unknown"} reason=${failure?.message ?? "unclassified failure"}${failure?.refusal ? ` refusal=${failure.refusal}` : ""}`,
+              );
               return json(res, 503, {
-                error: "Socket publication could not be confirmed",
+                error:
+                  failure?.sent === false &&
+                  failure.refusal?.startsWith("rate-limited:")
+                    ? failure.refusal
+                    : "Socket publication could not be confirmed",
                 ...(error instanceof SocketRequestError && !error.sent
                   ? { sent: false }
                   : {}),

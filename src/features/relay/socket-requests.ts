@@ -1,4 +1,5 @@
 import type { VerifiedEvent } from "nostr-tools";
+import { publicationRefusal } from "../developer/traffic.ts";
 import { eventDto } from "./events.ts";
 
 /** False means proven non-delivery, not merely a negative or missing OK. */
@@ -6,6 +7,7 @@ export class SocketRequestError extends Error {
   constructor(
     message: string,
     readonly sent: boolean,
+    readonly refusal?: string,
   ) {
     super(message);
   }
@@ -110,7 +112,11 @@ export function createSocketPublications(wake: () => void) {
             /^(conflict|forbidden):/.test(data[3]));
         job.finish(
           undefined,
-          new SocketRequestError("Relay publication not confirmed", !rejected),
+          new SocketRequestError(
+            "Relay publication not confirmed",
+            !rejected,
+            publicationRefusal(data[3]),
+          ),
         );
       }
       return true;

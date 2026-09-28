@@ -8,21 +8,20 @@ export function OwnedContribution<T extends object>({
   entry,
   registry,
   children,
+  fallback = (
+    <p role="alert">
+      This optional control is unavailable. Other settings and channel recovery
+      remain available.
+    </p>
+  ),
 }: {
   entry: T;
   registry: { snapshot(): readonly T[] };
   children(entry: T, active: () => boolean): ReactNode;
+  fallback?: ReactNode;
 }) {
   return (
-    <ContributionBoundary
-      key={contributionKey(entry)}
-      fallback={
-        <p role="alert">
-          This optional control is unavailable. Other settings and channel
-          recovery remain available.
-        </p>
-      }
-    >
+    <ContributionBoundary key={contributionKey(entry)} fallback={fallback}>
       <Owned key={contributionKey(entry)} entry={entry} registry={registry}>
         {children}
       </Owned>

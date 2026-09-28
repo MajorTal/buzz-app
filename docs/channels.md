@@ -154,9 +154,20 @@ derive the saved group id separately from `group:<id>` rather than conflating it
 with rendered placement. Right-clicking the separate session disclosure remains
 outside the parent menu trigger, as do child-session rows.
 
-Sidebar create-channel dialogs and partial-setup recovery stay available on other
-pages. Completion is fenced to the originating relay session and navigates to a
-normal conversation destination. New-session intent uses the Channels version-1
+Sidebar create-channel dialogs stay available on other pages. Channel admission
+(creation plus verified viewer membership) is fenced to the originating relay
+session and navigates to a normal conversation destination. Remaining template
+setup continues in that session; failure produces a dismissible notice without
+navigating again. Frozen setup receipts and delivery evidence remain saved, but
+there is no template Resume or automatic startup continuation. An uncertain
+admission keeps the original form locked to its channel identity. **Retry channel**
+checks that creation first; if delivery remains unknown, an explicit click may
+republish only the exact saved Create event, with the same UUID and signature.
+It never continues template writes or retries in the background. Successful recovery opens that channel and reports
+any unfinished setup for manual inspection. Closing/reopening retains the attempt;
+after session replacement, unresolved ordinary creations (including pre-upgrade
+Outbox entries) restore for the same identity-preserving retry. Already-admitted partial
+setups do not occupy a new Create form. New-session intent uses the Channels version-1
 page route `{ kind: "new-session", parentId }`; Channels checks parent access/type
 and Sessions availability. Only parent intent, never draft text, enters history.
 Preparing-DM suppression captures the pre-open roster and exact member set, hiding

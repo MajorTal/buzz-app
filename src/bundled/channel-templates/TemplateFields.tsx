@@ -1,3 +1,7 @@
+import { npubEncode } from "nostr-tools/nip19";
+import { publicKeyLabels } from "../../shared/identity/public-key";
+import { Avatar } from "../../shared/design-system/ui/Avatar";
+import { ChoiceRow } from "../../shared/design-system/ui/ChoiceRow";
 import { useState } from "react";
 import { Checkbox } from "../../shared/design-system/ui/Checkbox";
 import { Field } from "../../shared/design-system/ui/Field";
@@ -21,32 +25,51 @@ export function AgentSelection({
   onChange(keys: string[]): void;
 }) {
   const [search, setSearch] = useState("");
-  const choices = [
+  const choices: readonly AgentChoice[] = [
     ...agents,
     ...selected
       .filter((key) => !agents.some((a) => a.pubkey === key))
       .map((pubkey) => ({ pubkey, name: "Unavailable agent" })),
   ];
+  const labels = publicKeyLabels(choices.map((agent) => agent.pubkey));
   return (
     <div className={styles.stack}>
       <Field label="Find individual agents">
         <Input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          placeholder="Name or public key"
+          placeholder="Name or npub"
         />
       </Field>
       <div className={styles.choices}>
         {choices
           .filter((a) =>
-            `${a.name} ${a.pubkey}`
+            `${a.name} ${npubEncode(a.pubkey)} ${a.pubkey}`
               .toLowerCase()
               .includes(search.toLowerCase()),
           )
           .map((agent) => (
             <Checkbox
               key={agent.pubkey}
-              label={`${agent.name} · ${agent.pubkey.slice(0, 10)}`}
+              label={
+                <ChoiceRow
+                  leading={
+                    <Avatar
+                      alt=""
+                      fallback={agent.name}
+                      src={agent.avatar ?? null}
+                      size="small"
+                      shape="squircle"
+                    />
+                  }
+                  label={agent.name}
+                  description={
+                    <span title={npubEncode(agent.pubkey)}>
+                      {labels.get(agent.pubkey)}
+                    </span>
+                  }
+                />
+              }
               checked={selected.includes(agent.pubkey)}
               onCheckedChange={(checked) =>
                 onChange(
@@ -59,7 +82,7 @@ export function AgentSelection({
           ))}
         {!choices.length && (
           <p className="text-secondary">
-            No existing agents are available in this community.
+            No agents from the Agents page are available in this community.
           </p>
         )}
       </div>
@@ -84,6 +107,10 @@ export function TemplateFields({
     !e.record.deleted && e.record.value.type === "team" ? [e.record.value] : [],
   );
   const missing = value.teamIds.filter((id) => !teams.some((t) => t.id === id));
+  const labels = publicKeyLabels([
+    ...agents.map((agent) => agent.pubkey),
+    ...(acceptedAgents ?? []),
+  ]);
   let preview = "",
     error = "";
   try {
@@ -91,11 +118,13 @@ export function TemplateFields({
       (acceptedAgents
         ? acceptedAgents.map((pubkey) => ({
             pubkey,
-            name: agents.find((a) => a.pubkey === pubkey)?.name ?? pubkey,
+            name:
+              agents.find((a) => a.pubkey === pubkey)?.name ??
+              "Unavailable agent",
           }))
         : resolveLineup(value, entries, agents)
       )
-        .map((a) => `${a.name} · ${a.pubkey.slice(0, 10)}`)
+        .map((a) => `${a.name} · ${labels.get(a.pubkey)}`)
         .join(", ") || "Only you";
   } catch (reason) {
     error = reason instanceof Error ? reason.message : String(reason);

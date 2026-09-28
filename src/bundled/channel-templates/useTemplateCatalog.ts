@@ -1,3 +1,4 @@
+import { avatarSource } from "../../shared/avatar-source";
 import { useEffect, useSyncExternalStore } from "react";
 import { useAgentChoices } from "../../features/agents/use-choices";
 import { templateAgentChoices } from "../../features/agents/choices";
@@ -8,6 +9,8 @@ export function useTemplateCatalog(session: RelaySession) {
     session.channelKit.subscribe,
     session.channelKit.snapshot,
   );
+  // Keep legacy artwork available just as Agents does; its readiness does not
+  // gate native selection or preflight.
   const library = useAgentChoices(session);
   const archives = useSyncExternalStore(
     session.archives.subscribe,
@@ -21,19 +24,34 @@ export function useTemplateCatalog(session: RelaySession) {
     // Channel discovery/access changes can invalidate a completed archive read.
     if (archives.status === "idle") void session.archives.ensure();
   }, [session, archives.status]);
+  const { templates } = library;
   return {
     kit,
-    agentsComplete: library.complete && list.status === "ready",
+    agentsComplete: templates.complete && list.status === "ready",
     agentsPending:
-      library.pending || list.status === "idle" || list.status === "loading",
-    agents: templateAgentChoices(library, list).filter(
-      (a) => !archives.archived.includes(a.pubkey),
-    ),
-    agentsReady: library.status === "ready" && archives.status === "ready",
-    error: library.error ?? archives.error ?? list.error,
+      templates.pending || list.status === "idle" || list.status === "loading",
+    agents: templateAgentChoices(library, list)
+      .filter((a) => !archives.archived.includes(a.pubkey))
+      .map((agent) => {
+        const source = avatarSource(
+          agent.avatar ??
+            library.definitions.find((d) => d.id === agent.definitionId)
+              ?.avatar,
+        );
+        return {
+          ...agent,
+          avatar: source?.startsWith("data:")
+            ? source
+            : source
+              ? session.media(source, "small")
+              : undefined,
+        };
+      }),
+    agentsReady: templates.status === "ready" && archives.status === "ready",
+    error: templates.error ?? archives.error ?? list.error,
     refresh: () => {
       void session.channelKit.refresh();
-      void session.agentChoices.refresh();
+      void session.agentChoices.refresh("templates");
       void session.archives.refresh();
       session.channels.refreshList?.();
     },

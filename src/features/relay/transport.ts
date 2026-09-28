@@ -3,6 +3,7 @@ import {
   type MemoryReader,
   type MemoryListing,
 } from "../agents/memory";
+import { publicationRefusal } from "../developer/traffic";
 import { brokerUpload, type AttachmentUpload } from "./attachments";
 import type { ChannelKitHost } from "../channel-templates/host";
 import type { KitRecord } from "../channel-templates/model";
@@ -1043,9 +1044,18 @@ async function acceptPublish(response: Response, id: string) {
       throw new PublishRejected(
         `Relay rejected the message (${response.status})`,
       );
-    // A broker that never reached the relay reports `sent: false`; that message
-    // was not delivered and is safe to mark failed and retry.
-    const body = await readApiFailure(response);
+    // Only proven non-delivery is safe to mark failed. Socket quota reasons are
+    // display-only: keep them distinct from HTTP API quota/cooldown ownership.
+    const body = await readApiFailure(response, (value) => {
+      if (!value || typeof value !== "object") return;
+      const failure = value as { sent?: unknown; error?: unknown };
+      if (
+        failure.sent === false &&
+        typeof failure.error === "string" &&
+        failure.error.startsWith("rate-limited:")
+      )
+        return publicationRefusal(failure.error);
+    });
     if (body.sent === false || body.quota === "api")
       throw new PublishRejected(body.error);
     throw new Error(

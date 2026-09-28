@@ -19,9 +19,20 @@ export function sameCommunityAgents(
   });
 }
 
-type Choice = AgentLibrarySnapshot["identities"][number] & { managed: boolean };
+type Choice = AgentLibrarySnapshot["identities"][number] & {
+  managed: boolean;
+  managedName?: string;
+};
+type SelectionSource = boolean | "templates";
+type TemplateChoices = Pick<AgentLibrarySnapshot, "status" | "error"> & {
+  identities: readonly Choice[];
+  complete: boolean;
+  pending: boolean;
+};
 export type AgentChoicesSnapshot = Omit<AgentLibrarySnapshot, "identities"> & {
   identities: readonly Choice[];
+  /** Templates mirror Agents, including source readiness and errors. */
+  templates: TemplateChoices;
   /** Usable candidates do not imply complete evidence for automatic recipients. */
   complete: boolean;
   pending: boolean;
@@ -42,6 +53,12 @@ export function createAgentChoices({
 }) {
   const empty: AgentChoicesSnapshot = {
     status: "unavailable",
+    templates: {
+      status: "unavailable",
+      identities: [],
+      complete: false,
+      pending: false,
+    },
     definitions: [],
     identities: [],
     complete: false,
@@ -74,6 +91,7 @@ export function createAgentChoices({
           ...choices.get(row.pubkey),
           ...(row.picture == null ? {} : { avatar: row.picture }),
           managed: true,
+          managedName: row.name,
         });
       }
     const ready = legacy.status === "ready" || local?.status === "ready";
@@ -81,7 +99,20 @@ export function createAgentChoices({
       legacy.error,
       local?.status === "error" ? local.error : undefined,
     ].filter(Boolean);
+    const templateSource =
+      !local || local.status === "unavailable" ? legacy : local;
+    const templates: TemplateChoices = {
+      status: templateSource.status,
+      identities: [...choices.values()]
+        .filter((agent) => templateSource === legacy || agent.managed)
+        .map((agent) => ({ ...agent, name: agent.managedName ?? agent.name })),
+      complete: templateSource.status === "ready" && !templateSource.error,
+      pending:
+        templateSource.status === "idle" || templateSource.status === "loading",
+      ...(templateSource.error ? { error: templateSource.error } : {}),
+    };
     const value: AgentChoicesSnapshot = {
+      templates,
       status: ready
         ? "ready"
         : errors.length
@@ -107,6 +138,10 @@ export function createAgentChoices({
     cached = { legacy, local, value };
     return value;
   };
+  const usesLegacy = (source: SelectionSource) =>
+    source === "templates"
+      ? !native || native.snapshot().status === "unavailable"
+      : source;
   return Object.freeze({
     snapshot,
     subscribe(listener: () => void) {
@@ -131,10 +166,10 @@ export function createAgentChoices({
         void library.refresh();
       if (native?.snapshot().status === "idle") void native.refresh();
     },
-    async refresh(includeLegacy = true) {
+    async refresh(source: SelectionSource = true) {
       if (signal.aborted) return;
       await Promise.all([
-        includeLegacy ? library.refresh() : undefined,
+        usesLegacy(source) ? library.refresh() : undefined,
         native?.refresh(),
       ]);
     },
@@ -147,8 +182,8 @@ export function createAgentChoices({
   });
 }
 
-/** Legacy definitions have no destination evidence; templates retain the visible
- * community roster constraint. Native identities already carry an exact origin. */
+/** Match the Agents page's source, retaining community and archive policy at the
+ * action boundary. Never substitute old-library identities during a native error. */
 export function templateAgentChoices(
   agents: AgentChoicesSnapshot,
   channels: ChannelList,
@@ -158,7 +193,7 @@ export function templateAgentChoices(
       ? channels.channels.flatMap((c) => c.members ?? [])
       : [],
   );
-  return agents.identities.filter(
+  return agents.templates.identities.filter(
     (agent) => agent.managed || members.has(agent.pubkey),
   );
 }

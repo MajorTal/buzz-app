@@ -11,6 +11,7 @@ import {
   filterSummary,
   httpLabel,
   logSocketFrame,
+  publicationRefusal,
   relayLabel,
 } from "./traffic";
 
@@ -134,5 +135,40 @@ it("does not encode rejected oversized text frames, but counts ordinary UTF-8 by
     expect(lines[1]).toContain("(2 B)");
   } finally {
     encode.mockRestore();
+  }
+});
+
+it("publication refusal diagnostics preserve only bounded exact protocol reasons", () => {
+  for (const reason of [
+    "invalid: policy:owner_only — agent has no owner set",
+    "invalid: policy:owner_only — only the agent owner can add this agent",
+    "invalid: policy:nobody — this agent has disabled external channel additions",
+    "invalid: actor not authorized",
+    "invalid: channel not found",
+    "invalid: channel is archived",
+    "invalid: event timestamp too far from server time",
+    "invalid: event pubkey does not match authenticated identity",
+    "restricted: channel-scoped tokens cannot publish global events",
+    "restricted: community writes are fenced",
+    "restricted: insufficient scope (need users:write)",
+    "restricted: not a channel member",
+    "restricted: insufficient scope (need admin:channels)",
+    "error: internal server error",
+    "rate-limited: quota exceeded; retry in 60s",
+    "rate-limited: shared admission unavailable",
+  ])
+    expect(publicationRefusal(reason)).toBe(reason);
+  for (const reason of [
+    "invalid: private content\nforged log",
+    "restricted: https://private.invalid?token=private",
+    "private-error",
+    "rate-limited: quota exceeded; retry in 60s\n",
+    `rate-limited: quota exceeded; retry in ${"9".repeat(1000)}s`,
+    `invalid: ${"private".repeat(20000)}`,
+  ]) {
+    const summary = publicationRefusal(reason);
+    expect(summary).toContain("unrecognized reason");
+    expect(summary).not.toMatch(/private|[\r\n]/);
+    expect(summary.length).toBeLessThan(100);
   }
 });

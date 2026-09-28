@@ -477,10 +477,27 @@ pub fn run() {
             }
         })
         .on_page_load(browser::page_load)
-        .on_window_event(browser::window_event)
+        .on_window_event(|window, event| {
+            #[cfg(target_os = "macos")]
+            if window.label() == "main" {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    // Keep the webview and running agents alive until explicit Quit.
+                    api.prevent_close();
+                    if let Err(error) = window.hide() {
+                        eprintln!("Could not close Buzz window: {error}");
+                    }
+                    return;
+                }
+            }
+            browser::window_event(window, event);
+        })
         .build(app_context())
         .expect("failed to build Buzz Foundation")
         .run(|app, event| {
+            #[cfg(target_os = "macos")]
+            if matches!(event, tauri::RunEvent::Reopen { .. }) {
+                deep_links::focus_main(app);
+            }
             if let tauri::RunEvent::ExitRequested { api, .. } = &event {
                 app.state::<ModelHost>().shutdown();
                 if app.state::<AgentHost>().shutdown().is_err() {

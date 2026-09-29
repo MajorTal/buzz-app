@@ -13,7 +13,11 @@ export function AttachmentImage({
   cached = false,
   onOpenLink,
   onOpenReview,
+  thumbnail = false,
+  label = "Open image attachment",
 }: {
+  thumbnail?: boolean;
+  label?: string;
   attachment: Attachment;
   url: string;
   source: string | undefined;
@@ -22,26 +26,33 @@ export function AttachmentImage({
   onOpenReview?: (attachment: Attachment, seconds: number) => void;
 }) {
   const corners = useMediaCorners();
-  const style = attachment.dimensions
-    ? {
-        width: Math.min(
-          360,
-          attachment.dimensions.width,
-          (320 * attachment.dimensions.width) / attachment.dimensions.height,
-        ),
-        aspectRatio: `${attachment.dimensions.width} / ${attachment.dimensions.height}`,
-      }
-    : undefined;
+  const style =
+    !thumbnail && attachment.dimensions
+      ? {
+          width: Math.min(
+            360,
+            attachment.dimensions.width,
+            (320 * attachment.dimensions.width) / attachment.dimensions.height,
+          ),
+          aspectRatio: `${attachment.dimensions.width} / ${attachment.dimensions.height}`,
+        }
+      : undefined;
   if (!source)
     return cached ? (
       <span
         ref={corners}
         className={`${styles.attachmentImage} ${styles.mediaPlaceholder}`}
+        data-thumbnail={thumbnail || undefined}
         style={style}
         aria-hidden="true"
       />
     ) : (
-      <span className={styles.attachmentUnavailable} role="status">
+      <span
+        className={
+          thumbnail ? styles.imageUnavailable : styles.attachmentUnavailable
+        }
+        role="status"
+      >
         Image unavailable
       </span>
     );
@@ -49,11 +60,12 @@ export function AttachmentImage({
     <a
       ref={corners}
       className={styles.attachmentImage}
+      data-thumbnail={thumbnail || undefined}
       style={style}
       href={url}
       target="_blank"
       rel="noreferrer"
-      aria-label="Open image attachment"
+      aria-label={label}
       data-media-preview=""
       onClick={(event) => {
         if (event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -66,11 +78,13 @@ export function AttachmentImage({
     >
       {/* Retargeting retires both the DOM pixels and all pending callbacks before
           the new source can paint. Session switches also remount the workspace. */}
-      <ImagePixels
-        key={JSON.stringify([source, attachment.blurhash])}
-        source={source}
-        blurhash={attachment.blurhash}
-      />
+      <span className={styles.attachmentImagePixels}>
+        <ImagePixels
+          key={JSON.stringify([source, attachment.blurhash])}
+          source={source}
+          blurhash={attachment.blurhash}
+        />
+      </span>
     </a>
   );
 }

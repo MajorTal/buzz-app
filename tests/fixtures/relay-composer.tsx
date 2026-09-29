@@ -1,4 +1,5 @@
 // Local-only browser fixture. Every event is signed with ephemeral test keys; no network relay.
+import { useKeyboardFocusVisibility } from "../../src/shared/design-system/useKeyboardFocusVisibility";
 import { createRoot } from "react-dom/client";
 import { ToastProvider } from "../../src/shared/design-system/ui/Toast";
 import { Context } from "@deepseek-ai/cordis";
@@ -144,16 +145,20 @@ const data = {
 };
 const container = document.getElementById("root");
 if (!container) throw new Error("Missing fixture root");
-createRoot(container).render(
-  <ToastProvider>
-    <div style={{ height: "100vh" }}>
-      <ChannelWorkspaceFixture
-        host={navigationHost}
-        providers={new TemplateProvidersService(root)}
-        relay={data}
-        panels={new PanelsService(root)}
-        pages={new PagesService(root)}
-      />
-    </div>
-  </ToastProvider>,
-);
+function Fixture() {
+  useKeyboardFocusVisibility();
+  return (
+    <ToastProvider>
+      <div style={{ height: "100vh" }}>
+        <ChannelWorkspaceFixture
+          host={navigationHost}
+          providers={new TemplateProvidersService(root)}
+          relay={data}
+          panels={new PanelsService(root)}
+          pages={new PagesService(root)}
+        />
+      </div>
+    </ToastProvider>
+  );
+}
+createRoot(container).render(<Fixture />);

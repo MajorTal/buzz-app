@@ -1,4 +1,4 @@
-import { openPage, pageChoices } from "./navigation.mjs";
+import { openPage, pageChoices, selectPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { wheel, anchor, settle, upper, expectAnchor } from "./timeline.mjs";
 
@@ -885,9 +885,8 @@ test("Projects directory fits the workspace and page navigation survives plugin 
     await page.keyboard.press("Escape");
     await expect(search).toHaveCount(0);
   };
-  await (await expectPageOrder(titles))
-    .getByRole("option", { name: "Projects", exact: true })
-    .click();
+  await expectPageOrder(titles);
+  await selectPage(page, "Projects");
   const surface = page.getByRole("region", { name: "Projects", exact: true });
   const title = surface.getByRole("heading", {
     name: "Projects",
@@ -951,9 +950,8 @@ test("Projects directory fits the workspace and page navigation survives plugin 
   await projects.click();
   await expect(projects).toHaveAttribute("aria-checked", "true");
   // Re-enabled Projects registered last; navigation surfaces must still sort it.
-  await (await expectPageOrder(titles))
-    .getByRole("option", { name: "Projects", exact: true })
-    .click();
+  await expectPageOrder(titles);
+  await selectPage(page, "Projects");
   await expect(title).toBeVisible();
 });
 

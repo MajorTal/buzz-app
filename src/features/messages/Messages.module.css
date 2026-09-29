@@ -366,12 +366,22 @@
   max-width: 100%;
   aspect-ratio: 360 / 320;
   margin-top: var(--space-2);
-  overflow: hidden;
   border-radius: var(--media-preview-radius);
+}
+/* Clip the pixels, not the focusable link's outside keyboard outline. */
+.attachmentImagePixels {
+  position: absolute;
+  inset: 0;
+}
+.attachmentImagePixels,
+.attachmentImage.mediaPlaceholder {
+  overflow: hidden;
+  border-radius: inherit;
   clip-path: var(--media-corner-clip, none);
   background: var(--affordance-subtle-hover);
 }
 .attachmentImage.mediaPlaceholder {
+  border-radius: var(--media-preview-radius);
   background: var(--surface-inset);
 }
 .attachmentImage canvas,
@@ -383,7 +393,48 @@
   height: 100%;
 }
 .attachmentImage img {
-  object-fit: scale-down;
+  object-fit: var(--attachment-image-fit, scale-down);
+}
+/* Fixed tiles keep lazy loading from moving the reading position. */
+.imageGroup {
+  min-width: 0;
+  margin-top: var(--space-2);
+}
+.imageStrip {
+  display: flex;
+  gap: var(--space-2);
+  overflow-x: auto;
+  padding: var(--space-1);
+  scroll-padding-inline: var(--space-1);
+  scrollbar-width: thin;
+}
+.attachmentImage[data-thumbnail],
+.imageUnavailable {
+  flex: 0 0 auto;
+  width: calc(var(--space-16) + var(--space-2));
+  aspect-ratio: 1;
+  margin: 0;
+}
+.attachmentImage[data-thumbnail] {
+  --attachment-image-fit: cover;
+}
+html[data-keyboard-navigation] .attachmentImage:focus-visible {
+  outline: 2px solid var(--border-focus);
+  outline-offset: 2px;
+}
+.imageCount {
+  @apply text-caption;
+  color: var(--text-subtle);
+  margin-top: var(--space-1);
+}
+.imageUnavailable {
+  @apply text-caption;
+  display: grid;
+  place-items: center;
+  padding: var(--space-1);
+  border-radius: var(--radius-row);
+  background: var(--affordance-subtle-hover);
+  color: var(--text-subtle);
 }
 /* The existing editor owns text; this surface owns only composer layout. */
 .composer {
@@ -617,6 +668,15 @@ a.fileAttachment:hover {
 html[data-keyboard-navigation] .fileAttachment:focus-visible {
   outline: 2px solid var(--focus);
   outline-offset: 2px;
+}
+.fileGroup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+}
+.fileGroup .fileAttachment {
+  margin-top: 0;
 }
 .fileAttachmentBody {
   min-width: 0;

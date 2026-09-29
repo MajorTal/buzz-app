@@ -136,6 +136,17 @@ function previewPicture(
   aspect: number,
 ): Bounds {
   const media = preview.querySelector("img, video");
+  if (media && getComputedStyle(media).objectFit === "cover") {
+    // The full image extends beyond the cropped tile; previewBounds clips it.
+    const width = Math.max(bounds.width, bounds.height * aspect);
+    const height = width / aspect;
+    return {
+      left: bounds.left + (bounds.width - width) / 2,
+      top: bounds.top + (bounds.height - height) / 2,
+      width,
+      height,
+    };
+  }
   const fit = contained(bounds, aspect);
   if (
     media instanceof HTMLImageElement &&

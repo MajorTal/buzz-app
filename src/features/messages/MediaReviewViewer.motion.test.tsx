@@ -663,3 +663,37 @@ it.each(["escape", "backdrop"])(
     }
   },
 );
+
+it("opens and closes a wide image from its cropped square thumbnail", async () => {
+  const { animate, release } = setup("image");
+  const opener = screen.getByRole("link", { name: "Open image attachment" });
+  Object.defineProperty(opener, "getBoundingClientRect", {
+    value: () => new DOMRect(100, 200, 72, 72),
+  });
+  const image = opener.querySelector("img");
+  if (!image) throw new Error("Missing preview image");
+  Object.defineProperties(image, {
+    naturalWidth: { value: 1600 },
+    naturalHeight: { value: 800 },
+  });
+  image.style.objectFit = "cover";
+  fireEvent.click(opener, { detail: 1 });
+  const firstFrame = animate.mock.calls[0]?.[0][0];
+  // Cover paints 144 × 72, cropped by the 72 × 72 preview, not 72 × 36.
+  expect(firstFrame?.transform).toBe("translate(-384px, -134px) scale(0.144)");
+  expect(firstFrame?.clipPath).toContain("inset(");
+  act(() => animate.mock.results[0]?.value.onfinish?.());
+  const exitStart = animate.mock.calls.length;
+  fireEvent.click(
+    screen.getByRole("button", { name: "Close fullscreen viewer" }),
+    { detail: 1 },
+  );
+  expect(animate.mock.calls[exitStart]?.[0][1]).toMatchObject({
+    transform: firstFrame?.transform,
+    clipPath: firstFrame?.clipPath,
+  });
+  act(() => animate.mock.results[exitStart]?.value.onfinish?.());
+  expect(screen.queryByRole("dialog")).toBeNull();
+  await waitFor(() => expect(opener).toHaveFocus());
+  release();
+});

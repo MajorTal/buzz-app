@@ -141,10 +141,7 @@ it("blocks runtime-unavailable and transitioning launches but preserves recovery
   h.data.runtimeAvailable = true;
   h.agent.status = "starting";
   await act(() => h.control.refresh());
-  expect(screen.getByRole("button", { name: "Start" })).toHaveAttribute(
-    "aria-disabled",
-    "true",
-  );
+  expect(screen.queryByRole("button", { name: "Start" })).toBeNull();
   expect(screen.getByRole("button", { name: "Restart" })).toHaveAttribute(
     "aria-disabled",
     "true",

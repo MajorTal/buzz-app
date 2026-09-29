@@ -1,10 +1,14 @@
 //! Exact-source read-only legacy lookup and create-only native credential custody.
-//! No environment, shell, per-key migration or fallback to another legacy service.
+//! No environment, shell or fallback to another legacy service.
 use crate::{Credentials, LegacySource, Result, Secret};
 use std::collections::BTreeMap;
 use std::sync::Arc;
 use zeroize::{Zeroize, Zeroizing};
 
+#[cfg(any(target_os = "macos", test))]
+mod bundle;
+#[cfg(any(target_os = "macos", test))]
+mod bundle_lock;
 mod platform;
 #[cfg(test)]
 mod tests;
@@ -19,7 +23,6 @@ enum Failure {
     Denied,
     Corrupt,
     Unavailable,
-    #[cfg(any(target_os = "windows", target_os = "linux", test))]
     Busy,
 }
 impl Failure {
@@ -31,8 +34,7 @@ impl Failure {
             }
             Self::Denied => "Secure storage access was denied; allow access explicitly and retry",
             Self::Corrupt => "Selected secure-storage credential is malformed",
-            #[cfg(any(target_os = "windows", target_os = "linux", test))]
-            Self::Busy => "Another Buzz app is accessing this credential; retry shortly",
+            Self::Busy => "Credentials are busy; retry after the current operation finishes",
             Self::Unavailable => "The OS credential store is unavailable on this platform",
         }
         .into()
@@ -53,15 +55,27 @@ trait Keychain: Send + Sync {
     ) -> std::result::Result<Zeroizing<Vec<u8>>, Failure>;
     fn add(&self, service: &str, account: &str, value: &[u8]) -> std::result::Result<(), Failure>;
     fn delete(&self, service: &str, account: &str) -> std::result::Result<(), Failure>;
+    #[cfg(any(target_os = "macos", test))]
+    fn replace(&self, _: &str, _: &str, _: &[u8]) -> std::result::Result<(), Failure> {
+        Err(Failure::Unavailable)
+    }
+    #[cfg(any(target_os = "macos", test))]
+    fn bundle_lock(&self) -> std::result::Result<Box<dyn bundle::BundleLock>, Failure> {
+        Err(Failure::Unavailable)
+    }
 }
 
 pub struct PlatformCredentials {
     keychain: Arc<dyn Keychain>,
+    #[cfg(any(target_os = "macos", test))]
+    bundle: Option<bundle::Bundle>,
 }
 impl Default for PlatformCredentials {
     fn default() -> Self {
         Self {
             keychain: Arc::new(platform::OsKeychain),
+            #[cfg(any(target_os = "macos", test))]
+            bundle: cfg!(target_os = "macos").then(bundle::Bundle::default),
         }
     }
 }
@@ -78,6 +92,12 @@ fn account(id: &str) -> Result<String> {
 }
 
 impl Credentials for PlatformCredentials {
+    fn retry(&self) {
+        #[cfg(any(target_os = "macos", test))]
+        if let Some(bundle) = &self.bundle {
+            bundle.retry();
+        }
+    }
     fn read_legacy(&self, source: LegacySource, pubkey: &str) -> Result<Secret> {
         if !crate::config::canonical_key(pubkey) {
             return Err("Invalid selected agent identity".into());
@@ -102,6 +122,10 @@ impl Credentials for PlatformCredentials {
         if id.split_once('-').map(|(key, _)| key) != Some(pubkey) {
             return Err("Credential identifier does not match the selected agent".into());
         }
+        #[cfg(any(target_os = "macos", test))]
+        if let Some(bundle) = &self.bundle {
+            return bundle.read(self.keychain.as_ref(), &account, pubkey);
+        }
         match self.keychain.saved(SERVICE, &account) {
             Ok(bytes) => {
                 if bytes.len() > 64 {
@@ -119,6 +143,10 @@ impl Credentials for PlatformCredentials {
         if id.split_once('-').map(|(pubkey, _)| pubkey) != Some(key.pubkey()) {
             return Err("Credential identifier does not match the selected agent".into());
         }
+        #[cfg(any(target_os = "macos", test))]
+        if let Some(bundle) = &self.bundle {
+            return bundle.add(self.keychain.as_ref(), &account, key);
+        }
         let value = key.hex();
         self.keychain
             .add(SERVICE, &account, value.as_bytes())
@@ -128,6 +156,10 @@ impl Credentials for PlatformCredentials {
         let account = account(id)?;
         if id.split_once('-').map(|(key, _)| key) != Some(pubkey) {
             return Err("Credential identifier does not match the selected agent".into());
+        }
+        #[cfg(any(target_os = "macos", test))]
+        if let Some(bundle) = &self.bundle {
+            return bundle.delete(self.keychain.as_ref(), &account);
         }
         match self.keychain.delete(SERVICE, &account) {
             Ok(()) | Err(Failure::Absent) => Ok(()),

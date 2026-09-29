@@ -61,7 +61,7 @@ export function ProfileAgentActions({
       {agent && (
         <>
           <div className="flex flex-wrap gap-2">
-            {agent.status !== "running" && (
+            {(agent.status === "stopped" || agent.status === "failed") && (
               <Button
                 size="compact"
                 ref={startRef}
@@ -69,7 +69,7 @@ export function ProfileAgentActions({
                 disabled={!!startBlock}
                 onClick={() => act("start")}
               >
-                Start
+                {agent.status === "failed" ? "Retry start" : "Start"}
               </Button>
             )}
             <Button

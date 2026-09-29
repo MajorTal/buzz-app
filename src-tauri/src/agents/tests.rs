@@ -688,11 +688,19 @@ mod overlap {
         fn add(&self, _: &str, _: &Secret) -> Result<(), String> {
             panic!("not a write")
         }
-        fn read(&self, id: &str, _: &str) -> Result<Option<Secret>, String> {
+        fn read(&self, id: &str, pubkey: &str) -> Result<Option<Secret>, String> {
             self.entered.send(id.to_owned()).unwrap();
             let gate = self.release.lock().unwrap().remove(id);
             gate.ok_or("Unplanned credential read")?.recv().unwrap();
-            Err(REFUSAL.into())
+            if pubkey == "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798" {
+                Secret::parse(
+                    "0000000000000000000000000000000000000000000000000000000000000001",
+                    pubkey,
+                )
+                .map(Some)
+            } else {
+                Err(REFUSAL.into())
+            }
         }
     }
     struct Gate {
@@ -795,6 +803,211 @@ mod overlap {
             .unwrap()
     }
 
+    // A is ahead of B in restore's sorted queue; only B has a usable test key.
+    fn seed_replay_pair(dir: &std::path::Path) -> (String, String) {
+        seed_pair(dir);
+        let path = dir.join("store/agents.json");
+        let mut saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let mut ids = Vec::new();
+        for (i, pubkey) in [
+            "11".repeat(32),
+            "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798".into(),
+        ]
+        .iter()
+        .enumerate()
+        {
+            let id = saved["agents"][i]["id"].as_str().unwrap().replacen(
+                &if i == 0 { "ab" } else { "cd" }.repeat(32),
+                pubkey,
+                1,
+            );
+            saved["agents"][i]["id"] = json!(id);
+            saved["agents"][i]["pubkey"] = json!(pubkey);
+            ids.push(id);
+        }
+        std::fs::write(path, serde_json::to_vec(&saved).unwrap()).unwrap();
+        (ids.remove(0), ids.remove(0))
+    }
+
+    #[tokio::test]
+    async fn mentions_coalesce_through_queued_waiting_and_starting_into_launch_input() {
+        let (dir, host, _app, view) = fixture();
+        let (_, id) = seed_replay_pair(dir.path());
+        let gate = Gate::install(&host, dir.path(), &["cred-ab", "cred-cd"]);
+        let owner = host.clone();
+        let restore = tokio::spawn(async move { owner.restore().await });
+        assert_eq!(gate.entered().await, "cred-ab");
+        // A confirmed send already thirty seconds old, well beyond the runner's
+        // five-second default window. No wall-clock sleep controls this ordering.
+        let sent = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_secs()
+            - 30;
+        for floor in [sent + 2, sent, sent + 1] {
+            invoke(
+                &view,
+                "agent_control_attach_mention",
+                json!({"id":id,"expectedRevision":1,"replayFloor":floor}),
+            )
+            .unwrap();
+        }
+        assert!(
+            gate.idle(),
+            "attaching a queued mention must not acquire credentials"
+        );
+        gate.release["cred-ab"].send(()).unwrap();
+        assert_eq!(gate.entered().await, "cred-cd");
+        assert_eq!(
+            host.with(|h| Ok(h.starts[&id].replay_floor)).unwrap(),
+            Some(sent)
+        );
+        invoke(
+            &view,
+            "agent_control_attach_mention",
+            json!({"id":id,"expectedRevision":1,"replayFloor":sent - 1}),
+        )
+        .unwrap();
+        // Starting is still before final launch admission and must accept input.
+        host.with(|h| {
+            h.starts.get_mut(&id).unwrap().status = ProcessStatus::Starting;
+            Ok(())
+        })
+        .unwrap();
+        invoke(
+            &view,
+            "agent_control_attach_mention",
+            json!({"id":id,"expectedRevision":1,"replayFloor":sent - 2}),
+        )
+        .unwrap();
+        // Consume the exact input at final admission without launching a native
+        // test harness as the app supervisor. Controller's subprocess regression
+        // separately checks action_with_key forwards this input into the runner.
+        let replay = host
+            .with(|h| {
+                let ticket = h.starts[&id].ticket;
+                h.take_start(&id, ticket)
+            })
+            .unwrap();
+        gate.release["cred-cd"].send(()).unwrap();
+        within(restore).await;
+        assert_eq!(replay.replay_floor, Some(sent - 2));
+        assert!(gate.idle());
+        assert!(host.with(|h| Ok(h.starts.is_empty())).unwrap());
+        assert!(invoke(
+            &view,
+            "agent_control_attach_mention",
+            json!({"id":id,"expectedRevision":1,"replayFloor":sent})
+        )
+        .is_err());
+        assert!(
+            !std::fs::read_to_string(dir.path().join("store/agents.json"))
+                .unwrap()
+                .contains(&(sent - 2).to_string())
+        );
+    }
+
+    #[tokio::test]
+    async fn queued_replay_cannot_survive_stop_or_revision_change() {
+        for stop in [true, false] {
+            let (dir, host, _app, view) = fixture();
+            let (_, id) = seed_replay_pair(dir.path());
+            let gate = Gate::install(&host, dir.path(), &["cred-ab"]);
+            let owner = host.clone();
+            let restore = tokio::spawn(async move { owner.restore().await });
+            assert_eq!(gate.entered().await, "cred-ab");
+            invoke(
+                &view,
+                "agent_control_attach_mention",
+                json!({"id":id,"expectedRevision":1,"replayFloor":100}),
+            )
+            .unwrap();
+            if stop {
+                invoke(
+                    &view,
+                    "agent_control_action",
+                    json!({"id":id,"action":"stop"}),
+                )
+                .unwrap();
+                assert!(invoke(
+                    &view,
+                    "agent_control_attach_mention",
+                    json!({"id":id,"expectedRevision":1,"replayFloor":90})
+                )
+                .is_err());
+            } else {
+                let path = dir.path().join("store/agents.json");
+                let mut saved: Value =
+                    serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+                saved["agents"][1]["revision"] = json!(2);
+                std::fs::write(path, serde_json::to_vec(&saved).unwrap()).unwrap();
+                assert!(invoke(
+                    &view,
+                    "agent_control_attach_mention",
+                    json!({"id":id,"expectedRevision":2,"replayFloor":90})
+                )
+                .is_err());
+            }
+            gate.release["cred-ab"].send(()).unwrap();
+            within(restore).await;
+            assert!(
+                gate.idle(),
+                "cancelled/changed queued replay must not acquire credentials"
+            );
+            let observed = invoke(&view, "agent_control_snapshot", json!({})).unwrap();
+            assert_eq!(
+                agent(&observed, &id)["status"],
+                if stop { "stopped" } else { "failed" }
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn restore_read_failure_clears_seeded_waiting_and_allows_explicit_retry() {
+        let (dir, host, _app, _view) = fixture();
+        let id = seed_pair(dir.path())[0].clone();
+        // Reopen so Host::open, not the test, seeds the queue.
+        *host.0.lock().unwrap() = Err("retired".into());
+        let fresh = AgentHost::open(Ok((
+            dir.path().join("store"),
+            dir.path().join("legacy"),
+            dir.path().join("workspace"),
+        )));
+        assert!(fresh
+            .with(|h| Ok(h.snapshot()?.data.agents[0].status == ProcessStatus::Waiting))
+            .unwrap());
+        let path = dir.path().join("store/agents.json");
+        let saved = std::fs::read(&path).unwrap();
+        std::fs::write(&path, "malformed").unwrap();
+        fresh.restore().await;
+        std::fs::write(path, saved).unwrap();
+        let snapshot = fresh.with(|h| h.snapshot()).unwrap();
+        assert!(snapshot
+            .data
+            .agents
+            .iter()
+            .all(|a| a.status == ProcessStatus::Failed
+                && a.error.as_deref() == Some("Saved agents are malformed; left unchanged")));
+        assert!(fresh.with(|h| Ok(h.queued.is_empty())).unwrap());
+        let gate = Gate::install(&fresh, dir.path(), &["cred-ab"]);
+        gate.release["cred-ab"].send(()).unwrap();
+        let retried = start(fresh.clone(), id.clone(), Action::Start, false, None, None)
+            .await
+            .unwrap();
+        assert_eq!(gate.entered().await, "cred-ab");
+        assert_eq!(
+            retried
+                .data
+                .agents
+                .iter()
+                .find(|a| a.id == id)
+                .unwrap()
+                .error
+                .as_deref(),
+            Some(REFUSAL)
+        );
+    }
+
     #[tokio::test]
     async fn queued_start_preparation_cannot_overtake_a_later_stop() {
         let (dir, host, _app, _view) = fixture();
@@ -851,6 +1064,24 @@ mod overlap {
         let restore = tokio::spawn(async move { owner.restore().await });
         // Restore waits on the first agent's credential while the user acts.
         assert_eq!(gate.entered().await, credential(&first));
+        let waiting = invoke(&view, "agent_control_snapshot", json!({})).unwrap();
+        assert_eq!(agent(&waiting, &first)["status"], "waiting");
+        assert_eq!(agent(&waiting, &second)["status"], "waiting");
+        // Native admission, not only disabled buttons, rejects overlapping Start.
+        let duplicate = start(
+            host.clone(),
+            first.clone(),
+            Action::Start,
+            false,
+            None,
+            None,
+        )
+        .await;
+        assert_eq!(
+            duplicate.err().as_deref(),
+            Some("Agent start already in progress; use Stop to cancel")
+        );
+        assert!(gate.idle());
         let stopped = invoke(
             &view,
             "agent_control_action",
@@ -881,9 +1112,12 @@ mod overlap {
         let middle = invoke(&view, "agent_control_snapshot", json!({})).unwrap();
         assert!(agent(&middle, &first)["error"].is_null());
         assert_eq!(agent(&middle, &first)["enabled"], false);
+        assert_eq!(agent(&middle, &first)["status"], "stopped");
+        assert_eq!(agent(&middle, &second)["status"], "waiting");
         gate.release[&credential(&second)].send(()).unwrap();
         let started = within(explicit).await.unwrap();
         assert_eq!(agent(&started, &second)["error"], REFUSAL);
+        assert_eq!(agent(&started, &second)["status"], "failed");
         assert!(agent(&started, &first)["error"].is_null());
 
         // A fresh host has no action history: both launch preferences restore.
@@ -908,6 +1142,162 @@ mod overlap {
             assert_eq!(agent(&after, id)["startOnAppLaunch"], true);
         }
         fresh.shutdown().unwrap();
+    }
+
+    #[tokio::test]
+    async fn refused_acquisition_never_projects_starting_between_admissions() {
+        let (dir, host, _app, _view) = fixture();
+        let id = seed_pair(dir.path())[0].clone();
+        let credential = credential(&id);
+        let gate = Gate::install(&host, dir.path(), &[&credential]);
+        let mut pending = std::pin::pin!(start(
+            host.clone(),
+            id.clone(),
+            Action::Start,
+            false,
+            None,
+            None
+        ));
+        tokio::select! {
+            result = &mut pending => panic!("start finished before credential release: {}", result.is_ok()),
+            entered = gate.entered() => assert_eq!(entered, credential),
+        }
+        let waiting = host.with(|h| h.snapshot()).unwrap();
+        assert_eq!(
+            agent(&serde_json::to_value(waiting).unwrap(), &id)["status"],
+            "waiting"
+        );
+        gate.release[&credential].send(()).unwrap();
+        // Drive only one poll of Start between snapshots. FIFO admission makes
+        // each scheduled transition observable before Start can schedule another,
+        // including the former erroneous Starting admission after refusal.
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let completed = std::future::poll_fn(|cx| {
+                    use std::future::Future;
+                    std::task::Poll::Ready(match pending.as_mut().poll(cx) {
+                        std::task::Poll::Ready(result) => Some(result),
+                        std::task::Poll::Pending => None,
+                    })
+                })
+                .await;
+                let snapshot = run(host.clone(), |h| h.snapshot()).await.unwrap();
+                let snapshot = serde_json::to_value(snapshot).unwrap();
+                assert_ne!(agent(&snapshot, &id)["status"], "starting");
+                if let Some(result) = completed {
+                    result.unwrap();
+                    assert_eq!(agent(&snapshot, &id)["status"], "failed");
+                    assert_eq!(agent(&snapshot, &id)["error"], REFUSAL);
+                    break;
+                }
+            }
+        })
+        .await
+        .expect("refused start did not settle");
+    }
+
+    #[tokio::test]
+    async fn native_start_projects_launch_integrity_failure_after_acquiring_key() {
+        let (dir, host, _app, view) = fixture();
+        seed_pair(dir.path());
+        let path = dir.path().join("store/agents.json");
+        let mut saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        let pubkey = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+        let id = saved["agents"][0]["id"]
+            .as_str()
+            .unwrap()
+            .replacen(&"ab".repeat(32), pubkey, 1);
+        saved["agents"][0]["pubkey"] = json!(pubkey);
+        saved["agents"][0]["id"] = json!(id);
+        std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
+        let gate = Gate::install(&host, dir.path(), &["cred-ab"]);
+        // Bundle initialization succeeded, but launch must recheck these bytes.
+        std::fs::write(dir.path().join("tools/buzz-agent"), "tampered").unwrap();
+        let pending = tokio::task::spawn_blocking({
+            let (view, id) = (view.clone(), id.clone());
+            move || {
+                invoke(
+                    &view,
+                    "agent_control_action",
+                    json!({"id":id,"action":"start"}),
+                )
+            }
+        });
+        assert_eq!(gate.entered().await, "cred-ab");
+        gate.release["cred-ab"].send(()).unwrap();
+        let result = within(pending).await.unwrap();
+        let failed = agent(&result, &id);
+        assert_eq!(failed["status"], "failed");
+        assert!(failed["error"].as_str().unwrap().contains("integrity"));
+        assert!(failed["runningRevision"].is_null());
+        assert_eq!(failed["enabled"], true);
+        assert_eq!(failed["startOnAppLaunch"], true);
+        assert!(host.with(|h| Ok(h.starts.is_empty())).unwrap());
+        let observed = invoke(&view, "agent_control_snapshot", json!({})).unwrap();
+        assert_eq!(agent(&observed, &id), failed);
+    }
+
+    #[tokio::test]
+    async fn acquired_key_cannot_escape_stop_quit_or_saved_revision_fences() {
+        for boundary in ["stop", "quit", "save"] {
+            let (dir, host, _app, view) = fixture();
+            seed_pair(dir.path());
+            let path = dir.path().join("store/agents.json");
+            let mut saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+            let pubkey = "79be667ef9dcbbac55a06295ce870b07029bfcdb2dce28d959f2815b16f81798";
+            let id =
+                saved["agents"][0]["id"]
+                    .as_str()
+                    .unwrap()
+                    .replacen(&"ab".repeat(32), pubkey, 1);
+            saved["agents"][0]["pubkey"] = json!(pubkey);
+            saved["agents"][0]["id"] = json!(id);
+            std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
+            let gate = Gate::install(&host, dir.path(), &["cred-ab"]);
+            let (owner, target) = (host.clone(), id.clone());
+            let pending = tokio::spawn(async move {
+                start(owner, target, Action::Start, false, None, None).await
+            });
+            assert_eq!(gate.entered().await, "cred-ab");
+            let waiting = invoke(&view, "agent_control_snapshot", json!({})).unwrap();
+            assert_eq!(agent(&waiting, &id)["status"], "waiting");
+            invoke(
+                &view,
+                "agent_control_attach_mention",
+                json!({"id":id,"expectedRevision":1,"replayFloor":100}),
+            )
+            .unwrap();
+            match boundary {
+                "stop" => {
+                    invoke(
+                        &view,
+                        "agent_control_action",
+                        json!({"id":id,"action":"stop"}),
+                    )
+                    .unwrap();
+                }
+                "quit" => {
+                    host.shutdown().unwrap();
+                }
+                _ => {
+                    saved["agents"][0]["revision"] = json!(2);
+                    std::fs::write(&path, serde_json::to_vec(&saved).unwrap()).unwrap();
+                }
+            }
+            gate.release["cred-ab"].send(()).unwrap();
+            let result = within(pending).await;
+            if boundary == "save" {
+                let result = serde_json::to_value(result.unwrap()).unwrap();
+                assert_eq!(agent(&result, &id)["status"], "failed");
+                assert!(agent(&result, &id)["error"]
+                    .as_str()
+                    .unwrap()
+                    .contains("Saved settings changed"));
+                assert!(agent(&result, &id)["runningRevision"].is_null());
+            } else {
+                assert!(result.is_err());
+            }
+        }
     }
 
     // Eligibility can lapse while the OS credential prompt is open (e.g. the
@@ -1813,4 +2203,27 @@ async fn dropped_caller_does_not_release_a_running_native_operation() {
     assert_pending(next.as_mut()).await;
     release.send(()).unwrap();
     assert!(next.await.is_ok());
+}
+
+#[tokio::test]
+async fn restore_uses_serialized_launch_preference_not_enabled_alone() {
+    let (dir, host, _app, _view) = fixture();
+    let id = seed(dir.path());
+    let path = dir.path().join("store/agents.json");
+    let mut data: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+    data["agents"][0]["startOnAppLaunch"] = json!(false);
+    std::fs::write(&path, serde_json::to_vec(&data).unwrap()).unwrap();
+    host.restore().await;
+    let data = host.with(|h| h.snapshot()).unwrap().data;
+    assert!(data.agents[0].enabled);
+    assert!(!data.agents[0].start_on_app_launch);
+    assert!(data.agents[0].status == ProcessStatus::Stopped);
+    assert!(data.agents[0].error.is_none());
+    host.with(|h| h.controller.set_start_on_app_launch(&id, true))
+        .unwrap();
+    host.restore().await;
+    let data = host.with(|h| h.snapshot()).unwrap().data;
+    assert!(data.agents[0].start_on_app_launch);
+    assert!(data.agents[0].status == ProcessStatus::Failed);
+    assert_eq!(data.agents[0].error.as_deref(), Some(RUNTIME_GATE));
 }

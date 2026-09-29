@@ -90,8 +90,14 @@ because execution failed. The old-Buzz ownership guard remains in force.
 
 Mention startup carries the earliest relevant pending send timestamp into the
 bundled runner's existing replay input (bounded by its 15-minute catch-up limit).
-Already-running agents are not restarted. Process state is not proof of a live
-reply; imported identities require old Buzz stopped before handover.
+Already-running agents are not restarted. Mentions during queued or pending startup
+attach their earliest timestamp to that same launch, without another credential
+read or listener. Stop and changed saved revisions retire that input. If launch
+has already finished or the host cannot attach it, the send shows a separate
+replay warning instead of silently treating Waiting as Running. Attachment is not
+proof of delivery; a later credential/launch failure remains visible in Agents.
+Process state is not proof of a live reply; imported identities require old Buzz
+stopped before handover.
 
 The focused Add/Edit dialog contains Name and Agent instructions, followed by
 **AI configuration** in dependency order: **Harness → Provider → Model**. Provider
@@ -267,6 +273,63 @@ use temporary stores, public fixture keys and loopback HTTP. They do not establi
 live relay access, native image rendering or packaged human signing. Camera and
 recording are outside this avatar slice.
 
+## Agent Keychain unlock (macOS)
+
+Managed agent keys share one agent-only Keychain item: service
+`dev.local.buzz.foundation.agents`, account `agent-bundle-v1`. After a successful
+read, the native credential owner caches it for the session; starting another
+migrated agent does not read another Keychain item. Human identity and old Buzz's
+credential blob stay separate. Nothing collects the macOS password or changes
+Keychain access controls. Development signing and other credentials can still
+cause OS prompts; this is not a promise of exactly one total dialog.
+
+Existing app-owned `agent:<key-community>` entries are copied lazily on Start or
+other explicit credential use, with exact identity validation and secure readback.
+The first migration can require multiple approvals. Original entries remain for
+rollback; explicit Delete removes both copies before removing settings. New keys
+are written only to the bundle, so older versions cannot start newly created keys.
+Do not operate older and newer credential writers concurrently during rollback.
+Never delete old Buzz's source credentials for this migration.
+
+A short per-OS-user file lock serializes bundle access across cooperating
+worktrees/profiles. Writes re-read the current bundle under that lock and verify
+readback; a nonsecret invalidation token in the lock file invalidates other
+sessions' cached copies before writes. Lock files contain no keys. Busy storage
+fails visibly and requires explicit Retry; it never waits behind another app's
+consent prompt or automatically replays a write. This does not coordinate manual
+Keychain edits or older app versions; quit the app before changing storage outside
+this owner. A refused unlock is remembered until explicit Start/Retry, Import,
+Create, profile publication, or Delete; later auto-start rows do not reopen it.
+
+All launch-selected agents appear **Waiting to start · unlock Keychain if prompted**
+until their turn finishes acquiring credentials. A successful acquisition advances
+to **Starting process**, then process-alive evidence or a specific failure with
+**Retry start**. Stop remains available while waiting; pending OS dialogs may
+still need dismissal, but a late result cannot start a stopped agent. Quit and
+saved-revision fences remain in force. No frontend polling automatically retries
+Start. Windows/Linux retain their existing per-agent credential adapter.
+
+### Development startup diagnostics
+
+Debug builds print `[agent-startup]` and `[agent-keychain]` lines to the existing
+`just desktop` terminal. Selection records include the public key/community ID,
+effective `startOnAppLaunch` and enabled intent, then each auto-start attempt records its
+final process state. Credential records identify bundle/individual/legacy item
+class, operation, begin/end, sanitized failure category and elapsed time. They
+never print keys, raw item accounts, relay URLs, environment, agent names or OS
+error text. Release builds do not emit these diagnostics; no new log store or
+telemetry transport is added. A Keychain API call is not proof of an OS prompt.
+
+For an attended check, retain only these prefixed lines locally, note the dialog's
+item label (never the password), then quit and relaunch the **unchanged binary**.
+Do not manually start agents or send waking mentions during this check: credential
+lines have no agent ID, so overlapping credential operations cannot be attributed
+by order. Already-migrated agents should use the bundle, not individual reads. Native
+signing/OS consent remains a separate observation; do not equate a fixture pass
+or a Keychain call count with password-dialog acceptance. Auto-start off is a
+saved preference, not an execution failure: change **Start on launch** in the
+agent profile's Runtime tab deliberately rather than rewriting settings.
+
 ## Runtime boundary
 
 Native startup opens `app_data_dir/agent-controller`, never the old library as a
@@ -279,6 +342,15 @@ OS credential dialog does not hold the controller: Stop, Disconnect and Quit
 retire late starts; Save during a credential wait requires an explicit retry.
 Synthetic native tests inject rejecting or in-memory credentials and runtime
 resources. Production has no disposable storage override or preview launch mode.
+
+Launch-selected agents start relay listeners; their AI worker pools remain lazy
+until work arrives. Status reads project configured ACP/MCP paths without reading
+or hashing executables. These paths and `runtimeAvailable` describe the bundle
+accepted at initialization, not a fresh integrity check or relay readiness. Every
+actual launch still verifies its bundled worker, ACP and MCP executables before
+spawn, and exposes verification failure on the agent. Native Start projects one
+final snapshot after recording its outcome. This adds no incoming wake service
+for fully stopped listeners and no durable interrupted-turn recovery.
 
 On Unix, an execed supervisor in the same app binary owns each agent's shared
 identity lock, isolated listener session, and temporary runtime directory. App
@@ -503,8 +575,8 @@ live handover remains a separate step below.
 
 1. While old Buzz still runs, review/import only. Choose the installed/development
    library and destination under **Import options**. Import may prompt for the
-   selected legacy secure-storage blob; it creates separate app credentials at service
-   `dev.local.buzz.foundation.agents`, account `agent:<key-community>`. The source
+   selected legacy secure-storage blob; it creates app credentials in the separate agent-only bundle described above.
+   The source
    is read-only and imported agents stay stopped. Refused custody is a blocker,
    never a reason to migrate keys implicitly.
 2. Review prompt, workspace, harness/provider/model and write-only overrides.

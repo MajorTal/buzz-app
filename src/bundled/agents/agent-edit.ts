@@ -108,6 +108,8 @@ export function agentProcessLabel(agent: AgentView): string {
   switch (agent.status) {
     case "running":
       return "Process running · relay readiness unverified";
+    case "waiting":
+      return "Waiting to start · unlock Keychain if prompted";
     case "starting":
       return "Starting process";
     case "stopping":

@@ -79,6 +79,13 @@ impl RuntimeBundle {
         bundle.files = observed;
         Ok(bundle)
     }
+    /// Configured path for display only. Does not inspect files or authorize launch.
+    pub(crate) fn display_path(&self, name: &str) -> Option<PathBuf> {
+        let filename = filename(name);
+        self.files
+            .contains_key(&filename)
+            .then(|| self.directory.join(filename))
+    }
     pub(crate) fn executable(&self, name: &str) -> Result<PathBuf> {
         let filename = filename(name);
         let expected = self

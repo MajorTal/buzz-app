@@ -234,13 +234,20 @@ export async function startAddedAgent(
     throw new Error(
       "Added, but the local agent could not be checked. Retry to start it.",
     );
-  if (agent.status === "running" || agent.status === "starting") return;
+  if (
+    agent.status === "running" ||
+    agent.status === "waiting" ||
+    agent.status === "starting"
+  )
+    return;
   try {
     const result = await control.action(agent.id, "start");
     const started = result.agents.find((item) => item.id === agent.id);
     if (
       !started ||
-      (started.status !== "running" && started.status !== "starting")
+      (started.status !== "running" &&
+        started.status !== "waiting" &&
+        started.status !== "starting")
     )
       throw new Error(
         started?.error ?? "The agent is not running. Retry to start it.",

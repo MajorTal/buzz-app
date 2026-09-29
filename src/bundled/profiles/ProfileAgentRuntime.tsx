@@ -53,7 +53,10 @@ export function ProfileAgentRuntime({
   return (
     <section aria-label="Local agent" className={styles.runtime}>
       <h3 className="text-body">Local agent</h3>
-      <p role="status">{agentProcessLabel(agent)}</p>
+      <p role="status">
+        {state.status === "error" && "Last known: "}
+        {agentProcessLabel(agent)}
+      </p>
       {drift && (
         <p>
           Saved revision {agent.revision} is not running yet (running revision{" "}

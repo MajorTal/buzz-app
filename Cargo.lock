@@ -547,6 +547,7 @@ dependencies = [
  "dotenvy",
  "getrandom 0.3.4",
  "libc",
+ "nix 0.31.3",
  "secp256k1",
  "security-framework",
  "serde",

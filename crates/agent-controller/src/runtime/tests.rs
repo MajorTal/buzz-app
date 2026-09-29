@@ -459,7 +459,8 @@ fn failed_temp_cleanup_reports_error_and_allows_explicit_retry() {
         let stopped = if matches!(action, Action::Restart) {
             controller
                 .action_with_key(&a.id, action, 1, &key, None)
-                .unwrap()
+                .unwrap();
+            controller.snapshot().unwrap()
         } else {
             controller.action(&a.id, action).unwrap()
         };
@@ -991,6 +992,58 @@ fn bundle_rejects_a_revision_different_from_the_runtime_spec() {
 
 #[test]
 #[cfg(unix)]
+fn snapshots_project_configured_paths_but_starts_reverify_each_executable() {
+    for name in ["buzz-acp", "buzz-dev-mcp", "buzz-agent"] {
+        for removed in [false, true] {
+            let dir = tempfile::tempdir().unwrap();
+            let tools = tempfile::tempdir().unwrap();
+            let a = agent(dir.path());
+            let mut store = Store::open(dir.path().join("config")).unwrap();
+            store.insert(vec![a.clone()]).unwrap();
+            let mut controller = Controller::new(
+                store,
+                Arc::new(Memory),
+                Ok(bundle(tools.path())),
+                dir.path().join("ownership"),
+            );
+            let path = tools.path().join(name);
+            if removed {
+                fs::remove_file(path).unwrap();
+            } else {
+                fs::write(path, "tampered").unwrap();
+            }
+            // Projection retains configured paths even when runtime files cannot
+            // be verified. No status poll may treat these as launch authority.
+            let before = controller.snapshot().unwrap();
+            assert!(before.runtime_available);
+            assert_eq!(
+                before.agents[0].acp_command.as_deref(),
+                tools.path().join("buzz-acp").to_str()
+            );
+            assert_eq!(
+                before.agents[0].mcp_command.as_deref(),
+                tools.path().join("buzz-dev-mcp").to_str()
+            );
+            let key = Secret::parse(KEY, PUB).unwrap();
+            controller
+                .action_with_key(&a.id, Action::Start, 1, &key, None)
+                .unwrap();
+            let after = controller.snapshot().unwrap();
+            assert!(matches!(after.agents[0].status, ProcessStatus::Failed));
+            assert!(after.agents[0]
+                .error
+                .as_deref()
+                .unwrap()
+                .contains(if removed { "missing" } else { "integrity" }));
+            assert!(after.agents[0].running_revision.is_none());
+            assert!(controller.running.is_empty());
+            assert!(!dir.path().join("starts").exists());
+        }
+    }
+}
+
+#[test]
+#[cfg(unix)]
 fn manifest_integrity_and_exact_identity_exclusion_across_profiles() {
     let dir = tempfile::tempdir().unwrap();
     let tools = tempfile::tempdir().unwrap();
@@ -1115,9 +1168,10 @@ fn mention_start_forwards_replay_floor_without_persisting_or_restoring_it() {
         dir.path().join("ownership"),
     );
     let key = Secret::parse(KEY, PUB).unwrap();
-    let result = controller
+    controller
         .action_with_key(&a.id, Action::Start, 1, &key, Some(1234567890))
         .unwrap();
+    let result = controller.snapshot().unwrap();
     assert!(result.agents[0].enabled);
     assert!(matches!(result.agents[0].status, ProcessStatus::Running));
     let output = wait_for_contents(&dir.path().join("starts"), |text| {

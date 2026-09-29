@@ -60,7 +60,14 @@ export function AgentCard({
     status === "running" ? presence === "online" : presence !== "online";
   useEffect(() => {
     const owner = session?.presence;
-    if (!owner || !status || settled) return;
+    if (
+      !owner ||
+      !status ||
+      status === "waiting" ||
+      status === "starting" ||
+      settled
+    )
+      return;
     // The harness publishes presence just after native start/stop confirms,
     // so one read can race it. Re-read at the owner's gate, then resume its
     // normal cadence even if relay evidence never agrees.

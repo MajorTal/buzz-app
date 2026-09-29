@@ -71,6 +71,7 @@ pub struct HarnessView {
 #[serde(rename_all = "lowercase")]
 pub enum ProcessStatus {
     Stopped,
+    Waiting,
     Starting,
     Running,
     Stopping,

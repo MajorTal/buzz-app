@@ -299,6 +299,8 @@ function respondToLabel(
 }
 
 function statusLabel(status: AgentView["status"]) {
+  if (status === "waiting")
+    return "Waiting to start · unlock Keychain if prompted";
   return status.charAt(0).toUpperCase() + status.slice(1);
 }
 

@@ -86,7 +86,7 @@ export function ManagedAgentActions({
           Imported, not started. Mention this agent in a channel to start it.
         </p>
       )}
-      {agent.enabled && (
+      {agent.startOnAppLaunch && (
         <p className="text-body-sm text-secondary">Starts with this app.</p>
       )}
       {agent.error && (
@@ -114,14 +114,14 @@ export function ManagedAgentActions({
         </div>
       )}
       <div className="flex flex-wrap gap-2">
-        {agent.status !== "running" && (
+        {(agent.status === "stopped" || agent.status === "failed") && (
           <Button
             variant="primary"
             size="compact"
             disabled={!!startBlock}
             onClick={() => act("start")}
           >
-            Start
+            {agent.status === "failed" ? "Retry start" : "Start"}
           </Button>
         )}
         <Button

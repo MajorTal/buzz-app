@@ -42,7 +42,13 @@ export interface AgentView {
   revision: number;
   runningRevision: number | null;
   enabled: boolean;
-  status: "stopped" | "starting" | "running" | "stopping" | "failed";
+  status:
+    | "stopped"
+    | "waiting"
+    | "starting"
+    | "running"
+    | "stopping"
+    | "failed";
   error: string | null;
   diagnostics: string[];
   profilePending?: boolean;
@@ -176,6 +182,12 @@ export interface AgentControlHost {
   ): Promise<ControlSnapshot>;
   delete?(id: string, expectedRevision: number): Promise<ControlSnapshot>;
   saveDefaults?(edit: AgentDefaultsEdit): Promise<ControlSnapshot>;
+  /** Attach replay input only; never starts or restarts a process. */
+  attachMention?(
+    id: string,
+    expectedRevision: number,
+    replayFloor: number,
+  ): Promise<void>;
   action(
     id: string,
     action: AgentAction,
@@ -252,6 +264,8 @@ export function agentLaunchBlock(
     return (
       state.data?.runtimeMessage || "The bundled agent runtime is unavailable."
     );
+  if (agent.status === "waiting")
+    return "Waiting to start; unlock Keychain if prompted.";
   if (agent.status === "starting" || agent.status === "stopping")
     return "Waiting for the process transition.";
   return null;
@@ -665,8 +679,31 @@ export function createAgentControl(
         const failures: string[] = [];
         for (const agent of agents) {
           if (!valid()) return;
-          if (agent.status === "running" || state.pendingLaunch === agent.id)
+          if (agent.status === "running" && state.pendingLaunch !== agent.id)
             continue;
+          if (
+            agent.status === "waiting" ||
+            agent.status === "starting" ||
+            state.pendingLaunch === agent.id
+          ) {
+            try {
+              if (!host.attachMention)
+                throw new Error("Replay attachment unavailable");
+              // Replay metadata has its own native admission. It never mutates the
+              // projection or supersedes the in-flight Start/Stop write lane.
+              await host.attachMention(
+                agent.id,
+                agent.revision,
+                Math.min(replayFloor, earliestPending),
+              );
+            } catch {
+              if (!valid()) return;
+              failures.push(
+                `${agent.name}'s pending launch could not confirm replay of this mention. Open Agents to check its status.`,
+              );
+            }
+            continue;
+          }
           try {
             const result = await action(
               agent.id,

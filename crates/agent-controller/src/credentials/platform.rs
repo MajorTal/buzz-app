@@ -16,23 +16,51 @@ mod macos {
     impl Keychain for OsKeychain {
         fn legacy(&self, service: &str, account: &str) -> Result<Zeroizing<Vec<u8>>, Failure> {
             // Legacy file-Keychain search list only. No DPK/per-key migration.
-            find_generic_password(None, service, account)
-                .map(|(password, _)| Zeroizing::new(password.to_vec()))
-                .map_err(error)
+            observe("legacy-read", account, || {
+                find_generic_password(None, service, account)
+                    .map(|(password, _)| Zeroizing::new(password.to_vec()))
+                    .map_err(error)
+            })
         }
         fn saved(&self, service: &str, account: &str) -> Result<Zeroizing<Vec<u8>>, Failure> {
             // Read the same default Keychain that add writes, never a search-list match.
-            SecKeychain::default()
-                .map_err(error)?
-                .find_generic_password(service, account)
-                .map(|(password, _)| Zeroizing::new(password.to_vec()))
-                .map_err(error)
+            observe("read", account, || {
+                SecKeychain::default()
+                    .map_err(error)?
+                    .find_generic_password(service, account)
+                    .map(|(password, _)| Zeroizing::new(password.to_vec()))
+                    .map_err(error)
+            })
         }
         fn add(&self, service: &str, account: &str, value: &[u8]) -> Result<(), Failure> {
-            SecKeychain::default()
-                .map_err(error)?
-                .add_generic_password(service, account, value)
-                .map_err(error)
+            observe("add", account, || {
+                SecKeychain::default()
+                    .map_err(error)?
+                    .add_generic_password(service, account, value)
+                    .map_err(error)
+            })
+        }
+        fn replace(&self, service: &str, account: &str, value: &[u8]) -> Result<(), Failure> {
+            // Updates the existing item in place; preserves its access controls.
+            let keychain = SecKeychain::default().map_err(error)?;
+            match observe("replace-read", account, || {
+                keychain
+                    .find_generic_password(service, account)
+                    .map_err(error)
+            }) {
+                Ok((_, mut item)) => observe("update", account, || {
+                    item.set_password(value).map_err(error)
+                }),
+                Err(Failure::Absent) => observe("add", account, || {
+                    keychain
+                        .add_generic_password(service, account, value)
+                        .map_err(error)
+                }),
+                Err(problem) => Err(problem),
+            }
+        }
+        fn bundle_lock(&self) -> Result<Box<dyn super::super::bundle::BundleLock>, Failure> {
+            super::super::bundle_lock::acquire().map(|lock| Box::new(lock) as _)
         }
         fn delete(&self, service: &str, account: &str) -> Result<(), Failure> {
             let keychain = SecKeychain::default().map_err(error)?;
@@ -45,6 +73,40 @@ mod macos {
                 .map_err(error)
         }
     }
+}
+
+// Development terminal evidence only. Never format values, raw accounts, service
+// names or OS error text. A Keychain call is NOT proof that an OS dialog appeared.
+#[cfg(any(target_os = "macos", test))]
+fn item_class(account: &str) -> &'static str {
+    if account == super::bundle::ACCOUNT {
+        "bundle"
+    } else if account.starts_with("agent:") {
+        "individual"
+    } else {
+        "legacy"
+    }
+}
+#[cfg(any(target_os = "macos", test))]
+fn observe<T>(
+    operation: &'static str,
+    account: &str,
+    work: impl FnOnce() -> Result<T, Failure>,
+) -> Result<T, Failure> {
+    let begin = std::time::Instant::now();
+    let report = |phase, outcome: Option<Failure>| {
+        if cfg!(debug_assertions) {
+            use std::io::Write;
+            // Broken terminal output must never change credential custody.
+            let _ = writeln!(std::io::stderr().lock(),
+                "[agent-keychain] pid={} item={} operation={operation} phase={phase} failure={outcome:?} elapsed_ms={}",
+                std::process::id(), item_class(account), begin.elapsed().as_millis());
+        }
+    };
+    report("begin", None);
+    let result = work();
+    report("end", result.as_ref().err().copied());
+    result
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -120,5 +182,33 @@ mod keyring_platform {
         fn delete(&self, service: &str, account: &str) -> Result<(), Failure> {
             credentials::delete(service, account).map_err(error)
         }
+    }
+}
+
+#[test]
+fn diagnostics_classify_without_exposing_accounts_and_preserve_results() {
+    assert_eq!(item_class(super::bundle::ACCOUNT), "bundle");
+    assert_eq!(item_class("agent:PRIVATE_SENTINEL"), "individual");
+    assert_eq!(item_class("PRIVATE_SENTINEL"), "legacy");
+    let mut calls = 0;
+    // The value deliberately implements neither Debug nor Display.
+    struct PrivateValue;
+    let result = observe("read", "PRIVATE_SENTINEL", || {
+        calls += 1;
+        Ok(PrivateValue)
+    });
+    assert!(result.is_ok());
+    assert_eq!(calls, 1);
+    for failure in [
+        Failure::Absent,
+        Failure::Occupied,
+        Failure::Denied,
+        Failure::Corrupt,
+        Failure::Unavailable,
+        Failure::Busy,
+    ] {
+        assert!(
+            matches!(observe::<PrivateValue>("read", "PRIVATE_SENTINEL", || Err(failure)), Err(actual) if actual == failure)
+        );
     }
 }

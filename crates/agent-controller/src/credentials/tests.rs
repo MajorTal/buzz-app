@@ -10,6 +10,8 @@ struct Fake {
     entries: Mutex<BTreeMap<(String, String), Vec<u8>>>,
     failure: Mutex<Option<Failure>>,
     calls: Mutex<Vec<(String, String, String)>>,
+    lock_root: Mutex<Option<tempfile::TempDir>>,
+    bad_write: Mutex<bool>,
 }
 impl Fake {
     fn put(&self, service: &str, account: &str, bytes: Vec<u8>) {
@@ -41,6 +43,30 @@ impl Fake {
     }
 }
 impl Keychain for Fake {
+    fn bundle_lock(&self) -> std::result::Result<Box<dyn bundle::BundleLock>, Failure> {
+        let mut root = self.lock_root.lock().unwrap();
+        let root = root.get_or_insert_with(|| tempfile::tempdir().unwrap());
+        bundle_lock::acquire_at(root.path()).map(|lock| Box::new(lock) as _)
+    }
+    fn replace(
+        &self,
+        service: &str,
+        account: &str,
+        bytes: &[u8],
+    ) -> std::result::Result<(), Failure> {
+        self.calls
+            .lock()
+            .unwrap()
+            .push(("replace".into(), service.into(), account.into()));
+        if let Some(error) = *self.failure.lock().unwrap() {
+            return Err(error);
+        }
+        if *self.bad_write.lock().unwrap() {
+            return Ok(());
+        }
+        self.put(service, account, bytes.to_vec());
+        Ok(())
+    }
     fn delete(&self, service: &str, account: &str) -> std::result::Result<(), Failure> {
         self.calls
             .lock()
@@ -93,6 +119,7 @@ fn fixture() -> (PlatformCredentials, Arc<Fake>) {
     (
         PlatformCredentials {
             keychain: keychain.clone(),
+            bundle: None,
         },
         keychain,
     )
@@ -319,6 +346,227 @@ fn default_platform_cannot_access_keychain_in_unit_tests() {
         .is_err());
     let id = agent_id(PUB, "wss://relay.example");
     assert!(credentials.read(&id, PUB).is_err());
+    assert!(credentials
+        .add(&id, &Secret::parse(KEY, PUB).unwrap())
+        .is_err());
+}
+
+fn bundled(fake: Arc<Fake>) -> PlatformCredentials {
+    PlatformCredentials {
+        keychain: fake,
+        bundle: Some(bundle::Bundle::default()),
+    }
+}
+#[test]
+fn bundle_migration_verifies_and_preserves_rollback_then_reopens_with_one_read() {
+    let fake = Arc::new(Fake::default());
+    let credentials = bundled(fake.clone());
+    let ids = [
+        agent_id(PUB, "wss://one.example"),
+        agent_id(PUB, "wss://two.example"),
+    ];
+    for id in &ids {
+        fake.put(SERVICE, &account(id).unwrap(), KEY.as_bytes().to_vec());
+    }
+    for id in &ids {
+        assert_eq!(*credentials.read(id, PUB).unwrap().unwrap().hex(), KEY);
+    }
+    for id in &ids {
+        assert!(fake
+            .entries
+            .lock()
+            .unwrap()
+            .contains_key(&(SERVICE.into(), account(id).unwrap())));
+    }
+    let reopened = bundled(fake.clone());
+    fake.calls.lock().unwrap().clear();
+    for _ in 0..2 {
+        for id in &ids {
+            assert_eq!(*reopened.read(id, PUB).unwrap().unwrap().hex(), KEY);
+        }
+    }
+    assert_eq!(
+        *fake.calls.lock().unwrap(),
+        vec![("saved".into(), SERVICE.into(), bundle::ACCOUNT.into())]
+    );
+}
+#[test]
+fn bundle_denial_is_shared_until_explicit_retry_and_never_falls_back() {
+    let fake = Arc::new(Fake::default());
+    let credentials = bundled(fake.clone());
+    let id = agent_id(PUB, "wss://relay.example");
+    fake.put(SERVICE, &account(&id).unwrap(), KEY.as_bytes().to_vec());
+    *fake.failure.lock().unwrap() = Some(Failure::Denied);
+    assert!(credentials.read(&id, PUB).err().unwrap().contains("denied"));
+    *fake.failure.lock().unwrap() = None;
+    assert!(credentials.read(&id, PUB).is_err());
+    assert_eq!(fake.calls.lock().unwrap().len(), 1);
+    credentials.retry();
+    assert!(credentials.read(&id, PUB).unwrap().is_some());
+}
+#[test]
+fn bundle_readback_failure_retains_original_and_explicit_retry_migrates() {
+    let fake = Arc::new(Fake::default());
+    let credentials = bundled(fake.clone());
+    let id = agent_id(PUB, "wss://relay.example");
+    fake.put(SERVICE, &account(&id).unwrap(), KEY.as_bytes().to_vec());
+    *fake.bad_write.lock().unwrap() = true;
+    assert!(credentials.read(&id, PUB).is_err());
+    assert!(fake
+        .entries
+        .lock()
+        .unwrap()
+        .contains_key(&(SERVICE.into(), account(&id).unwrap())));
+    *fake.bad_write.lock().unwrap() = false;
+    credentials.retry();
+    assert!(credentials.read(&id, PUB).unwrap().is_some());
+}
+#[test]
+fn bundle_writers_merge_fresh_and_delete_invalidates_other_session_cache() {
+    let fake = Arc::new(Fake::default());
+    let one = bundled(fake.clone());
+    let two = bundled(fake.clone());
+    let ids = [
+        agent_id(PUB, "wss://one.example"),
+        agent_id(PUB, "wss://two.example"),
+    ];
+    let key = Secret::parse(KEY, PUB).unwrap();
+    one.add(&ids[0], &key).unwrap();
+    assert!(two.read(&ids[0], PUB).unwrap().is_some());
+    two.add(&ids[1], &key).unwrap();
+    assert!(one.read(&ids[1], PUB).unwrap().is_some());
+    assert!(one.add(&ids[0], &key).is_err());
+    fake.put(SERVICE, &account(&ids[0]).unwrap(), KEY.as_bytes().to_vec());
+    one.delete(&ids[0], PUB).unwrap();
+    assert!(two.read(&ids[0], PUB).unwrap().is_none());
+    assert!(two.read(&ids[1], PUB).unwrap().is_some());
+    one.delete(&ids[0], PUB).unwrap();
+    assert!(bundled(fake).read(&ids[1], PUB).unwrap().is_some());
+}
+#[test]
+fn corrupt_bundle_never_reads_individual_items_or_writes() {
+    let id = agent_id(PUB, "wss://relay.example");
+    let account = account(&id).unwrap();
+    for bytes in [
+        b"not-json".to_vec(),
+        format!("{{\"{account}\":\"{KEY}\",\"{account}\":\"{KEY}\"}}").into_bytes(),
+        serde_json::to_vec(
+            &json!({&account: "0000000000000000000000000000000000000000000000000000000000000002"}),
+        )
+        .unwrap(),
+        serde_json::to_vec(&json!({"human": KEY})).unwrap(),
+        vec![b' '; MAX_BLOB + 1],
+    ] {
+        let fake = Arc::new(Fake::default());
+        fake.put(SERVICE, bundle::ACCOUNT, bytes);
+        fake.put(SERVICE, &account, KEY.as_bytes().to_vec());
+        assert!(bundled(fake.clone()).read(&id, PUB).is_err());
+        assert_eq!(
+            *fake.calls.lock().unwrap(),
+            vec![("saved".into(), SERVICE.into(), bundle::ACCOUNT.into())]
+        );
+    }
+}
+
+#[test]
+fn busy_and_corrupt_individual_migration_do_not_poison_other_agents() {
+    let fake = Arc::new(Fake::default());
+    let credentials = bundled(fake.clone());
+    let bad = agent_id(PUB, "wss://bad.example");
+    let good = agent_id(PUB, "wss://good.example");
+    fake.put(SERVICE, &account(&bad).unwrap(), b"malformed".to_vec());
+    fake.put(SERVICE, &account(&good).unwrap(), KEY.as_bytes().to_vec());
+    let lock = fake.bundle_lock().unwrap();
+    assert!(credentials.read(&good, PUB).is_err());
+    drop(lock);
+    assert!(credentials.read(&bad, PUB).is_err());
+    // No retry reset: the next restore row can still migrate and start.
+    assert!(credentials.read(&good, PUB).unwrap().is_some());
+}
+
+#[test]
+fn rollback_delete_then_reimport_reuses_retained_bundle_without_writing() {
+    let legacy = tempfile::tempdir().unwrap();
+    let dest = tempfile::tempdir().unwrap();
+    let root = legacy
+        .path()
+        .join(LegacySource::Development.app_directory())
+        .join("agents");
+    std::fs::create_dir_all(&root).unwrap();
+    std::fs::write(
+        root.join("managed-agents.json"),
+        serde_json::to_vec(&json!([
+            {"pubkey": PUB, "name": "Fixture"}
+        ]))
+        .unwrap(),
+    )
+    .unwrap();
+    let (old_credentials, fake) = fixture();
+    fake.put("buzz-desktop-dev", "secrets", blob());
+    let mut store = Store::open(dest.path().into()).unwrap();
+    let mut imports = Imports::default();
+    let preview = imports
+        .preview(
+            LegacySource::Development,
+            legacy.path().into(),
+            dest.path().into(),
+            "wss://relay.example",
+        )
+        .unwrap();
+    let id = preview.candidates[0].id.clone();
+    imports
+        .commit(
+            &preview.token,
+            std::slice::from_ref(&id),
+            &mut store,
+            &old_credentials,
+        )
+        .unwrap();
+
+    // Upgrade migrates the individual credential, retaining the rollback copy.
+    let credentials = bundled(fake.clone());
+    assert!(credentials.read(&id, PUB).unwrap().is_some());
+    drop(credentials);
+    // An older Foundation build removes only the individual item and settings.
+    old_credentials.delete(&id, PUB).unwrap();
+    store
+        .remove(&id, store.agents().unwrap()[0].revision)
+        .unwrap();
+    assert!(store.agents().unwrap().is_empty());
+    assert!(old_credentials.read(&id, PUB).unwrap().is_none());
+    let before = fake.entries.lock().unwrap().clone();
+    assert!(before.contains_key(&(SERVICE.into(), bundle::ACCOUNT.into())));
+
+    // Re-upgrade takes the actual native import path, not a direct add probe.
+    let credentials = bundled(fake.clone());
+    let preview = imports
+        .preview(
+            LegacySource::Development,
+            legacy.path().into(),
+            dest.path().into(),
+            "wss://relay.example",
+        )
+        .unwrap();
+    fake.calls.lock().unwrap().clear();
+    imports
+        .prepare(&preview.token, std::slice::from_ref(&id), &store)
+        .unwrap()
+        .acquire(&credentials)
+        .unwrap()
+        .commit(&mut store)
+        .unwrap();
+    assert_eq!(store.agents().unwrap().len(), 1);
+    assert_eq!(store.agents().unwrap()[0].id, id);
+    assert!(!store.agents().unwrap()[0].enabled);
+    assert_eq!(
+        *fake.calls.lock().unwrap(),
+        vec![
+            ("legacy".into(), "buzz-desktop-dev".into(), "secrets".into()),
+            ("saved".into(), SERVICE.into(), bundle::ACCOUNT.into()),
+        ]
+    );
+    assert_eq!(*fake.entries.lock().unwrap(), before);
+    // Re-import reuses custody; it does not weaken the create-only API.
     assert!(credentials
         .add(&id, &Secret::parse(KEY, PUB).unwrap())
         .is_err());

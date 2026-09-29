@@ -33,6 +33,7 @@
     "allow-agent-control-start-on-app-launch",
     "allow-agent-control-delete",
     "allow-agent-control-action",
+    "allow-agent-control-attach-mention",
     "allow-agent-control-import-preview",
     "allow-agent-control-import-commit",
     "allow-agent-models-begin",

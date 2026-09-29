@@ -353,7 +353,7 @@ impl Controller {
         let saved = self.store.agents()?;
         let defaults = self.store.defaults()?;
         let command = |name| {
-            let path = self.bundle.as_ref().ok()?.executable(name).ok()?;
+            let path = self.bundle.as_ref().ok()?.display_path(name)?;
             Some(path.to_string_lossy().into_owned())
         };
         let (acp_command, mcp_command) = (command("buzz-acp"), command("buzz-dev-mcp"));
@@ -677,6 +677,7 @@ impl Controller {
         self.bundle.as_ref().map_err(Clone::clone)?;
         Ok((agent.credential_id, agent.pubkey, agent.revision, workspace))
     }
+    /// Record the action outcome; the native host projects one final snapshot.
     pub fn action_with_key(
         &mut self,
         id: &str,
@@ -684,7 +685,7 @@ impl Controller {
         revision: u64,
         key: &crate::Secret,
         replay_floor: Option<u64>,
-    ) -> Result<ControlSnapshot> {
+    ) -> Result<()> {
         if self.credential_request(id)?.2 != revision {
             return Err("Saved settings changed while opening credentials; retry Start".into());
         }
@@ -692,7 +693,7 @@ impl Controller {
         if matches!(action, Action::Restart) {
             if let Err(error) = self.stop(id) {
                 self.errors.insert(id.into(), error);
-                return self.snapshot();
+                return Ok(());
             }
         }
         match self.start_with_key(id, Some(key), replay_floor) {
@@ -703,7 +704,7 @@ impl Controller {
                 self.errors.insert(id.into(), error);
             }
         }
-        self.snapshot()
+        Ok(())
     }
     pub fn record_error(&mut self, id: &str, error: String) {
         self.errors.insert(id.into(), error);

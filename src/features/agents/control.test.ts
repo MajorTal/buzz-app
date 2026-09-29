@@ -668,6 +668,7 @@ for (const cancel of ["scope", "stop", "dispose"] as const) {
 
 it("overlapping mentions coalesce the pending same-agent Start and Stop defeats its late completion", async () => {
   const fixture = controlFixture();
+  fixture.host.attachMention = vi.fn(async () => {});
   fixture.agent.enabled = false;
   fixture.agent.status = "stopped";
   const control = createAgentControl(fixture.host);
@@ -694,6 +695,11 @@ it("overlapping mentions coalesce the pending same-agent Start and Stop defeats 
     signal,
   )();
   expect(action).toHaveBeenCalledOnce();
+  expect(fixture.host.attachMention).toHaveBeenCalledWith(
+    fixture.agent.id,
+    1,
+    1235,
+  );
   await control.action(fixture.agent.id, "stop");
   launched.resolve({
     ...fixture.data,
@@ -1092,6 +1098,32 @@ it("keeps Stop available while Goose installs and refreshes once it settles", as
   control.dispose();
 });
 
+for (const status of ["waiting", "starting"] as const) {
+  it(`attaches the earliest mention floor to a native ${status} launch without duplicate Start`, async () => {
+    const fixture = controlFixture();
+    fixture.host.attachMention = vi.fn(async () => {});
+    fixture.agent.status = status;
+    const control = createAgentControl(fixture.host);
+    await control.refresh();
+    await control.prepareMention(
+      [fixture.agent.pubkey],
+      fixture.agent.relayUrl,
+      100,
+      new AbortController().signal,
+    )(90);
+    expect(fixture.host.attachMention).toHaveBeenCalledExactlyOnceWith(
+      fixture.agent.id,
+      fixture.agent.revision,
+      90,
+    );
+    expect(control.snapshot().mentionError).toBeUndefined();
+    expect(
+      fixture.calls.filter((call) => call.action === "start"),
+    ).toHaveLength(0);
+    control.dispose();
+  });
+}
+
 it("runs Pi installation outside agent writes, fences Goose, and preserves the report after Stop", async () => {
   const fixture = controlFixture();
   const install = deferred<GooseInstallReport>();
@@ -1184,3 +1216,54 @@ for (const operation of ["save", "saveDefaults"] as const) {
     control.dispose();
   });
 }
+
+for (const supported of [true, false]) {
+  it(`warns when a pending launch cannot attach replay (supported=${supported})`, async () => {
+    const fixture = controlFixture();
+    fixture.agent.status = "waiting";
+    if (supported)
+      fixture.host.attachMention = vi.fn(async () => {
+        throw new Error("RAW SECRET");
+      });
+    const control = createAgentControl(fixture.host);
+    await control.prepareMention(
+      [fixture.agent.pubkey],
+      fixture.agent.relayUrl,
+      100,
+      new AbortController().signal,
+    )();
+    expect(control.snapshot().mentionError).toContain(
+      "pending launch could not confirm replay",
+    );
+    expect(control.snapshot().mentionError).not.toContain("RAW SECRET");
+    expect(
+      fixture.calls.filter((call) => call.action === "start"),
+    ).toHaveLength(0);
+    control.dispose();
+  });
+}
+it("Stop retires a late replay-attachment failure without overwriting its result", async () => {
+  const fixture = controlFixture();
+  fixture.agent.status = "waiting";
+  const attached = deferred<void>();
+  fixture.host.attachMention = vi.fn(async () => {
+    await attached.promise;
+    throw new Error("cancelled");
+  });
+  const control = createAgentControl(fixture.host);
+  const wake = control.prepareMention(
+    [fixture.agent.pubkey],
+    fixture.agent.relayUrl,
+    100,
+    new AbortController().signal,
+  )();
+  await vi.waitFor(() =>
+    expect(fixture.host.attachMention).toHaveBeenCalledOnce(),
+  );
+  await control.action(fixture.agent.id, "stop");
+  attached.resolve();
+  await wake;
+  expect(control.snapshot().data?.agents[0]?.status).toBe("stopped");
+  expect(control.snapshot().mentionError).toBeUndefined();
+  control.dispose();
+});

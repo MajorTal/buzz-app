@@ -1145,7 +1145,7 @@ it("credential import keeps real Stop controls reachable without trapping the ed
     ).toBeEnabled();
     fireEvent.click(within(dialog).getByRole("button", { name: "Stop" }));
     // Stop leaves the independent launch preference on.
-    await within(dialog).findByText("Stopped · starts with buzz-app");
+    await within(dialog).findByText("Start on launch enabled");
     fireEvent.click(
       within(dialog).getByRole("button", { name: "Close editor" }),
     );
@@ -2253,3 +2253,39 @@ it.each([
     expect(commit).toHaveBeenCalledTimes(1);
   },
 );
+
+it("shows native waiting, recovery Stop and one explicit Retry without polling a Start", async () => {
+  const { f, control } = setup("ready", (f) => {
+    f.agent.status = "waiting";
+    f.agent.enabled = false;
+    f.agent.startOnAppLaunch = true;
+  });
+  const cards = await screen.findAllByRole("article", {
+    name: `Agent ${f.agent.name}`,
+  });
+  const card = cards.find((entry) =>
+    entry.textContent?.includes(f.agent.relayUrl),
+  );
+  if (!card) throw Error("Exact destination card missing");
+  expect(
+    within(card).getByText("Waiting to start · unlock Keychain if prompted"),
+  ).toBeVisible();
+  expect(within(card).queryByRole("button", { name: "Start" })).toBeNull();
+  expect(within(card).getByRole("button", { name: "Stop" })).toBeEnabled();
+  expect(within(card).getByText("Starts with this app.")).toBeVisible();
+  f.agent.status = "failed";
+  f.agent.error =
+    "Secure storage access was denied; allow access explicitly and retry";
+  await act(() => control.refresh());
+  await act(() => control.refresh());
+  expect(within(card).getByRole("alert")).toHaveTextContent(
+    "Secure storage access was denied",
+  );
+  expect(f.calls.filter((call) => call.action === "start")).toHaveLength(0);
+  await userEvent.click(
+    within(card).getByRole("button", { name: "Retry start" }),
+  );
+  await waitFor(() =>
+    expect(f.calls.filter((call) => call.action === "start")).toHaveLength(1),
+  );
+});

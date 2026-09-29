@@ -140,7 +140,13 @@ test("local controls preserve drafts, confirm operations and distinguish disable
     ).toHaveValue("My unsaved prompt");
     await editor.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(
-      editor.getByText("Stopped · a later sent mention can start this agent"),
+      editor.getByText("Process stopped", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      editor.getByText(
+        "Manual start · a later sent mention can start this agent",
+        { exact: true },
+      ),
     ).toBeVisible();
     const before = await page.evaluate(() =>
       window.agentControlFixture.calls.filter(
@@ -266,7 +272,10 @@ test("explicit-on preference survives Stop without changing the enabled state", 
     ).toBeVisible();
     await editor.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(
-      editor.getByText("Stopped · starts with buzz-app", { exact: true }),
+      editor.getByText("Process stopped", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      editor.getByText("Start on launch enabled", { exact: true }),
     ).toBeVisible();
     expect(
       await page.evaluate(() => ({
@@ -384,14 +393,15 @@ for (const previouslyStopped of [false, true]) {
           }),
         ).toBeVisible();
         await expect(
-          editor.getByText("Process running · relay readiness unverified", {
-            exact: true,
-          }),
+          editor.getByText(
+            "Last known: Process running · relay readiness unverified",
+            {
+              exact: true,
+            },
+          ),
         ).toBeVisible();
         await expect(
-          editor.getByText(
-            "Stopped · a later sent mention can start this agent",
-          ),
+          editor.getByText("Process stopped", { exact: true }),
         ).toHaveCount(0);
       }
       await expect(
@@ -419,7 +429,13 @@ for (const previouslyStopped of [false, true]) {
       await stop.click();
       await expect(page.getByRole("alert")).toHaveCount(0);
       await expect(
-        editor.getByText("Stopped · a later sent mention can start this agent"),
+        editor.getByText("Process stopped", { exact: true }),
+      ).toBeVisible();
+      await expect(
+        editor.getByText(
+          "Manual start · a later sent mention can start this agent",
+          { exact: true },
+        ),
       ).toBeVisible();
       await expect(
         editor.getByRole("button", { name: "Save changes" }),
@@ -489,7 +505,13 @@ test("unavailable runtime blocks launch and credential import while retaining St
     await openEditor(page);
     await editor.getByRole("button", { name: "Stop", exact: true }).click();
     await expect(
-      editor.getByText("Stopped · a later sent mention can start this agent"),
+      editor.getByText("Process stopped", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      editor.getByText(
+        "Manual start · a later sent mention can start this agent",
+        { exact: true },
+      ),
     ).toBeVisible();
     expect(
       await page.evaluate(() =>
@@ -868,8 +890,12 @@ for (const launch of ["start", "restart"]) {
         await expect(firstStop).toBeDisabled(); // one Stop IPC at a time
         await page.evaluate(() => window.releaseStop());
         await expect(
+          other.getByText("Process stopped", { exact: true }),
+        ).toBeVisible();
+        await expect(
           other.getByText(
-            "Stopped · a later sent mention can start this agent",
+            "Manual start · a later sent mention can start this agent",
+            { exact: true },
           ),
         ).toBeVisible();
         await closeEditor(page);
@@ -889,8 +915,12 @@ for (const launch of ["start", "restart"]) {
           .toBe("fixture-agent");
         await page.evaluate(() => window.releaseStop());
         await expect(
+          first.getByText("Process stopped", { exact: true }),
+        ).toBeVisible();
+        await expect(
           first.getByText(
-            "Stopped · a later sent mention can start this agent",
+            "Manual start · a later sent mention can start this agent",
+            { exact: true },
           ),
         ).toBeVisible();
         await expect(
@@ -908,15 +938,23 @@ for (const launch of ["start", "restart"]) {
           first.getByRole("button", { name: "Restart", exact: true }),
         ).toBeEnabled();
         await expect(
+          first.getByText("Process stopped", { exact: true }),
+        ).toBeVisible();
+        await expect(
           first.getByText(
-            "Stopped · a later sent mention can start this agent",
+            "Manual start · a later sent mention can start this agent",
+            { exact: true },
           ),
         ).toBeVisible();
         await closeEditor(page);
         await openEditor(page, "Other running agent");
         await expect(
+          other.getByText("Process stopped", { exact: true }),
+        ).toBeVisible();
+        await expect(
           other.getByText(
-            "Stopped · a later sent mention can start this agent",
+            "Manual start · a later sent mention can start this agent",
+            { exact: true },
           ),
         ).toBeVisible();
         await expect(

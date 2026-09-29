@@ -16,6 +16,7 @@ import {
   BellIcon,
   RobotIcon,
   ChatCircleIcon,
+  UsersIcon,
   KeyboardIcon,
   WrenchIcon,
 } from "../shared/design-system/icons/index";
@@ -89,6 +90,7 @@ export function Settings({
   onSection?: (section: string) => void;
   navigationPane?: boolean;
 }) {
+  useEffect(() => cards.retainVisibility(), [cards]);
   const contributed = useSyncExternalStore(cards.subscribe, cards.snapshot);
   const client = useSyncExternalStore(
     communities.subscribe,
@@ -98,7 +100,11 @@ export function Settings({
     (membership) => membership.id === client.selected,
   );
   const communityCards = useMemo(
-    () => contributed.filter((card) => !card.group),
+    () => contributed.filter((card) => !card.group && !card.section),
+    [contributed],
+  );
+  const administrationCards = useMemo(
+    () => contributed.filter((card) => card.section === "administration"),
     [contributed],
   );
   const contributedGroups = useMemo(
@@ -128,6 +134,13 @@ export function Settings({
   const visibleSections = useMemo(
     () => [
       ...communitySections,
+      ...(selectedCommunity
+        ? administrationCards.map((card) => ({
+            id: card.key,
+            label: card.title,
+            icon: UsersIcon,
+          }))
+        : []),
       ...(!selectedCommunity ? personalProfile : []),
       ...contributedGroups.flatMap((group) =>
         group.cards.map((card) => ({
@@ -141,7 +154,12 @@ export function Settings({
         ? [{ id: "developer", label: "Developer", icon: WrenchIcon }]
         : []),
     ],
-    [communitySections, contributedGroups, selectedCommunity],
+    [
+      administrationCards,
+      communitySections,
+      contributedGroups,
+      selectedCommunity,
+    ],
   );
   const defaultSection = selectedCommunity ? "profile" : "appearance";
   const [selected, setSelected] = useState(defaultSection);
@@ -199,6 +217,25 @@ export function Settings({
                         event.currentTarget.focus();
                         if (onSection) onSection(id);
                         else setSelected(id);
+                      }}
+                    />
+                  ))}
+                </NavigationSection>
+              )}
+              {selectedCommunity && administrationCards.length > 0 && (
+                <NavigationSection label="Administration">
+                  {administrationCards.map((card) => (
+                    <NavigationItem
+                      label={card.title}
+                      icon={<UsersIcon aria-hidden="true" size={18} />}
+                      selected={selected === card.key}
+                      type="button"
+                      key={card.key}
+                      aria-current={selected === card.key ? "page" : undefined}
+                      onClick={(event) => {
+                        event.currentTarget.focus();
+                        if (onSection) onSection(card.key);
+                        else setSelected(card.key);
                       }}
                     />
                   ))}
@@ -293,12 +330,41 @@ export function Settings({
                   <OwnedContribution entry={card} registry={cards}>
                     {(entry, active) => {
                       const Card = entry.component;
-                      return <Card active={active} />;
+                      return (
+                        <Card
+                          active={active}
+                          {...(selectedCommunity
+                            ? { community: selectedCommunity }
+                            : {})}
+                        />
+                      );
                     }}
                   </OwnedContribution>
                 )}
               </div>
             ))}
+            {administrationCards.map(
+              (card) =>
+                selected === card.key && (
+                  <OwnedContribution
+                    key={card.key}
+                    entry={card}
+                    registry={cards}
+                  >
+                    {(entry, active) => {
+                      const Card = entry.component;
+                      return (
+                        <Card
+                          active={active}
+                          {...(selectedCommunity
+                            ? { community: selectedCommunity }
+                            : {})}
+                        />
+                      );
+                    }}
+                  </OwnedContribution>
+                ),
+            )}
             {contributedGroups.flatMap((group) =>
               group.cards.map(
                 (card) =>

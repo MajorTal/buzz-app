@@ -29,12 +29,26 @@ export function useAppNavigation(services: AppServices) {
     services.plugins.subscribe,
     services.plugins.snapshot,
   );
-  const settingsCards = useSyncExternalStore(
-    services.settingsCards.subscribe,
-    services.settingsCards.snapshot,
-  );
+
   const startup = plugins.configuration.status;
   const target = state.entry.target;
+  const settings = target.kind === "settings";
+  const visibility = useSyncExternalStore(
+    services.settingsCards.subscribe,
+    () =>
+      settings && target.section
+        ? services.settingsCards.visibility(target.section)
+        : true,
+  );
+  // Demand belongs to the route, including pending/error presentation and retry.
+  const [retainedAttempt, setRetainedAttempt] =
+    useState<typeof state.attempt>();
+  useLayoutEffect(() => {
+    if (!settings) return;
+    const release = services.settingsCards.retainVisibility();
+    setRetainedAttempt(state.attempt);
+    return release;
+  }, [services, settings, state.attempt]);
   const lastNonSettings = useRef<OpenTarget | undefined>(undefined);
   if (target.kind !== "settings") lastNonSettings.current = target;
   const scope = "scope" in target ? target.scope : undefined;
@@ -85,6 +99,8 @@ export function useAppNavigation(services: AppServices) {
   }
   if (
     target.kind === "settings" &&
+    !failure &&
+    !waiting &&
     target.section &&
     ![
       "profile",
@@ -99,10 +115,12 @@ export function useAppNavigation(services: AppServices) {
     // Plugin cards are addressed by contribution key.
     const section = target.section;
     const owner = section.split("/")[0] ?? "";
-    if (!settingsCards.some((card) => card.key === section)) {
+    if (visibility !== true) {
       if (
+        retainedAttempt !== state.attempt ||
         startup === "loading" ||
-        plugins.activation[owner]?.status === "starting"
+        plugins.activation[owner]?.status === "starting" ||
+        visibility === "pending"
       )
         waiting = true;
       else failure = "unavailable";
@@ -273,9 +291,11 @@ export function useAppNavigation(services: AppServices) {
       if (
         (pageKey === channelsKey ||
           pageKey === "buzz.projects/projects" ||
-          pageKey === "buzz.agents/agents") &&
+          pageKey === "buzz.agents/agents" ||
+          settings) &&
         !state.ingress &&
-        !failure &&
+        (!failure ||
+          (settings && failure === "unavailable" && visibility === "error")) &&
         !waiting
       ) {
         const status = services.relay.snapshot().status;

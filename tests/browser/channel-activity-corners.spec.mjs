@@ -19,7 +19,15 @@ for (const multiple of [false, true]) {
       app,
     }, testInfo) => {
       await open(page, app);
-      const alpha = page.locator('button[data-channel-id="alpha"]');
+      const sidebar = page.getByRole("complementary", {
+        name: "Channel sidebar",
+        includeHidden: true,
+      });
+      const showNavigation = page.getByRole("button", {
+        name: "Show navigation",
+        exact: true,
+      });
+      const alpha = sidebar.locator('button[data-channel-id="alpha"]');
       await expect(
         alpha.getByRole("img", { name: /unread threads?/ }),
       ).toBeVisible();
@@ -42,10 +50,6 @@ for (const multiple of [false, true]) {
         else narrow = mid + 1;
       }
       const openPopup = async () => {
-        const showNavigation = page.getByRole("button", {
-          name: "Show navigation",
-          exact: true,
-        });
         if (await showNavigation.isVisible()) await showNavigation.click();
         await expect(alpha).toBeVisible();
         await alpha.hover();

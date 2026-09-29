@@ -182,6 +182,8 @@ function ConnectedApp({ services }: { services: AppServices }) {
                 Open Settings
               </Button>
             </div>
+          ) : route.waiting ? (
+            <p role="status">Opening destination…</p>
           ) : settings ? (
             <Settings
               plugins={plugins}
@@ -213,7 +215,7 @@ function ConnectedApp({ services }: { services: AppServices }) {
                 });
               }}
             />
-          ) : route.waiting || startup === "loading" ? (
+          ) : startup === "loading" ? (
             <p role="status">Opening destination…</p>
           ) : route.page ? (
             <PageView

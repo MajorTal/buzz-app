@@ -50,12 +50,7 @@ test("the app runtime exposes ready bundled pages and removes them on disable", 
     assert.deepEqual(services.channelTemplates.snapshot(), []);
     assert.deepEqual(
       services.settingsCards.snapshot().map((card) => card.pluginId),
-      [
-        "buzz.channels",
-        "block.hosted-communities",
-        "buzz.moderation",
-        "buzz.emoji",
-      ],
+      ["buzz.channels", "block.hosted-communities", "buzz.emoji"],
     );
     assert.equal(
       services.panels.snapshot().some((p) => p.pluginId === "buzz.todos"),
@@ -103,12 +98,7 @@ test("the app runtime exposes ready bundled pages and removes them on disable", 
     assert.deepEqual(services.channelTemplates.snapshot(), []);
     assert.deepEqual(
       services.settingsCards.snapshot().map((card) => card.pluginId),
-      [
-        "buzz.channels",
-        "block.hosted-communities",
-        "buzz.moderation",
-        "buzz.emoji",
-      ],
+      ["buzz.channels", "block.hosted-communities", "buzz.emoji"],
     );
     await services.plugins.change("enable", "buzz.channel-templates");
     await vi.waitFor(() =>

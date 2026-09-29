@@ -688,6 +688,14 @@ export const test = base.extend({
               ),
             ]
           : [];
+      if (filter.kinds?.includes(13534)) {
+        expect(filter).toEqual({
+          authors: [getPublicKey(relayKey)],
+          kinds: [13534],
+          limit: 1,
+        });
+        return [sign(13534, [["member", viewer, "owner"]], "", relayKey)];
+      }
       if (filter.kinds?.includes(39001))
         return rosterIds
           .filter((id) => !filter["#d"] || filter["#d"].includes(id))
@@ -1268,6 +1276,14 @@ export const test = base.extend({
           request.method === "GET"
         )
           return send(response, { policy: null });
+        if (route === "invite" && request.method === "POST")
+          return send(response, {
+            code: "fixture",
+            url: `${JSON.parse(fixtureAliases)[community]}/invite/fixture`,
+            expires_at: 1700003600,
+            max_uses: body.max_uses ?? null,
+            uses_remaining: body.max_uses ?? null,
+          });
         if (route === "session") {
           report.sessions.push(community);
           return send(response, {
@@ -1544,6 +1560,10 @@ export const test = base.extend({
       );
       await use({
         sign: (template) => finalizeEvent(template, userKey),
+        membershipSnapshot(role) {
+          expect(["owner", "admin", "member"]).toContain(role);
+          return sign(13534, [["member", viewer, role]], "", relayKey);
+        },
         origin,
         report,
         watchPageErrors(other) {

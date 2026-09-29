@@ -139,6 +139,7 @@ it("disables the inventory card's Use here and says why", async () => {
       edit={() => {}}
       importedId={null}
       onUseHere={onUseHere}
+      onImport={() => {}}
     />,
   );
   const card = await screen.findByRole("article", {

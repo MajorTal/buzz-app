@@ -1,9 +1,10 @@
 import { InventoryIdentityCard } from "./InventoryIdentityCard";
-import type { ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import type {
   AgentControl,
   AgentControlState,
   AgentView,
+  ImportSource,
 } from "../../features/agents/control";
 import type { RelaySession } from "../../features/relay/session";
 import type { Profile } from "../../features/relay/contracts";
@@ -30,6 +31,7 @@ export function InventoryView({
   remove,
   importedId,
   onUseHere,
+  onImport,
   children,
 }: {
   state: AgentControlState;
@@ -44,8 +46,12 @@ export function InventoryView({
   remove?: ((agent: AgentView) => void) | undefined;
   importedId: string | null;
   onUseHere(pubkey: string): void;
+  onImport(pubkey: string, source?: ImportSource): void;
   children?: ReactNode;
 }) {
+  const [selectedSources, setSelectedSources] = useState<
+    Record<string, ImportSource>
+  >({});
   const data = state.data;
   if (!data) return null;
   const groups = new Map<string, InventoryEntry[]>();
@@ -94,6 +100,14 @@ export function InventoryView({
                 remove={remove}
                 importedId={importedId}
                 onUseHere={onUseHere}
+                onImport={onImport}
+                selectedSource={selectedSources[row.pubkey]}
+                onSourceChange={(source) =>
+                  setSelectedSources((saved) => ({
+                    ...saved,
+                    [row.pubkey]: source,
+                  }))
+                }
               />
             ))}
           </div>

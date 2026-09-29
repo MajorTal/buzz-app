@@ -148,6 +148,7 @@ export function AgentsPage({
                     importedId,
                     label,
                     onUseHere,
+                    onImport,
                   ) =>
                     state.status === "unavailable" ? (
                       library
@@ -162,6 +163,7 @@ export function AgentsPage({
                         control={control}
                         connection={connection}
                         onUseHere={onUseHere}
+                        onImport={onImport}
                       />
                     ) : (
                       <ManagedAgents

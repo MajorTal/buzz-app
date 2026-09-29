@@ -65,6 +65,7 @@ function setup(
         ]);
     }
   }
+  const onImport = vi.fn();
   const onUseHere = vi.fn();
   const view = () => (
     <InventoryView
@@ -78,11 +79,13 @@ function setup(
       edit={() => {}}
       importedId={null}
       onUseHere={onUseHere}
+      onImport={onImport}
     />
   );
   const mounted = render(view());
   return {
     f,
+    onImport,
     onUseHere,
     rows,
     redraw: () => mounted.rerender(view()),
@@ -215,4 +218,38 @@ it("renders four exclusive sections with all setups on one exact-key card", asyn
       await screen.findByRole("region", { name: "Relay-only agents" }),
     ).getByRole("article", { name: "Agent Not imported" }),
   ).toBeVisible();
+});
+
+it("retains the chosen source when an identity card unmounts and returns", () => {
+  const { rows, redraw, onImport } = setup("connected", (f) => {
+    f.data.parked = [
+      {
+        pubkey: "cd".repeat(32),
+        name: "Shared source",
+        sources: ["installed", "development"],
+      },
+    ];
+  });
+  const key = "cd".repeat(32);
+  const row = rows.get(key);
+  if (!row) throw Error("Missing fixture identity");
+  fireEvent.change(screen.getByLabelText("Old Buzz installation"), {
+    target: { value: "development" },
+  });
+  rows.delete(key);
+  redraw();
+  expect(
+    screen.queryByRole("article", { name: "Agent Shared source" }),
+  ).toBeNull();
+  rows.set(key, row);
+  redraw();
+  expect(screen.getByLabelText("Old Buzz installation")).toHaveValue(
+    "development",
+  );
+  fireEvent.click(
+    within(
+      screen.getByRole("article", { name: "Agent Shared source" }),
+    ).getByRole("button", { name: "Import" }),
+  );
+  expect(onImport).toHaveBeenCalledWith(key, "development");
 });

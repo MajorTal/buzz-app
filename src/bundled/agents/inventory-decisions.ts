@@ -35,7 +35,9 @@ export function inventoryDecision(
       ? destination
         ? "use"
         : "wait"
-      : "unavailable";
+      : !row.localIdentity && row.oldBuzzSources.length > 0
+        ? "import"
+        : "unavailable";
   const blocked =
     action === "wait"
       ? "Connect to a destination community to set up this identity."

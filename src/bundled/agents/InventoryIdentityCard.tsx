@@ -3,6 +3,7 @@ import type {
   AgentControl,
   AgentControlState,
   AgentView,
+  ImportSource,
 } from "../../features/agents/control";
 import type { RelaySession } from "../../features/relay/session";
 import type { Profile } from "../../features/relay/contracts";
@@ -28,6 +29,9 @@ export function InventoryIdentityCard({
   remove,
   importedId,
   onUseHere,
+  onImport,
+  selectedSource,
+  onSourceChange,
 }: {
   row: AgentInventoryIdentity;
   decision: ReturnType<typeof inventoryDecision>;
@@ -41,6 +45,9 @@ export function InventoryIdentityCard({
   remove?: ((agent: AgentView) => void) | undefined;
   importedId: string | null;
   onUseHere(pubkey: string): void;
+  onImport(pubkey: string, source?: ImportSource): void;
+  selectedSource: ImportSource | undefined;
+  onSourceChange(source: ImportSource): void;
 }) {
   const data = state.data;
   if (!data) return null;
@@ -50,6 +57,14 @@ export function InventoryIdentityCard({
   // The app runs every saved setup, so each keeps its controls whether or not
   // its community is the one currently selected or connected.
   const setups = localSetups(row, destination);
+  const selected = selectedSource;
+  const source =
+    row.oldBuzzSources.length === 1
+      ? row.oldBuzzSources[0]
+      : selected && row.oldBuzzSources.includes(selected)
+        ? selected
+        : undefined;
+  const needsSource = !row.localIdentity && row.oldBuzzSources.length > 1;
   return (
     <AgentCard
       name={row.displayName}
@@ -82,6 +97,46 @@ export function InventoryIdentityCard({
           tile ? "flex min-w-0 flex-wrap items-center gap-2" : "contents"
         }
       >
+        {needsSource && (
+          <label className="agent-control-field">
+            <span className="sr-only">Old Buzz installation</span>
+            <select
+              value={source ?? ""}
+              disabled={state.busy || state.status !== "ready"}
+              onChange={(event) => {
+                const next = event.target.value as ImportSource;
+                onSourceChange(next);
+              }}
+            >
+              <option value="" disabled>
+                Choose an installation
+              </option>
+              {row.oldBuzzSources.map((value) => (
+                <option key={value} value={value}>
+                  {value === "installed"
+                    ? "Installed Buzz"
+                    : "Development Buzz"}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+        {decision.action === "import" && (
+          <Button
+            variant="primary"
+            size="compact"
+            title="Bring this agent into this app with its existing identity and key. It stays stopped in your chosen community until you start it."
+            disabled={
+              state.busy ||
+              state.status !== "ready" ||
+              data.importAvailable === false ||
+              (needsSource && !source)
+            }
+            onClick={() => onImport(row.pubkey, source)}
+          >
+            Import
+          </Button>
+        )}
         {decision.action === "use" && (
           <>
             <Button

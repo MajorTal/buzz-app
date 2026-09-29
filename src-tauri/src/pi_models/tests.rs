@@ -177,6 +177,7 @@ async fn installed_pi_catalog_uses_production_context() {
         name: "Probe".into(),
         picture: None,
         system_prompt: String::new(),
+        session_policy: Some(None),
         workspace: dir.path().display().to_string(),
         harness: HarnessEdit {
             command: adapter,
@@ -214,6 +215,7 @@ async fn installed_pi_connection_test_uses_production_context() {
             name: "Probe".into(),
             picture: None,
             system_prompt: String::new(),
+            session_policy: Some(None),
             workspace: dir.path().display().to_string(),
             harness: HarnessEdit {
                 command: adapter.clone(),

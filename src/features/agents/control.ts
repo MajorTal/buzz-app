@@ -30,6 +30,8 @@ export interface AgentView {
   /** Missing preserves existing artwork; empty removes it. */
   picture?: string | null;
   systemPrompt: string;
+  /** Null inherits Agent defaults; imported agents can carry their own choice. */
+  sessionPolicy: "channel" | "thread" | null;
   workspace: string;
   harness: {
     command: string;
@@ -113,6 +115,7 @@ export interface AgentDefaultSettings {
   provider: string;
   model: string;
   effort: string;
+  sessionPolicy: "channel" | "thread";
   environmentKeys: string[];
 }
 export interface AgentDefaultsEdit
@@ -134,6 +137,7 @@ export interface AgentEdit {
   /** Omitted preserves artwork; empty removes it. */
   picture?: string;
   systemPrompt: string;
+  sessionPolicy: "channel" | "thread" | null;
   workspace: string;
   harness: Omit<AgentView["harness"], "environmentKeys">;
   /** Missing preserves the native value; null removes it; string replaces it. */

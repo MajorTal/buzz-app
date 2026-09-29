@@ -617,11 +617,18 @@ it("selects installed Goose with ACP arguments and saves its provider and model"
     target: { value: "anthropic/claude-sonnet-4" },
   });
   fireEvent.blur(model);
+  await userEvent.click(
+    within(dialog).getByRole("combobox", { name: "Conversation context" }),
+  );
+  await userEvent.click(
+    await screen.findByRole("option", { name: "Each thread" }),
+  );
   fireEvent.click(within(dialog).getByRole("button", { name: "Save changes" }));
   await within(dialog).findByText("Saved.");
   expect(f.calls.find((call) => call.action === "save")?.payload).toMatchObject(
     {
       edit: {
+        sessionPolicy: "thread",
         harness: {
           command: "/Users/test/.local/bin/goose",
           args: ["acp"],
@@ -1736,6 +1743,7 @@ for (const mode of ["edit", "create"] as const) {
   });
 }
 it("create copies only the default harness and shows inherited defaults", async () => {
+  const user = userEvent.setup();
   const create = vi.fn();
   vi.spyOn(communityApi, "communityRequest").mockResolvedValue({ auth: [] });
   setup("connected", (fixture) => {
@@ -1752,6 +1760,7 @@ it("create copies only the default harness and shows inherited defaults", async 
       provider: "anthropic",
       model: "default-model",
       effort: "high",
+      sessionPolicy: "thread",
       environmentKeys: ["SHARED_TOKEN"],
     };
     fixture.data.createAvailable = true;
@@ -1779,6 +1788,15 @@ it("create copies only the default harness and shows inherited defaults", async 
   expect(
     within(dialog).getByText("Use agent defaults (anthropic)"),
   ).toBeInTheDocument();
+  expect(
+    within(dialog).getByRole("combobox", { name: "Conversation context" }),
+  ).toHaveTextContent("Use agent defaults (Each thread)");
+  await user.click(
+    within(dialog).getByRole("combobox", { name: "Conversation context" }),
+  );
+  await user.click(
+    await screen.findByRole("option", { name: "Entire channel" }),
+  );
   fireEvent.click(within(dialog).getByRole("button", { name: "Create agent" }));
   await waitFor(() => expect(create).toHaveBeenCalled());
   // Only the harness is copied; provider, model, effort and env stay blank
@@ -1791,6 +1809,7 @@ it("create copies only the default harness and shows inherited defaults", async 
       model: "",
     },
     environment: {},
+    sessionPolicy: "channel",
   });
 });
 it("qualifies management identities while keeping configured names and edit targets exact", async () => {

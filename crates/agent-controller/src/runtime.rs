@@ -121,6 +121,10 @@ impl RuntimeBundle {
             .env("BUZZ_ACP_IDLE_POOL_SLEEP", "900")
             .env("BUZZ_ACP_SUBSCRIBE", "mentions")
             .env("BUZZ_ACP_RESPOND_TO", respond_to)
+            .env(
+                "BUZZ_ACP_SESSION_POLICY",
+                agent.session_policy.unwrap_or_default().as_str(),
+            )
             .env("BUZZ_ACP_DEDUP", "queue")
             .env("BUZZ_ACP_MULTIPLE_EVENT_HANDLING", "steer")
             .env("BUZZ_ACP_MCP_COMMAND", self.executable("buzz-dev-mcp")?)

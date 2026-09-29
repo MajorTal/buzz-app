@@ -149,6 +149,8 @@ pub fn bundled_manifests() -> Vec<Manifest> {
             "../../../src/bundled/moderation/manifest.json"
         ))
         .expect("moderation manifest"),
+        serde_json::from_str(include_str!("../../../src/bundled/run402/manifest.json"))
+            .expect("run402 manifest"),
     ]
 }
 fn is_bundled(id: &str) -> bool {

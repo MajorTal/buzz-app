@@ -10,21 +10,6 @@ export function MessageTimestamp({
   compact?: boolean;
 }) {
   const date = new Date(createdAt * 1000);
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(now.getDate() - 1);
-  const day =
-    date.toDateString() === now.toDateString()
-      ? "Today"
-      : date.toDateString() === yesterday.toDateString()
-        ? "Yesterday"
-        : date.toLocaleDateString(undefined, {
-            month: "short",
-            day: "numeric",
-            ...(date.getFullYear() !== now.getFullYear()
-              ? { year: "numeric" as const }
-              : {}),
-          });
   const clock = new Intl.DateTimeFormat(undefined, {
     hour: "numeric",
     minute: "2-digit",
@@ -36,7 +21,7 @@ export function MessageTimestamp({
         .map((part) => part.value)
         .join("")
         .trim()
-    : `${day} at ${clock.format(date)}`;
+    : clock.format(date);
   const fullDate = date.toLocaleString(undefined, {
     dateStyle: "full",
     timeStyle: "long",

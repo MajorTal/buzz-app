@@ -99,7 +99,7 @@ export function MessageActionBar({
             }}
           />
         )}
-        <span className={styles.copyLinkShortcut}>
+        <span>
           <IconButton
             aria-label="Copy link"
             title={link ? "Copy link" : "Message link unavailable"}
@@ -157,17 +157,6 @@ export function MessageActionBar({
                   <CopyIcon />
                 </MenuIcon>
                 Copy message
-              </MenuItem>
-              <MenuItem
-                disabled={!link || copying}
-                onClick={() => {
-                  if (link) void copy(() => link, "Link");
-                }}
-              >
-                <MenuIcon>
-                  <LinkIcon />
-                </MenuIcon>
-                Copy link
               </MenuItem>
               {overflowItems}
             </AfterMenuClose.Provider>

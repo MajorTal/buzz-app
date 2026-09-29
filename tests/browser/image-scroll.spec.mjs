@@ -8,27 +8,33 @@ import { settle, wheel, anchor, expectAnchor } from "./timeline.mjs";
 // release them and assert stability without any corrective scrolling.
 async function navigate(page, direction) {
   const feed = page.getByRole("region", { name: "Channel message history" });
-  const gap = () =>
-    feed.evaluate((el) => el.scrollHeight - el.clientHeight - el.scrollTop);
-  const reached = (distance) =>
-    direction < 0 ? distance > 5000 : distance < 4;
+  const remaining = () =>
+    feed.evaluate(
+      (el, direction) =>
+        direction < 0
+          ? el.scrollTop - (el.scrollHeight - el.clientHeight) / 3
+          : el.scrollHeight - el.clientHeight - el.scrollTop,
+      direction,
+    );
   await feed.hover();
+  // Read inside the current scroll extent, clear of both clamped edges.
   // Traverse to the setup condition, not a fixed wheel-count budget. WebKit and
   // virtualized remeasurement can apply only part of a requested displacement.
   // The existing test deadline bounds traversal; every gesture must make settled
   // progress. This runs only while image responses are held, never during the
   // preservation assertions that follow their release.
   while (true) {
-    const before = await gap();
-    if (reached(before)) break;
-    const remaining = direction < 0 ? 6000 - before : before;
-    await wheel(page, direction * Math.min(2000, remaining));
+    const before = await remaining();
+    if (before < 4) break;
+    await wheel(page, direction * Math.min(2000, before));
     expect(
-      direction * (before - (await gap())),
+      before - (await remaining()),
       "image navigation retains progress after settling",
     ).toBeGreaterThan(0);
   }
-  expect(reached(await gap()), "image navigation reaches its setup").toBe(true);
+  expect(await remaining(), "image navigation reaches its setup").toBeLessThan(
+    4,
+  );
 }
 
 async function fixtureServer() {
@@ -118,6 +124,10 @@ test("delayed and failed images preserve bottom and reading anchors across remou
     await navigate(page, -1);
     await expect.poll(() => pending.size).toBeGreaterThan(0);
     await settle(page);
+    expect(await feed.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    expect(await gap()).toBeGreaterThan(
+      await feed.evaluate((el) => el.clientHeight),
+    );
     const reading = await anchor(page);
     await release();
     await loaded();
@@ -193,6 +203,17 @@ test("image navigation handles partial gestures and rejects blocked input", asyn
     <section role="region" aria-label="Channel message history"
       style="height:700px;overflow:auto"><div style="height:14000px"></div></section>
   `);
+  // Install the fixture's input policy before hover commits WebKit's wheel
+  // event regions; adding the first listener immediately before input can lose it.
+  await page.getByRole("region").evaluate((element) => {
+    element.addEventListener(
+      "wheel",
+      (event) => {
+        if (element.hasAttribute("data-block-wheel")) event.preventDefault();
+      },
+      { passive: false },
+    );
+  });
   const wheel = page.mouse.wheel.bind(page.mouse);
   let gestures = 0;
   page.mouse.wheel = (x, y) => {
@@ -206,9 +227,7 @@ test("image navigation handles partial gestures and rejects blocked input", asyn
     await navigate(page, -1);
     expect(gestures).toBeGreaterThan(8);
     await page.getByRole("region").evaluate((element) => {
-      element.addEventListener("wheel", (event) => event.preventDefault(), {
-        passive: false,
-      });
+      element.setAttribute("data-block-wheel", "");
     });
     gestures = 0;
     await expect(navigate(page, 1)).rejects.toThrow(

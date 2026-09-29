@@ -8,6 +8,7 @@ import type { RelaySession } from "../relay/session";
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Virtualizer, type VirtualizerHandle } from "virtua";
 import { MessageRow } from "./MessageRow";
+import { continuesMessageGroup } from "./message-grouping";
 import type { Attachment, ChannelWindow } from "../relay/contracts";
 import { useRowProfiles } from "../relay/react";
 import { geometryFor, geometrySignature } from "./geometry";
@@ -302,9 +303,7 @@ function Timeline({
         ? savedPosition.current
         : null;
     let observer: MutationObserver | undefined;
-    let correctionPending = false;
     const restorePosition = () => {
-      correctionPending = false;
       if (intent.current !== scheduledIntent || !handle.current) return;
       if (restore) {
         const anchor = restore.anchor;
@@ -349,8 +348,16 @@ function Timeline({
           observer = new MutationObserver(() => {
             if (list.style.height === height) return;
             height = list.style.height;
+            // Capture a native clamp while its shrink is still observable.
+            // Another append can grow the list before the queued scroll event.
+            if (
+              !restore &&
+              measuredPosition.current &&
+              intent.current === scheduledIntent &&
+              scroller.current
+            )
+              recordPosition(scroller.current);
             cancelAnimationFrame(frame);
-            correctionPending = true;
             frame = requestAnimationFrame(restorePosition);
           });
           observer.observe(list, {
@@ -364,15 +371,17 @@ function Timeline({
     return () => {
       cancelAnimationFrame(frame);
       observer?.disconnect();
-      // A row refresh can cancel the late measurement correction. Carry the
-      // original restoration across it; only newer reader input may retire it.
-      if (
-        correctionPending &&
-        restore &&
-        !follow.current &&
-        intent.current === scheduledIntent
-      ) {
-        savedPosition.current = restore;
+      // A row refresh can arrive before the first deferred measurement or
+      // cancel its correction. Keep restoration until newer reader input.
+      if (restore && !follow.current && intent.current === scheduledIntent) {
+        // Carry the original geometry with the resolved membership identity.
+        savedPosition.current =
+          restore.anchor && restoredAnchor.current
+            ? {
+                ...restore,
+                anchor: { ...restore.anchor, id: restoredAnchor.current },
+              }
+            : restore;
         settled.current = false;
       }
     };
@@ -525,8 +534,7 @@ function Timeline({
           {rows.map((row, index) => {
             const day =
               index === 0
-                ? queries.channels.get?.(channelId)?.channelType !== "dm" ||
-                  window.hasMore
+                ? true
                 : new Date(
                     (rows[index - 1]?.createdAt ?? 0) * 1000,
                   ).toDateString() !==
@@ -545,6 +553,11 @@ function Timeline({
               />
             ) : (
               <MessageRow
+                layout={
+                  continuesMessageGroup(rows[index - 1], row)
+                    ? "continuation"
+                    : "timeline"
+                }
                 session={queries}
                 scope={scope}
                 key={row.id}

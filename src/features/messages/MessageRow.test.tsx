@@ -897,7 +897,9 @@ it.each(["sending", "failed"] as const)(
         screen.getByRole("button", { name: "More message actions" }),
       );
       await screen.findByRole("menu");
-      expect(screen.getAllByRole("menuitem")).toHaveLength(2);
+      expect(
+        screen.getAllByRole("menuitem").map((item) => item.textContent),
+      ).toEqual(["Copy message"]);
       expect(screen.queryByRole("separator")).toBeNull();
     } finally {
       cleanup();

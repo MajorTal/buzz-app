@@ -25,6 +25,7 @@ import type { RelaySession } from "../relay/session";
 import type { ThreadView } from "../relay/threads";
 import { useRowProfiles } from "../relay/react";
 import { MessageRow } from "./MessageRow";
+import { continuesMessageGroup } from "./message-grouping";
 import { MessageComposer } from "./MessageComposer";
 import styles from "./Messages.module.css";
 import { rejectUnhandledFileDrop } from "./use-file-drop";
@@ -519,11 +520,11 @@ function ThreadMessages({
   function renderReplies(parent: string | undefined, depth = 0): ReactNode {
     return (tree.children.get(parent) ?? []).map((row) => {
       const children = tree.children.get(row.id);
-      const continuation =
-        previousReply?.authorId === row.authorId &&
-        row.createdAt >= previousReply.createdAt &&
-        row.createdAt - previousReply.createdAt <= 10 * 60 &&
-        !row.membership;
+      const continuation = continuesMessageGroup(previousReply, row);
+      const day =
+        !previousReply ||
+        new Date(previousReply.createdAt * 1000).toDateString() !==
+          new Date(row.createdAt * 1000).toDateString();
       previousReply =
         children?.length && !expanded.has(row.id) ? undefined : row;
       const descendants = branchReplies.get(row.id) ?? [];
@@ -547,7 +548,7 @@ function ThreadMessages({
           media={session.media}
           onOpenLink={onOpenLink}
           canOpenLink={canOpenLink}
-          day={false}
+          day={day}
           layout={continuation ? "continuation" : "thread"}
           retry={session.messages.retry}
           {...(canSeekVideo ? { onMediaTime: handleMediaTime } : {})}
@@ -659,7 +660,7 @@ function ThreadMessages({
             media={session.media}
             onOpenLink={onOpenLink}
             canOpenLink={canOpenLink}
-            day={false}
+            day={true}
             layout="thread"
             retry={session.messages.retry}
             mediaMode="thread"

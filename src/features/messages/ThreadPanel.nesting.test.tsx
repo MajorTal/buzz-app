@@ -208,7 +208,12 @@ it("groups the first same-author reply with the root but respects the time windo
     "data-layout",
     "continuation",
   );
-  h.update([{ ...row("parent", "root"), createdAt: 602 }]);
+  h.update([{ ...row("parent", "root"), createdAt: 301 }]);
+  expect(screen.getByText("parent").closest("article")).toHaveAttribute(
+    "data-layout",
+    "continuation",
+  );
+  h.update([{ ...row("parent", "root"), createdAt: 302 }]);
   expect(screen.getByText("parent").closest("article")).toHaveAttribute(
     "data-layout",
     "thread",

@@ -318,7 +318,7 @@ export const test = base.extend({
             sign(
               9,
               [["h", channel]],
-              `${community} ${channel} message ${i}\n${"Mixed height message content. ".repeat((1 + (i % 7) * 3) * (tallMessages ? 4 : 1))}`,
+              `${community} ${channel} message ${i}\n${"Mixed height message content. ".repeat((1 + (i % 7) * 3) * (tallMessages ? 5 : 1))}`,
               readState ? peerKey : userKey,
               1700000100 + i,
             ),

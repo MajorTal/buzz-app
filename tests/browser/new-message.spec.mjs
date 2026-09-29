@@ -609,7 +609,15 @@ test("empty compose, keyboard selection, pagination, removal effects, retry, the
   await expect(message).toHaveCount(1);
   await expect(message).toBeVisible();
   await expect(message.locator("time")).toBeVisible();
-  await expect(page.locator('[class*="_day_"]')).toHaveCount(0);
+  const visibleDate = await message.locator("time").evaluate((time) =>
+    new Date(time.dateTime).toLocaleDateString(undefined, {
+      year: "numeric",
+      weekday: "long",
+      month: "long",
+      day: "numeric",
+    }),
+  );
+  await expect(message.getByText(visibleDate, { exact: true })).toBeVisible();
   await expect(
     page.getByRole("textbox", { name: "Message #Avery Chen" }),
   ).toBeVisible();

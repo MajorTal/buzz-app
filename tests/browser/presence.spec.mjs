@@ -218,7 +218,8 @@ test("foreground send and cold channel entry remain available during a profile s
 });
 
 test.describe("human message bylines show known presence", () => {
-  test.use({ threadUnread: true, historyCounts: { alpha: 20, beta: 20 } });
+  // Presence demand needs a mounted author header, not a virtualized history.
+  test.use({ threadUnread: true, historyCounts: { alpha: 2, beta: 1 } });
   test("timeline and thread bylines demand presence alongside an explicit profile", async ({
     page,
     app,

@@ -432,7 +432,11 @@ readingTest(
     await expectBottom();
     // Reopen by keyboard without browser click-to-scroll changing the saved position.
     const target = "https://github.com/block/buzz/pull/4";
-    const saved = await upper(page);
+    // Keep the offscreen opener within the virtualizer's mounted buffer after
+    // focus moves to the panel; this tests restoration to a mounted trigger.
+    await history.hover();
+    await wheel(page, -200);
+    const saved = await anchor(page);
     await expectNonPaging(page, app);
     await page
       .getByRole("link", { name: target, exact: true })
@@ -455,6 +459,9 @@ readingTest(
         };
       });
     await button(page, "Close channel panel").focus();
+    await expect(
+      page.getByRole("link", { name: target, exact: true }),
+    ).not.toBeInViewport();
     await button(page, "Close channel panel").click();
     const trigger = page.getByRole("link", { name: target, exact: true });
     await settle(page);

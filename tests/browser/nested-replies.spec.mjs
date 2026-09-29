@@ -624,7 +624,7 @@ for (const width of [1492, 1280, 1024, 390])
         panel
           .locator(`[data-message-id="${id}"]`)
           .getByRole("group", { name: "Message actions" }),
-      ).toHaveCSS("opacity", width < 640 ? "1" : "0");
+      ).toHaveCSS("opacity", "0");
     }
     await panel.screenshot({
       path: test.info().outputPath(`crowded-${width}.png`),

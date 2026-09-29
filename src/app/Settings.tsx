@@ -4,7 +4,8 @@ import { Panel } from "../shared/design-system/ui/Panel";
 import { NavigationItem } from "../shared/design-system/ui/NavigationItem";
 import { NavigationSection } from "../shared/design-system/ui/NavigationSection";
 import { Button } from "../shared/design-system/ui/Button";
-import { Switch } from "../shared/design-system/ui/Switch";
+import { SwitchPreferenceRow } from "../shared/design-system/ui/SwitchPreferenceRow";
+import { PreferenceRow } from "../shared/design-system/ui/PreferenceRow";
 import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { RecoveryScreen } from "./RecoveryScreen";
 import styles from "./Settings.module.css";
@@ -388,43 +389,42 @@ export function Settings({
                           ? running.error
                           : null);
                       return (
-                        <article
-                          className="flex flex-wrap items-center justify-between gap-3 px-1 py-3"
-                          key={id}
-                        >
-                          <div className="flex min-w-0 flex-1 items-center gap-3">
-                            <span className="flex size-8 shrink-0 items-center justify-center rounded-xl bg-soft text-muted">
-                              <SquaresFourIcon aria-hidden="true" size={17} />
-                            </span>
-                            <div className="min-w-0">
-                              <h3 className="m-0 text-label font-medium">
-                                {plugin.manifest.name}
-                              </h3>
-                              {failure && (
-                                <p role="alert" className="error">
-                                  {failure}
-                                </p>
-                              )}
-                            </div>
-                          </div>
+                        <article className="py-1" key={id}>
+                          {/* Channels is required and has no enable/disable control. */}
+                          {id === "buzz.channels" ? (
+                            <PreferenceRow
+                              icon={<SquaresFourIcon size={20} />}
+                              title={plugin.manifest.name}
+                              trailing={
+                                <span className="text-body-sm text-subtle">
+                                  Required
+                                </span>
+                              }
+                            />
+                          ) : (
+                            <SwitchPreferenceRow
+                              icon={<SquaresFourIcon size={20} />}
+                              label={plugin.manifest.name}
+                              aria-label={`Enable ${plugin.manifest.name}`}
+                              checked={plugin.enabled}
+                              readOnly={busy}
+                              aria-disabled={busy}
+                              onClick={(event) => event.currentTarget.focus()}
+                              onCheckedChange={() => {
+                                if (busy) return;
+                                void plugins.change(
+                                  plugin.enabled ? "disable" : "enable",
+                                  id,
+                                );
+                              }}
+                            />
+                          )}
+                          {failure && (
+                            <p role="alert" className="error text-body-sm">
+                              {failure}
+                            </p>
+                          )}
                           <div className="actions items-center">
-                            {/* Channels is required and has no enable/disable control. */}
-                            {id !== "buzz.channels" && (
-                              <Switch
-                                aria-label={`Enable ${plugin.manifest.name}`}
-                                checked={plugin.enabled}
-                                readOnly={busy}
-                                aria-disabled={busy}
-                                onClick={(event) => event.currentTarget.focus()}
-                                onCheckedChange={() => {
-                                  if (busy) return;
-                                  void plugins.change(
-                                    plugin.enabled ? "disable" : "enable",
-                                    id,
-                                  );
-                                }}
-                              />
-                            )}
                             {plugin.previous && (
                               <Button
                                 type="button"

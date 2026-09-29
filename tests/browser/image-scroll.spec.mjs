@@ -263,6 +263,14 @@ async function holdDecodes(page, holdVisibility = false) {
         });
       };
       const observers = [];
+      // Record native observe() calls on canvases so a test can wait for the
+      // product's passive effect to register before adding its own observer.
+      const observedCanvases = new WeakSet();
+      const realObserve = IntersectionObserver.prototype.observe;
+      IntersectionObserver.prototype.observe = function (target) {
+        if (target instanceof HTMLCanvasElement) observedCanvases.add(target);
+        return realObserve.call(this, target);
+      };
       if (holdVisibility) {
         window.IntersectionObserver = class {
           constructor(callback) {
@@ -277,6 +285,7 @@ async function holdDecodes(page, holdVisibility = false) {
       }
       window.imageTest = {
         paints,
+        observed: (canvas) => observedCanvases.has(canvas),
         waiting: (name) => pending.has(`https://image.test/${name}.svg`),
         release(name) {
           const key = `https://image.test/${name}.svg`;
@@ -339,7 +348,29 @@ test("blurhash visibility, decode swap, failure and retired source lifetimes", a
       `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/attachment-image.html`,
     );
     // Mounted but offscreen (as in a long thread) must not spend pixel work.
-    await page.waitForTimeout(150);
+    // The product observes the canvas in a passive effect, so wait for that
+    // registration first. Barrier: an IntersectionObserver created after the
+    // product's delivers its first notification in the same or a later task,
+    // so the product's initial visibility callback has already run.
+    await expect
+      .poll(() =>
+        frame(page)
+          .locator("canvas")
+          .evaluate((canvas) => window.imageTest.observed(canvas)),
+      )
+      .toBe(true);
+    await frame(page)
+      .locator("canvas")
+      .evaluate(
+        (canvas) =>
+          new Promise((resolve) => {
+            const observer = new IntersectionObserver(() => {
+              observer.disconnect();
+              resolve();
+            });
+            observer.observe(canvas);
+          }),
+      );
     expect(await page.evaluate(() => window.imageTest.paints)).toEqual([]);
     await page.getByRole("button", { name: "Reveal", exact: true }).click();
     await expect

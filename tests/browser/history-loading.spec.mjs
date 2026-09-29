@@ -20,8 +20,17 @@ tall(
     ).toHaveCount(0);
     await history(page).hover();
     for (let i = 0; i < 100 && !app.pending.length; i++) {
+      const before = await history(page).evaluate((e) => e.scrollTop);
       await page.mouse.wheel(0, -450);
-      await page.waitForTimeout(40);
+      // Each wheel step must land (scroll moves or the older page is
+      // requested) before the next one.
+      await expect
+        .poll(
+          async () =>
+            app.pending.length > 0 ||
+            (await history(page).evaluate((e) => e.scrollTop)) < before,
+        )
+        .toBe(true);
       if (
         await history(page)
           .getByRole("button", { name: "Loading older…", exact: true })

@@ -757,9 +757,9 @@ test("Projects → Messages keeps saved groups, selected channel, and scroll on 
     await expect(
       page.getByRole("textbox", { name: "Message #Beta", exact: true }),
     ).toBeVisible();
-    await page.waitForTimeout(300); // Keep the decode path held for the full interval.
     // Wall time does not guarantee RAF callbacks on a busy runner. Wait for
     // samples, not correct samples: every earlier frame stays in the assertion.
+    // The decode path stays held until finally, across all sampled frames.
     await page.waitForFunction(() => window.sidebarFrames.length > 3);
     const frames = await page.evaluate(() => {
       window.captureSidebar = false;

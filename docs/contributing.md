@@ -330,7 +330,12 @@ the complete suite still runs with `pnpm test` / `just scan`:
   per engine), each with two workers. They start alongside measurements on separate
   runners; `CI required` still requires both lanes. Each runner builds the native
   plugin-manager fixture in a separately logged setup step before starting
-  Playwright. Its Rust cache is optional: a cache miss still builds the fixture,
+  Playwright. Browser jobs install the existing `bin/.rust-*.pkg` pin through
+  the runner's rustup with the minimal compiler/Cargo/standard-library profile,
+  avoiding Hermit's full Rust archive on cold runners. `HERMIT_PREPEND_PATH`
+  keeps that toolchain selected inside Hermit-launched pnpm/Node subprocesses;
+  native jobs retain Hermit's Rust, rustfmt and Clippy. The fixture's Rust cache
+  is optional: a cache miss still builds it,
   outside the browser subprocess timeout. No measurement is repeated on shards,
   and no retry hides a failure. Functional jobs also run when measurements fail:
   this spends more runner minutes for faster, independent feedback.

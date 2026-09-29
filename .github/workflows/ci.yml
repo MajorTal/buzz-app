@@ -145,6 +145,24 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+      # Browser fixtures need only the pinned compiler, Cargo and standard library,
+      # not Hermit's full Rust archive (including docs). Keep this path first even
+      # when pnpm/Node re-enter Hermit, so cold shards do not install Rust twice.
+      - name: Install minimal pinned Rust for browser fixtures
+        shell: bash
+        run: |
+          pins=(bin/.rust-*.pkg)
+          test "${#pins[@]}" -eq 1
+          test -L "${pins[0]}"
+          version=${pins[0]#bin/.rust-}
+          version=${version%.pkg}
+          rustup toolchain install "$version" --profile minimal --no-self-update
+          rustc_path=$(rustup which --toolchain "$version" rustc)
+          toolchain_bin=$(dirname "$rustc_path")
+          test -x "$toolchain_bin/rustc"
+          test -x "$toolchain_bin/cargo"
+          echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
+          echo "HERMIT_PREPEND_PATH=$toolchain_bin" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup
         with:
           browsers: "true"

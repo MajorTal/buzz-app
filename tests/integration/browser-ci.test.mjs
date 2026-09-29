@@ -4,7 +4,9 @@ import {
   mkdirSync,
   mkdtempSync,
   readFileSync,
+  readdirSync,
   rmSync,
+  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
@@ -84,6 +86,75 @@ test("six independent browser jobs retain isolated measurements and native setup
   ]);
   for (const engine of ["chromium", "webkit"])
     assert.deepEqual(projects[engine].dependencies, ["webkit-measurements"]);
+});
+
+test("browser Rust setup uses the repository pin before Hermit and fails closed", (t) => {
+  const { steps } = parse(workflow).jobs.browser;
+  const install = steps.find(
+    (step) => step.name === "Install minimal pinned Rust for browser fixtures",
+  );
+  assert.ok(install);
+  assert.equal(install.if, undefined);
+  assert.equal(install["continue-on-error"], undefined);
+  assert.ok(
+    steps.indexOf(install) <
+      steps.findIndex((step) => step.uses === "./.github/actions/setup"),
+  );
+  const pins = readdirSync(new URL("../../bin", import.meta.url)).filter(
+    (name) => /^\.rust-.*\.pkg$/.test(name),
+  );
+  assert.equal(pins.length, 1);
+  const version = pins[0].slice(6, -4);
+  const cwd = mkdtempSync(join(tmpdir(), "buzz-browser-rust-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, "bin"));
+  mkdirSync(join(cwd, "toolchain"));
+  for (const name of ["cargo", "rustc"])
+    writeFileSync(join(cwd, "toolchain", name), "#!/bin/sh\nexit 0\n", {
+      mode: 0o755,
+    });
+  writeFileSync(
+    join(cwd, "rustup"),
+    '#!/bin/sh\nprintf "%s\\n" "$*" >> calls\nif [ "$1" = toolchain ]; then exit "$INSTALL_STATUS"; fi\nprintf "%s/toolchain/rustc\\n" "$PWD"\n',
+    { mode: 0o755 },
+  );
+  const output = join(cwd, "output");
+  const execute = (status = "0") => {
+    writeFileSync(output, "");
+    writeFileSync(join(cwd, "calls"), "");
+    return spawnSync("bash", ["-eo", "pipefail", "-c", install.run], {
+      cwd,
+      env: {
+        ...process.env,
+        PATH: `${cwd}:${process.env.PATH}`,
+        GITHUB_ENV: output,
+        INSTALL_STATUS: status,
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+  };
+  assert.notEqual(execute().status, 0, "missing pin must fail");
+  symlinkSync("hermit", join(cwd, "bin", pins[0]));
+  const result = execute();
+  assert.equal(result.status, 0, result.stderr);
+  assert.equal(
+    readFileSync(join(cwd, "calls"), "utf8"),
+    `toolchain install ${version} --profile minimal --no-self-update\nwhich --toolchain ${version} rustc\n`,
+  );
+  assert.equal(
+    readFileSync(output, "utf8"),
+    `RUSTUP_TOOLCHAIN=${version}\nHERMIT_PREPEND_PATH=${cwd}/toolchain\n`,
+  );
+  assert.notEqual(
+    execute("1").status,
+    0,
+    "installation failure must propagate",
+  );
+  assert.equal(readFileSync(output, "utf8"), "");
+  symlinkSync("hermit", join(cwd, "bin/.rust-other.pkg"));
+  assert.notEqual(execute().status, 0, "ambiguous pin must fail");
+  assert.equal(readFileSync(join(cwd, "calls"), "utf8"), "");
 });
 
 test("workflow shards discover every functional test/project exactly once", (t) => {

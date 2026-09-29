@@ -7,6 +7,10 @@ on:
         description: Build Windows/Linux candidates only (no publishing or macOS signing)
         type: boolean
         default: false
+      promote_version:
+        description: Promote a validated version (e.g. 0.0.0-preview.22.1) to the macOS preview updater feed; no build
+        type: string
+        default: ""
   schedule:
     - cron: "17 */6 * * *"
 
@@ -19,7 +23,7 @@ concurrency:
 
 jobs:
   build:
-    if: github.repository == 'block/buzz-app' && !inputs.candidates
+    if: github.repository == 'block/buzz-app' && !inputs.candidates && !inputs.promote_version
     name: Build, sign, and notarize
     runs-on: macos-latest
     timeout-minutes: 120
@@ -176,6 +180,60 @@ jobs:
             --target "$SOURCE_SHA" --prerelease --latest=false \
             --title "Buzz $VERSION (macOS preview)" \
             --notes "Apple Silicon macOS preview from commit $SOURCE_SHA. Built, signed, and notarized by Actions run $GITHUB_RUN_ID."
+
+  promote_preview:
+    name: Promote verified macOS preview
+    needs: [build, publish]
+    # Explicit promotions skip build/publish; automatic promotions require both to succeed.
+    if: >-
+      ${{ !cancelled() && github.repository == 'block/buzz-app' && github.ref == 'refs/heads/main' && !inputs.candidates &&
+          ((inputs.promote_version != '' && needs.build.result == 'skipped' && needs.publish.result == 'skipped') ||
+           (inputs.promote_version == '' && needs.build.result == 'success' && needs.publish.result == 'success')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Verify and publish preview feed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          VERSION: ${{ inputs.promote_version || needs.build.outputs.version }}
+        run: |
+          set -euo pipefail
+          # Validate the version before using it in release asset paths.
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+-preview\.[0-9]+\.[0-9]+$ ]] || exit 1
+          export archive="Buzz_${VERSION}_aarch64.app.tar.gz"
+          mkdir -p "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/current" "$RUNNER_TEMP/served"
+          gh release view "v$VERSION" --json assets,isPrerelease --jq \
+            '.isPrerelease and (any(.assets[]; .name == env.archive and .size > 0)) and (any(.assets[]; .name == (env.archive + ".sig") and .size > 0))' | grep -qx true
+          gh release download "v$VERSION" --pattern "$archive" --dir "$RUNNER_TEMP/candidate"
+          gh release download "v$VERSION" --pattern "$archive.sig" --dir "$RUNNER_TEMP/candidate"
+          test -s "$RUNNER_TEMP/candidate/$archive" && test -s "$RUNNER_TEMP/candidate/$archive.sig"
+          tar -xOzf "$RUNNER_TEMP/candidate/$archive" 'Buzz Foundation.app/Contents/MacOS/buzz-foundation' > "$RUNNER_TEMP/candidate/buzz-foundation"
+          test -s "$RUNNER_TEMP/candidate/buzz-foundation"
+          current=''
+          if gh release view preview-feed >/dev/null 2>&1; then
+            gh release download preview-feed --pattern latest.json --dir "$RUNNER_TEMP/current"
+            current="$RUNNER_TEMP/current/latest.json"
+          fi
+          node scripts/preview-feed.mjs generate "$VERSION" "$RUNNER_TEMP/candidate/$archive.sig" "$RUNNER_TEMP/candidate/latest.json" "$RUNNER_TEMP/candidate/$archive" "$RUNNER_TEMP/candidate/buzz-foundation" ${current:+"$current"}
+          node scripts/preview-feed.mjs verify "$VERSION" "$RUNNER_TEMP/candidate/$archive.sig" "$RUNNER_TEMP/candidate/latest.json" "$RUNNER_TEMP/candidate/$archive" "$RUNNER_TEMP/candidate/buzz-foundation" ${current:+"$current"}
+          if [[ -z "$current" ]]; then
+            gh release create preview-feed "$RUNNER_TEMP/candidate/latest.json" \
+              --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title 'Buzz macOS preview updater feed' \
+              --notes 'Rolling manifest for manually validated macOS previews. Not the stable channel.'
+          elif cmp -s "$RUNNER_TEMP/candidate/latest.json" "$current"; then
+            echo 'Preview feed already points to this candidate.'
+          else
+            gh release upload preview-feed "$RUNNER_TEMP/candidate/latest.json" --clobber
+          fi
+          gh release download preview-feed --pattern latest.json --dir "$RUNNER_TEMP/served"
+          cmp "$RUNNER_TEMP/candidate/latest.json" "$RUNNER_TEMP/served/latest.json"
 
   windows:
     if: github.repository == 'block/buzz-app' && inputs.candidates

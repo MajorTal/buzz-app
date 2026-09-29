@@ -162,3 +162,19 @@ it("pending mentions annotate the existing native launch without another Start",
     },
   );
 });
+
+it("retained inventory actions use native custody commands", async () => {
+  vi.mocked(invoke).mockReset();
+  vi.mocked(isTauri).mockReturnValue(true);
+  const host = nativeAgentControlHost();
+  const resolution = {
+    pubkey: "ab".repeat(32),
+    relayUrl: "wss://relay.example",
+    owner: "cd".repeat(32),
+    signature: "signed",
+  };
+  await host?.configureHere?.("retained", resolution);
+  expect(vi.mocked(invoke).mock.calls).toEqual([
+    ["agent_control_use_here", { id: "retained", resolution }],
+  ]);
+});

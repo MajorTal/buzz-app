@@ -7,6 +7,7 @@ import {
   type AgentControlState,
   type AgentView,
 } from "../../features/agents/control";
+import { LocalInventoryAction } from "./LocalInventoryAction";
 import { Button } from "../../shared/design-system/ui/Button";
 import { agentProcessLabel } from "./agent-edit";
 
@@ -15,12 +16,17 @@ export function ManagedAgentActions({
   state,
   control,
   imported,
+  destination = "",
+  owner = "",
 }: {
   agent: AgentView;
   state: AgentControlState;
   control: AgentControl;
   imported: boolean;
+  destination?: string;
+  owner?: string;
 }) {
+  const [settingUp, setSettingUp] = useState(false);
   const details = useRef<HTMLDivElement>(null);
   const [checking, setChecking] = useState(false);
   // Describes one refreshed status; any later status change supersedes it.
@@ -71,7 +77,7 @@ export function ManagedAgentActions({
     });
   };
   return (
-    <div ref={details} tabIndex={-1} className="flex flex-col gap-4">
+    <div ref={details} tabIndex={-1} className="flex flex-col gap-2">
       <div className="flex flex-col gap-1">
         <p className="m-0 break-all text-body-sm text-secondary">
           {agent.relayUrl}
@@ -82,15 +88,32 @@ export function ManagedAgentActions({
         </p>
       </div>
       {imported && !agent.enabled && (
-        <p role="status">
-          Imported, not started. Mention this agent in a channel to start it.
+        <p role="status" className="m-0 text-body-sm">
+          Imported, not started.{" "}
+          {agent.configured === false
+            ? "Choose Use here to set up this identity in a community."
+            : "Start it when you are ready."}
         </p>
       )}
+      {agent.configured === false &&
+        (state.data?.localInventoryActions && control.configureHere ? (
+          <LocalInventoryAction
+            control={control}
+            agent={agent}
+            destination={destination}
+            owner={owner}
+            disabled={state.busy || state.status !== "ready"}
+            onPending={setSettingUp}
+            onUsed={() => {}}
+          />
+        ) : (
+          <p>Update the desktop app to set up this imported identity.</p>
+        ))}
       {agent.startOnAppLaunch && (
-        <p className="text-body-sm text-secondary">Starts with this app.</p>
+        <p className="m-0 text-body-sm text-secondary">Starts with this app.</p>
       )}
       {agent.error && (
-        <p role="alert" className="break-words text-body-sm">
+        <p role="alert" className="m-0 break-words text-body-sm">
           {agent.error}
         </p>
       )}
@@ -100,7 +123,9 @@ export function ManagedAgentActions({
       )}
       {agent.profilePending && (
         <div className="space-y-2">
-          <p role="status">Settings saved. Profile publication is pending.</p>
+          <p role="status" className="m-0 text-body-sm">
+            Settings saved. Profile publication is pending.
+          </p>
           <Button
             disabled={
               state.busy || state.status !== "ready" || !control.publishProfile
@@ -118,7 +143,7 @@ export function ManagedAgentActions({
           <Button
             variant="primary"
             size="compact"
-            disabled={!!startBlock}
+            disabled={!!startBlock || settingUp}
             onClick={() => act("start")}
           >
             {agent.status === "failed" ? "Retry start" : "Start"}
@@ -133,7 +158,7 @@ export function ManagedAgentActions({
         </Button>
       </div>
       {startBlock && agent.status !== "running" && (
-        <p className="text-body-sm text-secondary">{startBlock}</p>
+        <p className="m-0 text-body-sm text-secondary">{startBlock}</p>
       )}
     </div>
   );

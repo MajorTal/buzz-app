@@ -68,12 +68,17 @@ export function AgentImport({
       generation.current++;
     };
   }, [initialDestination, load]);
-  const candidates = preview?.candidates.filter(
-    (candidate) =>
-      !managedAgents.some(
-        (agent) => agent.id === candidate.id && !agent.needsTeamImport,
-      ),
+  // Native import rejects any key already held locally, in any community.
+  const managedKeys = new Set(
+    managedAgents.map((agent) => agent.pubkey.toLowerCase()),
   );
+  const candidates = preview?.candidates.filter((candidate) => {
+    const saved = managedAgents.find((agent) => agent.id === candidate.id);
+    // A saved agent reappears only to repair its missing team import.
+    return saved
+      ? saved.needsTeamImport
+      : !managedKeys.has(candidate.pubkey.toLowerCase());
+  });
   return (
     <section
       aria-label="Import from old Buzz"

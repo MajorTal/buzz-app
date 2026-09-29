@@ -2,7 +2,9 @@
 //! No legacy desktop dependency, implicit identity creation, or credential projection.
 mod agent_defaults;
 mod bundle;
+mod community;
 mod config;
+pub use community::CommunityResolution;
 pub mod connection;
 mod create;
 mod credentials;

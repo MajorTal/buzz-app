@@ -34,6 +34,7 @@ export function controlFixture() {
     restartDiff: [],
   };
   const data: ControlSnapshot = {
+    localInventoryActions: true,
     runtimeAvailable: true,
     avatarEditingAvailable: true,
     agents: [agent],
@@ -56,6 +57,13 @@ export function controlFixture() {
       calls.push({ action: "profile", payload: { id } });
       if (failProfile) throw "The fixture could not publish the profile.";
       agent.profilePending = false;
+      return structuredClone(data);
+    },
+    async configureHere(id, resolution) {
+      calls.push({ action: "configure", payload: { id, resolution } });
+      const target = data.agents.find((a) => a.id === id);
+      if (!target) throw Error("Missing identity");
+      target.configured = true;
       return structuredClone(data);
     },
     async snapshot() {
@@ -138,6 +146,7 @@ export function controlFixture() {
       calls.push({ action: "import", payload: { token, ids } });
       data.agents.push({
         ...structuredClone(agent),
+        configured: true,
         id: "second-fixture",
         pubkey: "cd".repeat(32),
         relayUrl: importDestination,

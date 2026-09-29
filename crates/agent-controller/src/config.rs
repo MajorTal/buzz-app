@@ -56,6 +56,7 @@ pub struct AgentView {
     pub restart_diff: Vec<crate::restart::RestartDiffEntry>,
     pub deployed_remote: bool,
     pub needs_team_import: bool,
+    pub configured: bool,
 }
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -126,6 +127,9 @@ pub(crate) struct Agent {
     pub extra: BTreeMap<String, Value>,
 }
 impl Agent {
+    pub(crate) fn configured(&self) -> bool {
+        self.extra.get("configured") != Some(&Value::Bool(false))
+    }
     /// `inherited` supplies launch selectors; the saved harness is shown as saved.
     pub(crate) fn view(&self, inherited: &crate::agent_defaults::AgentDefaults) -> AgentView {
         let defaults = crate::build_defaults();
@@ -153,6 +157,7 @@ impl Agent {
             status: ProcessStatus::Stopped,
             error: None,
             diagnostics: Vec::new(),
+            configured: self.configured(),
             profile_pending: self.extra.get("profilePending") == Some(&Value::Bool(true)),
             start_on_app_launch: self.starts_on_launch(),
             respond_to: self.respond_to(defaults.owner_only).ok().map(str::to_owned),

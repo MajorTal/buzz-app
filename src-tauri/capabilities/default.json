@@ -37,6 +37,7 @@
     "allow-agent-control-attach-mention",
     "allow-agent-control-import-preview",
     "allow-agent-control-import-commit",
+    "allow-agent-control-use-here",
     "allow-agent-models-begin",
     "allow-agent-models-cancel",
     "allow-agent-models-run",

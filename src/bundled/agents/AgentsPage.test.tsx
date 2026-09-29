@@ -526,7 +526,7 @@ it("focuses the imported managed identity without starting it", async () => {
     await screen.findByRole("button", { name: "Import Fixture agent" }),
   );
   const notice = await screen.findByText(
-    "Imported, not started. Mention this agent in a channel to start it.",
+    "Imported, not started. Start it when you are ready.",
   );
   const imported = notice.closest("article");
   if (!imported) throw Error("Imported card missing");
@@ -1073,6 +1073,36 @@ it("shows Harness, Provider and Model in order while preserving settings on Save
   ).toBeVisible();
 });
 
+it("does not offer an identity for import when its key is already set up in another community", async () => {
+  setup("ready", (fixture) => {
+    fixture.data.agents.push({
+      ...structuredClone(fixture.agent),
+      id: "held-elsewhere",
+      pubkey: "CD".repeat(32),
+      relayUrl: "wss://elsewhere.example",
+      enabled: false,
+      status: "stopped",
+      runningRevision: null,
+    });
+  });
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Not imported from old Buzz" }),
+  );
+  fireEvent.change(screen.getByLabelText("Destination community"), {
+    target: { value: "wss://third.example" },
+  });
+  for (let load = 0; load < 2; load++) {
+    fireEvent.click(screen.getByRole("button", { name: "Load agents" }));
+    expect(
+      await screen.findByText(
+        "No agents left to import or repair from this library for this community.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Import Fixture agent" }),
+    ).toBeNull();
+  }
+});
 it("credential import keeps real Stop controls reachable without trapping the editor", async () => {
   let releaseImport!: () => void;
   const gate = new Promise<void>((resolve) => {
@@ -1164,9 +1194,7 @@ it("credential import keeps real Stop controls reachable without trapping the ed
     });
     await waitFor(() => expect(control.snapshot().busy).toBe(false));
     expect(
-      screen.queryByText(
-        "Imported, not started. Mention this agent in a channel to start it.",
-      ),
+      screen.queryByText("Imported, not started. Start it when you are ready."),
     ).toBeNull();
     await act(async () => control.refresh());
     const imported = control
@@ -2287,5 +2315,53 @@ it("shows native waiting, recovery Stop and one explicit Retry without polling a
   );
   await waitFor(() =>
     expect(f.calls.filter((call) => call.action === "start")).toHaveLength(1),
+  );
+});
+
+it("Use here retries owner confirmation and keeps setup stopped until a separate Start", async () => {
+  const request = vi
+    .spyOn(communityApi, "communityRequest")
+    .mockRejectedValueOnce(new Error("Confirmation unavailable"))
+    .mockResolvedValueOnce({
+      pubkey: "ab".repeat(32),
+      relayUrl: "wss://relay.example.test",
+      owner: "de".repeat(32),
+      signature: "fixture",
+    });
+  const { f } = setup("connected", (fixture) => {
+    Object.assign(fixture.agent, {
+      configured: false,
+      enabled: false,
+      status: "stopped",
+      runningRevision: null,
+    });
+  });
+  const cards = await screen.findAllByRole("article", {
+    name: "Agent Fixture agent",
+  });
+  const card = cards.find((entry) =>
+    entry.textContent?.includes("wss://relay.example.test"),
+  );
+  if (!card) throw Error("Imported card missing");
+  expect(within(card).getByRole("button", { name: "Start" })).toBeDisabled();
+  fireEvent.click(within(card).getByRole("button", { name: "Use here" }));
+  await within(card).findByText("Confirmation unavailable");
+  expect(f.calls.some((call) => call.action === "configure")).toBe(false);
+  fireEvent.click(within(card).getByRole("button", { name: "Use here" }));
+  await waitFor(() =>
+    expect(within(card).getByRole("button", { name: "Start" })).toBeEnabled(),
+  );
+  expect(request).toHaveBeenLastCalledWith(
+    "https://relay.example.test",
+    "resolve-agent-community",
+    { pubkey: f.agent.pubkey, owner: "de".repeat(32), confirmed: true },
+  );
+  expect(f.agent.enabled).toBe(false);
+  expect(
+    f.calls.some((call) => call.action === "start" || call.action === "import"),
+  ).toBe(false);
+  fireEvent.click(within(card).getByRole("button", { name: "Start" }));
+  await waitFor(() =>
+    expect(f.calls.some((call) => call.action === "start")).toBe(true),
   );
 });

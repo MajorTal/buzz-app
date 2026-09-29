@@ -2684,3 +2684,47 @@ test("server-wide stats work without a default community and do not start upstre
     await h.close();
   }
 });
+
+test("community setup signs explicit owner intent without inventory or enrollment", async () => {
+  const key = new Uint8Array(32);
+  key[31] = 7;
+  const viewer = getPublicKey(key);
+  const pubkey = "ab".repeat(32);
+  const h = await harness(() => {
+    throw new Error("No relay read permitted");
+  });
+  const route = `${encodeURIComponent(fixtureRelayUrl)}/resolve-agent-community`;
+  const input = { pubkey, owner: viewer, confirmed: true };
+  try {
+    for (const invalid of [
+      { ...input, confirmed: false },
+      { ...input, owner: pubkey },
+      { ...input, pubkey: viewer },
+      { ...input, pubkey: "invalid" },
+      { ...input, extra: true },
+    ])
+      expect((await h.post(route, invalid)).status).toBe(400);
+    const response = await h.post(route, input);
+    expect(response.status).toBe(200);
+    const resolution = await response.json();
+    expect(resolution).toMatchObject({
+      pubkey,
+      owner: viewer,
+      relayUrl: fixtureRelayUrl.replace(/^https:/, "wss:"),
+    });
+    const { schnorr } = await import("@noble/curves/secp256k1.js");
+    expect(
+      schnorr.verify(
+        Buffer.from(resolution.signature, "hex"),
+        createHash("sha256")
+          .update(`nostr:agent-community:${pubkey}:${resolution.relayUrl}`)
+          .digest(),
+        Buffer.from(viewer, "hex"),
+      ),
+    ).toBe(true);
+    expect(h.calls).toHaveLength(0);
+    expect(h.publications).toHaveLength(0);
+  } finally {
+    await h.close();
+  }
+});

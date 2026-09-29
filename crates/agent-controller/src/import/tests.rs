@@ -104,6 +104,8 @@ fn preview_is_keyless_commit_resolves_preserves_and_never_enables_or_mutates_sou
     assert!(!saved.enabled);
     // Source `start_on_app_launch: true` does not auto-start an imported record.
     assert_eq!(saved.start_on_app_launch, Some(false));
+    assert!(saved.configured());
+    assert_eq!(saved.relay_url, "wss://relay.example");
     assert_eq!(saved.system_prompt, "definition-prompt");
     assert_eq!(saved.harness.model, "definition-model");
     assert_eq!(saved.harness.provider, "global-provider");
@@ -825,4 +827,87 @@ fn team_snapshot_handles_empty_deleted_and_invalid_teams() {
         let data = read_source(&root).unwrap();
         assert!(team_instructions(&data, &data.records[1]).is_err());
     }
+}
+#[test]
+fn import_excludes_overlapping_destinations_before_credentials_through_commit() {
+    let old = tempfile::tempdir().unwrap();
+    let dest = tempfile::tempdir().unwrap();
+    source(old.path());
+    let keys = Memory::default();
+    let mut store = Store::open(dest.path().into()).unwrap();
+    let mut first = Imports::default();
+    let preview = first
+        .preview(
+            LegacySource::Installed,
+            old.path().into(),
+            dest.path().into(),
+            "wss://first.example",
+        )
+        .unwrap();
+    let mut second = Imports::default();
+    let other = second
+        .preview(
+            LegacySource::Installed,
+            old.path().into(),
+            dest.path().into(),
+            "wss://second.example",
+        )
+        .unwrap();
+    let ids = [preview.candidates[0].id.clone()];
+    let other_ids = [other.candidates[0].id.clone()];
+    let prepared = first.prepare(&preview.token, &ids, &store).unwrap();
+    // Separate preview owners still share the same store reservation.
+    assert!(second
+        .prepare(&other.token, &other_ids, &store)
+        .err()
+        .unwrap()
+        .contains("import is in progress"));
+    assert!(keys.keys.lock().unwrap().is_empty());
+    // Cancellation before credential access releases the reservation.
+    drop(prepared);
+    let prepared = first.prepare(&preview.token, &ids, &store).unwrap();
+    let unavailable = Memory {
+        fail: true,
+        ..Default::default()
+    };
+    assert!(prepared.acquire(&unavailable).is_err());
+    // Credential failure releases it too, so the same preview can be retried.
+    let pending = first
+        .prepare(&preview.token, &ids, &store)
+        .unwrap()
+        .acquire(&keys)
+        .unwrap();
+    let reads = keys.reads.load(Ordering::SeqCst);
+    assert!(second
+        .commit(&other.token, &other_ids, &mut store, &keys)
+        .unwrap_err()
+        .contains("import is in progress"));
+    assert_eq!(keys.reads.load(Ordering::SeqCst), reads);
+    assert_eq!(
+        keys.keys
+            .lock()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        ids
+    );
+    pending.commit(&mut store).unwrap();
+    let before = fs::read(dest.path().join("agents.json")).unwrap();
+    assert!(second
+        .commit(&other.token, &other_ids, &mut store, &keys)
+        .unwrap_err()
+        .contains("already imported"));
+    assert_eq!(keys.reads.load(Ordering::SeqCst), reads);
+    assert_eq!(
+        keys.keys
+            .lock()
+            .unwrap()
+            .keys()
+            .cloned()
+            .collect::<Vec<_>>(),
+        ids
+    );
+    assert_eq!(fs::read(dest.path().join("agents.json")).unwrap(), before);
+    assert_eq!(store.agents().unwrap().len(), 1);
 }

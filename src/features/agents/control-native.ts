@@ -51,6 +51,8 @@ export function nativeAgentControlHost(): AgentControlHost | null {
         action,
         ...(replayFloor === undefined ? {} : { replayFloor }),
       }),
+    configureHere: (id, resolution) =>
+      invoke("agent_control_use_here", { id, resolution }),
     previewImport: (source, destination) =>
       invoke("agent_control_import_preview", { source, destination }),
     commitImport: (token, ids) =>

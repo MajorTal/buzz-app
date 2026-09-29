@@ -32,11 +32,9 @@ test("shared avatars defer offscreen artwork, omit the referrer and recover from
   expect(requests[0].referer).toBeUndefined();
 
   const avatar = page
-    .getByRole("article")
-    .filter({
-      has: page.getByRole("button", { name: "A Brain: 2 identities" }),
-    })
-    .getByRole("img", { name: "A Brain", exact: true });
+    .getByRole("region", { name: "Library identities", exact: true })
+    .getByRole("img", { name: /^A Brain identity/ })
+    .first();
   const image = avatar.locator("img");
   await expect
     .poll(() => image.evaluate((el) => el.naturalWidth))

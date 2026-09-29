@@ -135,12 +135,12 @@ it("opens identities in a popover and returns focus on Escape", async () => {
   const user = userEvent.setup();
   const pubkey = "ab".repeat(32);
   render(<AgentCard name="Agent" identities={[{ pubkey, name: "Agent" }]} />);
-  const trigger = screen.getByRole("button", { name: "Agent: 1 identity" });
+  const trigger = screen.getByRole("button", { name: "Agent: public key" });
   expect(screen.queryByText(npubEncode(pubkey))).toBeNull();
   const card = screen.getByRole("article");
   await user.click(trigger);
   const popup = await screen.findByRole("dialog", {
-    name: "Agent identities",
+    name: "Agent public key",
   });
   expect(card).not.toContainElement(popup);
   expect(screen.getByText(npubEncode(pubkey))).toBeVisible();

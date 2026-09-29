@@ -219,7 +219,7 @@ export function ProfileButton({
               shape="round"
               icon={
                 <span
-                  className="pointer-events-none relative flex size-full items-center justify-center rounded-full"
+                  className={styles.triggerAvatar}
                   role="img"
                   aria-label={
                     viewer

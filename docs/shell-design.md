@@ -29,7 +29,7 @@ semantic tokens, UI authoring rules and the local component reference.
   Channels is presented as Messages. Legacy tone props are retained for
   compatibility; all pages share the supplied gradient and repeating CSS dots.
   Add recognized page presentation here without changing plugin contracts.
-- `AppShell.tsx` owns the 56px header, vertical page navigation, contributed panel
+- `AppShell.tsx` owns the 48px header, vertical page navigation, contributed panel
   launchers, Settings access, community rail, and page frames. Page navigation sits
   above the channel list outside Settings, using its saved sidebar width
   and resize behavior. Settings replaces that card with `SettingsSidebar.tsx`,
@@ -45,7 +45,9 @@ semantic tokens, UI authoring rules and the local component reference.
   220px disclosure overlays content, supports Escape, and keeps sidebar state
   mounted. A navigation selection closes the phone drawer and hands focus to the
   main content; this includes conversation and Settings-section selections.
-  Desktop layouts retain the visible sidebar and saved width.
+  Messages, Agents, and desktop Settings share an animated header toggle; hiding
+  the sidebar preserves its mounted state and saved width. Reduced motion disables
+  the transition. Other desktop pages retain the visible sidebar.
   The header keeps history and account/search actions, with no second navigation row.
   Full-height pages get a 16px outer gutter (8px on narrow screens) and own their
   card surfaces. The shell adds no white backing behind them. Document pages

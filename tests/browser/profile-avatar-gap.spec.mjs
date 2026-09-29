@@ -59,12 +59,12 @@ test("profile avatar cutout shows the shell through hover, press and open menu",
         ctx.drawImage(image, 0, 0);
         const at = (x, y) => [...ctx.getImageData(x, y, 1, 1).data];
         return {
-          // The screenshot includes 4px outside the 40px control. Its gap
-          // is at avatar-local (29,29); the other samples detect a focus ring.
-          gap: at(33, 33),
-          left: at(1, 24),
-          top: at(24, 1),
-          right: at(46, 24),
+          // The screenshot includes 4px outside the 28px control. Its gap
+          // is at avatar-local (20,20); the other samples detect a focus ring.
+          gap: at(24, 24),
+          left: at(1, 18),
+          top: at(18, 1),
+          right: at(34, 18),
         };
       }, png.toString("base64"));
     const expected = await sample(background);

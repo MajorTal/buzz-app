@@ -8,7 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { keypair, signed } from "../features/relay/testing";
 import { stubAvatarBrowserApis } from "../features/agents/avatar-testing";
 import type { RelayEvent } from "../features/relay/events";
@@ -46,6 +46,15 @@ vi.mock("../bundled", async () => ({
     },
   ],
 }));
+// jsdom has no media queries; responsive geometry is covered in browser tests.
+beforeEach(() => {
+  vi.stubGlobal("matchMedia", (media: string) => ({
+    media,
+    matches: false,
+    addEventListener() {},
+    removeEventListener() {},
+  }));
+});
 let services: AppServices | undefined;
 afterEach(async () => {
   activation.release();

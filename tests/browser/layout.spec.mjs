@@ -82,6 +82,10 @@ async function link(page, app, target) {
   ).toBeVisible();
 }
 async function shellFits(page, width) {
+  if (width <= 650)
+    await expect(
+      page.locator("[data-shell-sidebar-toggle]"),
+    ).toHaveAccessibleName(/^(Show|Hide) navigation$/);
   const disclosure = button(page, "Show navigation");
   const collapsed = await disclosure.isVisible();
   if (collapsed) await disclosure.click();
@@ -208,8 +212,8 @@ test("bento surfaces, sidebar pages, real link panel and compact community navig
   near(rail.width, 48);
   near(sidebar.x, rail.x + rail.width);
   near(before.x - sidebar.x - sidebar.width, 8);
-  near(before.y, 56);
-  near(before.height, 760);
+  near(before.y, 48);
+  near(before.height, 768);
   const background = await page
     .locator(".shell-background")
     .evaluate((el) => getComputedStyle(el).backgroundImage);

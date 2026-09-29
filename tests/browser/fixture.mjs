@@ -755,7 +755,13 @@ export const test = base.extend({
                     (dmIds.includes(id) ? "dm" : "stream"),
                 ],
                 ...(archivedIds.has(id) ? [["archived", "true"]] : []),
-                ...(id === "open" ? [["public"]] : []),
+                // Ordinary channels are explicitly public; do not add a public
+                // flag to private sessions or change the separate DM fixtures.
+                ...(!sessionChannels.includes(id) &&
+                !dmIds.includes(id) &&
+                !lifecycleRows.some((row) => row.id === id && row.type === "dm")
+                  ? [["public"]]
+                  : []),
                 ...(dmIds.includes(id) ? [["hidden"]] : []),
                 ...(sessionChannels.includes(id)
                   ? [

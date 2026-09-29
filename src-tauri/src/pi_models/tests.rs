@@ -149,6 +149,7 @@ async fn test_prompts_the_selected_model_and_reports_its_reply() {
     let args = std::fs::read_to_string(dir.path().join("args")).unwrap();
     assert!(args.contains("--no-session"), "{args}");
     assert!(args.contains("--no-tools"), "{args}");
+    assert!(!args.contains("--thinking off"), "{args}");
     assert!(
         args.ends_with("--provider openai --model ns/gpt\n"),
         "{args}"

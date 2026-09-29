@@ -28,6 +28,12 @@ for (const multiple of [false, true]) {
         name: /Open unread thread from/,
       });
       const openPopup = async () => {
+        const showNavigation = page.getByRole("button", {
+          name: "Show navigation",
+          exact: true,
+        });
+        if (await showNavigation.isVisible()) await showNavigation.click();
+        await expect(alpha).toBeVisible();
         await alpha.hover();
         await expect(rows).toHaveCount(multiple ? 2 : 1);
         await rows.first().hover();

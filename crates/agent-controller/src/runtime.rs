@@ -322,10 +322,12 @@ pub struct ModelContext {
     pub filter: Option<String>,
     pub model_overridden: bool,
 }
-/// Native-only Goose catalog context; environment values never enter a snapshot.
+/// Native-only Goose model context; environment values never enter a snapshot.
 pub struct GooseModelContext {
     pub command: PathBuf,
+    pub workspace: PathBuf,
     pub provider_id: String,
+    pub model_id: String,
     pub environment: BTreeMap<String, String>,
     pub model_overridden: bool,
 }
@@ -438,7 +440,7 @@ impl Controller {
         edit: AgentEdit,
     ) -> Result<GooseModelContext> {
         let agent = self.edited_agent(id, revision, edit)?;
-        goose_model_context(&agent.harness, &agent.environment)
+        goose_model_context(&agent.harness, &agent.workspace, &agent.environment)
     }
     pub fn pi_model_context(
         &self,
@@ -472,7 +474,7 @@ impl Controller {
     }
     pub fn draft_goose_model_context(edit: AgentEdit) -> Result<GooseModelContext> {
         let environment = draft_environment(edit.environment);
-        goose_model_context(&edit.harness, &environment)
+        goose_model_context(&edit.harness, &edit.workspace, &environment)
     }
     pub fn draft_model_context(edit: AgentEdit) -> Result<ModelContext> {
         let environment = draft_environment(edit.environment);
@@ -951,6 +953,7 @@ fn model_context_with_defaults(
 
 fn goose_model_context(
     harness: &crate::HarnessEdit,
+    workspace: &str,
     environment: &BTreeMap<String, String>,
 ) -> Result<GooseModelContext> {
     crate::config::validate_environment(environment)?;
@@ -968,7 +971,12 @@ fn goose_model_context(
     }
     Ok(GooseModelContext {
         command,
+        workspace: workspace.into(),
         provider_id: provider.clone(),
+        model_id: environment
+            .get("GOOSE_MODEL")
+            .unwrap_or(&harness.model)
+            .clone(),
         environment: environment.clone(),
         model_overridden: environment.contains_key("GOOSE_MODEL"),
     })

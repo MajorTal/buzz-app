@@ -1483,6 +1483,8 @@ fn goose_model_context_uses_effective_draft_provider_without_projecting_secrets(
     let context = Controller::draft_goose_model_context(edit(None)).unwrap();
     assert_eq!(context.command, goose);
     assert_eq!(context.provider_id, "databricks_v2");
+    assert_eq!(context.model_id, "effective-model");
+    assert_eq!(context.workspace, dir.path());
     assert!(context.model_overridden);
     assert_eq!(
         context.environment["DATABRICKS_HOST"],

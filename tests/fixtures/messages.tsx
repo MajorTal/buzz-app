@@ -388,6 +388,9 @@ Object.assign(window, {
       failRepair = true;
       established(channelOne);
     },
+    reconnectRepairPending() {
+      return !!holdRepair;
+    },
     releaseReconnectRepair() {
       holdRepair?.();
     },

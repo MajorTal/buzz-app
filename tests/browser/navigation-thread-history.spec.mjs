@@ -151,7 +151,7 @@ for (const reading of [false, true]) {
       ).toHaveCount(0);
       await expect(
         region.getByText("Loading thread…", { exact: true }),
-      ).toBeVisible();
+      ).toHaveCount(0);
       // The panel is presented even while bounded history is still pending.
       await expect
         .poll(() =>

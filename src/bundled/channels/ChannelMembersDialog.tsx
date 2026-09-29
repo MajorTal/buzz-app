@@ -333,7 +333,7 @@ export function ChannelMembersDialog({
                   : "Join this channel to add people and agents."}
           </p>
         )}
-        {rosterBusy && (
+        {rosterBusy && !members.size && (
           <p role="status" className="text-body-sm text-subtle">
             Loading members…
           </p>

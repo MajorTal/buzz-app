@@ -374,7 +374,21 @@ it("starts a single older page after scrolling through 80% of loaded history", (
   h.scroll(0);
   expect(h.view.loadMore).toHaveBeenCalledOnce();
 });
-it("places older-page progress and retry between root and replies", () => {
+it("shows initial thread loading only until content is available", () => {
+  const h = messagesHarness();
+  h.snapshot.status = "loading";
+  h.snapshot.root = undefined;
+  const section = h.render();
+  expect(within(section).getByText("Loading thread…")).toBeVisible();
+  expect(
+    within(section).queryByText("Original message unavailable."),
+  ).toBeNull();
+  h.snapshot.root = row;
+  h.render();
+  expect(within(section).getByText("root")).toBeVisible();
+  expect(within(section).queryByText("Loading thread…")).toBeNull();
+});
+it("keeps older-page loading quiet and retry between root and replies", () => {
   const h = messagesHarness();
   h.snapshot.direction = "older";
   h.snapshot.canLoadMore = true;
@@ -390,13 +404,9 @@ it("places older-page progress and retry between root and replies", () => {
   const root = screen.getByText("root").closest("article");
   const reply = screen.getByText("older reply").closest("article");
   if (!root || !reply) throw new Error("Missing root or older reply");
-  const cue = within(section).getByText("Loading older replies…");
-  expect(
-    root.compareDocumentPosition(cue) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
-  expect(
-    cue.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING,
-  ).toBeTruthy();
+  expect(within(section).queryByText("Loading older replies…")).toBeNull();
+  expect(root).toBeVisible();
+  expect(reply).toBeVisible();
   expect(within(section).queryByText("Loading thread…")).toBeNull();
 
   h.snapshot.status = "error";
@@ -421,7 +431,7 @@ it("places older-page progress and retry between root and replies", () => {
   h.render();
   expect(within(section).queryByText("Loading older replies…")).toBeNull();
 });
-it("keeps retained-range repair loading and retry after the replies", () => {
+it("keeps retained-range repair quiet and retry after the replies", () => {
   const h = messagesHarness();
   h.snapshot.direction = "older";
   h.snapshot.replies = [
@@ -431,7 +441,7 @@ it("keeps retained-range repair loading and retry after the replies", () => {
   h.snapshot.readKind = "refresh";
   const section = h.render();
   expect(within(section).queryByText("Loading older replies…")).toBeNull();
-  expect(within(section).getByText("Loading thread…")).toBeVisible();
+  expect(within(section).queryByText("Loading thread…")).toBeNull();
 
   h.snapshot.status = "error";
   h.snapshot.error = "repair failed";

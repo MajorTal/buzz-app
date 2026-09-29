@@ -440,19 +440,25 @@ test("session changes discard the previous sidebar targets and manual unread sti
       .getByRole("button", { name: "Channel settings", exact: true })
       .click();
     await expect.poll(() => pendingRoutes.length).toBeGreaterThan(0);
+    const panel = page.getByRole("complementary", { name: "Channel sidebar" });
+    await expect(panel).toHaveAttribute("aria-busy", "true");
     // A new session reveals its roster after the bounded startup wait even if
     // preferences are still blocked. Scrolling the empty loading view is a no-op.
     await expect(row(page, "alpha")).toBeVisible();
     await expect(
       page.getByText("Updating sidebar details…", { exact: true }),
-    ).toBeVisible();
+    ).toHaveCount(0);
     await scroll(page, 1800);
     await expect(cue(page, "above")).toBeVisible();
     // Completing delayed preferences must not replace the user's newer viewport.
+    const refreshed = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/relay/secondary/sidebar-preferences") &&
+        response.ok(),
+    );
     release();
-    await expect(
-      page.getByText("Updating sidebar details…", { exact: true }),
-    ).toBeHidden();
+    await refreshed;
+    await expect(panel).not.toHaveAttribute("aria-busy", "true");
     expect(await list(page).evaluate((element) => element.scrollTop)).toBe(
       1800,
     );

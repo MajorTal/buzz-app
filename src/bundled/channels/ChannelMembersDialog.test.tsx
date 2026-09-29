@@ -39,6 +39,7 @@ async function setup(
   let applyAddition = true;
   let searchFailure = false;
   let nameRetry: Promise<void> | undefined;
+  let rosterRead: Promise<void> | undefined;
   let release: (() => void) | undefined;
   const publish = vi.fn(async (_event: RelayEvent) => {
     if (failure) throw new PublishRejected(failure);
@@ -64,6 +65,8 @@ async function setup(
       await nameRetry;
       throw new Error("Names unavailable");
     }
+    if (filters.some((filter) => filter.kinds?.includes(39002)))
+      await rosterRead;
     return [
       roster(relay, id, members, clock),
       signed(relay, {
@@ -135,6 +138,9 @@ async function setup(
     },
     fail: (value: string) => {
       failure = value;
+    },
+    holdRoster: (pending: Promise<void> | undefined) => {
+      rosterRead = pending;
     },
     holdNames: (pending: Promise<void>) => {
       nameRetry = pending;
@@ -416,3 +422,42 @@ it.each(["none", "rejected", "lagging"])(
     expect(action).toHaveBeenCalledTimes(2);
   },
 );
+
+it("keeps known members quiet while rechecking membership without enabling unverified additions", async () => {
+  const t = await setup();
+  await vi.waitFor(() =>
+    expect(screen.queryByText("Loading members…")).toBeNull(),
+  );
+  expect(await t.search()).toBeEnabled();
+  await t.user.keyboard("{Escape}");
+  const rosterReads = () =>
+    t.query.mock.calls.filter(([filters]) =>
+      filters.some((filter) => filter.kinds?.includes(39002)),
+    ).length;
+  const before = rosterReads();
+  let release!: () => void;
+  t.holdRoster(
+    new Promise<void>((_resolve, reject) => {
+      release = () => reject(new Error("Roster unavailable"));
+    }),
+  );
+  try {
+    await t.user.click(screen.getByRole("button", { name: "Channel members" }));
+    await vi.waitFor(() => expect(rosterReads()).toBe(before + 1));
+    expect(screen.getByText("Carl (you)")).toBeVisible();
+    expect(screen.queryByText("Loading members…")).not.toBeInTheDocument();
+    const add = await t.search();
+    expect(add).toBeDisabled();
+    // No matching members is not an empty roster.
+    expect(screen.queryByText("Loading members…")).not.toBeInTheDocument();
+    await act(async () => release());
+    const retry = await screen.findByRole("button", { name: "Retry members" });
+    expect(add).toBeDisabled();
+    t.holdRoster(undefined);
+    await t.user.click(retry);
+    await vi.waitFor(() => expect(add).toBeEnabled());
+    expect(t.publish).not.toHaveBeenCalled();
+  } finally {
+    await act(async () => release());
+  }
+});

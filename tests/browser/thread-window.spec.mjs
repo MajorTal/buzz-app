@@ -30,9 +30,25 @@ test("reconnect repair failure keeps retry reachable at the newest replies", asy
         ),
       )
       .toBeLessThan(2);
+    const beforeRepair = await history.evaluate((el) => ({
+      height: el.scrollHeight,
+      top: el.querySelector("ol [data-message-id]").getBoundingClientRect().top,
+    }));
     await page.evaluate(() => window.messagesFixture.holdReconnectRepair());
-    // The held root read is the actual session reconnect repair, not scrollback.
-    await expect(history.getByText("Loading thread…")).toBeVisible();
+    // Observe the real pending read, not text that the product deliberately omits.
+    await expect
+      .poll(() =>
+        page.evaluate(() => window.messagesFixture.reconnectRepairPending()),
+      )
+      .toBe(true);
+    await expect(history.getByText("Loading thread…")).toHaveCount(0);
+    expect(
+      await history.evaluate((el) => ({
+        height: el.scrollHeight,
+        top: el.querySelector("ol [data-message-id]").getBoundingClientRect()
+          .top,
+      })),
+    ).toEqual(beforeRepair);
     await expect(history.getByText("Loading older replies…")).toHaveCount(0);
     await page.evaluate(() => window.messagesFixture.releaseReconnectRepair());
     const error = history.getByRole("alert");
@@ -155,7 +171,7 @@ test("legacy continuation failure exposes recovery after retained replies", asyn
 
 // Browser boundary: actual layout/scroll anchoring and user demand over the real
 // StrictMode session and ThreadPanel. Protocol permutations stay in owner tests.
-test("older-page cue stays between root and replies while the request is held", async ({
+test("older-page loading adds no row or layout shift while the request is held", async ({
   page,
 }) => {
   const server = await createServer({
@@ -174,41 +190,36 @@ test("older-page cue stays between root and replies while the request is held", 
     const history = page.getByRole("region", { name: "Thread messages" });
     const replies = history.locator("ol [data-message-id]");
     await expect(replies).toHaveCount(10);
+    // Settle at the top before the held request so native scrolling cannot
+    // masquerade as a layout shift caused by a loading row.
+    await history.evaluate((el) => {
+      el.scrollTop = 0;
+      el.dispatchEvent(new Event("scroll"));
+    });
+    await expect.poll(() => history.evaluate((el) => el.scrollTop)).toBe(0);
+    await page.evaluate(() => document.fonts.ready);
+    const before = await history.evaluate((el) => ({
+      height: el.scrollHeight,
+      top: el.querySelector("ol [data-message-id]").getBoundingClientRect().top,
+    }));
     await page.evaluate(() => window.messagesFixture.holdOlderPage());
     await history.hover();
-    await page.mouse.wheel(0, -4000);
+    await page.mouse.wheel(0, -300);
     await expect
       .poll(() =>
         page.evaluate(() => window.messagesFixture.report.filters.length),
       )
       .toBe(2);
     const cue = history.getByText("Loading older replies…", { exact: true });
-    await cue.scrollIntoViewIfNeeded();
-    await expect(cue).toBeVisible({ timeout: 2_000 });
-    const position = await history.evaluate((element) => {
-      const root = element.querySelector("[data-message-id]");
-      const cue = element.querySelector('[role="status"]');
-      const reply = element.querySelector("ol [data-message-id]");
-      if (!root || !cue || !reply) return undefined;
-      const rootBottom = root.getBoundingClientRect().bottom;
-      const cueTop = cue.getBoundingClientRect().top;
-      const cueBottom = cue.getBoundingClientRect().bottom;
-      const replyTop = reply.getBoundingClientRect().top;
-      const viewport = element.getBoundingClientRect();
-      return {
-        rootBottom,
-        cueTop,
-        cueBottom,
-        replyTop,
-        viewportTop: viewport.top,
-        viewportBottom: viewport.bottom,
-      };
-    });
-    expect(position).toBeDefined();
-    expect(position.cueTop).toBeGreaterThanOrEqual(position.rootBottom);
-    expect(position.cueBottom).toBeLessThanOrEqual(position.replyTop);
-    expect(position.cueTop).toBeGreaterThanOrEqual(position.viewportTop);
-    expect(position.cueBottom).toBeLessThanOrEqual(position.viewportBottom);
+    await expect(cue).toHaveCount(0);
+    await expect(history.getByText("Loading thread…")).toHaveCount(0);
+    expect(
+      await history.evaluate((el) => ({
+        height: el.scrollHeight,
+        top: el.querySelector("ol [data-message-id]").getBoundingClientRect()
+          .top,
+      })),
+    ).toEqual(before);
     expect(await replies.count()).toBe(10);
     await page.evaluate(() => window.messagesFixture.releaseOlderPage());
     await expect(replies).toHaveCount(60);
@@ -271,7 +282,6 @@ test("newest window positions immediately; scrollback preserves the visible repl
     // Already at the top: wheel input demands history but has no native scroll
     // to finish, so scrollend is not a completion signal for this gesture.
     await page.mouse.wheel(0, -300);
-    await expect(history.getByText("Loading older replies…")).toBeVisible();
     await expect
       .poll(() =>
         page.evaluate(() => window.messagesFixture.report.filters.length),
@@ -283,9 +293,8 @@ test("newest window positions immediately; scrollback preserves the visible repl
     expect(continuation.thread_window).toBe(true);
     expect(continuation.until).toBeDefined();
     expect(continuation.before_id).toBeDefined();
-    // The loading cue is in the reply flow and disappears when the page
-    // completes. At the scroll limit its removal can shift a fixed pixel, so
-    // assert the user-visible contract: the reply being read stays in view.
+    await expect(history.getByText("Loading older replies…")).toHaveCount(0);
+    // Newly prepended content preserves the reply being read.
     const readingId = await history.evaluate((el) => {
       const viewport = el.getBoundingClientRect();
       const visible = [...el.querySelectorAll("ol [data-message-id]")].filter(

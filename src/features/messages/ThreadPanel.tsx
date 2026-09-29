@@ -863,27 +863,17 @@ function ThreadMessages({
           <p className={styles.empty}>Original message unavailable.</p>
         ) : null}
         <ol>
-          {showOlderPageStatus &&
-            (snapshot.status === "loading" || snapshot.error) && (
-              <li className={styles.threadHistoryPageStatus}>
-                {snapshot.status === "loading" ? (
-                  <p role="status">Loading older replies…</p>
-                ) : (
-                  <>
-                    <p role="alert">{snapshot.error}</p>
-                    <Button type="button" onClick={retryThread}>
-                      Retry thread
-                    </Button>
-                  </>
-                )}
-              </li>
-            )}
+          {showOlderPageStatus && snapshot.error && (
+            <li className={styles.threadHistoryPageStatus}>
+              <p role="alert">{snapshot.error}</p>
+              <Button type="button" onClick={retryThread}>
+                Retry thread
+              </Button>
+            </li>
+          )}
           {renderReplies(undefined)}
         </ol>
-        {(snapshot.status === "loading" && !showOlderPageStatus) ||
-        (snapshot.direction !== "older" &&
-          snapshot.status === "ready" &&
-          snapshot.canLoadMore) ? (
+        {snapshot.status === "loading" && !rows.length ? (
           <p role="status">Loading thread…</p>
         ) : null}
         {snapshot.targetStatus === "unavailable" && (

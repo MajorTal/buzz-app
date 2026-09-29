@@ -155,6 +155,9 @@ Disabling Bestie removes its snake and open card without evicting a local link c
 The shell supplies the outer page gutter. Channel previews, roster labels, and routine refresh
 and freshness indicators are omitted. Channel Settings → Diagnostics keeps
 manual refresh, outbox inspection, and timing capture available on demand.
+Background thread reads and sidebar enrichment/reconnection do not insert progress
+rows into populated views. Initial empty loads still explain the wait; failures
+and their retry controls remain visible.
 
 The composer preserves the session's text sending and keyboard behavior. Its
 rounded input and lavender send arrow follow the reference; unsupported upload,

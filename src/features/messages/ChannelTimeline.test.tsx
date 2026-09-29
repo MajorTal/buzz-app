@@ -598,6 +598,24 @@ it("restores a saved message anchor instead of an unreachable cold pixel offset"
   expect(h.handle.scrollTo).not.toHaveBeenCalled();
   h.unmount();
 });
+it("a restoration scroll through unmeasured rows does not become bottom follow", () => {
+  const h = setup({
+    mounted: [{ id: "last", y: 42 }],
+    initial: { offset: 80851, bottom: false, anchor: { id: "last", y: 42 } },
+  });
+  // Virtua's scroll event lands at the estimated bottom before rows measure.
+  h.element.scrollTop = 3038;
+  h.dispatchScroll();
+  h.handle.scrollToIndex.mockClear();
+  h.setRows([timelineMessage("first"), timelineMessage("last")]);
+  h.measureRows();
+  expect(h.handle.scrollToIndex).not.toHaveBeenCalledWith(1, { align: "end" });
+  h.unmount();
+  expect(h.saved()).toMatchObject({
+    bottom: false,
+    anchor: { id: "last" },
+  });
+});
 it.each([
   { offset: 1234, bottom: false },
   { offset: 1234, bottom: false, anchor: { id: "missing", y: 42 } },

@@ -218,6 +218,9 @@ function Timeline({
         element.scrollTop <
           previous.offset + Math.min(0, element.scrollHeight - previous.height);
       if (previous && follow.current && !movedUp) position.bottom = true;
+      // Restoration can scroll before Virtua measures rows beneath the anchor,
+      // briefly reaching the estimated bottom. Only reader input may follow.
+      if (anchor) position.bottom = false;
       savedPosition.current = position;
       follow.current = position.bottom;
       measuredPosition.current = {

@@ -59,8 +59,10 @@ lines/64 KiB. Changing community, losing ownership or the local record closes th
 view. Empty, loading, copy and generic error states do not expose native errors.
 A packaged app cannot obtain this development-broker proof and fails closed.
 
-When Agent Activity is enabled and the host supplies conversation context, **View
-activity** opens its raw panel for this exact identity and originating channel.
+When Agent Activity is enabled, the host supplies conversation context and the
+profile is a known agent (a self-declared agent profile hint or a local library
+record), **View activity** opens its raw panel for this exact identity and
+originating channel. People's profiles show neither the card nor the action.
 The Info tab's “Latest activity” card shows up to three recently updated assistant
 messages or tool titles/statuses from the existing session-owned records, restricted
 to this exact public key and originating channel (including threads). Retained text
@@ -80,8 +82,9 @@ no preview, never an all-channel fallback. Connecting, disconnected, unavailable
 and empty states are explicit. Counts and detailed explanations stay in the
 activity panel; the preview does not infer idle state or successful completion.
 
-This action is offered for any public identity: it does not infer that the identity
-is an owned/running agent. Public agent hints never grant telemetry access. The
+The known-agent check is the same display-only evidence as the squircle avatar: it
+does not infer that the identity is an owned/running agent. Public agent hints
+never grant telemetry access. The
 existing observer admission and session access-reset/generation fences remain the
 authority; the child adds no library read, capture lease, socket, timer or store.
 Disabling Agent Activity removes the preview/action and clears capture. Profile
@@ -189,7 +192,7 @@ supplies agent display metadata, not management authority.
 ## UI and iteration
 
 Avatar, name, about, self-declared NIP-05 (not DNS-verified), exact copyable
-npub, and an optional compact activity preview/action. **Message** is offered for a
+npub, and, for known agents, an optional compact activity preview/action. **Message** is offered for a
 foreign profile when the session can start direct messages; as in New message,
 a known agent qualifies only while this community's ready native control manages
 it, rechecked on click. It opens (or reopens) the one-to-one DM through the session's direct-message operation and

@@ -162,6 +162,8 @@ export const test = base.extend({
         ),
       ]),
     );
+    // Kind 0 by author for keys a test creates; served on later profile reads.
+    const servedProfiles = new Map();
     const participants = largeSidebar
       ? Array.from({ length: 1001 }, (_, i) =>
           (i + 1).toString(16).padStart(64, "0"),
@@ -639,6 +641,15 @@ export const test = base.extend({
         });
         return [sign(13535, [["-"]])];
       }
+      if (filter.kinds?.includes(13534)) {
+        // Relay-signed roster for archive consent; the viewer is a plain member.
+        expect(filter).toEqual({
+          kinds: [13534],
+          authors: [getPublicKey(relayKey)],
+          limit: 1,
+        });
+        return [sign(13534, [["member", viewer, "member"]])];
+      }
       if (filter.kinds?.includes(30617) || filter.kinds?.includes(30621)) {
         expect(filter).toEqual({ kinds: [30617, 30621], limit: 100 });
         return [];
@@ -845,6 +856,9 @@ export const test = base.extend({
       if (filter.kinds?.includes(0))
         return [
           profiles.get(community),
+          ...[...servedProfiles.values()].filter((event) =>
+            filter.authors?.includes(event.pubkey),
+          ),
           ...membershipKeys
             .filter((key) => filter.authors?.includes(getPublicKey(key)))
             .map((key) =>
@@ -1618,6 +1632,12 @@ export const test = base.extend({
           );
           relay.observer(community, event);
           return { event, plaintext, agent };
+        },
+        // Answer later kind-0 reads for this key; no live delivery is modeled.
+        serveProfile(key, body) {
+          const event = sign(0, [], JSON.stringify(body), key);
+          servedProfiles.set(event.pubkey, event);
+          return event;
         },
         // Change only modeled relay state. The app must consume the next real
         // roster response; this does not call client purge/recovery internals.

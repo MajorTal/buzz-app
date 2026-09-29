@@ -414,11 +414,13 @@ function ProfileDetails({
                         onDeleted={close}
                       />
                     )}
-                    <ProfileActivity
-                      session={session}
-                      pubkey={pubkey}
-                      context={context}
-                    />
+                    {knownAgent && (
+                      <ProfileActivity
+                        session={session}
+                        pubkey={pubkey}
+                        context={context}
+                      />
+                    )}
                     {control &&
                       (!knownAgent || ownership.settled) &&
                       !runtimePending &&

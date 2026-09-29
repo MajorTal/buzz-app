@@ -428,8 +428,39 @@ it("profile activity opens the exact agent and originating channel before its fi
     .getByRole("button", { name: "Channel settings", exact: true })
     .click();
   await expect.poll(() => app.relay.hasRoute("primary", "observer")).toBe(true);
+  const profile = page.getByRole("complementary", {
+    name: "Profile",
+    exact: true,
+  });
+  // A person's profile carries no activity card: neither preview nor launcher.
+  const personKey = generateSecretKey();
+  const personMessage = finalizeEvent(
+    {
+      kind: 9,
+      tags: [["h", profileChannelId]],
+      content: "Contextual person entry",
+      created_at: Math.floor(Date.now() / 1000),
+    },
+    personKey,
+  );
+  app.relay.publish("primary", personMessage);
+  await page
+    .locator(`[data-message-id="${personMessage.id}"]`)
+    .getByRole("button", { name: /profile/ })
+    .click();
+  // The settled metadata read is the barrier: no agent evidence can follow it.
+  await expect(
+    profile.getByText("No profile metadata is available in this community."),
+  ).toBeVisible();
+  await expect(
+    profile.getByRole("region", { name: "Activity preview" }),
+  ).toHaveCount(0);
+  await expect(
+    profile.getByRole("button", { name: "View activity", exact: true }),
+  ).toHaveCount(0);
   const agentKey = generateSecretKey();
   const agent = getPublicKey(agentKey);
+  app.serveProfile(agentKey, { name: "Fixture agent", is_agent: true });
   const message = finalizeEvent(
     {
       kind: 9,
@@ -459,10 +490,6 @@ it("profile activity opens the exact agent and originating channel before its fi
     )
     .toBe(true);
   await avatar.click();
-  const profile = page.getByRole("complementary", {
-    name: "Profile",
-    exact: true,
-  });
   await expect(
     profile.getByRole("region", { name: "Activity preview" }),
   ).toContainText("No activity yet");

@@ -42,6 +42,7 @@
   --sidebar-padding: var(--space-2);
   --sidebar-padding-end: var(--sidebar-padding);
   --channel-row-radius: var(--radius-control);
+  --sidenav-emoji-size: 13px;
   padding-inline: var(--sidebar-padding) var(--sidebar-padding-end);
 }
 .sidebarBrand {
@@ -131,18 +132,35 @@
   overflow: hidden;
   border-radius: var(--radius-row);
 }
-/* WebKit ignores margins on scrollbar track pseudo-elements. Mask only the
-   scrollbar column so its visible start is inset without moving scroll content. */
+/* WebKit ignores margins on scrollbar track pseudo-elements. Cover the top
+   track, then restore the thumb's rounded cap at the inset without moving
+   scroll content. */
+.channelListFrame::before,
 .channelListFrame::after {
   position: absolute;
-  z-index: 2;
-  top: 0;
   right: 0;
   width: 5px;
-  height: 12px;
   background: var(--surface-panel);
   content: "";
   pointer-events: none;
+}
+.channelListFrame::before {
+  z-index: 3;
+  top: calc(var(--space-6) - 2px);
+  width: 3px;
+  height: 4px;
+  border-radius: var(--radius-pill);
+  background: color-mix(in srgb, var(--border-standard) 90%, transparent);
+  opacity: 0;
+  transition: opacity 90ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+.channelListFrame:has(.channelList:is(:hover, :focus-within))::before {
+  opacity: 1;
+}
+.channelListFrame::after {
+  z-index: 2;
+  top: 0;
+  height: var(--space-6);
 }
 .channelList {
   width: calc(100% + 2px);
@@ -151,10 +169,34 @@
   box-sizing: border-box;
   overflow-y: auto;
   padding-block: var(--sidebar-padding);
-  --channel-row-fill-end: 5px;
+  --channel-row-fill-start: var(--space-1);
+  /* The scroll frame/list extend 6px beyond the panel content box so the native
+     scrollbar can sit at the edge. Preserve the existing left fill inset and
+     compensate only the right edge back to the same panel-relative gutter. */
+  --channel-row-fill-end: calc(var(--space-1) + 6px);
   scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
+}
+/* Shorten every painted row symmetrically while preserving icon, label, trailing
+   control, and scrollbar positions. Wrapped channel rows paint on the wrapper;
+   direct destination/session rows paint on the navigation item itself. */
+.channelList [data-variant="row"] {
+  width: calc(
+    100% -
+    var(--channel-row-fill-start) -
+    var(--channel-row-fill-end)
+  );
+  margin-inline: var(--channel-row-fill-start) var(--channel-row-fill-end);
+  padding-inline: calc(var(--space-2) - var(--channel-row-fill-start))
+    calc(var(--space-1) + var(--space-half) - var(--channel-row-fill-start));
+}
+.channelList [data-variant="row"][data-inset] {
+  padding-inline-start: calc(
+    var(--space-2) +
+    var(--space-6) -
+    var(--channel-row-fill-start)
+  );
 }
 .channelList:is(:hover, :focus-within) {
   scrollbar-color: color-mix(in srgb, var(--border-standard) 90%, transparent)
@@ -235,7 +277,8 @@
   align-items: center;
   gap: var(--space-1);
   min-height: calc(var(--space-6) + var(--space-1));
-  padding: var(--space-half) calc((2 * var(--space-6)) + var(--space-2))
+  padding: var(--space-half)
+    calc((2 * (var(--space-6) + var(--space-1))) + var(--space-2))
     var(--space-half) var(--space-2);
   color: var(--text-unavailable);
   font-size: var(--text-body-sm);
@@ -254,12 +297,18 @@
   outline-offset: -2px;
 }
 .sectionLabel {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+.sectionTitle {
+  display: block;
+  min-width: 0;
   overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 .sectionLabel [data-sidebar-group-icon] {
-  margin-inline-end: var(--space-1);
+  margin-inline-end: var(--space-2);
 }
 .sectionChevron {
   display: inline-grid;
@@ -285,8 +334,15 @@
   opacity: 0;
   pointer-events: auto;
 }
+.sectionHeader > .sectionActions {
+  top: 50%;
+  transform: translateY(-50%);
+}
 .sectionActions [data-icon-variant] {
   color: inherit;
+}
+.sectionHeader > .sectionActions [data-icon-variant] {
+  width: calc(var(--space-6) + var(--space-1));
 }
 .untitledSection {
   padding-block-start: var(--space-1);

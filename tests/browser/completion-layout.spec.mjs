@@ -74,7 +74,7 @@ test("host shortcuts coexist with an open completion menu and preserve its draft
   await expect(page.getByRole("option").first()).toBeVisible();
   await input.press(`${modifier}+,`);
   await expect(
-    page.getByRole("heading", { name: "Settings", exact: true }),
+    page.getByRole("region", { name: "Settings", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await openPage(page, "Messages");

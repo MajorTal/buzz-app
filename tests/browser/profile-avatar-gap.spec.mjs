@@ -23,7 +23,7 @@ test("profile avatar cutout shows the shell through hover, press and open menu",
     await page.setViewportSize({ width, height: 844 });
     const avatar = await control.boundingBox();
     const panel = await page
-      .locator('[aria-labelledby="settings-title"]')
+      .getByRole("region", { name: "Settings", exact: true })
       .boundingBox();
     expect(avatar.width).toBe(40);
     expect

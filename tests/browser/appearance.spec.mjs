@@ -1,3 +1,4 @@
+import { selectSettingsSection } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open, anchor, expectAnchor } from "./timeline.mjs";
 
@@ -9,9 +10,9 @@ async function settings(page) {
   await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   // Finish the menu-to-page focus handoff before testing keyboard controls.
   await expect(page.getByRole("main")).toBeFocused();
-  await button(page, "Appearance").click();
+  await selectSettingsSection(page, "Appearance");
 }
-async function expectMode(page, mode) {
+async function expectMode(page, mode, inSettings = false) {
   await expect(page.locator("html")).toHaveAttribute("data-color-mode", mode);
   await expect(page.locator("html")).toHaveCSS("color-scheme", mode);
   await expect(page.locator("html")).toHaveCSS(
@@ -31,8 +32,14 @@ async function expectMode(page, mode) {
   if (collapsed) await disclosure.click();
   await expect(
     page
-      .getByRole("complementary", { name: "Channel sidebar", exact: true })
-      .getByRole("navigation", { name: "Subscribed channels", exact: true }),
+      .getByRole("complementary", {
+        name: inSettings ? "Settings sidebar" : "Channel sidebar",
+        exact: true,
+      })
+      .getByRole("navigation", {
+        name: inSettings ? "Settings sections" : "Subscribed channels",
+        exact: true,
+      }),
   ).toBeVisible();
   if (collapsed) await button(page, "Hide navigation").click();
 }
@@ -49,21 +56,21 @@ test("Appearance changes and restores both modes, shared keyboard controls, dial
   const dark = page.getByRole("radio", { name: "Dark", exact: true });
   await expect(system).toBeChecked();
   await page.emulateMedia({ colorScheme: "dark" });
-  await expectMode(page, "dark");
+  await expectMode(page, "dark", true);
   await page.emulateMedia({ colorScheme: "light" });
-  await expectMode(page, "light");
+  await expectMode(page, "light", true);
   await light.check();
   await page.emulateMedia({ colorScheme: "dark" });
-  await expectMode(page, "light");
+  await expectMode(page, "light", true);
   await light.focus();
   await page.keyboard.press("ArrowRight");
   await expect(dark).toBeChecked();
   await expect(dark).toBeFocused();
-  await expectMode(page, "dark");
+  await expectMode(page, "dark", true);
   await expect(
     page
-      .getByRole("navigation", { name: "Subscribed channels", exact: true })
-      .getByRole("button", { name: "Inbox", exact: true }),
+      .getByRole("navigation", { name: "Settings sections", exact: true })
+      .getByRole("button", { name: "Notifications", exact: true }),
   ).toHaveCSS(
     "color",
     await page.evaluate(() => {
@@ -89,7 +96,7 @@ test("Appearance changes and restores both modes, shared keyboard controls, dial
         exact: true,
       })
       .check();
-    await expectMode(page, mode);
+    await expectMode(page, mode, true);
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 844 });
       await expect(
@@ -113,7 +120,7 @@ test("Appearance changes and restores both modes, shared keyboard controls, dial
   }
   await dark.check();
   await page.reload();
-  await expectMode(page, "dark");
+  await expectMode(page, "dark", true);
   await settings(page);
   await expect(dark).toBeChecked();
 });
@@ -129,23 +136,23 @@ test("System appearance follows computer changes and keeps the selected choice a
   await page.getByRole("radio", { name: "Dark", exact: true }).check();
   await system.check();
   await expect(system).toBeChecked();
-  await expectMode(page, "light");
+  await expectMode(page, "light", true);
   await page.screenshot({ path: testInfo.outputPath("system-light.png") });
   expect(await page.evaluate((key) => localStorage.getItem(key), key)).toBe(
     "system",
   );
   await page.emulateMedia({ colorScheme: "dark" });
-  await expectMode(page, "dark");
+  await expectMode(page, "dark", true);
   await page.reload();
-  await expectMode(page, "dark");
+  await expectMode(page, "dark", true);
   await settings(page);
   await expect(system).toBeChecked();
   await page.screenshot({ path: testInfo.outputPath("system-dark.png") });
   await page.emulateMedia({ colorScheme: "light" });
-  await expectMode(page, "light");
+  await expectMode(page, "light", true);
   await page.getByRole("radio", { name: "Dark", exact: true }).check();
   await page.emulateMedia({ colorScheme: "light" });
-  await expectMode(page, "dark");
+  await expectMode(page, "dark", true);
 });
 
 test("storage denial is visible and retryable; another window updates a live conversation without remount", async ({
@@ -188,7 +195,7 @@ test("storage denial is visible and retryable; another window updates a live con
       };
     }, key);
     await other.getByRole("radio", { name: "Dark", exact: true }).check();
-    await expectMode(other, "dark");
+    await expectMode(other, "dark", true);
     await expect(
       other.getByRole("dialog", {
         name: "Appearance wasn’t saved",

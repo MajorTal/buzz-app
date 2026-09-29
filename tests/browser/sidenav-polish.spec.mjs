@@ -1,6 +1,53 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
+test.use({ savedSidebar: true });
+
+test("sidebar scrollbar starts below the top inset without changing content geometry", async ({
+  page,
+  app,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 360 });
+  await open(page, app);
+  const sidebar = page.getByRole("navigation", { name: "Subscribed channels" });
+  await expect
+    .poll(() =>
+      sidebar.evaluate(
+        (viewport) => viewport.scrollHeight > viewport.clientHeight,
+      ),
+    )
+    .toBe(true);
+  const geometry = await sidebar.evaluate((viewport) => {
+    const frame = viewport.parentElement;
+    if (!(frame instanceof HTMLElement))
+      throw new Error("Missing sidebar frame");
+    const mask = getComputedStyle(frame, "::after");
+    const panel = viewport.closest("[data-buzz-surface]");
+    if (!(panel instanceof HTMLElement))
+      throw new Error("Missing sidebar panel");
+    return {
+      maskTop: Number.parseFloat(mask.top),
+      maskHeight: Number.parseFloat(mask.height),
+      maskRight: Number.parseFloat(mask.right),
+      maskWidth: Number.parseFloat(mask.width),
+      maskColor: mask.backgroundColor,
+      panelColor: getComputedStyle(panel).backgroundColor,
+      paddingTop: Number.parseFloat(getComputedStyle(viewport).paddingTop),
+      scrollTop: viewport.scrollTop,
+    };
+  });
+  expect(geometry).toEqual({
+    maskTop: 0,
+    maskHeight: 24,
+    maskRight: 0,
+    maskWidth: 5,
+    maskColor: geometry.panelColor,
+    panelColor: geometry.panelColor,
+    paddingTop: 8,
+    scrollTop: 0,
+  });
+});
+
 // Real layout, pointer hover and portaled-menu geometry cannot be proven in jsdom.
 // Keep this fixture small; the existing sidebar-unread journeys own overflow scale.
 test("compact sidenav keeps its geometry across persistent page navigation", async ({
@@ -10,6 +57,41 @@ test("compact sidenav keeps its geometry across persistent page navigation", asy
   await open(page, app);
   const sidebar = page.getByRole("navigation", { name: "Subscribed channels" });
   const alpha = sidebar.getByRole("button", { name: "Alpha", exact: true });
+  const panel = page.getByRole("complementary", {
+    name: "Channel sidebar",
+    exact: true,
+  });
+  const destinations = ["Inbox", "Bestie", "Agents"].map((name) =>
+    panel.getByRole("button", { name, exact: true }),
+  );
+  const assertDestinationFillParity = async () => {
+    const geometry = await Promise.all(
+      destinations.map((destination) =>
+        destination.evaluate((element) => {
+          const panel = element.closest('aside[aria-label="Channel sidebar"]');
+          if (!(panel instanceof HTMLElement))
+            throw new Error("Missing channel sidebar panel");
+          const panelRect = panel.getBoundingClientRect();
+          const rowRect = element.getBoundingClientRect();
+          return {
+            left: rowRect.left - panelRect.left,
+            right: panelRect.right - rowRect.right,
+            gutter: (() => {
+              const scroll = element.closest(
+                '[aria-label="Subscribed channels"]',
+              );
+              return scroll.offsetWidth - scroll.clientWidth;
+            })(),
+          };
+        }),
+      ),
+    );
+    for (const row of geometry) {
+      expect(row.left).toBe(13);
+      expect(row.right).toBe(row.left + row.gutter);
+    }
+  };
+  await assertDestinationFillParity();
   const before = await alpha.boundingBox();
   expect(before.height).toBe(28);
   const viewportBox = await sidebar.boundingBox();
@@ -50,7 +132,7 @@ test("compact sidenav keeps its geometry across persistent page navigation", asy
     expect(visual.scrollbarWidth).toBe(visual.offsetWidth - visual.clientWidth);
     expect(visual.leftContentInset).toBe(0);
     expect(visual.rightContentInset).toBe(0);
-    expect(visual.fillInset).toBe(5);
+    expect(visual.fillInset).toBe(10);
     expect(Number.parseFloat(visual.radius)).toBeGreaterThan(0);
     expect(visual.overflow).toBe("visible");
   };
@@ -59,7 +141,7 @@ test("compact sidenav keeps its geometry across persistent page navigation", asy
     const sidebar = document.querySelector(".shell-sidebar");
     if (!(sidebar instanceof HTMLElement))
       throw new Error("Missing channel sidebar");
-    sidebar.style.width = "124px";
+    sidebar.style.width = "220px";
   });
   await expect
     .poll(() =>
@@ -70,6 +152,7 @@ test("compact sidenav keeps its geometry across persistent page navigation", asy
     .toBe(0);
   const narrowViewport = await sidebar.boundingBox();
   const narrowAlpha = await alpha.boundingBox();
+  await assertDestinationFillParity();
   expect(narrowAlpha.x + narrowAlpha.width).toBeLessThanOrEqual(
     narrowViewport.x + narrowViewport.width,
   );
@@ -225,21 +308,29 @@ test("placeholder destinations retain companion layout across navigation and res
       .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
       .toBe(page.viewportSize().width);
   };
+  const selectChannel = async (name) => {
+    const show = page.getByRole("button", {
+      name: "Show navigation",
+      exact: true,
+    });
+    if (await show.isVisible()) await show.click();
+    await sidebar.getByRole("button", { name, exact: true }).click();
+  };
   for (const width of [1440, 900, 600]) {
     await page.setViewportSize({ width, height: 950 });
-    await sidebar.getByRole("button", { name: "Inbox", exact: true }).click();
+    await selectChannel("Inbox");
     await launcher.click();
     await checkGeometry(width <= 1000);
-    await sidebar.getByRole("button", { name: "Bestie", exact: true }).click();
+    await selectChannel("Bestie");
     await expect(
       conversation.getByRole("heading", { name: "Bestie", exact: true }),
     ).toBeVisible();
     await checkGeometry(width <= 1000);
     await launcher.click();
     await expect(companion).not.toBeVisible();
-    await sidebar.getByRole("button", { name: "Alpha", exact: true }).click();
+    await selectChannel("Alpha");
     await launcher.click();
-    await sidebar.getByRole("button", { name: "Inbox", exact: true }).click();
+    await selectChannel("Inbox");
     await checkGeometry(width <= 1000);
     await launcher.click();
   }
@@ -296,3 +387,95 @@ test("channel name fades follow renames without resizing the sidebar", async ({
     else await expect(renamed).not.toHaveAttribute("data-overflowing");
   }
 });
+
+const fillSidebar = test.extend({
+  dmLabels: true,
+  sessionChannels: ["alpha"],
+  sessionParents: { alpha: "11111111-1111-4111-8111-111111111111" },
+});
+
+// Fill lives on the channel wrapper pseudo-element but directly on ordinary and
+// nested navigation rows. Real browser geometry verifies those paints align.
+fillSidebar(
+  "all sidenav row fills share visible inline bounds",
+  async ({ page, app }) => {
+    await page.goto(app.origin);
+    const sidebar = page.getByRole("complementary", {
+      name: "Channel sidebar",
+    });
+    const list = page.getByRole("navigation", { name: "Subscribed channels" });
+    const rows = {
+      destination: sidebar.getByRole("button", { name: "Inbox", exact: true }),
+      channel: sidebar.getByRole("button", { name: "Beta", exact: true }),
+      dm: sidebar.getByRole("button", { name: "Alice Fixture", exact: true }),
+      session: sidebar.getByRole("button", { name: /Alpha, session in/ }),
+    };
+    const fillBounds = (row) =>
+      row.evaluate((button) => {
+        const wrapper = button.closest("[data-channel-sidebar-row]");
+        const target = wrapper ?? button;
+        const rect = target.getBoundingClientRect();
+        const style = getComputedStyle(
+          target,
+          wrapper ? "::before" : undefined,
+        );
+        const inset = (value) => {
+          const parsed = Number.parseFloat(value);
+          return Number.isFinite(parsed) ? parsed : 0;
+        };
+        return {
+          left: rect.left + inset(style.left),
+          right: rect.right - inset(style.right),
+          containerLeft: rect.left,
+          containerRight: rect.right,
+        };
+      });
+    for (const width of [1440, 720]) {
+      await page.setViewportSize({ width, height: 900 });
+      // Resizing is asynchronous in WebKit; assert the complete applied layout.
+      await expect(async () => {
+        const bounds = Object.fromEntries(
+          await Promise.all(
+            Object.entries(rows).map(async ([key, row]) => {
+              await expect(row).toBeVisible();
+              return [key, await fillBounds(row)];
+            }),
+          ),
+        );
+        expect(
+          bounds.destination.left - bounds.destination.containerLeft,
+        ).toBeCloseTo(0, 0);
+        expect(
+          bounds.destination.containerRight - bounds.destination.right,
+        ).toBeCloseTo(0, 0);
+        const listBounds = await list.evaluate((element) => {
+          const rect = element.getBoundingClientRect();
+          return { left: rect.left, right: rect.right };
+        });
+        expect(bounds.destination.left - listBounds.left).toBeCloseTo(4, 0);
+        expect(
+          listBounds.right - bounds.destination.right,
+        ).toBeGreaterThanOrEqual(4);
+        for (const bound of Object.values(bounds)) {
+          expect(bound.left).toBeCloseTo(bounds.destination.left, 0);
+          expect(bound.right).toBeCloseTo(bounds.destination.right, 0);
+        }
+      }).toPass({ timeout: 10_000 });
+    }
+
+    await page
+      .getByRole("button", { name: "Your profile", exact: true })
+      .click();
+    await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
+    const settings = page.getByRole("complementary", {
+      name: "Settings sidebar",
+    });
+    const back = settings.getByRole("button", { name: "Back", exact: true });
+    const profile = settings.getByRole("button", {
+      name: "Profile",
+      exact: true,
+    });
+    await expect(profile).toHaveAttribute("aria-current", "page");
+    expect(await fillBounds(profile)).toEqual(await fillBounds(back));
+  },
+);

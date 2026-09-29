@@ -14,8 +14,8 @@
 .row::before {
   position: absolute;
   z-index: 0;
-  inset: 0;
-  right: var(--channel-row-fill-end, 0);
+  inset-block: 0;
+  inset-inline: var(--channel-row-fill-start, 0) var(--channel-row-fill-end, 0);
   border-radius: inherit;
   background: transparent;
   content: "";
@@ -41,6 +41,12 @@
   flex: 1;
   min-width: 0;
 }
+.row .select [data-variant="row"] {
+  width: 100%;
+  margin-inline: 0;
+  padding-inline: var(--space-2)
+    calc(var(--channel-row-fill-end, 0%) + var(--space-1) + var(--space-half));
+}
 .select [class~="navigation-item-label"],
 .sessions [class~="navigation-item-label"] {
   text-overflow: clip;
@@ -63,18 +69,26 @@
 .iconSpace[data-dm-visual] {
   margin-inline-end: var(--space-half);
 }
+.select [class~="navigation-item-trailing"] {
+  display: flex;
+  align-items: center;
+}
 .badges {
   display: inline-flex;
   align-items: center;
-  translate: -12px -1px;
+  padding-inline-end: var(--space-1);
   gap: var(--space-2);
 }
 .nameContent {
-  --user-status-emoji-size: 15px;
+  --user-status-emoji-size: var(--sidenav-emoji-size);
   display: flex;
   align-items: center;
   gap: var(--space-2);
   min-width: 0;
+}
+.nameContent[data-name-accessory] {
+  width: fit-content;
+  max-width: 100%;
 }
 .label,
 .childLabel {
@@ -86,18 +100,10 @@
 .label:only-child {
   width: 100%;
 }
-.label[data-overflowing],
-.childLabel[data-overflowing] {
-  -webkit-mask-image: linear-gradient(
-    to right,
-    black calc(100% - var(--space-5)),
-    transparent
-  );
-  mask-image: linear-gradient(
-    to right,
-    black calc(100% - var(--space-5)),
-    transparent
-  );
+.nameContent[data-name-accessory] .label {
+  width: auto;
+  max-width: 100%;
+  flex: 0 1 auto;
 }
 .row:has([data-channel-unread], [data-channel-activity]) .label {
   color: var(--text-navigation-unread);

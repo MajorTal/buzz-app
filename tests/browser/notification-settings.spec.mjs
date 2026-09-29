@@ -1,3 +1,4 @@
+import { selectSettingsSection } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 
 test.use({ historyCounts: { alpha: 0, beta: 0 } });
@@ -30,7 +31,7 @@ test("Notifications keeps settings separated and button labels contained at supp
     'section[aria-labelledby="notification-settings-title"]',
   );
   for (const scale of [100, 200]) {
-    await button(page, "Appearance").click();
+    await selectSettingsSection(page, "Appearance");
     if (scale === 200) {
       for (let i = 0; i < 10; i++) {
         await page.getByRole("button", { name: "Increase text size" }).click();
@@ -39,9 +40,7 @@ test("Notifications keeps settings separated and button labels contained at supp
     await expect(page.getByRole("status", { name: "Text size" })).toHaveText(
       `${scale}%`,
     );
-    await page
-      .getByRole("button", { name: "Notifications", exact: true })
-      .click();
+    await selectSettingsSection(page, "Notifications");
     await expect(
       section.getByRole("button", { name: "Allow notifications" }),
     ).toBeVisible();

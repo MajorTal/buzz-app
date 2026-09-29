@@ -36,7 +36,7 @@ test("real Settings keys respect dialogs and modifiers, focus main, and preserve
   await page.keyboard.press(`${modifier}+,`);
   await expect(page.getByRole("dialog", { name: "Search Buzz" })).toBeVisible();
   await expect(
-    page.getByRole("heading", {
+    page.getByRole("region", {
       name: "Settings",
       exact: true,
       includeHidden: true,
@@ -50,7 +50,7 @@ test("real Settings keys respect dialogs and modifiers, focus main, and preserve
   await composer.focus();
   await page.keyboard.press(`${modifier}+,`);
   await expect(
-    page.getByRole("heading", { name: "Settings", exact: true }),
+    page.getByRole("region", { name: "Settings", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("main")).toBeFocused();
   await openPage(page, "Messages");
@@ -273,7 +273,7 @@ test("a shadow-root modal blocks Settings and plugin bindings but allows text zo
   await page.keyboard.press(`${modifier}+,`);
   await expect(control).toBeFocused();
   await expect(
-    page.getByRole("heading", {
+    page.getByRole("region", {
       name: "Settings",
       exact: true,
       includeHidden: true,

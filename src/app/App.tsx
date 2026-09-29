@@ -9,6 +9,7 @@ import { useEffect, useSyncExternalStore } from "react";
 import { registerAppShortcuts } from "./shortcuts";
 import type { AppServices } from "./services";
 import { Settings } from "./Settings";
+import { SettingsSidebar } from "./SettingsSidebar";
 import { RecoveryScreen } from "./RecoveryScreen";
 import { PageView } from "../features/pages/PageView";
 import { useAppNavigation } from "./navigation";
@@ -87,20 +88,49 @@ function ConnectedApp({ services }: { services: AppServices }) {
     <ToastProvider>
       <ChannelNavigationProvider relay={services.relay}>
         <AppShell
-          sidebar={() => (
-            <ChannelSidebar
-              relay={services.relay}
-              navigator={services.navigation}
-              providers={services.channelTemplates}
-              target={route.target}
-              sessionsEnabled={route.pages.some(
-                (page) => page.pluginId === "buzz.sessions",
-              )}
-              agentsEnabled={route.pages.some(
-                (page) => page.key === "buzz.agents/agents",
-              )}
-            />
-          )}
+          sidebar={() =>
+            settings ? (
+              <SettingsSidebar
+                cards={services.settingsCards}
+                communities={services.communities}
+                {...(route.target.kind === "settings" && route.target.section
+                  ? { selected: route.target.section }
+                  : {})}
+                onBack={route.leaveSettings}
+                onSection={(section) => {
+                  const client = services.communities.snapshot();
+                  void services.navigation.open({
+                    version: 1,
+                    kind: "settings",
+                    section,
+                    ...(client.viewer && client.selected
+                      ? {
+                          scope: {
+                            viewer: client.viewer,
+                            communityOrigin: communityDestination(
+                              client.selected,
+                            ).url,
+                          },
+                        }
+                      : { scope: null }),
+                  });
+                }}
+              />
+            ) : (
+              <ChannelSidebar
+                relay={services.relay}
+                navigator={services.navigation}
+                providers={services.channelTemplates}
+                target={route.target}
+                sessionsEnabled={route.pages.some(
+                  (page) => page.pluginId === "buzz.sessions",
+                )}
+                agentsEnabled={route.pages.some(
+                  (page) => page.key === "buzz.agents/agents",
+                )}
+              />
+            )
+          }
           navigationControls={
             <NavigationControls navigation={services.navigation} />
           }
@@ -124,6 +154,7 @@ function ConnectedApp({ services }: { services: AppServices }) {
           companion={pageOwnsCompanion ? undefined : companion}
           pages={startup === "ready" ? route.pages : []}
           selected={route.selected}
+          navigationAttempt={route.state.attempt.id}
           onSelect={select}
           tone={presentation.tone}
           workspace={startup === "ready" && route.page?.layout === "workspace"}
@@ -163,6 +194,7 @@ function ConnectedApp({ services }: { services: AppServices }) {
               notifications={services.notifications}
               agentControl={services.agentControl}
               navigation={route.request}
+              navigationPane
               onSection={(section) => {
                 const client = services.communities.snapshot();
                 void services.navigation.open({

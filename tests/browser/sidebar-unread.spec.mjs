@@ -470,13 +470,49 @@ test("session changes discard the previous sidebar targets and manual unread sti
   }
 });
 
-test("priority dots use semantic primary color in both modes", async ({
+test("priority dots stay aligned and use semantic primary color in both modes", async ({
   page,
   app,
-}) => {
+}, info) => {
   await open(page, app);
   const dot = row(page, "dm-030").locator("[data-channel-priority]");
   await expect(dot).toBeAttached();
+  // Browser layout must center the visible dot, reserve label space, and keep
+  // it inside the inset row highlight at both supported sidebar widths.
+  for (const width of [260, 220]) {
+    await sidebar(page).evaluate((element, width) => {
+      element.closest(".shell-sidebar").style.width = `${width}px`;
+    }, width);
+    await expect
+      .poll(() =>
+        dot.evaluate((element) => {
+          const button = element.closest("button[data-channel-id]");
+          const row = element.closest("[data-channel-sidebar-row]");
+          const marker = element.getBoundingClientRect();
+          const bounds = button.getBoundingClientRect();
+          const fill = getComputedStyle(row, "::before");
+          const label = button
+            .querySelector(".navigation-item-label")
+            .getBoundingClientRect();
+          return {
+            centered:
+              Math.abs(
+                marker.top + marker.height / 2 - bounds.top - bounds.height / 2,
+              ) < 0.5,
+            inset:
+              row.getBoundingClientRect().right -
+                Number.parseFloat(fill.right) -
+                marker.right ===
+              10,
+            separated: marker.left - label.right >= 6,
+          };
+        }),
+      )
+      .toEqual({ centered: true, inset: true, separated: true });
+    await row(page, "dm-030").screenshot({
+      path: info.outputPath(`priority-dot-${width}.png`),
+    });
+  }
   for (const mode of ["light", "dark"]) {
     await page.evaluate((mode) => {
       document.documentElement.dataset.colorMode = mode;

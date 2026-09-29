@@ -1,3 +1,4 @@
+import { FadingLabel } from "./FadingLabel";
 import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import {
@@ -5,58 +6,9 @@ import {
   CaretRightIcon,
   XIcon,
 } from "../../shared/design-system/icons/index";
-import {
-  useId,
-  useLayoutEffect,
-  useRef,
-  useState,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+import { useId, type ReactElement, type ReactNode } from "react";
 import type { ChannelSummary } from "../../features/relay/contracts";
 import styles from "./ChannelSidebarRow.module.css";
-
-function FadingLabel({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string | undefined;
-}) {
-  const label = useRef<HTMLSpanElement>(null);
-  const [overflowing, setOverflowing] = useState(false);
-  useLayoutEffect(() => {
-    const element = label.current;
-    if (!element) return;
-    const measure = () =>
-      setOverflowing(element.scrollWidth > element.clientWidth);
-    measure();
-    const mutations = new MutationObserver(measure);
-    mutations.observe(element, {
-      characterData: true,
-      childList: true,
-      subtree: true,
-    });
-    const observer =
-      typeof ResizeObserver === "undefined"
-        ? undefined
-        : new ResizeObserver(measure);
-    observer?.observe(element);
-    return () => {
-      mutations.disconnect();
-      observer?.disconnect();
-    };
-  }, []);
-  return (
-    <span
-      ref={label}
-      className={className}
-      data-overflowing={overflowing || undefined}
-    >
-      {children}
-    </span>
-  );
-}
 
 export function ChannelSidebarRow({
   channel,
@@ -114,7 +66,10 @@ export function ChannelSidebarRow({
       onClick={() => onSelect(channel.id)}
       selected={selected === channel.id && !draftSelected}
       label={
-        <span className={styles.nameContent}>
+        <span
+          className={styles.nameContent}
+          data-name-accessory={nameAccessory ? "" : undefined}
+        >
           <FadingLabel className={styles.label}>{channel.name}</FadingLabel>
           {nameAccessory}
         </span>

@@ -142,6 +142,10 @@ test("channel sidebar resizes from the full gutter and persists", async ({
     .poll(async () => (await sidebar.boundingBox())?.width)
     .toBeCloseTo(260, 0);
 
+  await handle.press("Home");
+  await expect
+    .poll(async () => (await sidebar.boundingBox())?.width)
+    .toBeCloseTo(220, 0);
   await handle.press("End");
   await expect
     .poll(async () => (await sidebar.boundingBox())?.width)
@@ -496,7 +500,10 @@ for (const destination of [
           .getByRole("menuitem", { name: "Settings", exact: true })
           .click();
         await expect(
-          page.getByRole("heading", { name: "Settings", exact: true }),
+          page.getByRole("complementary", {
+            name: "Settings sidebar",
+            exact: true,
+          }),
         ).toBeVisible();
       } else {
         await openPage(
@@ -504,12 +511,26 @@ for (const destination of [
           destination === "Back/Forward" ? "Projects" : destination,
         );
       }
-      await expect(sidebar).toBeVisible();
-      expect(await node.evaluate((element) => element.isConnected)).toBe(true);
+      if (destination === "Settings") {
+        await expect(sidebar).toHaveCount(0);
+        expect(await node.evaluate((element) => element.isConnected)).toBe(
+          false,
+        );
+      } else {
+        await expect(sidebar).toBeVisible();
+        expect(await node.evaluate((element) => element.isConnected)).toBe(
+          true,
+        );
+      }
       await expect(
         page.getByRole("region", { name: "Channel message history" }),
       ).toHaveCount(0);
       if (destination === "Back/Forward") await button(page, "Go back").click();
+      else if (destination === "Settings")
+        await page
+          .getByRole("complementary", { name: "Settings sidebar" })
+          .getByRole("button", { name: "Back", exact: true })
+          .click();
       else await openPage(page, "Messages");
     };
     await group.locator("summary").click();

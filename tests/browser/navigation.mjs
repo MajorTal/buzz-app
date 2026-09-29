@@ -50,3 +50,16 @@ export async function selectPage(page, name, { connected = true } = {}) {
   await input.press("Enter");
   await expect(dialog).not.toBeVisible();
 }
+
+export async function selectSettingsSection(page, name) {
+  const show = page.getByRole("button", {
+    name: "Show navigation",
+    exact: true,
+  });
+  if (await show.isVisible()) await show.click();
+  await page
+    .getByRole("complementary", { name: "Settings sidebar", exact: true })
+    .getByRole("button", { name, exact: true })
+    .click();
+  await expect(page.getByRole("region", { name, exact: true })).toBeVisible();
+}

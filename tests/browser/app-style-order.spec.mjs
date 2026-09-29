@@ -23,6 +23,10 @@ test("app startup preserves shared shell control styling", async ({ page }) => {
     }, dark);
     for (const width of [390, 820, 1440]) {
       await page.setViewportSize({ width, height: 950 });
+      if (width <= 650)
+        await page
+          .getByRole("button", { name: "Show navigation", exact: true })
+          .click();
       await expect(inbox).toHaveCSS("border-top-width", "0px");
       await expect(agents).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
       const controls = [
@@ -48,6 +52,10 @@ test("app startup preserves shared shell control styling", async ({ page }) => {
       await search.hover();
       await expect(search).toHaveCSS("background-color", glassHover);
       await page.mouse.move(0, 0);
+      if (width <= 650)
+        await page
+          .getByRole("button", { name: "Hide navigation", exact: true })
+          .click();
     }
   }
 });

@@ -286,6 +286,11 @@ test("channel menu mute/read persist without selecting the row; failed mute rema
       .getByRole("switch", { name: "Enable Sessions" });
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", String(enabled));
+    await page
+      .getByRole("complementary", { name: "Settings sidebar" })
+      .getByRole("button", { name: "Back", exact: true })
+      .click();
+    await expect(beta).toBeVisible();
   };
   await toggleSessions(false);
   await beta.click({ button: "right" });

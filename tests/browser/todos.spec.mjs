@@ -1,4 +1,4 @@
-import { openPage } from "./navigation.mjs";
+import { openPage, selectSettingsSection } from "./navigation.mjs";
 import { npubEncode } from "nostr-tools/nip19";
 import { verifyEvent } from "nostr-tools";
 import { test, expect } from "./fixture.mjs";
@@ -52,7 +52,7 @@ test("opt-in Todos saves ordinary Canvas and disabling leaves it editable", asyn
   const plugins = async () => {
     await button("Your profile").click();
     await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
-    await button("Plugins").click();
+    await selectSettingsSection(page, "Plugins");
   };
   const messages = async () => {
     const disclosure = button("Show navigation");

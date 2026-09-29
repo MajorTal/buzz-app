@@ -74,15 +74,21 @@ test("group icons resolve custom media without overlapping labels, and the creat
       const icon = element.querySelector("[data-sidebar-group-icon]");
       const title = document.createRange();
       title.selectNodeContents(icon.nextSibling);
+      const iconBounds = icon.getBoundingClientRect();
+      const summaryBounds = element.getBoundingClientRect();
       return {
-        gap:
-          title.getBoundingClientRect().left -
-          icon.getBoundingClientRect().right,
-        height: element.getBoundingClientRect().height,
+        gap: title.getBoundingClientRect().left - iconBounds.right,
+        height: summaryBounds.height,
+        iconTop: iconBounds.top,
+        iconBottom: iconBounds.bottom,
+        summaryTop: summaryBounds.top,
+        summaryBottom: summaryBounds.bottom,
       };
     });
-    expect(layout.gap).toBe(4);
+    expect(layout.gap).toBe(8);
     expect(layout.height).toBe(28);
+    expect(layout.iconTop).toBeGreaterThanOrEqual(layout.summaryTop);
+    expect(layout.iconBottom).toBeLessThanOrEqual(layout.summaryBottom);
   }
   await page
     .locator('[data-sidebar-section="group:laptop"] summary')
@@ -184,4 +190,108 @@ test("group icons resolve custom media without overlapping labels, and the creat
   });
   await page.keyboard.press("Escape");
   await expect(row).toBeFocused();
+});
+
+// Real browser layout owns overflow detection, fading, and control alignment.
+test("section labels fade on overflow and recover when widened", async ({
+  page,
+  app,
+}, info) => {
+  await page.route("**/media?*", (route) =>
+    route.fulfill({
+      contentType: "image/svg+xml",
+      body: '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16"><rect width="16" height="16" fill="blue"/></svg>',
+    }),
+  );
+  await open(page, app);
+  const sidebar = page.getByRole("complementary", {
+    name: "Channel sidebar",
+    exact: true,
+  });
+  const row = sidebar.locator('[data-channel-id="beta"]');
+  await row.click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Move channel", exact: true })
+    .hover();
+  await page
+    .getByRole("menuitem", { name: "Create new…", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Create new section" });
+  const name = "Interface gang collaboration";
+  await dialog.getByRole("textbox", { name: "Section name" }).fill(name);
+  await dialog.getByRole("button", { name: "Create and move" }).click();
+  const summary = sidebar.locator("summary").filter({ hasText: name });
+  await expect(summary).toBeVisible();
+  await sidebar.evaluate((element) => {
+    element.closest(".shell-sidebar").style.width = "220px";
+  });
+  await summary.hover();
+  await expect
+    .poll(() =>
+      summary.evaluate((element) => {
+        const title = element.querySelector("span > span");
+        const label = title.parentElement;
+        const rect = title.getBoundingClientRect();
+        const labelRect = label.getBoundingClientRect();
+        const actions = element
+          .closest("details")
+          .nextElementSibling.getBoundingClientRect();
+        return {
+          wrapped:
+            rect.height > Number.parseFloat(getComputedStyle(title).lineHeight),
+          fits: title.scrollWidth <= title.clientWidth,
+          visible: rect.left >= labelRect.left && rect.right <= labelRect.right,
+          clearOfActions: rect.right <= actions.left,
+        };
+      }),
+    )
+    .toEqual({
+      wrapped: false,
+      fits: false,
+      visible: true,
+      clearOfActions: true,
+    });
+  const title = summary.locator("span > span");
+  await expect(title).toHaveAttribute("data-overflowing", "true");
+  await expect(title).toHaveCSS("mask-image", /linear-gradient/);
+  for (const width of [220, 260]) {
+    await sidebar.evaluate((element, width) => {
+      element.closest(".shell-sidebar").style.width = `${width}px`;
+    }, width);
+    await expect
+      .poll(() =>
+        summary.evaluate((element) => {
+          const bounds = element.getBoundingClientRect();
+          const center = bounds.top + bounds.height / 2;
+          const chevron = element.lastElementChild.getBoundingClientRect();
+          const buttons = [
+            ...element
+              .closest("details")
+              .nextElementSibling.querySelectorAll("button"),
+          ].map((button) => button.getBoundingClientRect());
+          return {
+            centered: [chevron, ...buttons].every(
+              (rect) => Math.abs(rect.top + rect.height / 2 - center) < 0.5,
+            ),
+            spacing:
+              buttons[1].left +
+              buttons[1].width / 2 -
+              buttons[0].left -
+              buttons[0].width / 2,
+            separateTargets:
+              chevron.right <= buttons[0].left &&
+              buttons[0].right <= buttons[1].left,
+          };
+        }),
+      )
+      .toEqual({ centered: true, spacing: 28, separateTargets: true });
+    await summary.screenshot({
+      path: info.outputPath(`section-label-${width}.png`),
+    });
+  }
+  await sidebar.evaluate((element) => {
+    element.closest(".shell-sidebar").style.width = "520px";
+  });
+  await expect(title).not.toHaveAttribute("data-overflowing");
+  await expect(title).toHaveCSS("mask-image", "none");
 });

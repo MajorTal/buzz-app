@@ -7,7 +7,7 @@ test.use({
   historyCounts: { alpha: 1, beta: 1 },
 });
 
-test("DM identity cues remain exactly 22px at normal and narrow sidebar widths", async ({
+test("DM identity cues remain exactly 22px at normal and minimum sidebar widths", async ({
   page,
   app,
 }, info) => {
@@ -36,7 +36,7 @@ test("DM identity cues remain exactly 22px at normal and narrow sidebar widths",
     const sidebar = document.querySelector(".shell-sidebar");
     if (!(sidebar instanceof HTMLElement))
       throw new Error("Missing channel sidebar");
-    sidebar.style.width = "124px";
+    sidebar.style.width = "220px";
   });
   await assertIdentitySize(oneToOne);
   await assertIdentitySize(group);

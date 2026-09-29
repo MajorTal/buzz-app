@@ -1,3 +1,4 @@
+import { selectSettingsSection } from "./navigation.mjs";
 import { openPage, pageChoices } from "./navigation.mjs";
 import { readFile } from "node:fs/promises";
 import { test, expect } from "./fixture.mjs";
@@ -8,7 +9,7 @@ async function openPlugins(page, origin) {
   await page.goto(origin);
   await button(page, "Your profile").click();
   await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
-  await button(page, "Plugins").click();
+  await selectSettingsSection(page, "Plugins");
 }
 // Native IPC is the boundary fixture; Settings -> manager -> platform adapter are production.
 async function nativeImports(page, samples = []) {
@@ -204,7 +205,7 @@ test("Settings text buttons contain enlarged labels without resizing icon button
       .toEqual([]);
   };
   for (const scale of [100, 200]) {
-    await button(page, "Appearance").click();
+    await selectSettingsSection(page, "Appearance");
     if (scale === 200) {
       for (let i = 0; i < 10; i++)
         await button(page, "Increase text size").click();
@@ -218,7 +219,7 @@ test("Settings text buttons contain enlarged labels without resizing icon button
       [1280, "Light"],
     ]) {
       await page.setViewportSize({ width, height: 900 });
-      await button(page, "Appearance").click();
+      await selectSettingsSection(page, "Appearance");
       const appearance = page.getByRole("region", {
         name: "Appearance",
         exact: true,
@@ -266,7 +267,7 @@ test("Settings text buttons contain enlarged labels without resizing icon button
             ),
         )
         .not.toContain(false);
-      await button(page, "Plugins").click();
+      await selectSettingsSection(page, "Plugins");
       const plugins = page.getByRole("region", {
         name: "Plugins",
         exact: true,
@@ -343,8 +344,8 @@ test("folder/Git preview selects the exact subfolder, installs disabled and warn
   await expect(page.getByRole("radio")).toHaveCount(2);
   await expect(button(page, "Install plugin")).toHaveCount(0);
   await page.getByRole("radio", { name: /Example two/ }).check();
-  await button(page, "Profile").click();
-  await button(page, "Plugins").click();
+  await selectSettingsSection(page, "Profile");
+  await selectSettingsSection(page, "Plugins");
   await expect(page.getByRole("radio", { name: /Example two/ })).toBeChecked();
   await expect(
     page.getByText(
@@ -469,7 +470,7 @@ test("checked-in local examples activate and work independently", async ({
   );
   await button(page, "Your profile").click();
   await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
-  await button(page, "Plugins").click();
+  await selectSettingsSection(page, "Plugins");
   await page.getByRole("switch", { name: "Enable Counter playground" }).click();
   const navigation = await pageChoices(page);
   await expect(

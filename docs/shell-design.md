@@ -31,27 +31,30 @@ semantic tokens, UI authoring rules and the local component reference.
   Add recognized page presentation here without changing plugin contracts.
 - `AppShell.tsx` owns the 56px header, vertical page navigation, contributed panel
   launchers, Settings access, community rail, and page frames. Page navigation sits
-  above the persistent channel list on every page, using its saved sidebar width
-  and resize behavior. `App.tsx` composes `features/channel-navigation/ChannelSidebar`
+  above the channel list outside Settings, using its saved sidebar width
+  and resize behavior. Settings replaces that card with `SettingsSidebar.tsx`,
+  preserving the same width (220px minimum) and returning to the previous view
+  with Back. `App.tsx` composes `features/channel-navigation/ChannelSidebar`
   through an ordinary render prop; there is no portal or plugin contract expansion.
   Sidebar session state resets on scope/connection generation without remounting
   unrelated pages. Its own error boundary keeps page navigation and Settings usable.
   Page buttons use shared navigation rows and focus the main region on selection.
   A scrollable page list leaves room for channels at short heights.
-  At widths up to 650px, Settings collapses this navigation behind the header’s
+  At widths up to 650px, every page collapses navigation behind the header’s
   Show navigation button to preserve readable content at 200% text size. The
-  disclosure overlays Settings, supports Escape, and keeps sidebar state mounted.
-  Other pages and desktop Settings retain the visible sidebar.
+  220px disclosure overlays content, supports Escape, and keeps sidebar state
+  mounted. A navigation selection closes the phone drawer and hands focus to the
+  main content; this includes conversation and Settings-section selections.
+  Desktop layouts retain the visible sidebar and saved width.
   The header keeps history and account/search actions, with no second navigation row.
   Full-height pages get a 16px outer gutter (8px on narrow screens) and own their
   card surfaces. The shell adds no white backing behind them. Document pages
   scroll inside the remaining viewport.
-- `Settings.tsx` presents Profile, Plugins and Appearance as selectable sections in a left
-  sidebar, opening on Profile. When the content area is narrow (including beside
-  a companion panel), the section buttons form a compact row above the content.
-  Navigation and details scroll together inside the solid container at narrow
-  widths, so wrapped navigation cannot consume the detail pane's height. Wide
-  layouts keep independently scrolling navigation and details.
+- `SettingsSidebar.tsx` presents community and app sections in the shell's
+  replacement sidebar. `Settings.tsx` renders the selected detail pane and retains
+  drafts across section changes. The detail pane scrolls independently and keeps
+  an accessible level-one Settings heading. Standalone Settings fixtures retain
+  their embedded navigation, which becomes a compact row at narrow widths.
   Native buttons use normal Tab/Enter navigation and expose the current section.
   `ProfileSettings.tsx` edits the local default inline with Save and Cancel,
   sharing fields and validation with community setup. Cancel restores the saved

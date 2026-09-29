@@ -1,3 +1,4 @@
+import { FadingLabel } from "./FadingLabel";
 import { useId, useState, type ReactNode } from "react";
 import {
   MenuIcon,
@@ -95,7 +96,7 @@ export function SidebarSection({
               {icon && session && (
                 <SidebarGroupIcon icon={icon} session={session} />
               )}
-              {title}
+              <FadingLabel className={styles.sectionTitle}>{title}</FadingLabel>
             </span>
             <span className={`${styles.sidebarIcon} ${styles.sectionChevron}`}>
               <CaretDownIcon weight="bold" size={15} />

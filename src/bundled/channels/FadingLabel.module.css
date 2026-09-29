@@ -1,0 +1,12 @@
+.label[data-overflowing] {
+  -webkit-mask-image: linear-gradient(
+    to right,
+    black calc(100% - var(--space-5)),
+    transparent
+  );
+  mask-image: linear-gradient(
+    to right,
+    black calc(100% - var(--space-5)),
+    transparent
+  );
+}

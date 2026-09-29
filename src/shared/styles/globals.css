@@ -217,7 +217,8 @@
   .shell-sidebar-default {
     @apply flex min-h-0 shrink-0;
     width: 260px;
-    max-width: max(124px, calc(100% - 336px));
+    min-width: 220px;
+    max-width: max(220px, calc(100% - 336px));
   }
   .shell-sidebar-default {
     margin-right: var(--space-panel-gap);
@@ -237,8 +238,8 @@
   @media (max-width: 650px) {
     .shell-sidebar,
     .shell-sidebar-default {
-      width: 124px;
-      max-width: 124px;
+      width: 220px;
+      max-width: 220px;
     }
     .shell-sidebar-default {
       margin-right: var(--space-1);
@@ -246,21 +247,30 @@
     .shell-navigation-toggle {
       display: inline-flex;
     }
-    .shell-body-settings .shell-navigation {
+    .shell-navigation {
       display: none;
     }
-    .shell-body-settings .shell-navigation[data-expanded="true"] {
+    .shell-navigation[data-expanded="true"] {
       @apply absolute inset-y-0 left-2 z-20 flex pb-2;
       max-width: calc(100% - 16px);
     }
-    .shell-body-settings .shell-navigation .shell-sidebar,
-    .shell-body-settings .shell-navigation .shell-sidebar-default {
-      width: 260px;
-      max-width: 100%;
+    .shell-navigation .shell-sidebar,
+    .shell-navigation .shell-sidebar-default {
+      max-width: 220px;
       margin-right: 0;
     }
-    .shell-body-settings .shell-navigation > hr {
+    .shell-navigation > hr {
       display: none;
+    }
+  }
+  @media (max-width: 400px) {
+    .shell-header,
+    .shell-actions,
+    .shell-communities > nav {
+      gap: 0;
+    }
+    .shell-communities > nav {
+      margin-inline-end: 0;
     }
   }
   .muted {

@@ -20,6 +20,7 @@ const titleBarDragProps = macDesktop ? macTitleBarDragHandlers : {};
 export function AppShell({
   pages,
   selected,
+  navigationAttempt,
   onSelect,
   tone,
   workspace,
@@ -35,6 +36,7 @@ export function AppShell({
 }: {
   pages: readonly RegisteredPage[];
   selected: string;
+  navigationAttempt: string;
   onSelect: (key: string) => void;
   tone: string;
   workspace?: boolean;
@@ -51,9 +53,13 @@ export function AppShell({
   const fillsWorkspace = workspace || selected === "settings";
   const [navigationOpen, setNavigationOpen] = useState(false);
   const navigationToggle = useRef<HTMLButtonElement>(null);
+  // biome-ignore lint/correctness/useExhaustiveDependencies: Only a new navigation attempt closes the drawer; opening the disclosure must not retrigger this effect.
   useEffect(() => {
-    if (selected !== "settings") setNavigationOpen(false);
-  }, [selected]);
+    if (navigationOpen && navigationToggle.current?.getClientRects().length) {
+      document.getElementById("main-content")?.focus({ preventScroll: true });
+    }
+    setNavigationOpen(false);
+  }, [navigationAttempt]);
   const pageNavigation = (
     <nav aria-label="Pages" className="shell-pages">
       {orderPages(pages).map((page) => {
@@ -104,20 +110,18 @@ export function AppShell({
           {...titleBarDragProps}
         >
           {navigationControls}
-          {selected === "settings" && (
-            <span className="shell-navigation-toggle">
-              <IconButton
-                ref={navigationToggle}
-                aria-label={
-                  navigationOpen ? "Hide navigation" : "Show navigation"
-                }
-                aria-expanded={navigationOpen}
-                aria-controls="shell-navigation"
-                onClick={() => setNavigationOpen((open) => !open)}
-                icon={<SidebarIcon aria-hidden="true" size={20} />}
-              />
-            </span>
-          )}
+          <span className="shell-navigation-toggle">
+            <IconButton
+              ref={navigationToggle}
+              aria-label={
+                navigationOpen ? "Hide navigation" : "Show navigation"
+              }
+              aria-expanded={navigationOpen}
+              aria-controls="shell-navigation"
+              onClick={() => setNavigationOpen((open) => !open)}
+              icon={<SidebarIcon aria-hidden="true" size={20} />}
+            />
+          </span>
         </div>
         <div
           className="shell-actions"

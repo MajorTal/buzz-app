@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react";
 import { readView, writeView } from "../../shared/view-state";
 
 export const CHANNEL_SIDEBAR_DEFAULT_WIDTH = 260;
-export const CHANNEL_SIDEBAR_MIN_WIDTH = 124;
+export const CHANNEL_SIDEBAR_MIN_WIDTH = 220;
 export const CHANNEL_SIDEBAR_MAX_WIDTH = 520;
 
 export function clampChannelSidebarWidth(width: number) {
@@ -17,6 +17,9 @@ type SidebarView = {
   scrollTop: number;
   width: number;
 };
+
+// Preserve explicit resize intent across route remounts when storage is unavailable.
+const widths = new Map<string, number>();
 
 function restore(scope: string): SidebarView {
   const raw = readView<unknown>(scope, "channel-sidebar", null);
@@ -33,13 +36,18 @@ function restore(scope: string): SidebarView {
         ? saved.scrollTop
         : 0,
     width:
-      typeof saved.width === "number" && Number.isFinite(saved.width)
+      widths.get(scope) ??
+      (typeof saved.width === "number" && Number.isFinite(saved.width)
         ? clampChannelSidebarWidth(saved.width)
-        : CHANNEL_SIDEBAR_DEFAULT_WIDTH,
+        : CHANNEL_SIDEBAR_DEFAULT_WIDTH),
   };
 }
 
 /** Scoped to the ready community/viewer workspace; no roster or message cache. */
+export function readChannelSidebarWidth(scope: string): number {
+  return restore(scope).width;
+}
+
 export function useSidebarView(scope: string, ready: boolean) {
   const [view, setView] = useState(() => restore(scope));
   const intent = useRef(view);
@@ -107,6 +115,7 @@ export function useSidebarView(scope: string, ready: boolean) {
     setWidth: (width: number) => {
       const next = clampChannelSidebarWidth(width);
       if (intent.current.width === next) return;
+      widths.set(scope, next);
       update({ ...intent.current, width: next });
       writeView(scope, "channel-sidebar", { ...intent.current, width: next });
     },

@@ -549,6 +549,8 @@ html[data-keyboard-navigation] .attachmentImage:focus-visible {
   background: var(--text-standard);
 }
 .messageBody [data-thread-summary] {
+  align-self: flex-start;
+  margin-inline-start: calc(-1 * var(--space-1));
   font-size: var(--text-caption);
   line-height: var(--text-caption--line-height);
   letter-spacing: var(--text-caption--letter-spacing);

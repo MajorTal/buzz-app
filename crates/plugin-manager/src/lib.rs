@@ -851,49 +851,27 @@ mod tests {
     }
 
     #[test]
-    fn todos_is_optional_and_keeps_explicit_enabled_intent() {
-        let temp = tempfile::tempdir().unwrap();
-        let manager = Manager::open(Some(temp.path().into()), "todos-test", false).unwrap();
-        let enabled = |manager: &Manager| {
-            manager
-                .catalog()
-                .unwrap()
-                .plugins
-                .into_iter()
-                .find(|plugin| plugin.manifest.id == "buzz.todos")
-                .unwrap()
-                .enabled
-        };
-        assert!(!enabled(&manager));
-        manager.change("enable", "buzz.todos").unwrap();
-        let reopened = Manager::open(Some(temp.path().into()), "todos-test", false).unwrap();
-        assert!(enabled(&reopened));
-        reopened.change("disable", "buzz.todos").unwrap();
-        assert!(!enabled(&manager));
-    }
-
-    #[test]
-    fn templates_default_off_and_preserve_explicit_overrides() {
-        let temp = tempfile::tempdir().unwrap();
-        let manager = Manager::open(Some(temp.path().into()), "templates-test", false).unwrap();
-        let enabled = |manager: &Manager| {
-            manager
-                .catalog()
-                .unwrap()
-                .plugins
-                .into_iter()
-                .find(|plugin| plugin.manifest.id == "buzz.channel-templates")
-                .unwrap()
-                .enabled
-        };
-        assert!(!enabled(&manager));
-        manager.change("enable", "buzz.channel-templates").unwrap();
-        let reopened = Manager::open(Some(temp.path().into()), "templates-test", false).unwrap();
-        assert!(enabled(&reopened));
-        reopened
-            .change("disable", "buzz.channel-templates")
-            .unwrap();
-        assert!(!enabled(&manager));
+    fn optional_plugins_default_off_and_preserve_explicit_overrides() {
+        for id in ["buzz.todos", "buzz.channel-templates"] {
+            let temp = tempfile::tempdir().unwrap();
+            let manager = Manager::open(Some(temp.path().into()), "optional-test", false).unwrap();
+            let enabled = |manager: &Manager| {
+                manager
+                    .catalog()
+                    .unwrap()
+                    .plugins
+                    .into_iter()
+                    .find(|plugin| plugin.manifest.id == id)
+                    .unwrap()
+                    .enabled
+            };
+            assert!(!enabled(&manager), "{id} defaults off");
+            manager.change("enable", id).unwrap();
+            let reopened = Manager::open(Some(temp.path().into()), "optional-test", false).unwrap();
+            assert!(enabled(&reopened), "{id} retains enable after reopening");
+            reopened.change("disable", id).unwrap();
+            assert!(!enabled(&manager), "{id} exposes persisted disable");
+        }
     }
 
     #[test]

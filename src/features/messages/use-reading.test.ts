@@ -1,54 +1,46 @@
+// @vitest-environment jsdom
+import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useReading } from "./use-reading";
 import type { RelaySession } from "../relay/session";
-const hooks = vi.hoisted(() => ({
-  create: undefined as (() => (() => void) | undefined) | undefined,
-}));
-vi.mock("react", () => ({
-  useEffect: (create: typeof hooks.create) => {
-    hooks.create = create;
-  },
-}));
-const cleanups: (() => void)[] = [];
+
 afterEach(() => {
-  for (const stop of cleanups.splice(0)) stop();
+  cleanup();
+  document.body.replaceChildren();
+  vi.restoreAllMocks();
   vi.useRealTimers();
   vi.unstubAllGlobals();
 });
-function setup({ supported = true, focused = true, settled = true } = {}) {
+function setup({
+  supported = true,
+  focused = true,
+  settled = true,
+  strict = false,
+} = {}) {
   vi.useFakeTimers();
-  const element = new EventTarget();
-  const doc = Object.assign(new EventTarget(), {
-    visibilityState: "visible",
-    hasFocus: () => focused,
-    activeElement: element,
-  });
-  const win = Object.assign(new EventTarget(), {
-    innerHeight: 500,
-    innerWidth: 500,
-  });
-  let rows = [
+  vi.spyOn(document, "hasFocus").mockReturnValue(focused);
+  let visibility: DocumentVisibilityState = "visible";
+  vi.spyOn(document, "visibilityState", "get").mockImplementation(
+    () => visibility,
+  );
+  const element = document.createElement("div");
+  element.tabIndex = 0;
+  const outside = document.createElement("button");
+  document.body.append(element, outside);
+  element.focus();
+  vi.spyOn(element, "getClientRects").mockReturnValue([
+    new DOMRect(0, 0, 500, 500),
+  ] as unknown as DOMRectList);
+  vi.spyOn(element, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 500, 500),
+  );
+  element.replaceChildren(
     row("visible", 100, 200),
     row("overscan", 600, 700),
     row("clipped", 450, 550),
-  ];
-  const scroller = {
-    current: Object.assign(element, {
-      isConnected: true,
-      contains: (node: unknown) => node === element,
-      getClientRects: () => [1],
-      getBoundingClientRect: () => ({
-        top: 0,
-        bottom: 500,
-        left: 0,
-        right: 500,
-      }),
-      querySelectorAll: () => rows,
-    }),
-  };
+  );
+  const scroller = { current: element };
   const position = { current: settled };
-  vi.stubGlobal("document", doc);
-  vi.stubGlobal("window", win);
   let mutation = () => {};
   const disconnected = vi.fn();
   vi.stubGlobal(
@@ -89,44 +81,44 @@ function setup({ supported = true, focused = true, settled = true } = {}) {
       reading,
     },
   } as unknown as RelaySession;
-  // biome-ignore lint/correctness/useHookAtTopLevel: React is mocked above; this harness explicitly runs and cleans up the captured effect.
-  useReading({
-    session,
-    channelId: "room",
-    scroller: scroller as never,
-    settled: position,
+  const view = renderHook(useReading, {
+    initialProps: { session, channelId: "room", scroller, settled: position },
+    reactStrictMode: strict,
   });
-  const cleanup = hooks.create?.();
-  if (cleanup) cleanups.push(cleanup);
   return {
     element,
-    doc,
+    outside,
+    session,
     reading,
     leases,
     position,
     disconnected,
     mutation: () => mutation(),
+    setVisibility: (next: DocumentVisibilityState) => {
+      visibility = next;
+    },
     setObserve: (next: typeof observe) => {
       observe = next;
     },
-    setRows: (next: typeof rows) => {
-      rows = next;
-    },
-    unmount: () => cleanup?.(),
+    setRows: (next: HTMLElement[]) => element.replaceChildren(...next),
+    retarget: (channelId: string, nextSession = session) =>
+      view.rerender({
+        session: nextSession,
+        channelId,
+        scroller,
+        settled: position,
+      }),
+    unmount: view.unmount,
   };
 }
 function row(id: string, top: number, bottom: number) {
-  return {
-    dataset: { messageId: id },
-    getBoundingClientRect: () => ({
-      top,
-      bottom,
-      left: 0,
-      right: 400,
-      height: bottom - top,
-      width: 400,
-    }),
-  };
+  const element = document.createElement("div");
+  element.dataset.messageId = id;
+  if (id === "membership") element.dataset.membershipRow = "";
+  vi.spyOn(element, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, top, 400, bottom - top),
+  );
+  return element;
 }
 it("reports only fully visible settled evidence after dwell, not mounted overscan", () => {
   const h = setup();
@@ -147,13 +139,13 @@ it.each([{ focused: false }, { settled: false }])(
 it("captures the cancellable lease before dwell and disposes it on hidden/unmount", () => {
   const h = setup();
   vi.advanceTimersByTime(300);
-  h.doc.visibilityState = "hidden";
-  h.doc.dispatchEvent(new Event("visibilitychange"));
+  h.setVisibility("hidden");
+  document.dispatchEvent(new Event("visibilitychange"));
   vi.advanceTimersByTime(1000);
   expect(h.leases[0]?.observe).not.toHaveBeenCalled();
   expect(h.leases[0]?.dispose).toHaveBeenCalledTimes(1);
-  h.doc.visibilityState = "visible";
-  h.doc.dispatchEvent(new Event("visibilitychange"));
+  h.setVisibility("visible");
+  document.dispatchEvent(new Event("visibilitychange"));
   h.unmount();
   vi.advanceTimersByTime(1000);
   expect(h.leases[1]?.observe).not.toHaveBeenCalled();
@@ -182,23 +174,26 @@ it("active content reflow cannot revoke dwell already queued for durability", as
         release = resolve;
       }),
   );
-  vi.advanceTimersByTime(750);
-  expect(h.leases[0]?.observe).toHaveBeenCalledExactlyOnceWith(["visible"]);
+  try {
+    vi.advanceTimersByTime(750);
+    expect(h.leases[0]?.observe).toHaveBeenCalledExactlyOnceWith(["visible"]);
 
-  h.mutation();
-  expect(h.leases[0]?.dispose).not.toHaveBeenCalled();
-  h.doc.activeElement = new EventTarget();
-  h.element.dispatchEvent(
-    Object.assign(new Event("focusout"), { relatedTarget: null }),
-  );
-  expect(h.leases[0]?.dispose).toHaveBeenCalledTimes(1);
-  release?.();
-  await vi.runAllTimersAsync();
+    h.mutation();
+    expect(h.leases[0]?.dispose).not.toHaveBeenCalled();
+    h.outside.focus();
+    h.element.dispatchEvent(
+      Object.assign(new Event("focusout"), { relatedTarget: null }),
+    );
+    expect(h.leases[0]?.dispose).toHaveBeenCalledTimes(1);
+  } finally {
+    release?.();
+    await vi.runAllTimersAsync();
+  }
   expect(h.leases[0]?.dispose).toHaveBeenCalledTimes(1);
 });
 it("focus leaving the reading surface cancels pending evidence", () => {
   const h = setup();
-  h.doc.activeElement = new EventTarget();
+  h.outside.focus();
   h.element.dispatchEvent(
     Object.assign(new Event("focusout"), { relatedTarget: null }),
   );
@@ -222,7 +217,7 @@ it("the viewing validity callback rechecks focus and settled positioning synchro
   h.position.current = false;
   expect(visible()).toBe(false);
   h.position.current = true;
-  h.doc.activeElement = new EventTarget();
+  h.outside.focus();
   expect(visible()).toBe(false);
   h.unmount();
   expect(visible()).toBe(false);
@@ -230,16 +225,57 @@ it("the viewing validity callback rechecks focus and settled positioning synchro
 
 it("membership activity cannot abort acknowledgment of a visible message below it", () => {
   const h = setup();
-  h.setRows([
-    {
-      ...row("membership", 10, 50),
-      dataset: { messageId: "membership", membershipRow: "" },
-    } as ReturnType<typeof row>,
-    row("conversation", 100, 200),
-  ]);
+  h.setRows([row("membership", 10, 50), row("conversation", 100, 200)]);
   h.mutation();
   vi.advanceTimersByTime(750);
   expect(h.leases.at(-1)?.observe).toHaveBeenCalledExactlyOnceWith([
     "conversation",
   ]);
 });
+
+it("releases the old channel and session on rerender and only observes the current lease", () => {
+  const h = setup();
+  vi.advanceTimersByTime(300);
+  const oldValidity = h.leases[0]?.view.mock.calls[0]?.[1];
+  h.retarget("next-room");
+  expect(h.leases[0]?.dispose).toHaveBeenCalledOnce();
+  expect(oldValidity()).toBe(false);
+  expect(h.reading).toHaveBeenLastCalledWith("next-room");
+  const nextReading = vi.fn((_channelId: string) => h.reading());
+  h.retarget("next-room", {
+    ...h.session,
+    unread: { ...h.session.unread, reading: nextReading },
+  });
+  expect(h.leases[1]?.dispose).toHaveBeenCalledOnce();
+  expect(nextReading).toHaveBeenCalledExactlyOnceWith("next-room");
+  vi.advanceTimersByTime(749);
+  for (const lease of h.leases) expect(lease.observe).not.toHaveBeenCalled();
+  vi.advanceTimersByTime(1);
+  expect(h.leases[2]?.observe).toHaveBeenCalledExactlyOnceWith(["visible"]);
+  h.unmount();
+  expect(h.leases[2]?.dispose).toHaveBeenCalledOnce();
+});
+
+it("StrictMode releases its probe lease and disconnects observation on unmount", () => {
+  const h = setup({ strict: true });
+  expect(h.leases).toHaveLength(2);
+  expect(h.leases[0]?.dispose).toHaveBeenCalledOnce();
+  expect(h.leases[1]?.dispose).not.toHaveBeenCalled();
+  const validity = h.leases[1]?.view.mock.calls[0]?.[1];
+  h.unmount();
+  expect(validity()).toBe(false);
+  for (const lease of h.leases) expect(lease.dispose).toHaveBeenCalledOnce();
+  expect(h.disconnected).toHaveBeenCalledTimes(4);
+  act(() => {
+    elementEvents(h.element);
+    window.dispatchEvent(new Event("focus"));
+    document.dispatchEvent(new Event("visibilitychange"));
+    vi.advanceTimersByTime(1000);
+  });
+  expect(h.reading).toHaveBeenCalledTimes(2);
+  for (const lease of h.leases) expect(lease.observe).not.toHaveBeenCalled();
+});
+function elementEvents(element: HTMLElement) {
+  for (const name of ["scroll", "pointerdown", "keydown", "focusin"])
+    element.dispatchEvent(new Event(name));
+}

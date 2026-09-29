@@ -1,24 +1,20 @@
-import { ReplyBranch } from "./ReplyBranch";
-import { ReplySummary } from "./ReplySummary";
-import { Button } from "../../shared/design-system/ui/Button";
-import { Avatar } from "../../shared/design-system/ui/Avatar";
-import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
-import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { useReading } from "./use-reading";
-import { beforeEach, expect, it, vi } from "vitest";
+// @vitest-environment jsdom
+import "@testing-library/jest-dom/vitest";
 import {
-  Children,
-  cloneElement,
-  isValidElement,
-  type ReactElement,
-  type ReactNode,
-} from "react";
+  act,
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { StrictMode } from "react";
+import { renderToString } from "react-dom/server";
+import { afterEach, expect, it, vi } from "vitest";
 import { ThreadPanel, type ThreadPanelProps } from "./ThreadPanel";
+import type { MessageRowProps } from "./MessageRow";
+import type { MessageComposerProps } from "./MessageComposer";
 import { createAgentLibrary } from "../agents/library";
-import { MessageRow } from "./MessageRow";
-import { MessageMarkdown } from "./MessageMarkdown";
-import { AttachmentImage } from "./AttachmentImage";
-import { MessageComposer } from "./MessageComposer";
 import type { RelaySession } from "../relay/session";
 import type { PageNavigation } from "../navigation/service";
 import { createNavigationController } from "../navigation/controller";
@@ -26,112 +22,58 @@ import { createMemoryHistory } from "../navigation/history";
 import type { ThreadSnapshot, ThreadView } from "../relay/threads";
 import type { ChannelMessage } from "../relay/contracts";
 
-// Shallow production-boundary checks. These invoke returned handlers and effect
-// lifetimes; they do not claim browser layout, focus, or React StrictMode validation.
-// Reading geometry/dwell has its own real-hook boundary suite. This fixture
-// deliberately supplies only the DOM shape needed for positioning.
-vi.mock("./use-reading", () => ({ useReading: vi.fn() }));
-const hooks = vi.hoisted(() => ({
-  refs: [] as { current: unknown }[],
-  ref: 0,
-  states: [] as unknown[],
-  index: 0,
-  effects: [] as {
-    deps: readonly unknown[];
-    cleanup?: (() => void) | undefined;
-  }[],
-  effect: 0,
-  pending: [] as (() => void)[],
-}));
-vi.mock("react", async (original) => ({
-  ...(await original<typeof import("react")>()),
-  memo: (fn: unknown) => fn,
-  useCallback: (fn: unknown) => fn,
-  useId: () => "thread-panel-test-id",
-  useRef(initial: unknown) {
-    const index = hooks.ref++;
-    hooks.refs[index] ??= { current: initial };
-    return hooks.refs[index];
-  },
-  useMemo: (fn: () => unknown) => fn(),
-  useState(initial: unknown) {
-    const index = hooks.index++;
-    if (!(index in hooks.states)) hooks.states[index] = initial;
-    return [
-      hooks.states[index],
-      (next: unknown) => {
-        hooks.states[index] =
-          typeof next === "function" ? next(hooks.states[index]) : next;
-      },
-    ];
-  },
-  useEffect(create: () => (() => void) | undefined, deps: readonly unknown[]) {
-    const index = hooks.effect++;
-    const old = hooks.effects[index];
-    if (!old || deps.some((value, i) => value !== old.deps[i]))
-      hooks.pending.push(() => {
-        old?.cleanup?.();
-        hooks.effects[index] = { deps, cleanup: create() };
-      });
-  },
-  useLayoutEffect(
-    create: () => (() => void) | undefined,
-    deps: readonly unknown[],
-  ) {
-    const index = hooks.effect++;
-    const old = hooks.effects[index];
-    if (!old || deps.some((value, i) => value !== old.deps[i]))
-      hooks.pending.push(() => {
-        old?.cleanup?.();
-        hooks.effects[index] = { deps, cleanup: create() };
-      });
-  },
-  useSyncExternalStore: (_subscribe: unknown, snapshot: () => unknown) =>
-    snapshot(),
-}));
+// Real React owns effects, refs and subscriptions. Only independent child UI is
+// reduced here; MessageRow/MessageComposer retain their own mounted suites.
 vi.mock("../relay/react", () => {
   const profiles = new Map();
   return { useRowProfiles: () => profiles };
 });
-beforeEach(() =>
-  Object.assign(hooks, {
-    refs: [],
-    ref: 0,
-    states: [],
-    index: 0,
-    effects: [],
-    effect: 0,
-    pending: [],
-  }),
-);
-function elements(node: ReactNode): ReactElement<Record<string, unknown>>[] {
-  if (Array.isArray(node)) return node.flatMap(elements);
-  if (!isValidElement<Record<string, unknown>>(node)) return [];
-  return [
-    node,
-    ...elements(node.props.children as ReactNode),
-    ...(node.type === ReplyBranch
-      ? elements(
-          typeof node.props.message === "function"
-            ? node.props.message(null)
-            : (node.props.message as ReactNode),
-        )
-      : []),
-    ...(node.type === PanelHeader
-      ? elements(node.props.actions as ReactNode)
-      : []),
-  ];
-}
-function button(tree: ReactNode, label: string) {
-  const found = elements(tree).find(
-    (e) =>
-      (e.type === "button" || e.type === Button || e.type === IconButton) &&
-      (e.props.children === label || e.props["aria-label"] === label),
-  );
-  expect(found, label).toBeDefined();
-  if (!found) throw new Error(`Missing button ${label}`);
-  return found;
-}
+vi.mock("./MessageRow", () => ({
+  MessageRow: ({ row, scope, retry, onOpenMediaReview }: MessageRowProps) => (
+    <article data-message-id={row.id} data-scope={scope}>
+      <span>{row.content}</span>
+      <button type="button" onClick={() => retry?.(row.id)}>
+        Retry {row.id}
+      </button>
+      {row.attachments.map((attachment) => (
+        <button
+          key={attachment.url}
+          type="button"
+          onClick={() => onOpenMediaReview?.(row.id, attachment, 0)}
+        >
+          Open {row.content}
+        </button>
+      ))}
+    </article>
+  ),
+}));
+vi.mock("./MessageComposer", () => ({
+  MessageComposer: ({
+    threadRootId,
+    channelId,
+    scope,
+    onSend,
+  }: MessageComposerProps) => (
+    <section
+      aria-label="Composer"
+      data-root={threadRootId}
+      data-channel={channelId}
+      data-scope={scope}
+    >
+      <button type="button" onClick={() => onSend?.("own-reply")}>
+        Send fixture reply
+      </button>
+    </section>
+  ),
+}));
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+  delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+  delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTop;
+});
 const row: ChannelMessage = {
   id: "a".repeat(64),
   channelId: "channel",
@@ -164,482 +106,280 @@ function ordinaryNavigation() {
     forSession: vi.fn<PageNavigation["forSession"]>(),
   } satisfies PageNavigation;
 }
-function setup(
+function messagesHarness(
   navigation?: PageNavigation,
   onOpenMediaReview?: ThreadPanelProps["onOpenMediaReview"],
 ) {
-  const snapshot: ThreadSnapshot = {
-    status: "ready",
-    root: row,
-    replies: [],
-    error: undefined,
-    canLoadMore: false,
-    limited: false,
+  const snapshot: { -readonly [K in keyof ThreadSnapshot]: ThreadSnapshot[K] } =
+    {
+      status: "ready",
+      root: row,
+      replies: [],
+      error: undefined,
+      canLoadMore: false,
+      limited: false,
+    };
+  let published: ThreadSnapshot = { ...snapshot };
+  const views: (ThreadView & {
+    listeners: Set<() => void>;
+    refresh: ReturnType<typeof vi.fn<() => Promise<void>>>;
+    loadMore: ReturnType<typeof vi.fn<() => Promise<void>>>;
+    dispose: ReturnType<typeof vi.fn>;
+  })[] = [];
+  const makeView = () => {
+    const listeners = new Set<() => void>();
+    const view = {
+      snapshot: () => published,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+      refresh: vi.fn(async () => {}),
+      loadMore: vi.fn(async () => {}),
+      dispose: vi.fn(),
+      listeners,
+    };
+    views.push(view);
+    return view;
   };
-  const view = {
-    snapshot: () => ({ ...snapshot }),
-    subscribe: () => () => {},
-    refresh: vi.fn(async () => {}),
-    loadMore: vi.fn(async () => {}),
-    dispose: vi.fn(),
-  } satisfies ThreadView;
-  const thread = vi.fn(() => view);
+  const first = makeView();
+  const thread = vi
+    .fn()
+    .mockImplementationOnce(() => first)
+    .mockImplementation(makeView);
   const ensure = vi.fn(async () => {});
   const session = {
     thread,
     profiles: { ensure },
     agentChoices: createAgentLibrary(undefined).queries,
     messages: { retry: vi.fn() },
-    // Geometry fixtures are read-only; reading behavior has its own boundary tests.
+    media: () => undefined,
     unread: {
       sync: () => ({ capability: "unsupported" }),
       snapshot: () => undefined,
       subscribe: () => () => {},
       attention: () => ({ unread: false }),
     },
-    media: () => undefined,
   } as unknown as RelaySession;
-  const close = vi.fn();
-  function render() {
-    hooks.ref = hooks.index = hooks.effect = 0;
-    const scoped = ThreadPanel({
-      session,
-      scope: "scope",
-      channelName: "General",
-      channelId: "channel",
-      messageId: row.id,
-      navigation,
-      close,
-      onOpenLink: () => false,
-      ...(onOpenMediaReview ? { onOpenMediaReview } : {}),
-    });
-    const children = Children.map(scoped.props.children, (child) => {
-      if (!isValidElement(child) || typeof child.type !== "function")
-        return child;
-      const Component = child.type as (
-        props: typeof child.props,
-      ) => ReactElement;
-      return Component(child.props);
-    });
-    return cloneElement(scoped, {}, children) as ReactElement<{
-      onKeyDown(event: unknown): void;
-    }>;
-  }
-  const effects = () => {
-    for (const effect of hooks.pending.splice(0)) effect();
+  vi.spyOn(document, "hasFocus").mockReturnValue(false);
+  vi.stubGlobal(
+    "ResizeObserver",
+    class {
+      observe() {}
+      disconnect() {}
+    },
+  );
+  HTMLElement.prototype.scrollIntoView = vi.fn();
+  // Controlled dimensions exercise positioning policy, not browser layout.
+  // Install before mount so the first real layout effect sees the same geometry.
+  let height = 4000,
+    top = 0;
+  vi.spyOn(HTMLElement.prototype, "clientHeight", "get").mockReturnValue(600);
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockImplementation(
+    () => height,
+  );
+  Object.defineProperty(HTMLElement.prototype, "scrollTop", {
+    configurable: true,
+    get: () => top,
+    set(value: number) {
+      top = Math.max(0, Math.min(value, height - 600));
+    },
+  });
+  const close = vi.fn(),
+    bubble = vi.fn();
+  const props = {
+    session,
+    scope: "scope",
+    channelName: "General",
+    channelId: "channel",
+    messageId: row.id,
+    navigation,
+    close,
+    onOpenLink: () => false,
+    ...(onOpenMediaReview ? { onOpenMediaReview } : {}),
   };
-  const unmount = () => {
-    for (const effect of hooks.effects) effect.cleanup?.();
-  };
+  let mounted: ReturnType<typeof render> | undefined;
+  let element: HTMLElement;
   return {
     snapshot,
-    view,
+    session,
+    views,
     thread,
     ensure,
-    session,
     close,
-    render,
-    effects,
-    unmount,
+    bubble,
+    props,
+    get view() {
+      return views.at(-1) ?? first;
+    },
+    get listeners() {
+      return (views.at(-1) ?? first).listeners;
+    },
+    get element() {
+      return element;
+    },
+    render(strict = false) {
+      act(() => {
+        published = { ...snapshot };
+        for (const view of views)
+          for (const listener of view.listeners) listener();
+      });
+      if (!mounted) {
+        const tree = (
+          <div role="application" onKeyDown={bubble}>
+            <ThreadPanel {...props} />
+          </div>
+        );
+        mounted = render(strict ? <StrictMode>{tree}</StrictMode> : tree);
+      }
+      element =
+        screen.queryByRole("region", { name: "Thread messages" }) ?? element;
+      return element;
+    },
+    resize(value: number) {
+      height = value;
+    },
+    scroll(value: number) {
+      element.scrollTop = value;
+      fireEvent.scroll(element);
+    },
+    unmount() {
+      mounted?.unmount();
+      delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTop;
+    },
   };
 }
-it("allocates only in the committed effect and disposes each owned view across effect remount", () => {
-  const h = setup();
-  const tree = h.render();
+it("allocates only after commit and disposes distinct owned views under StrictMode", () => {
+  const h = messagesHarness();
+  renderToString(<ThreadPanel {...h.props} />);
   expect(h.thread).not.toHaveBeenCalled();
-  h.effects();
-  expect(h.thread).toHaveBeenCalledExactlyOnceWith("channel", row.id);
-  expect(h.view.refresh).toHaveBeenCalledTimes(1);
-  (button(tree, "Close thread").props.onClick as () => void)();
-  expect(h.close).toHaveBeenCalledTimes(1);
-  const stopPropagation = vi.fn();
-  tree.props.onKeyDown({ key: "Escape", stopPropagation } as never);
-  expect(stopPropagation).toHaveBeenCalledTimes(1);
+  h.render(true);
+  expect(h.thread.mock.calls).toEqual([
+    ["channel", row.id],
+    ["channel", row.id],
+  ]);
+  expect(h.views[0]).not.toBe(h.views[1]);
+  expect(h.views[0]?.dispose).toHaveBeenCalledOnce();
+  expect(h.view.dispose).not.toHaveBeenCalled();
+  for (const view of h.views) expect(view.refresh).toHaveBeenCalledOnce();
+  fireEvent.click(screen.getByRole("button", { name: "Close thread" }));
+  fireEvent.keyDown(screen.getByRole("complementary", { name: "Thread" }), {
+    key: "Escape",
+  });
   expect(h.close).toHaveBeenCalledTimes(2);
+  expect(h.bubble).not.toHaveBeenCalled();
   h.unmount();
-  expect(h.view.dispose).toHaveBeenCalledTimes(1);
-  hooks.effects = [];
-  h.render();
-  h.effects();
-  expect(h.thread).toHaveBeenCalledTimes(2);
-  h.unmount();
-  expect(h.view.dispose).toHaveBeenCalledTimes(2);
+  for (const view of h.views) {
+    expect(view.dispose).toHaveBeenCalledOnce();
+    expect(view.listeners.size).toBe(0);
+  }
 });
 it("allocation failure exposes an effective retry rather than leaving a spinner", () => {
-  const h = setup();
-  h.thread.mockImplementationOnce(() => {
-    throw new Error("capacity");
-  });
+  const h = messagesHarness();
+  h.thread
+    .mockReset()
+    .mockImplementationOnce(() => {
+      throw new Error("capacity");
+    })
+    .mockReturnValue(h.view);
   h.render();
-  h.effects();
-  const failed = h.render();
-  (button(failed, "Retry thread").props.onClick as () => void)();
-  h.render();
-  h.effects();
+  expect(screen.getByRole("alert")).toHaveTextContent("capacity");
+  fireEvent.click(screen.getByRole("button", { name: "Retry thread" }));
+  expect(screen.getByText("root")).toBeVisible();
+  expect(screen.queryByRole("alert")).toBeNull();
   expect(h.thread).toHaveBeenCalledTimes(2);
-  expect(h.view.refresh).toHaveBeenCalledTimes(1);
-  h.unmount();
+  expect(h.view.refresh).toHaveBeenCalledOnce();
 });
 it("loads history automatically with error-only retry and no routine history controls", () => {
-  const h = setup();
+  const h = messagesHarness();
   h.render();
-  h.effects();
-  const panel = h.render();
-  const child = elements(panel).find(
-    (e) => typeof e.type === "function" && e.props.view === h.view,
-  );
-  if (!child) throw new Error("Missing thread messages");
-  const renderMessages = child.type as (
-    props: Record<string, unknown>,
-  ) => ReactElement;
-  const render = () => {
-    hooks.ref = hooks.index = hooks.effect = 0;
-    return renderMessages(child.props);
-  };
-  hooks.effects = [];
-  hooks.refs = [];
-  hooks.states = [];
-  vi.mocked(useReading).mockClear();
-  const tree = render();
-  expect(useReading).toHaveBeenCalledWith({
-    session: h.session,
-    channelId: "channel",
-    scroller: expect.objectContaining({ current: null }),
-    settled: expect.objectContaining({ current: false }),
-  });
-  h.effects();
   expect(h.ensure).toHaveBeenCalledExactlyOnceWith(
     [row.authorId],
     "background",
   );
-  expect(
-    elements(tree).some((e) => e.props.children === "Refresh thread"),
-  ).toBe(false);
-  expect(elements(tree).some((e) => e.props.children === "Retry thread")).toBe(
-    false,
-  );
-  expect(
-    elements(tree).some(
-      (e) =>
-        e.props.children ===
-        "Existing history may be incomplete. New replies appear automatically.",
-    ),
-  ).toBe(false);
-  expect(
-    elements(tree).some((e) => e.props.children === "Load more replies"),
-  ).toBe(false);
+  for (const name of ["Refresh thread", "Retry thread", "Load more replies"])
+    expect(screen.queryByRole("button", { name })).toBeNull();
+  expect(screen.queryByText(/Existing history may be incomplete/)).toBeNull();
   expect(h.view.loadMore).not.toHaveBeenCalled();
-  const mutable = h.snapshot as {
-    status: string;
-    error: string | undefined;
-    canLoadMore: boolean;
-    limited: boolean;
-  };
-  mutable.canLoadMore = true;
-  render();
-  h.effects();
-  expect(h.view.loadMore).toHaveBeenCalledTimes(1);
-  mutable.status = "loading";
-  render();
-  h.effects();
-  expect(h.view.loadMore).toHaveBeenCalledTimes(1);
-  mutable.status = "error";
-  mutable.error = "offline";
-  (button(render(), "Retry thread").props.onClick as () => void)();
-  h.effects();
-  expect(h.view.loadMore).toHaveBeenCalledTimes(1);
-  expect(h.view.refresh).toHaveBeenCalledTimes(2);
-  mutable.status = "ready";
-  mutable.error = undefined;
-  mutable.canLoadMore = false;
-  expect(elements(render()).some((e) => e.type === "footer")).toBe(false);
-  mutable.limited = true;
-  expect(
-    elements(render()).some(
-      (e) => e.props.children === "Thread history limit reached.",
-    ),
-  ).toBe(true);
-  mutable.status = "error";
-  mutable.error = "Thread view exceeded its memory limit.";
-  const failed = render();
-  expect(
-    elements(failed).some(
-      (e) =>
-        typeof e.props.children === "string" &&
-        e.props.children.includes("appear automatically"),
-    ),
-  ).toBe(false);
-  (button(failed, "Retry thread").props.onClick as () => void)();
-  expect(h.view.refresh).toHaveBeenCalledTimes(3);
-  h.effects();
-  expect(h.ensure).toHaveBeenCalledTimes(1); // No render-driven missing-profile loop.
-});
-it("bounds enlarged emoji presentation on sent messages", () => {
-  const message = (content: string) =>
-    elements(
-      MessageRow({
-        row: { ...row, content },
-        profile: undefined,
-        media: () => undefined,
-        onOpenLink: () => false,
-        day: false,
-        retry: undefined,
-      }),
-    ).find((element) => element.type === MessageMarkdown);
-  expect(message("😀 🙏 👏")?.props.largeEmoji).toBe(true);
-  expect(message("😀 🙏 👏 😄")?.props.largeEmoji).toBe(true);
-});
-
-it("the actual message row rejects attachment URLs outside the shared safe-link policy", () => {
-  const media = vi.fn(() => undefined);
-  const tree = MessageRow({
-    row: {
-      ...row,
-      attachments: [
-        { url: "https://safe.test/a.png", kind: "image" },
-        { url: "https://user:secret@unsafe.test/a.png", kind: "image" },
-        { url: "http://unsafe.test/a.png", kind: "image" },
-      ],
-    },
-    profile: undefined,
-    media,
-    onOpenLink: () => false,
-    day: false,
-    retry: undefined,
-  });
-  const attachments = elements(tree).filter(
-    (element) => element.type === AttachmentImage,
-  );
-  expect(media).toHaveBeenCalledExactlyOnceWith("https://safe.test/a.png");
-  expect(attachments).toHaveLength(1);
-  expect(attachments[0]?.props.attachment).toEqual({
-    url: "https://safe.test/a.png",
-    kind: "image",
-  });
-});
-
-it("seeks the media timecode while passing the stripped body to Markdown", () => {
-  const seek = vi.fn();
-  const tree = MessageRow({
-    row: { ...row, content: "⏱ 0:42 — **Change** the title" },
-    profile: undefined,
-    media: () => undefined,
-    onOpenLink: () => false,
-    onMediaTime: seek,
-    day: false,
-    retry: undefined,
-  });
-  (button(tree, "0:42").props.onClick as () => void)();
-  expect(seek).toHaveBeenCalledExactlyOnceWith(42);
-  const markdown = elements(tree).find(
-    (element) => element.type === MessageMarkdown,
-  );
-  expect(markdown?.props.row).toEqual({
-    ...row,
-    content: "**Change** the title",
-  });
-});
-
-it("shows a non-interactive timecode chip when no player can seek", () => {
-  const tree = MessageRow({
-    row: { ...row, content: "⏱ 0:42 — Change the title" },
-    profile: undefined,
-    media: () => undefined,
-    onOpenLink: () => false,
-    day: false,
-    retry: undefined,
-  });
-  const chip = elements(tree).find(
-    (element) => element.type === "span" && element.props.children === "0:42",
-  );
-  expect(chip).toBeDefined();
-  expect(chip?.props.onClick).toBeUndefined();
-  const markdown = elements(tree).find(
-    (element) => element.type === MessageMarkdown,
-  );
-  expect(markdown?.props.row).toMatchObject({ content: "Change the title" });
-});
-
-it("the actual message reply button opens its selected message and canonical thread root while retaining the trigger focus target", () => {
-  const open = vi.fn(),
-    focus = vi.fn();
-  const tree = MessageRow({
-    row,
-    profile: undefined,
-    media: () => undefined,
-    onOpenLink: () => false,
-    day: false,
-    retry: undefined,
-    onOpenThread: open,
-  });
-  (
-    button(tree, "View thread: 2 replies").props.onClick as (
-      event: unknown,
-    ) => void
-  )({ currentTarget: { focus } });
-  expect(focus).toHaveBeenCalledTimes(1);
-  expect(open).toHaveBeenCalledExactlyOnceWith(row.id, row.id);
-
-  const nested = MessageRow({
-    row: { ...row, id: "b".repeat(64), threadRootId: row.id },
-    profile: undefined,
-    media: () => undefined,
-    onOpenLink: () => false,
-    day: false,
-    retry: undefined,
-    onOpenThread: open,
-  });
-  (
-    button(nested, "View thread: 2 replies").props.onClick as (
-      event: unknown,
-    ) => void
-  )({ currentTarget: { focus } });
-  expect(open).toHaveBeenLastCalledWith("b".repeat(64), row.id);
-});
-
-function messagesHarness(
-  navigation?: PageNavigation,
-  onOpenMediaReview?: ThreadPanelProps["onOpenMediaReview"],
-) {
-  const h = setup(navigation, onOpenMediaReview);
+  h.snapshot.canLoadMore = true;
   h.render();
-  h.effects();
-  const child = elements(h.render()).find(
-    (e) => typeof e.type === "function" && e.props.view === h.view,
-  );
-  if (!child) throw new Error("Missing thread messages");
-  const props = child.props;
-  const component = child.type as (
-    props: Record<string, unknown>,
-  ) => ReactElement;
-  hooks.effects = [];
-  hooks.refs = [];
-  hooks.states = [];
-  let scrollTop = 0;
-  const element = {
-    querySelectorAll: () => [],
-    clientHeight: 600,
-    scrollHeight: 4000,
-    get scrollTop() {
-      return scrollTop;
-    },
-    set scrollTop(value: number) {
-      scrollTop = Math.max(
-        0,
-        Math.min(value, this.scrollHeight - this.clientHeight),
-      );
-    },
-  };
-  let tree: ReactNode;
-  function render() {
-    hooks.ref = hooks.index = hooks.effect = 0;
-    tree = component(props);
-    const section = elements(tree).find(
-      (e) => e.props["aria-label"] === "Thread messages",
-    );
-    if (!section) throw new Error("Missing history region");
-    (section.props.ref as { current: unknown }).current = element;
-    return section;
-  }
-  return {
-    ...h,
-    render,
-    tree: () => tree,
-    click(label: string) {
-      (button(tree, label).props.onClick as () => void)();
-    },
-    scroll(top: number) {
-      element.scrollTop = top;
-      const section = elements(tree).find(
-        (e) => e.props["aria-label"] === "Thread messages",
-      );
-      if (!section) throw new Error("Missing history region");
-      (section.props.onScroll as (event: unknown) => void)({
-        currentTarget: element,
-      });
-    },
-    element,
-    snapshot: h.snapshot as {
-      status: ThreadSnapshot["status"];
-      replies: readonly ChannelMessage[];
-      root: ChannelMessage | undefined;
-      canLoadMore: boolean;
-      limited: boolean;
-    },
-  };
-}
+  expect(h.view.loadMore).toHaveBeenCalledOnce();
+  h.snapshot.status = "loading";
+  h.render();
+  expect(h.view.loadMore).toHaveBeenCalledOnce();
+  h.snapshot.status = "error";
+  h.snapshot.error = "offline";
+  h.render();
+  fireEvent.click(screen.getByRole("button", { name: "Retry thread" }));
+  expect(h.view.loadMore).toHaveBeenCalledOnce();
+  expect(h.view.refresh).toHaveBeenCalledTimes(2);
+  h.snapshot.status = "ready";
+  h.snapshot.error = undefined;
+  h.snapshot.canLoadMore = false;
+  h.render();
+  expect(screen.queryByRole("button", { name: "Retry thread" })).toBeNull();
+  h.snapshot.limited = true;
+  h.render();
+  expect(screen.getByText("Thread history limit reached.")).toBeVisible();
+  h.snapshot.status = "error";
+  h.snapshot.error = "Thread view exceeded its memory limit.";
+  h.render();
+  expect(screen.queryByText(/appear automatically/)).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Retry thread" }));
+  expect(h.view.refresh).toHaveBeenCalledTimes(3);
+  expect(h.ensure).toHaveBeenCalledOnce();
+});
 it("positions after successful history loading, then follows live replies without another read", () => {
   const h = messagesHarness();
   h.snapshot.status = "loading";
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(0);
   h.snapshot.status = "error";
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(0);
   h.snapshot.status = "ready";
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(3400);
   h.scroll(3400);
   h.snapshot.replies = [{ ...row, id: "new", content: "live arrival" }];
-  h.element.scrollHeight = 4800;
+  h.resize(4800);
   const section = h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(4200);
-  expect(
-    elements(section).some(
-      (e) =>
-        e.type === MessageRow &&
-        (e.props.row as ChannelMessage).content === "live arrival",
-    ),
-  ).toBe(true);
+  expect(within(section).getByText("live arrival")).toBeVisible();
   expect(h.view.refresh).toHaveBeenCalledTimes(1); // Initial open only.
   expect(h.view.loadMore).not.toHaveBeenCalled();
 });
 it("preserves reading above the bottom through live updates and refresh, then resumes following on return", () => {
   const h = messagesHarness();
   h.render();
-  h.effects();
   h.scroll(500);
   h.snapshot.replies = [{ ...row, id: "new", content: "live arrival" }];
-  h.element.scrollHeight = 4800;
+  h.resize(4800);
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(500);
   h.snapshot.status = "loading";
   h.render();
-  h.effects();
   h.snapshot.status = "ready";
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(500);
   h.scroll(4200);
   h.snapshot.replies = [...h.snapshot.replies, { ...row, id: "next" }];
-  h.element.scrollHeight = 5500;
+  h.resize(5500);
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(4900);
 });
 it("routes media in replies through the resolved root review workspace", () => {
   const open = vi.fn();
   const h = messagesHarness(undefined, open);
-  const root = { ...row, id: "resolved-root" };
   const attachment = { url: "https://safe/image.png", kind: "image" as const };
-  h.snapshot.root = root;
-  h.snapshot.replies = [{ ...row, id: "reply", attachments: [attachment] }];
+  h.snapshot.root = { ...row, id: "resolved-root" };
+  h.snapshot.replies = [
+    { ...row, id: "reply", content: "media reply", attachments: [attachment] },
+  ];
   h.render();
-  h.effects();
-  const reply = elements(h.tree()).find(
-    (e) =>
-      e.type === MessageRow && (e.props.row as ChannelMessage).id === "reply",
-  );
-  const handler = reply?.props.onOpenMediaReview as
-    | ((rowId: string, item: typeof attachment, seconds: number) => void)
-    | undefined;
-  expect(handler).toBeDefined();
-  handler?.("reply", attachment, 0);
+  fireEvent.click(screen.getByRole("button", { name: "Open media reply" }));
   expect(open).toHaveBeenCalledExactlyOnceWith("reply", attachment, 0, true);
 });
 
@@ -647,48 +387,35 @@ it("uses the resolved root with the shared composer and reveals an own send even
   const h = messagesHarness();
   h.snapshot.root = { ...row, id: "resolved-root" };
   h.render();
-  h.effects();
-  const composer = elements(h.tree()).find((e) => e.type === MessageComposer);
-  expect(composer?.props).toMatchObject({
-    session: h.session,
-    scope: "scope",
-    channelId: "channel",
-    channelName: "General",
-    threadRootId: "resolved-root",
-  });
-  const rootRow = elements(h.tree()).find(
-    (element) =>
-      element.type === MessageRow &&
-      (element.props.row as ChannelMessage).id === "resolved-root",
+  expect(screen.getByRole("region", { name: "Composer" })).toHaveAttribute(
+    "data-root",
+    "resolved-root",
   );
-  expect(rootRow?.props).toMatchObject({
-    session: h.session,
-    scope: "scope",
-  });
-  expect(elements(h.tree()).some((e) => e.type === "footer")).toBe(false);
+  expect(screen.getByRole("region", { name: "Composer" })).toHaveAttribute(
+    "data-channel",
+    "channel",
+  );
+  expect(screen.getByRole("region", { name: "Composer" })).toHaveAttribute(
+    "data-scope",
+    "scope",
+  );
   h.scroll(500);
-  if (!composer) throw new Error("Missing composer");
-  (composer.props.onSend as (id: string) => void)("own-reply");
-  h.snapshot.replies = [{ ...row, id: "own-reply" }];
-  h.element.scrollHeight = 4800;
-  const section = h.render();
-  h.effects();
+  fireEvent.click(screen.getByRole("button", { name: "Send fixture reply" }));
+  h.snapshot.replies = [{ ...row, id: "own-reply", content: "own reply" }];
+  h.resize(4800);
+  h.render();
   expect(h.element.scrollTop).toBe(4200);
-  const reply = elements(section).find(
-    (e) =>
-      e.type === MessageRow &&
-      (e.props.row as ChannelMessage).id === "own-reply",
-  );
-  expect(reply?.props).toMatchObject({
-    session: h.session,
-    scope: "scope",
-    retry: h.session.messages.retry,
-  });
+  const reply = screen.getByText("own reply").closest("article");
+  expect(reply).toHaveAttribute("data-scope", "scope");
+  expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+  expect(
+    vi.mocked(HTMLElement.prototype.scrollIntoView).mock.contexts,
+  ).toContain(reply);
+  fireEvent.click(screen.getByRole("button", { name: "Retry own-reply" }));
+  expect(h.session.messages.retry).toHaveBeenCalledWith("own-reply");
   h.snapshot.root = undefined;
   h.render();
-  expect(elements(h.tree()).some((e) => e.type === MessageComposer)).toBe(
-    false,
-  );
+  expect(screen.queryByRole("region", { name: "Composer" })).toBeNull();
 });
 it.each([
   { gap: 79, follows: true },
@@ -698,12 +425,10 @@ it.each([
   ({ gap, follows }) => {
     const h = messagesHarness();
     h.render();
-    h.effects();
     h.scroll(3400 - gap);
     h.snapshot.replies = [{ ...row, id: "new" }];
-    h.element.scrollHeight = 4800;
+    h.resize(4800);
     h.render();
-    h.effects();
     expect(h.element.scrollTop).toBe(follows ? 4200 : 3400 - gap);
   },
 );
@@ -711,27 +436,23 @@ it("finishes automatic pages before initial positioning and preserves a reader�
   const h = messagesHarness();
   h.snapshot.canLoadMore = true;
   h.render();
-  h.effects();
   expect(h.view.loadMore).toHaveBeenCalledTimes(1);
   expect(h.element.scrollTop).toBe(0);
   const section = h.render();
-  (section.props.onWheel as () => void)();
+  fireEvent.wheel(section);
   h.scroll(500);
   h.snapshot.status = "loading";
   h.render();
-  h.effects();
   h.snapshot.status = "ready";
   h.snapshot.canLoadMore = false;
   h.snapshot.replies = [{ ...row, id: "history" }];
-  h.element.scrollHeight = 4800;
+  h.resize(4800);
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(500);
   h.scroll(4200);
   h.snapshot.replies = [...h.snapshot.replies, { ...row, id: "live" }];
-  h.element.scrollHeight = 5500;
+  h.resize(5500);
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(4900);
 });
 it.each([
@@ -746,7 +467,6 @@ it.each([
     const h = messagesHarness(navigation);
     h.snapshot.canLoadMore = true;
     h.render();
-    h.effects();
     expect(h.element.scrollTop).toBe(0);
     expect(h.view.loadMore).toHaveBeenCalledTimes(1);
     if (navigation)
@@ -755,21 +475,18 @@ it.each([
       });
     h.snapshot.status = "loading";
     h.render();
-    h.effects();
     expect(h.view.loadMore).toHaveBeenCalledTimes(1);
     h.snapshot.status = "ready";
     h.snapshot.canLoadMore = false;
     h.snapshot.limited = limited;
     h.snapshot.replies = [{ ...row, id: "history" }];
-    h.element.scrollHeight = 4800;
+    h.resize(4800);
     h.render();
-    h.effects();
     expect(h.element.scrollTop).toBe(4200);
     expect(h.view.loadMore).toHaveBeenCalledTimes(1);
     // A live update follows without completing the same visit twice.
     h.snapshot.replies = [...h.snapshot.replies, { ...row, id: "live" }];
     h.render();
-    h.effects();
     if (navigation)
       expect(navigation.complete).toHaveBeenCalledExactlyOnceWith({
         status: "opened",
@@ -778,7 +495,7 @@ it.each([
 );
 it.each(
   [false, true].flatMap((routed) =>
-    ["onWheel", "onTouchMove", "onPointerDown", "onKeyDown"].map((handler) => ({
+    ["wheel", "touchMove", "pointerDown", "keyDown"].map((handler) => ({
       routed,
       handler,
     })),
@@ -790,11 +507,12 @@ it.each(
     const h = messagesHarness(navigation);
     h.snapshot.status = "loading";
     const section = h.render();
-    h.effects();
-    (section.props[handler] as (event: unknown) => void)({ key: "PageUp" });
+    fireEvent[handler as "wheel" | "touchMove" | "pointerDown" | "keyDown"](
+      section,
+      { key: "PageUp" },
+    );
     h.snapshot.status = "ready";
     h.render();
-    h.effects();
     expect(h.element.scrollTop).toBe(0);
     if (navigation)
       expect(navigation.complete).toHaveBeenCalledExactlyOnceWith({
@@ -807,7 +525,6 @@ it("ordinary routed loading failure completes as unavailable, never as an opened
   const h = messagesHarness(navigation);
   h.snapshot.status = "error";
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(0);
   expect(navigation.complete).toHaveBeenCalledExactlyOnceWith({
     status: "failed",
@@ -833,12 +550,10 @@ it("a presented ordinary thread survives the real navigation deadline while hist
     h.view.loadMore.mockImplementation(() => held);
     h.snapshot.canLoadMore = true;
     h.render();
-    h.effects();
     expect(h.view.loadMore).toHaveBeenCalledTimes(1);
     h.snapshot.status = "loading";
     h.render();
-    h.effects();
-    await vi.advanceTimersByTimeAsync(16_000);
+    await act(() => vi.advanceTimersByTimeAsync(16_000));
     expect(controller.navigation.snapshot().status).toBe("opened");
     expect(await result).toEqual({ status: "opened" });
     expect(attempt.signal.aborted).toBe(false);
@@ -849,7 +564,6 @@ it("a presented ordinary thread survives the real navigation deadline while hist
     h.snapshot.status = "ready";
     h.snapshot.canLoadMore = false;
     h.render();
-    h.effects();
     expect(h.element.scrollTop).toBe(3400);
     expect(navigation.complete).toHaveBeenCalledTimes(1);
     h.unmount();
@@ -866,72 +580,12 @@ it("revoked ordinary presentation cannot position or complete after loading", ()
   h.snapshot.status = "loading";
   h.snapshot.root = undefined;
   h.render();
-  h.effects();
-  controller.abort();
+  act(() => controller.abort());
   expect(h.view.dispose).toHaveBeenCalledTimes(1);
+  expect(h.listeners.size).toBe(0);
+  expect(screen.queryByRole("region", { name: "Thread messages" })).toBeNull();
   h.snapshot.status = "ready";
   h.render();
-  h.effects();
   expect(h.element.scrollTop).toBe(0);
   expect(navigation.complete).not.toHaveBeenCalled();
-});
-it("shows bounded participant avatars on the real reply control, through the media boundary with fallback initials", () => {
-  const participants = ["p1", "p2", "p3", "p4", "p5"];
-  const media = vi.fn((url: string) =>
-    url === "https://safe/avatar" ? "https://proxy/avatar" : undefined,
-  );
-  const tree = MessageRow({
-    row: { ...row, participants },
-    profile: undefined,
-    participantProfiles: new Map([
-      ["p1", { name: "Alice", picture: "https://safe/avatar" }],
-      ["p2", { name: "Brain", picture: "http://unsafe" }],
-    ]),
-    media,
-    onOpenLink: () => false,
-    day: false,
-    retry: undefined,
-    onOpenThread: () => {},
-  });
-  const trigger = button(tree, "View thread: 2 replies");
-  const summary = elements(trigger).find(
-    (element) => element.type === ReplySummary,
-  );
-  if (!summary) throw new Error("Missing reply summary");
-  if (!isValidElement<Parameters<typeof ReplySummary>[0]>(summary))
-    throw new Error("Invalid reply summary");
-  const control = ReplySummary(summary.props);
-  const avatars = elements(control).filter((e) => e.type === Avatar);
-  expect(avatars.map((avatar) => avatar.props)).toEqual([
-    {
-      src: "https://proxy/avatar",
-      alt: "",
-      fallback: "Alice",
-      size: "fill",
-      shape: "circle",
-    },
-    {
-      src: undefined,
-      alt: "",
-      fallback: "Brain",
-      size: "fill",
-      shape: "circle",
-    },
-    { src: undefined, alt: "", fallback: "p3", size: "fill", shape: "circle" },
-  ]);
-  expect(media).toHaveBeenCalledWith("https://safe/avatar", "small");
-  expect(media).toHaveBeenCalledWith("http://unsafe", "small");
-  expect(
-    elements(control)
-      .filter((e) => e.props.title)
-      .map((e) => e.props.title),
-  ).toEqual(["Alice", "Brain", "p3"]);
-  expect(
-    elements(control).some(
-      (e) =>
-        Array.isArray(e.props.children) &&
-        e.props.children[0] === "+" &&
-        e.props.children[1] === 2,
-    ),
-  ).toBe(true);
 });

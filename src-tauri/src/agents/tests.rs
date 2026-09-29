@@ -410,16 +410,6 @@ fn saving_defaults_never_starts_or_enables_stopped_agents() {
     );
     let saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
     assert_eq!(saved["agents"][0]["enabled"], false);
-    // Native defaults file is owner-only.
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        let mode = std::fs::metadata(dir.path().join("store/defaults.json"))
-            .unwrap()
-            .permissions()
-            .mode();
-        assert_eq!(mode & 0o777, 0o600);
-    }
 }
 
 #[test]

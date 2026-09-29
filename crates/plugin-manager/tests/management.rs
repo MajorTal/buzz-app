@@ -257,6 +257,21 @@ fn rollback_swaps_reload_sources_and_same_byte_reload_refreshes_source() {
         .unwrap();
     assert_eq!(plugin.previous.as_deref(), Some(first.as_str()));
     assert!(plugin.reloadable);
+    let changed = "export const thirdReload = true;";
+    fs::write(third_source.join("plugin.js"), changed).unwrap();
+    let catalog = manager.reload("example.page").unwrap();
+    let reloaded = catalog
+        .plugins
+        .iter()
+        .find(|p| p.manifest.id == "example.page")
+        .unwrap();
+    assert_ne!(reloaded.revision, plugin.revision);
+    assert_eq!(reloaded.previous.as_deref(), Some(plugin.revision.as_str()));
+    manager.change("enable", "example.page").unwrap();
+    assert_eq!(
+        manager.module("example.page", &reloaded.revision).unwrap(),
+        changed
+    );
 }
 #[test]
 fn invalid_install_preserves_working_revision() {

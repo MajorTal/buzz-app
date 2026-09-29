@@ -159,25 +159,95 @@ mod tests {
     #[cfg(unix)]
     #[tokio::test]
     async fn one_shot_acp_request_reads_catalog_before_closing_stdin() {
-        use std::os::unix::fs::PermissionsExt;
-        let dir = tempfile::tempdir().unwrap();
+        use std::{
+            future::Future,
+            io::{BufRead, Read, Write},
+            os::{fd::FromRawFd, unix::fs::PermissionsExt},
+        };
+        const SOCKET: &str = "BUZZ_GOOSE_TEST_SOCKET";
+        if let Ok(socket) = std::env::var(SOCKET) {
+            // Re-enter this test as the fake Goose process. The wrapper reserves
+            // fd 3 for protocol output and sends libtest's output to /dev/null.
+            let mut request = String::new();
+            std::io::stdin().lock().read_line(&mut request).unwrap();
+            let request: Value = serde_json::from_str(&request).unwrap();
+            assert_eq!(
+                request["method"],
+                "_goose/unstable/providers/supported-models/list"
+            );
+            assert_eq!(request["params"]["providerId"], "openai");
+            assert_eq!(request["id"], 1);
+            assert_eq!(std::env::var("OPENAI_API_KEY").unwrap(), "test-key");
+            let mut gate = std::os::unix::net::UnixStream::connect(socket).unwrap();
+            gate.set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            gate.write_all(&[1]).unwrap();
+            gate.read_exact(&mut [0]).unwrap();
+            let mut input = libc::pollfd {
+                fd: libc::STDIN_FILENO,
+                events: libc::POLLIN | libc::POLLHUP,
+                revents: 0,
+            };
+            // No data remains after the request. Readability now means premature EOF.
+            assert_eq!(
+                unsafe { libc::poll(&mut input, 1, 0) },
+                0,
+                "stdin closed before catalog response"
+            );
+            let mut output = unsafe { std::fs::File::from_raw_fd(3) };
+            writeln!(output, "{}", json!({"jsonrpc":"2.0","id":1,"result":{"providerId":"openai","models":["gpt-6-sol"]}})).unwrap();
+            return;
+        }
+        // Keep the socket pathname within macOS's sockaddr_un limit.
+        let dir = tempfile::Builder::new()
+            .prefix("goose-test")
+            .tempdir_in("/tmp")
+            .unwrap();
+        let socket = dir.path().join("gate");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
         let command = dir.path().join("goose");
-        std::fs::write(
-            &command,
-            "#!/bin/sh\nread request\n[ \"$OPENAI_API_KEY\" = 'test-key' ] || exit 1\ncase \"$request\" in\n  *\\\"providerId\\\":\\\"openai\\\"*) printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{\"providerId\":\"openai\",\"models\":[\"gpt-6-sol\"]}}' ;;\nesac\n",
-        )
-        .unwrap();
+        std::fs::write(&command, r#"#!/bin/sh
+[ "$1" = acp ] || exit 1
+exec "$BUZZ_GOOSE_TEST_EXE" --exact goose_models::tests::one_shot_acp_request_reads_catalog_before_closing_stdin --nocapture 3>&1 >/dev/null
+"#).unwrap();
         std::fs::set_permissions(&command, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let result = fetch(GooseModelContext {
+        let context = GooseModelContext {
             command,
             provider_id: "openai".into(),
-            environment: [("OPENAI_API_KEY".into(), "test-key".into())]
-                .into_iter()
-                .collect(),
+            environment: [
+                ("OPENAI_API_KEY".into(), "test-key".into()),
+                (SOCKET.into(), socket.to_str().unwrap().into()),
+                (
+                    "BUZZ_GOOSE_TEST_EXE".into(),
+                    std::env::current_exe().unwrap().to_str().unwrap().into(),
+                ),
+            ]
+            .into_iter()
+            .collect(),
             model_overridden: false,
+        };
+        tokio::time::timeout(Duration::from_secs(10), async {
+            let mut lookup = std::pin::pin!(fetch(context));
+            let mut gate = tokio::select! {
+                accepted = listener.accept() => accepted.unwrap().0,
+                result = &mut lookup => panic!("lookup completed before request gate: {result:?}"),
+            };
+            let mut ready = [0];
+            tokio::select! {
+                ready = gate.read_exact(&mut ready) => { ready.unwrap(); },
+                result = &mut lookup => panic!("lookup completed before request read: {result:?}"),
+            }
+            // Advance past write_all before the child inspects stdin. The child
+            // cannot answer yet, so an early close is observable without sleeps.
+            std::future::poll_fn(|cx| {
+                assert!(lookup.as_mut().poll(cx).is_pending());
+                std::task::Poll::Ready(())
+            })
+            .await;
+            gate.write_all(&[1]).await.unwrap();
+            assert_eq!(lookup.await.unwrap(), vec!["gpt-6-sol"]);
         })
         .await
-        .unwrap();
-        assert_eq!(result, vec!["gpt-6-sol"]);
+        .expect("catalog fixture did not finish");
     }
 }

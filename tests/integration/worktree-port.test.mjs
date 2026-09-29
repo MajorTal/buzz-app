@@ -19,7 +19,6 @@ const KNOWN = [
 test("portForPath is deterministic and stays in [10010, 65009]", () => {
   for (const [candidate, expected] of KNOWN) {
     assert.equal(portForPath(candidate), expected);
-    assert.equal(portForPath(candidate), portForPath(candidate));
   }
   for (const candidate of ["", "/", "a".repeat(4096), KNOWN[0][0]]) {
     const port = portForPath(candidate);
@@ -37,7 +36,6 @@ test("portForPath remaps the browser-blocked default without colliding with same
   const buzzBasePort = Number(10000n + (BigInt(`0x${digest}`) % 55000n));
   assert.equal(buzzBasePort + 10, 10080);
   assert.equal(portForPath(candidate), 10081);
-  assert.equal(portForPath(candidate), portForPath(candidate));
   for (const offset of [0, 1, 100])
     assert.notEqual(portForPath(candidate), buzzBasePort + offset);
 });

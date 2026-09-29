@@ -2,6 +2,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import {
   canStopAgent,
   createAgentControl,
+  savedMessage,
   type GooseInstallReport,
 } from "./control";
 import { controlFixture } from "./control-testing";
@@ -12,6 +13,22 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
 });
+it("words save results by restart count", () => {
+  expect(savedMessage(0)).toBe("Saved.");
+  expect(savedMessage(undefined)).toBe("Saved.");
+  expect(savedMessage(1)).toBe("Saved. Restarted 1 agent.");
+  expect(savedMessage(3)).toBe("Saved. Restarted 3 agents.");
+  expect(savedMessage(1, 1)).toBe(
+    "Saved. Restarted 1 agent. 1 agent couldn’t restart with the new settings; check Agents.",
+  );
+  expect(savedMessage(0, 1)).toBe(
+    "Saved. 1 agent couldn’t restart with the new settings; check Agents.",
+  );
+  expect(savedMessage(2, 3)).toBe(
+    "Saved. Restarted 2 agents. 3 agents couldn’t restart with the new settings; check Agents.",
+  );
+});
+
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {

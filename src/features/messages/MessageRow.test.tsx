@@ -163,6 +163,7 @@ it.each(["bare", "angle", "markdown", "escaped"] as const)(
 );
 
 it.each([
+  ["😀 🙏 👏", [], true],
   ["😀 🙏 👏 😄", [], true],
   ["😀".repeat(40), [], true],
   [
@@ -903,6 +904,136 @@ it.each(["sending", "failed"] as const)(
     }
   },
 );
+
+// These contracts belong to the rendered row, rather than a shallow ThreadPanel fixture.
+function renderMessage(
+  patch: Partial<import("./MessageRow").MessageRowProps> = {},
+) {
+  return renderDom(
+    <MessageRow
+      row={row}
+      profile={undefined}
+      media={() => undefined}
+      onOpenLink={() => false}
+      day={false}
+      retry={undefined}
+      {...patch}
+    />,
+  );
+}
+
+it("rejects attachment URLs outside the shared safe-link policy", () => {
+  const media = vi.fn((url: string) => url);
+  const view = renderMessage({
+    row: {
+      ...row,
+      attachments: [
+        { url: "https://safe.test/a.png", kind: "image" },
+        { url: "https://user:secret@unsafe.test/a.png", kind: "image" },
+        { url: "http://unsafe.test/a.png", kind: "image" },
+      ],
+    },
+    media,
+  });
+  try {
+    const links = screen.getAllByRole("link", {
+      name: "Open image attachment",
+    });
+    expect(media).toHaveBeenCalledExactlyOnceWith("https://safe.test/a.png");
+    expect(links).toHaveLength(1);
+    expect(links[0]).toHaveAttribute("href", "https://safe.test/a.png");
+    expect(view.container.innerHTML).not.toContain("unsafe.test");
+  } finally {
+    view.unmount();
+  }
+});
+
+it.each([true, false])(
+  "renders a stripped timecode body with seeking available=%s",
+  (canSeek) => {
+    const seek = vi.fn();
+    const view = renderMessage({
+      row: { ...row, content: "⏱ 0:42 — **Change** the title" },
+      ...(canSeek ? { onMediaTime: seek } : {}),
+    });
+    try {
+      expect(screen.getByText("Change").tagName).toBe("STRONG");
+      expect(view.container).toHaveTextContent("Change the title");
+      expect(view.container.textContent?.match(/0:42/g)).toHaveLength(1);
+      expect(view.container).not.toHaveTextContent("⏱");
+      if (canSeek) {
+        fireEvent.click(screen.getByRole("button", { name: "0:42" }));
+        expect(seek).toHaveBeenCalledExactlyOnceWith(42);
+      } else {
+        expect(screen.queryByRole("button", { name: "0:42" })).toBeNull();
+        expect(screen.getByText("0:42").tagName).toBe("SPAN");
+      }
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
+it.each([undefined, "canonical-root"])(
+  "opens the selected row with canonical root %s and retains trigger focus",
+  (threadRootId) => {
+    const open = vi.fn();
+    const view = renderMessage({
+      row: { ...row, threadRootId },
+      onOpenThread: open,
+    });
+    try {
+      const trigger = screen.getByRole("button", {
+        name: "View thread: 23 replies",
+      });
+      fireEvent.click(trigger);
+      expect(trigger).toHaveFocus();
+      expect(open).toHaveBeenCalledExactlyOnceWith(
+        row.id,
+        threadRootId ?? row.id,
+      );
+    } finally {
+      view.unmount();
+    }
+  },
+);
+
+it("bounds reply participants and projects artwork with fallback initials", () => {
+  const media = vi.fn((url: string) =>
+    url === "https://safe/avatar" ? "https://proxy/avatar" : undefined,
+  );
+  const view = renderMessage({
+    row: { ...row, participants: ["p1", "p2", "p3", "p4", "p5"] },
+    participantProfiles: new Map([
+      ["p1", { name: "Alice", picture: "https://safe/avatar" }],
+      ["p2", { name: "Brain", picture: "http://unsafe" }],
+    ]),
+    media,
+    onOpenThread: () => {},
+  });
+  try {
+    const trigger = screen.getByRole("button", {
+      name: "View thread: 23 replies",
+    });
+    expect(
+      [...trigger.querySelectorAll("[title]")].map((e) =>
+        e.getAttribute("title"),
+      ),
+    ).toEqual(["Alice", "Brain", "p3"]);
+    expect(trigger.querySelector("img")).toHaveAttribute(
+      "src",
+      "https://proxy/avatar",
+    );
+    expect(trigger.querySelectorAll("img")).toHaveLength(1);
+    expect(trigger.querySelector('[title="Brain"]')).toHaveTextContent("B");
+    expect(trigger.querySelector('[title="p3"]')).toHaveTextContent("P");
+    expect(trigger).toHaveTextContent("+2");
+    expect(media).toHaveBeenCalledWith("https://safe/avatar", "small");
+    expect(media).toHaveBeenCalledWith("http://unsafe", "small");
+  } finally {
+    view.unmount();
+  }
+});
 
 it.each([1, 2, 3, 4, 5, 10])(
   "keeps all %i images reachable in a labelled strip",

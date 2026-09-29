@@ -206,14 +206,43 @@ test("profile plumbing: exact avatar/mention targets, thread enrichment, lifecyc
   const missingKey = await page.evaluate(
     () => window.profilesFixture.keys.missing,
   );
-  await page
-    .getByRole("button", { name: `View ${missingKey.slice(0, 10)} profile` })
-    .click();
+  const unknownAvatar = page.getByRole("button", {
+    name: `View ${missingKey.slice(0, 10)} profile`,
+  });
+  await expect(unknownAvatar.locator("[data-avatar-shape]")).toHaveAttribute(
+    "data-avatar-shape",
+    "squircle",
+  );
+  await unknownAvatar.click();
   await expect(key).toHaveText(npubs.missing);
   await expect(panel.getByText("Could not load this profile.")).toBeVisible();
+  await expect(
+    panel.getByRole("heading", { name: "Unknown agent", exact: true }),
+  ).toBeVisible();
+  await expect(
+    panel
+      .getByRole("img", { name: "Unknown agent avatar" })
+      .locator("[data-avatar-shape]"),
+  ).toHaveAttribute("data-avatar-shape", "squircle");
+  // This browser fixture has no native host; the empty loaded inventory case is
+  // covered by ProfilePanel.fallback.test.tsx, not an unavailable host.
+  await expect(panel.getByRole("region", { name: "Instances" })).toHaveCount(0);
+  await expect(panel.getByRole("tab", { name: "Runtime" })).toHaveCount(0);
+  await expect(panel.getByRole("tab", { name: "Memories" })).toHaveCount(0);
+  await expect(
+    panel.getByRole("button", { name: /^(Start|Stop|Restart|Delete agent)$/ }),
+  ).toHaveCount(0);
   await page.evaluate(() => window.profilesFixture.recover());
   await panel.getByRole("button", { name: "Retry profile" }).click();
   await expect(panel.getByText("Recovered biography")).toBeVisible();
+  await expect(
+    panel.getByRole("heading", { name: "Recovered", exact: true }),
+  ).toBeVisible();
+  await expect(
+    panel
+      .getByRole("img", { name: "Recovered avatar" })
+      .locator("[data-avatar-shape]"),
+  ).toHaveAttribute("data-avatar-shape", "squircle");
   for (const mode of ["light", "dark"]) {
     if (mode === "dark")
       await page.getByRole("button", { name: "Toggle appearance" }).click();

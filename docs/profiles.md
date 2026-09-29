@@ -167,6 +167,17 @@ supplies agent display metadata, not management authority.
   Channels resolves active contributions at click time and owns the right slot.
 - `nostr:npub…` is the exact public-key target, with no relay hint or authority.
   Opening uses the current community session, never another connection or cache.
+- Message avatars use an app-local `buzz:agent-profile:<pubkey>` target when
+  their existing display evidence identifies an agent, including kind-40002
+  messages without profile metadata. This preserves the avatar shape and an
+  unnamed **Unknown agent** heading. Other unnamed identities use `npub…xyz`.
+  The full copyable public key and profile-read retry remain available.
+  The navigation hint grants no ownership or native control and is not added
+  to the shared agent directory. Only the panel boundary accepts it; public
+  message links and composer tokens remain restricted to `nostr:npub…`.
+  Public metadata and configured names still win.
+  An empty confirmed native inventory says **Not managed on this device**;
+  it does not claim the agent is offline or absent from the whole community.
 - Display names bind only against the message's signed `p` keys, longest first.
   Unknown, ambiguous, untagged and incomplete names stay plain text. Code/link
   contexts are conservatively excluded on the full body, before URL rendering.

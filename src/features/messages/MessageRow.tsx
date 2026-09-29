@@ -146,7 +146,9 @@ export const MessageRow = memo(function MessageRow({
   const picture = profile?.picture
     ? media(profile.picture, "small")
     : undefined;
-  const target = profileTarget(row.authorId);
+  const target = profileTarget(row.authorId, {
+    agent: !!(row.agentEnvelope || agentPubkeys?.has(row.authorId)),
+  });
   const clickable = target && canOpenLink?.(target);
   const avatarShape =
     row.agentEnvelope || agentPubkeys?.has(row.authorId)

@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import {
+  ArrowClockwiseIcon,
+  ArrowSquareOutIcon,
+} from "../../shared/design-system/icons";
 import type { PluginModule } from "../../plugins/api";
 import type { PanelProps } from "../../features/panels/service";
 import { Button } from "../../shared/design-system/ui/Button";
@@ -126,7 +129,7 @@ export function RepoView({
           aria-label="Reload repository view"
           onClick={() => reload(reloads + 1)}
         >
-          <RefreshCw size={14} aria-hidden="true" /> Reload
+          <ArrowClockwiseIcon size={14} /> Reload
         </Button>
         <OpenInBrowser link={link} />
       </div>
@@ -151,7 +154,7 @@ function OpenInBrowser({ link, block }: { link: KygitLink; block?: boolean }) {
       target="_blank"
       rel="noreferrer"
     >
-      Open in browser <ExternalLink size={14} aria-hidden="true" />
+      Open in browser <ArrowSquareOutIcon size={14} />
     </a>
   );
 }

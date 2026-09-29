@@ -473,16 +473,21 @@ Click a message's reply count to open its root and replies in the right column.
 Up to three overlapping participant avatars appear beside the count, with `+N`
 for additional summary participants; missing/unavailable pictures use initials.
 They reuse the channel's existing shared profile/media path, not extra per-row reads.
-The panel automatically traverses the reader’s bounded history range before initial
-bottom positioning; there is no Load more replies button. A prior user scroll gesture
-wins. New replies arrive through the existing session and the panel follows while
-near the bottom, preserving reading position when scrolled up. Sending a reply is
+On a supporting relay, the panel opens at the newest 10 replies and loads older
+pages of 50 when you scroll upward; there is no Load more replies button. It validates
+signed NIP-CW thread bounds on every page. A prior scroll gesture wins over initial
+bottom placement. New replies arrive through the existing session and the panel
+follows near the bottom, preserving reading position above it. Sending a reply is
 explicit navigation intent and reveals the new local row.
 
-**Long-thread limitation:** traversal is oldest-first, capped at ten pages of 50.
-Bottom means bottom of returned history, not necessarily the newest reply in a long
-thread. A limit notice is not a completeness claim. True newest-page opening needs
-a relay query extension; automatic traversal alone does not solve that requirement.
+**Bounded history:** strict mode retains at most ten pages (10 initial replies
+plus nine pages of 50); legacy mode retains at most ten pages of 50. A limit notice is
+not a completeness claim. An older relay returning verified replies without thread
+bounds on the initial probe triggers a clean legacy restart: automatic oldest-first
+traversal, whose bottom may not be the newest reply in a long thread. An empty
+unsigned probe is ambiguous with access denial and stays retryable/unavailable.
+Malformed bounds, failed requests and missing bounds after strict support never
+downgrade. Media review still eagerly loads its bounded comment range.
 The thread and a linked object panel share that slot; a companion can remain below.
 Close or Escape returns focus to the reply button when it is still mounted. Changing
 channel/community or disabling Channels disposes the owned thread view.

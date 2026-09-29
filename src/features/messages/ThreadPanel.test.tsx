@@ -357,6 +357,98 @@ it("loads history automatically with error-only retry and no routine history con
   expect(h.view.refresh).toHaveBeenCalledTimes(3);
   expect(h.ensure).toHaveBeenCalledOnce();
 });
+it("starts a single older page after scrolling through 80% of loaded history", () => {
+  const h = messagesHarness();
+  h.snapshot.direction = "older";
+  h.snapshot.canLoadMore = true;
+  const section = h.render();
+  fireEvent.wheel(section, { deltaY: -1 });
+  h.scroll(681); // 20% of the 3,400px scrollable range is 680px.
+  expect(h.view.loadMore).not.toHaveBeenCalled();
+  h.scroll(680);
+  expect(h.view.loadMore).toHaveBeenCalledOnce();
+  h.scroll(0);
+  expect(h.view.loadMore).toHaveBeenCalledOnce();
+  h.snapshot.status = "loading";
+  h.render();
+  h.scroll(0);
+  expect(h.view.loadMore).toHaveBeenCalledOnce();
+});
+it("places older-page progress and retry between root and replies", () => {
+  const h = messagesHarness();
+  h.snapshot.direction = "older";
+  h.snapshot.canLoadMore = true;
+  h.snapshot.replies = [{ ...row, id: "older-reply", content: "older reply" }];
+  const section = h.render();
+  fireEvent.wheel(section, { deltaY: -1 });
+  h.scroll(0);
+  expect(h.view.loadMore).toHaveBeenCalledOnce();
+
+  h.snapshot.status = "loading";
+  h.snapshot.readKind = "older";
+  h.render();
+  const root = screen.getByText("root").closest("article");
+  const reply = screen.getByText("older reply").closest("article");
+  if (!root || !reply) throw new Error("Missing root or older reply");
+  const cue = within(section).getByText("Loading older replies…");
+  expect(
+    root.compareDocumentPosition(cue) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    cue.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(within(section).queryByText("Loading thread…")).toBeNull();
+
+  h.snapshot.status = "error";
+  h.snapshot.error = "offline";
+  h.render();
+  const alert = within(section).getByRole("alert");
+  expect(alert).toHaveTextContent("offline");
+  expect(
+    root.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  expect(
+    alert.compareDocumentPosition(reply) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  fireEvent.click(
+    within(section).getByRole("button", { name: "Retry thread" }),
+  );
+  expect(h.view.loadMore).toHaveBeenCalledTimes(2);
+  expect(h.view.refresh).toHaveBeenCalledOnce();
+
+  h.snapshot.status = "ready";
+  h.snapshot.error = undefined;
+  h.render();
+  expect(within(section).queryByText("Loading older replies…")).toBeNull();
+});
+it("keeps retained-range repair loading and retry after the replies", () => {
+  const h = messagesHarness();
+  h.snapshot.direction = "older";
+  h.snapshot.replies = [
+    { ...row, id: "retained-reply", content: "retained reply" },
+  ];
+  h.snapshot.status = "loading";
+  h.snapshot.readKind = "refresh";
+  const section = h.render();
+  expect(within(section).queryByText("Loading older replies…")).toBeNull();
+  expect(within(section).getByText("Loading thread…")).toBeVisible();
+
+  h.snapshot.status = "error";
+  h.snapshot.error = "repair failed";
+  h.render();
+  const reply = screen.getByText("retained reply").closest("article");
+  if (!reply) throw new Error("Missing retained reply");
+  const alert = within(section).getByRole("alert");
+  expect(alert).toHaveTextContent("repair failed");
+  expect(
+    reply.compareDocumentPosition(alert) & Node.DOCUMENT_POSITION_FOLLOWING,
+  ).toBeTruthy();
+  fireEvent.click(
+    within(section).getByRole("button", { name: "Retry thread" }),
+  );
+  expect(h.view.refresh).toHaveBeenCalledTimes(2);
+  expect(h.view.loadMore).not.toHaveBeenCalled();
+});
 it("positions after successful history loading, then follows live replies without another read", () => {
   const h = messagesHarness();
   h.snapshot.status = "loading";
@@ -526,7 +618,7 @@ it("finishes automatic pages before initial positioning and preserves a reader�
   expect(h.view.loadMore).toHaveBeenCalledTimes(1);
   expect(h.element.scrollTop).toBe(0);
   const section = h.render();
-  fireEvent.wheel(section);
+  fireEvent.wheel(section, { deltaY: -1 });
   h.scroll(500);
   h.snapshot.status = "loading";
   h.render();

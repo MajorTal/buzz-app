@@ -252,7 +252,6 @@
   /* A preview is supplemental context; destination cards can also open it.
      It is portal-rendered by Base UI so a clipped parent cannot hide it. */
   .buzz-preview-card {
-    z-index: var(--layer-popover);
     display: grid;
     width: max-content;
     max-width: min(18rem, 75vw);
@@ -266,8 +265,12 @@
       transform var(--duration-state) var(--easing-state);
   }
 
-  .buzz-preview-card[data-destination] {
+  .buzz-preview-card[data-destination],
+  .buzz-preview-card[data-interactive] {
     pointer-events: auto;
+  }
+
+  .buzz-preview-card[data-destination] {
     cursor: pointer;
     color: inherit;
     text-decoration: none;
@@ -819,7 +822,8 @@
 @layer components {
   /* The positioned portal owns the stacking context, not its popup child. */
   .buzz-menu-positioner,
-  .buzz-popover-positioner {
+  .buzz-popover-positioner,
+  .buzz-preview-card-positioner {
     z-index: var(--layer-popover);
   }
   .buzz-menu-popup {

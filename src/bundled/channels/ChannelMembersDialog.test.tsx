@@ -11,6 +11,7 @@ import type { RelayEvent } from "../../features/relay/events";
 import { PublishRejected } from "../../features/relay/outbox";
 import { createAgentControl } from "../../features/agents/control";
 import { controlFixture } from "../../features/agents/control-testing";
+import { ToastProvider } from "../../shared/design-system/ui/Toast";
 import { ChannelMembersButton } from "./ChannelMembersDialog";
 const stops: (() => void)[] = [];
 afterEach(() => {
@@ -99,11 +100,13 @@ async function setup(
     expect(owner.session.channels.list().status).toBe("ready"),
   );
   render(
-    <ChannelMembersButton
-      session={owner.session}
-      channelId={id}
-      control={control}
-    />,
+    <ToastProvider>
+      <ChannelMembersButton
+        session={owner.session}
+        channelId={id}
+        control={control}
+      />
+    </ToastProvider>,
   );
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Channel members" }));
@@ -284,6 +287,12 @@ it("finishes confirmed local-agent startup after closing and reopening during pu
   t.hold();
   await t.user.click(await t.search());
   await vi.waitFor(() => expect(t.publish).toHaveBeenCalledOnce());
+  const preview = screen.getByRole("dialog", {
+    name: "Fixture agent identity",
+  });
+  await t.user.keyboard("{Escape}");
+  await vi.waitFor(() => expect(preview).not.toBeInTheDocument());
+  expect(screen.getByRole("dialog", { name: "Channel members" })).toBeVisible();
   await t.user.keyboard("{Escape}");
   await vi.waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -310,6 +319,12 @@ it("keeps closed-dialog startup failures recoverable without another membership 
   t.hold();
   await t.user.click(await t.search());
   await vi.waitFor(() => expect(t.publish).toHaveBeenCalledOnce());
+  const preview = screen.getByRole("dialog", {
+    name: "Fixture agent identity",
+  });
+  await t.user.keyboard("{Escape}");
+  await vi.waitFor(() => expect(preview).not.toBeInTheDocument());
+  expect(screen.getByRole("dialog", { name: "Channel members" })).toBeVisible();
   await t.user.keyboard("{Escape}");
   await vi.waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),

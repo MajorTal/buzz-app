@@ -251,6 +251,11 @@ while the frame owns the active perimeter stroke. Read-only values can be
 read and copied; disabled actions cannot change a value. Search clear restores
 input focus. Features still own filtering, custom values, and async recovery.
 
+SearchField, Combobox.Control, and code Textarea default to no autocorrection,
+capitalization, or spellcheck. Callers can override these defaults explicitly.
+Ordinary Input and prose Textarea retain platform defaults. See the
+[exact-text input audit](../../../docs/input-correction-audit.md) for remaining fields.
+
 The Forms page in Just Design documents states, usage, and a form-in-dialog
 example. Review it with both themes, narrow widths, and enlarged text before
 introducing another form treatment.
@@ -368,6 +373,18 @@ Route navigation uses NavigationItem with aria-current instead. NavigationItem
 offers an `option` variant for picker rows with even 8px padding and immediate
 hover feedback. It forwards normal button events, refs and data attributes so unread observation,
 preloading and product shortcuts remain with the caller.
+
+PreviewCard may expose one supplemental action through `actionRef`, such as copying
+an identity's full npub. Action previews open without a delay so immediate Tab
+navigation reaches the action. They remain non-modal and never take focus on hover. Tab
+from the trigger reaches the action; Shift+Tab returns to the trigger; forward Tab
+continues after the trigger. Escape dismisses the preview before restoring focus,
+but never pulls focus back if the user moved it during exit. Closing previews
+are no longer Tab destinations.
+The positioned portal owns its layer above dialogs. An optional content anchor
+keeps previews near compact identity content inside wider actionable rows. Identity
+previews prefer above that content (with Base UI collision handling), leaving
+the hovered row’s trailing action unobstructed.
 
 ## Menu row corners
 

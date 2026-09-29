@@ -29,6 +29,7 @@ export function InventoryView({
   duplicate,
   remove,
   importedId,
+  onUseHere,
   children,
 }: {
   state: AgentControlState;
@@ -42,6 +43,7 @@ export function InventoryView({
   duplicate?: ((agent: AgentView) => void) | undefined;
   remove?: ((agent: AgentView) => void) | undefined;
   importedId: string | null;
+  onUseHere(pubkey: string): void;
   children?: ReactNode;
 }) {
   const data = state.data;
@@ -77,10 +79,11 @@ export function InventoryView({
         <section key={group} aria-label={group} className="flex flex-col gap-3">
           <h2 className="m-0 text-heading">{group}</h2>
           <div className="grid grid-cols-[repeat(auto-fill,minmax(min(100%,280px),1fr))] items-start gap-4">
-            {identities.map(({ row }) => (
+            {identities.map(({ row, decision }) => (
               <InventoryIdentityCard
                 key={row.pubkey}
                 row={row}
+                decision={decision}
                 state={state}
                 control={control}
                 session={session}
@@ -90,6 +93,7 @@ export function InventoryView({
                 duplicate={duplicate}
                 remove={remove}
                 importedId={importedId}
+                onUseHere={onUseHere}
               />
             ))}
           </div>

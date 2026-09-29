@@ -21,6 +21,7 @@ export function UnifiedInventory({
   duplicate,
   remove,
   importedId,
+  onUseHere,
 }: {
   state: AgentControlState;
   control: AgentControl;
@@ -29,6 +30,7 @@ export function UnifiedInventory({
   duplicate?: ((agent: AgentView) => void) | undefined;
   remove?: ((agent: AgentView) => void) | undefined;
   importedId: string | null;
+  onUseHere(pubkey: string): void;
 }) {
   const { agentLibrary: library, archives, profiles } = connection.session;
   const publicProfiles = useSyncExternalStore(
@@ -101,6 +103,7 @@ export function UnifiedInventory({
       duplicate={duplicate}
       remove={remove}
       importedId={importedId}
+      onUseHere={onUseHere}
     >
       {data.inventoryWarnings?.map((warning) => (
         <p key={warning} role="alert">

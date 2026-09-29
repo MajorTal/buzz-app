@@ -30,5 +30,15 @@ export function inventoryDecision(
     : row.oldBuzzSources.length
       ? importGroup
       : relayGroup;
-  return { group };
+  const action =
+    row.localIdentity && row.localSetups.size === 0
+      ? destination
+        ? "use"
+        : "wait"
+      : "unavailable";
+  const blocked =
+    action === "wait"
+      ? "Connect to a destination community to set up this identity."
+      : undefined;
+  return { group, action, blocked };
 }

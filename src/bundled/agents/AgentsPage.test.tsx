@@ -2408,9 +2408,11 @@ it("Use here retries owner confirmation and keeps setup stopped until a separate
   if (!card) throw Error("Imported card missing");
   expect(within(card).getByRole("button", { name: "Start" })).toBeDisabled();
   fireEvent.click(within(card).getByRole("button", { name: "Use here" }));
-  await within(card).findByText("Confirmation unavailable");
+  const dialog = screen.getByRole("dialog", { name: "Set up agent here" });
+  fireEvent.click(within(dialog).getByRole("button", { name: "Use here" }));
+  await within(dialog).findByText("Confirmation unavailable");
   expect(f.calls.some((call) => call.action === "configure")).toBe(false);
-  fireEvent.click(within(card).getByRole("button", { name: "Use here" }));
+  fireEvent.click(within(dialog).getByRole("button", { name: "Use here" }));
   await waitFor(() =>
     expect(within(card).getByRole("button", { name: "Start" })).toBeEnabled(),
   );

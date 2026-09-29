@@ -192,6 +192,22 @@ function Timeline({
           )?.id
         : undefined;
       const position = positionAt(element, renderedAnchor);
+      // A removed saved row cannot keep a restoration alive once a visible row
+      // replaces it. A temporarily unmounted row is still pending measurement.
+      if (anchor && !renderedAnchor && position.anchor)
+        restoredAnchor.current = undefined;
+      // A settled standalone row no longer needs correction. Membership groups
+      // retain the logical anchor even when their representative is in place.
+      if (
+        anchor &&
+        position.anchor?.id === renderedAnchor &&
+        position.anchor?.y === anchor.y &&
+        element.scrollHeight - element.clientHeight - element.scrollTop > 1 &&
+        !rows.some((row) =>
+          row.membershipRows?.some((member) => member.id === anchor.id),
+        )
+      )
+        restoredAnchor.current = undefined;
       // Virtua can emit the restoration scroll before mounting its visible
       // range. An anchorless observation must not erase the saved reading intent.
       // A reader gesture clears restoredAnchor before recording a new position.
@@ -220,7 +236,7 @@ function Timeline({
       if (previous && follow.current && !movedUp) position.bottom = true;
       // Restoration can scroll before Virtua measures rows beneath the anchor,
       // briefly reaching the estimated bottom. Only reader input may follow.
-      if (anchor) position.bottom = false;
+      if (restoredAnchor.current) position.bottom = false;
       savedPosition.current = position;
       follow.current = position.bottom;
       measuredPosition.current = {

@@ -2241,3 +2241,16 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
 .text pre {
   text-wrap-style: auto;
 }
+
+.jumpToLatest {
+  position: sticky;
+  z-index: 2;
+  top: calc(100% - var(--size-control) - var(--space-2));
+  height: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+button[data-jump-to-latest] {
+  pointer-events: auto;
+}

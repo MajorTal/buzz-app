@@ -171,10 +171,15 @@ readingTest(
     ).toBeAttached();
     await settle(page);
     await expectAnchor(page, reloadedAnchor);
-    await end(page);
+    const jumpToLatest = history(page).locator("button[data-jump-to-latest]");
+    await expect(jumpToLatest).toBeVisible();
+    await jumpToLatest.focus();
+    await page.keyboard.press("Enter");
+    await expect(history(page)).toBeFocused();
     await expect(
       history(page).locator(`[data-message-id="${held.id}"]`),
     ).toBeInViewport();
+    await expect(jumpToLatest).toHaveCount(0);
     const followed = app.append("primary", "alpha");
     await expect(
       history(page).locator(`[data-message-id="${followed.id}"]`),

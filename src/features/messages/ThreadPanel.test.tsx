@@ -96,6 +96,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.useRealTimers();
   delete (HTMLElement.prototype as Partial<HTMLElement>).scrollIntoView;
+  delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTo;
   delete (HTMLElement.prototype as Partial<HTMLElement>).scrollTop;
 });
 const row: ChannelMessage = {
@@ -196,6 +197,7 @@ function messagesHarness(
     },
   );
   HTMLElement.prototype.scrollIntoView = vi.fn();
+  HTMLElement.prototype.scrollTo = vi.fn();
   // Controlled dimensions exercise positioning policy, not browser layout.
   // Install before mount so the first real layout effect sees the same geometry.
   let height = 4000,
@@ -410,6 +412,49 @@ it("keeps video threads free of the timestamp comment shortcut at any playback p
     ).not.toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Composer" })).toBeVisible();
   }
+});
+
+it("counts replies recovered after a completed traversal, not initial history pages", () => {
+  const h = messagesHarness();
+  h.snapshot.canLoadMore = true;
+  h.render();
+  h.scroll(500);
+  h.snapshot.status = "loading";
+  h.snapshot.replies = [{ ...row, id: "history", createdAt: 1 }];
+  h.render();
+  h.snapshot.status = "ready";
+  h.snapshot.canLoadMore = false;
+  h.render();
+  h.scroll(500);
+  expect(screen.getByRole("button", { name: "Jump to latest" })).toBeVisible();
+
+  h.snapshot.status = "loading";
+  h.render();
+  h.snapshot.replies = [
+    ...h.snapshot.replies,
+    { ...row, id: "recovered", createdAt: 2 },
+  ];
+  h.render();
+  h.snapshot.status = "ready";
+  h.render();
+  expect(screen.getByRole("button", { name: "1 new message" })).toBeVisible();
+  h.snapshot.replies = [
+    ...h.snapshot.replies,
+    { ...row, id: "live", createdAt: 3 },
+  ];
+  h.render();
+  expect(screen.getByRole("button", { name: "2 new messages" })).toBeVisible();
+});
+
+it("transfers keyboard focus to the thread history before removing the jump button", () => {
+  const h = messagesHarness();
+  h.render();
+  h.scroll(500);
+  const jump = screen.getByRole("button", { name: "Jump to latest" });
+  jump.focus();
+  fireEvent.click(jump);
+  expect(h.element).toHaveFocus();
+  expect(screen.queryByRole("button", { name: "Jump to latest" })).toBeNull();
 });
 
 it("routes media in replies through the resolved root review workspace", () => {

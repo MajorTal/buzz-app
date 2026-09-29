@@ -7,6 +7,7 @@ export function runtimeFixture(directory) {
     mkdirSync(path.join(directory, name), { recursive: true });
   for (const name of [
     "scripts/build-agent-runtime.mjs",
+    "scripts/runtime-build-platform.mjs",
     "runtime/agent-runtime.json",
   ])
     copyFileSync(

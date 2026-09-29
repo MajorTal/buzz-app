@@ -378,7 +378,7 @@ pub(crate) async fn pi_install<R: tauri::Runtime>(
     #[cfg(not(any(target_os = "macos", target_os = "linux")))]
     {
         let _ = (app, state, agents);
-        return Err("Pi installation is supported only on macOS and Linux".into());
+        Err("Pi installation is supported only on macOS and Linux".into())
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
     {

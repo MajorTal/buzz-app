@@ -18,22 +18,12 @@ import { rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { runtimeBuildPlatform } from "./runtime-build-platform.mjs";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const spec = JSON.parse(
   await readFile(join(root, "runtime/agent-runtime.json"), "utf8"),
 );
-// Drop injected credentials and per-shell compiler overrides so cache entries
-// for a key come from the same pin, toolchain and build arguments. User-level
-// Cargo config and native compiler inputs (CC, CFLAGS) still apply unkeyed.
-const env = Object.fromEntries(
-  Object.entries(process.env).filter(
-    ([key]) =>
-      !/^(BUZZ_|BUZZODZ_|NOSTR_|DATABRICKS_|CARGO_(BUILD|ENCODED|PROFILE|TARGET)_|RUSTC$|RUSTC_|RUSTFLAGS$|RUSTDOCFLAGS$)/.test(
-        key,
-      ),
-  ),
-);
-env.PATH = `${join(root, "bin")}:${env.PATH ?? ""}`;
+const { env, cargo, rustc } = runtimeBuildPlatform(root);
 async function run(command, args, capture = false, cwd = root) {
   return new Promise((accept, reject) => {
     const child = spawn(command, args, {
@@ -53,8 +43,8 @@ async function run(command, args, capture = false, cwd = root) {
     );
   });
 }
-const toolchain = await run(join(root, "bin/rustc"), ["-vV"], true);
-const target = toolchain.match(/^host: (.+)$/m)?.[1];
+const toolchain = await run(rustc, ["-vV"], true);
+const target = toolchain.match(/^host: (.+)$/m)?.[1]?.trim();
 if (!target) throw new Error("Could not resolve pinned Rust target");
 const destination = join(root, "src-tauri/resources/agent-runtime");
 const filenames = spec.tools.map((name) =>
@@ -205,8 +195,7 @@ try {
     false,
     source,
   );
-  env.CARGO_TARGET_DIR = join(root, "target/agent-runtime-build");
-  await run(join(root, "bin/cargo"), buildArgs, false, source);
+  await run(cargo, buildArgs, false, source);
   await publish(join(env.CARGO_TARGET_DIR, target, "release"), destination);
   console.log(
     `Verified inputs staged at ${destination} (${spec.revision}, ${target})`,

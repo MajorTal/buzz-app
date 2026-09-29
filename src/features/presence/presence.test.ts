@@ -4,7 +4,7 @@ import type { PresenceActivity } from "./activity";
 import type { ReadTransport } from "../relay/transport";
 import { createRelaySession } from "../relay/session";
 import { createApiAdmission } from "../relay/http-admission";
-import type { LiveCallbacks } from "../relay/live";
+import { createLiveAdmission, type LiveCallbacks } from "../relay/live";
 const key = (n: number) => n.toString(16).padStart(64, "0");
 afterEach(() => {
   vi.useRealTimers();
@@ -458,4 +458,188 @@ it("refreshes early at the start gate without discarding current evidence", asyn
   expect(statuses).toEqual(["unknown", "offline", "online"]);
   release();
   h.owner.dispose();
+});
+
+it.each([true, false, null, "error"] as const)(
+  "reconciles only accepted publication, fences the pre-write read and accepts later snapshots (%s)",
+  async (result) => {
+    const h = setup();
+    h.owner.dispose();
+    vi.stubGlobal("navigator", {
+      locks: {
+        request: async (
+          _name: string,
+          _options: unknown,
+          work: () => Promise<void>,
+        ) => work(),
+      },
+    });
+    let release!: (values: ReadonlyMap<string, "offline">) => void;
+    h.read.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+    );
+    const publish = vi.fn(async () => {
+      if (result === "error") throw new Error("unconfirmed");
+      return result;
+    });
+    const owner = createPresence(h.transport, h.activity, publish, (fn) =>
+      fn(),
+    );
+    owner.subscribe(h.transport.viewer, () => {}, true);
+    owner.connected(true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(publish).toHaveBeenCalledOnce();
+    expect(owner.status(h.transport.viewer)).toBe(
+      result === true ? "online" : "unknown",
+    );
+    release(new Map([[h.transport.viewer, "offline"]]));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(owner.status(h.transport.viewer)).toBe(
+      result === true ? "online" : "offline",
+    );
+    h.read.mockResolvedValue(new Map([[h.transport.viewer, "away"]]));
+    owner.refresh();
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(owner.status(h.transport.viewer)).toBe("away");
+    owner.dispose();
+  },
+);
+
+it("live evidence fences held snapshots and invalidation retires observation", async () => {
+  const h = setup();
+  h.owner.dispose();
+  let receive!: (event: import("../relay/events").RelayEvent) => void;
+  const stop = vi.fn();
+  const observe = vi.fn((_keys, listener) => {
+    receive = listener;
+    return stop;
+  });
+  const owner = createPresence(
+    { ...h.transport, observePresence: observe },
+    h.activity,
+    async () => false,
+    (fn) => fn(),
+  );
+  let release!: (values: ReadonlyMap<string, "offline">) => void;
+  h.read.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        release = resolve;
+      }),
+  );
+  owner.subscribe(key(3), () => {});
+  owner.connected(true);
+  await vi.advanceTimersByTimeAsync(100);
+  expect(observe.mock.calls[0]?.[0]).toEqual([key(3)]);
+  const event = (pubkey: string, content: string) =>
+    ({ kind: 20001, pubkey, content }) as import("../relay/events").RelayEvent;
+  receive(event(key(4), "online"));
+  expect(owner.status(key(4))).toBe("unknown");
+  receive(event(key(3), "away"));
+  expect(owner.status(key(3))).toBe("away");
+  release(new Map([[key(3), "offline"]]));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(owner.status(key(3))).toBe("away");
+  owner.connected(false);
+  expect(stop).toHaveBeenCalledOnce();
+  receive(event(key(3), "online"));
+  expect(owner.status(key(3))).toBe("unknown");
+  owner.dispose();
+});
+
+it.each([undefined, true])(
+  "keeps late viewer demand within the 256 subject cap (profile: %s)",
+  async (profile) => {
+    const h = setup();
+    try {
+      for (let i = 3; i < 259; i++) h.owner.subscribe(key(i), () => {}, true);
+      await vi.advanceTimersByTimeAsync(100);
+      expect(h.owner.status(key(258))).toBe("online");
+      const displaced = vi.fn();
+      h.owner.subscribe(key(258), displaced, true);
+      h.owner.subscribe(h.transport.viewer, () => {}, profile);
+      expect(h.owner.limited(h.transport.viewer)).toBe(false);
+      expect(h.owner.limited(key(258))).toBe(true);
+      expect(h.owner.status(key(258))).toBe("unknown");
+      expect(displaced).toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(h.read).toHaveBeenCalledTimes(2);
+      const authors = h.read.mock.lastCall?.[0];
+      expect(authors).toHaveLength(256);
+      expect(new Set(authors).size).toBe(256);
+      expect(authors).toContain(h.transport.viewer);
+      expect(authors).not.toContain(key(258));
+      expect(h.owner.status(h.transport.viewer)).toBe("online");
+    } finally {
+      h.owner.dispose();
+    }
+  },
+);
+
+it("starts commands without jitter and retries at the real gate, including same-value commands", async () => {
+  const h = setup();
+  h.owner.dispose();
+  vi.stubGlobal("navigator", {
+    locks: {
+      request: async (
+        _name: string,
+        _options: unknown,
+        work: () => Promise<void>,
+      ) => work(),
+    },
+  });
+  const listeners = new Set<() => void>();
+  let status: "online" | "away" = "online",
+    command = 0;
+  const admission = createLiveAdmission();
+  const sent: number[] = [];
+  const activity = {
+    ...h.activity,
+    status: () => status,
+    command: () => command,
+    subscribe: (fn: () => void) => {
+      listeners.add(fn);
+      return () => {
+        listeners.delete(fn);
+      };
+    },
+  };
+  const publish = vi.fn(async () => {
+    const release = admission.tryPresence();
+    if (!release) return { retryAfterMs: admission.presenceDelay() };
+    admission.presenceSent();
+    sent.push(performance.now());
+    release();
+    return true;
+  });
+  const owner = createPresence(h.transport, activity, publish, (fn) => fn());
+  try {
+    owner.subscribe(h.transport.viewer, () => {});
+    owner.connected(true);
+    await vi.advanceTimersByTimeAsync(250);
+    expect(sent).toEqual([250]);
+    await vi.advanceTimersByTimeAsync(1000);
+    status = "away";
+    command++;
+    for (const fn of listeners) fn();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(publish).toHaveBeenCalledTimes(2); // No initial command jitter.
+    expect(owner.status(h.transport.viewer)).toBe("online");
+    await vi.advanceTimersByTimeAsync(4049);
+    expect(sent).toEqual([250]);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(sent).toEqual([250, 5300]);
+    expect(owner.status(h.transport.viewer)).toBe("away");
+    command++; // Explicit reassertion, though derived status did not change.
+    for (const fn of listeners) fn();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(publish).toHaveBeenCalledTimes(4);
+    await vi.advanceTimersByTimeAsync(5050);
+    expect(sent).toEqual([250, 5300, 10350]);
+  } finally {
+    owner.dispose();
+  }
 });

@@ -5,7 +5,7 @@ import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
 
-test("generated author package exposes agentControl, host, and identity names", async () => {
+test("generated author package in a path with spaces exposes agentControl, host, and identity names", async () => {
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const dir = await mkdtemp(join(tmpdir(), "buzz-author-consumer-"));
   const env = {
@@ -28,7 +28,7 @@ test("generated author package exposes agentControl, host, and identity names", 
       join(dir, "node_modules"),
       "dir",
     );
-    run("node", ["scripts/build-author.mjs", join(dir, "author")]);
+    run("node", ["scripts/build-author.mjs", join(dir, "author package")]);
     await writeFile(
       join(dir, "consumer.ts"),
       `
@@ -78,7 +78,9 @@ import type { provideAgentControl } from "@buzz/author";
           skipLibCheck: true,
           noEmit: true,
           types: [],
-          paths: { "@buzz/author": ["./author/types/plugins/author.d.ts"] },
+          paths: {
+            "@buzz/author": ["./author package/types/plugins/author.d.ts"],
+          },
         },
         files: ["consumer.ts"],
       }),

@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 const root = new URL("../", import.meta.url);
@@ -16,7 +16,7 @@ const result = spawnSync(
     "-p",
     "tsconfig.author.json",
     "--outDir",
-    new URL("types/", out).pathname,
+    fileURLToPath(new URL("types/", out)),
   ],
   { cwd: root, stdio: "inherit" },
 );
@@ -44,5 +44,5 @@ await writeFile(
   )}\n`,
 );
 console.log(
-  `Generated type-only @buzz/author preview in ${out.pathname}; no runtime imports supported.`,
+  `Generated type-only @buzz/author preview in ${fileURLToPath(out)}; no runtime imports supported.`,
 );

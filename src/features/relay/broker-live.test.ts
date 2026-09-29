@@ -457,6 +457,33 @@ it("preserves locally-unsent presence separately from refusal and unknown respon
     await tick();
     f.publish(0);
     await tick();
+    for (const retryAfterMs of [
+      0,
+      250,
+      3800,
+      86401000,
+      -1,
+      1.5,
+      86401001,
+      "250",
+      null,
+    ]) {
+      const result = owner.publishPresence?.(
+        "away",
+        new AbortController().signal,
+      );
+      required(f.controls.at(-1)).resolve(
+        Response.json({ accepted: null, retryAfterMs }),
+      );
+      expect(await result).toEqual(
+        typeof retryAfterMs === "number" &&
+          Number.isInteger(retryAfterMs) &&
+          retryAfterMs >= 0 &&
+          retryAfterMs <= 86401000
+          ? { retryAfterMs }
+          : null,
+      );
+    }
     for (const accepted of [null, false, true, undefined, "null"]) {
       const result = owner.publishPresence?.(
         "online",

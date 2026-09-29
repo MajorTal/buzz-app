@@ -1,27 +1,35 @@
-# Periodically refreshed community presence
+# Shared observed community presence
 
 Profiles show Active, Away, or Offline with text, while avatar badges use
 solid status fills. Pending, failed, stale, or unavailable evidence renders no
 status; it is not relabeled Offline. Message and thread bylines display badges
 and demand presence when mounted, as do one-to-one DM avatars in the sidebar.
 This describes recent Buzz session status in this community, not proof that a
-person is available or an
-immediate live-status stream. The relay stores one status per community/pubkey:
+person is available. Signed live status changes arrive on the existing socket;
+bounded snapshots repair missed events and disconnects. The relay stores one status per community/pubkey:
 multiple devices are last-writer-wins, so an idle device can report Away even
 while another is active. A crashed connection's lease can remain for up to 180
 seconds; refreshing the snapshot does not prove that the session is still alive.
 
 ## Your status
 
-The avatar dot shows your locally chosen/derived status, not an authoritative
-relay readback. Its account dropdown keeps Settings and offers **Online**,
-**Away**, and **Offline**, using the shared keyboard-accessible radio group.
-The checked choice reflects the current status. Automatic activity detection is
-internal: new/default and previously saved `auto` preferences return to Online
-on input/foreground return and Away after ten idle minutes. Selecting a
-status, including reselecting the checked status, saves a manual override;
-explicit Online, Away, and Offline choices persist
-through idle and input. Automatic is not a menu choice.
+The account avatar, message/thread bylines, profiles and one-to-one DM avatars
+consume the selected community session's observed directory. A menu choice is a
+command, not evidence: only accepted publication, verified live events, or a
+verified complete snapshot changes badges. Pending/unavailable status has no
+badge; the account control says **Status unavailable**. Personal space has no
+community authority, so it also has no observed badge.
+
+The account dropdown offers **Online**, **Away**, and **Offline**. Online resumes
+automatic activity detection; Away and Offline remain device-local overrides.
+The checked radio uses the same observed status as the button and avatar; unknown
+has no checked item. Selecting Online resumes automatic detection rather than
+pinning the badge green. Previously saved `online` values now restore as automatic.
+Automatic is not a separate menu choice. A click shows a loader while observed
+status differs from the target, without changing any badge optimistically. Each
+attempt has a 15-second confirmation deadline; a new click replaces it, a community
+or identity change cancels it, and late confirmation clears a timeout message.
+Same-value commands also ask the existing publisher to reassert the status.
 
 Online label text and avatar centers use Green 10. Away avatar centers and label backgrounds
 use Amber 10; the avatar badges have Green 11 / Amber 11 outlines against surrounding surfaces.
@@ -54,10 +62,10 @@ here. Passing the guard does not mean the Online label meets contrast targets.
 Presence still has accessible status text, and the dropdown uses standard text
 colors; that does not remedy the visual shortfall.
 
-The one app activity owner stores `auto | online | away | offline` per viewer in
+The one app activity owner stores `auto | away | offline` per viewer in
 `buzz-presence.v1:<pubkey>`. Same-origin windows observe storage changes; all
 retained communities use that viewer's intent. Startup restores it before opening
-a session. Existing `auto` values remain valid without migration; missing or
+a session. Existing `auto` and legacy `online` values restore automatic mode; missing or
 unrecognized values fall back to `auto`. Storage failure applies only to the
 current window and displays a warning. This is device-local, not cross-device
 arbitration: another device or CLI can overwrite the relay's last-writer-wins status.
@@ -74,10 +82,14 @@ or imply confirmed delivery. There is no durable invisible policy on the relay.
   loss and changing communities alone do not mean Away. Foreground return counts
   as activity; capture-phase input also observes editors that stop bubbling,
   including input without a keydown. Same-origin windows share
-  recent input through BroadcastChannel; no machine-idle or cross-device claim.
+  recent input through BroadcastChannel. Tauri samples machine-wide idle every
+  30 seconds using the same `user-idle` macOS/Windows support as the old desktop.
+  Unsupported platforms and command failures fall back to Buzz input. No
+  cross-device arbitration is added.
 - Each retained connected session owns one volatile presence directory. Mounted
   profiles, message bylines, and one-to-one DM sidebar rows demand authors. At
-  most 256 unique authors are selected; profiles take priority, then existing
+  most 256 unique authors are selected; the demanded viewer takes first priority,
+  then profiles, then existing
   selections and stable acquisition order. Overflow has no visible status.
 - Initial/new demand coalesces for 100ms, waiting at least five seconds after the
   previous read settles so transit cannot race the broker’s start gate. Successful
@@ -88,13 +100,21 @@ or imply confirmed delivery. There is no durable invisible policy on the relay.
   example, just after start or stop).
   Empty demand makes no request; removed authors lose their evidence. Hidden views,
   disconnect, access/cache invalidation and disposal invalidate observations.
+- One demand-scoped kind:20001 live-only route shares the authenticated socket.
+  Its author set updates at the existing coalesced snapshot/start gate, not on
+  every mounted row. Replacement keeps the old wire until the new EOSE; removed
+  subjects are fenced locally. Accepted self-publication and verified live events
+  update that same directory and fence older in-flight snapshots per subject.
+  Live evidence has the same 75-second local freshness bound. Later snapshots
+  remain authoritative and can replace it. Disconnect cleanup is not broadcast
+  by the relay, so snapshots remain necessary.
 - One bounded complete snapshot is validated before any status changes. The
   configured relay must sign each unique requested subject; only a successful
   complete response can make omitted subjects Offline. This is read-time evidence,
   not the relay's remaining lease. Invalid or failed responses mean Unknown for
   the whole snapshot. Valid relay-signed unsupported statuses mean Unknown only
   for that subject; canonical peers and complete-response omissions remain usable.
-- The development broker permits one optional HTTP flight, a principal-wide
+- The development broker and native signed transport permit one optional HTTP flight, a principal-wide
   five-second start gate, 256 subjects, a 20 KiB request and 1 MiB response, and
   a ten-second request lifetime. Optional work never uses ordinary read slots or
   dispatch credit. Local busy skips retry after 5–6 seconds; network failures wait
@@ -103,23 +123,29 @@ or imply confirmed delivery. There is no durable invisible policy on the relay.
   serializing same-origin windows. Publication is lossy and bounded; it never
   enters the durable outbox, replays missed ticks, or publishes Offline on close.
   Hidden observation does not stop connected-community renewal. Actual shared
-  relay cooldowns still take priority. A locally unsent publication
-  retries current status after 5–6 seconds through the same renewal timer; refused
-  or unconfirmed publications retain the 60–65 second interval.
+  relay cooldowns still take priority. Status changes and explicit commands start
+  without initial jitter; connect and lock handoff retain 250–1000ms jitter.
+  Admission skips report the remaining five-second send gate or cooldown; the
+  same renewal timer retries 50ms after that boundary, without polling. Other
+  locally unsent publications retry after 5–6 seconds, while refused or unconfirmed
+  publications retain the 60–65 second interval.
 
 Bounded presence reads and publications can run during ordinary HTTP work and
 channel subscription setup; neither waits for the entire host to become idle.
 Unavailable evidence can persist during relay cooldowns or unavailability. These limits bound
 client work; they do not
 promise zero CPU/network/backend cost, instant transitions, or a delivery SLA.
-There are no presence REQs, added sockets, relay changes, or direct-adapter parity.
+There is one bounded presence REQ per observing session, no added socket and no
+relay change. Native reads reuse the existing authenticated `POST /query`, signer,
+response verification and optional admission lane.
 
 ## Validation
 
 Owner tests live with `features/presence`, relay transport/admission and the broker.
 `tests/browser/presence.spec.mjs` exercises the built app and production broker with
 modeled upstream and ephemeral keys: held profile snapshots versus chat,
-byline presence/demand, avatar choices and reload, and real same-origin preference
+byline presence/demand, accepted avatar choices agreeing with self-message badges
+and reload, and real same-origin preference
 synchronization/Web Lock handoff while Offline. `settings.spec.mjs` retains the
 account disclosure, keyboard traversal and Settings journey in both engines. `channel-opening.spec.mjs` includes matched-thread
 measurement support. See [browser measurement limits](browser-testing.md).

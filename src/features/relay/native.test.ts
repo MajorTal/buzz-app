@@ -405,3 +405,44 @@ it.each(["missing", "offline"])(
     expect(requests.some((request) => request.path === "/events")).toBe(false);
   },
 );
+
+it.each(["online", "tampered", "wrong-author", "empty"] as const)(
+  "native presence snapshot uses bounded authenticated query and verifies authority (%s)",
+  async (result) => {
+    const origin = `https://presence-${result}.test`;
+    const event = signed(result === "wrong-author" ? viewer : relay, {
+      kind: 20001,
+      created_at: 1700000010,
+      tags: [["p", viewer.pubkey]],
+      content: "online",
+    });
+    respond = () => ({
+      body:
+        result === "empty"
+          ? []
+          : [result === "tampered" ? { ...event, content: "away" } : event],
+    });
+    const transport = await connectNativeTransport(origin);
+    const pending = transport.presenceSnapshot?.(
+      [viewer.pubkey],
+      new AbortController().signal,
+    );
+    if (result === "tampered" || result === "wrong-author")
+      await expect(pending).rejects.toThrow();
+    else
+      expect((await pending)?.get(viewer.pubkey)).toBe(
+        result === "empty" ? "offline" : "online",
+      );
+    expect(JSON.parse(requests.at(-1)?.body ?? "null")).toEqual([
+      { kinds: [20001], authors: [viewer.pubkey], limit: 1 },
+    ]);
+    expect(requests.at(-1)?.path).toBe("/query");
+    expect(
+      await transport.presenceSnapshot?.(
+        [viewer.pubkey],
+        new AbortController().signal,
+      ),
+    ).toBeNull();
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);

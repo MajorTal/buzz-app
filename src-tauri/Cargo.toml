@@ -70,3 +70,6 @@ webkit2gtk = "=2.0.2"
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 buzz-credential-store = { path = "../crates/credential-store" }
+
+[target.'cfg(any(target_os = "macos", windows))'.dependencies]
+user-idle = { version = "0.6", default-features = false }

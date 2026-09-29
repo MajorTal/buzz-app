@@ -143,6 +143,74 @@ async function until(check) {
   throw new Error("Local HTTP fixture did not reach expected state");
 }
 
+test("presence busy skips cross the real broker as null while cooldown keeps its deadline", async () => {
+  const h = await harness();
+  const nativeFetch = globalThis.fetch;
+  const outcomes = [];
+  let traffic;
+  let clock = 0; // Integer milliseconds keep ceil-based admission deadlines exact.
+  try {
+    vi.spyOn(performance, "now").mockImplementation(() => clock);
+    vi.stubGlobal("fetch", async (input, init) => {
+      const response = await nativeFetch(input, {
+        ...init,
+        headers: {
+          ...init?.headers,
+          ...(init?.method === "POST" ? { Origin: h.base } : {}),
+        },
+      });
+      if (String(input).endsWith("/stream-presence"))
+        outcomes.push(await response.clone().json());
+      return response;
+    });
+    const transport = await connectBrokerTransport(h.base);
+    let snapshot;
+    traffic = transport.subscribe({
+      receive() {},
+      established() {},
+      denied() {},
+      state(value) {
+        snapshot = value;
+      },
+    });
+    await until(() => snapshot?.status === "connected");
+    const first = traffic.publishPresence(
+      "online",
+      new AbortController().signal,
+    );
+    await until(() => h.publications.length === 1);
+    clock += 5100; // Gate elapsed; real receipt timer remains held.
+    expect(
+      await traffic.publishPresence("away", new AbortController().signal),
+    ).toBeNull();
+    expect(outcomes).toEqual([{ accepted: null }]);
+    expect(h.publications).toHaveLength(1);
+    const { event, socket } = h.publications[0];
+    await socket.receive([
+      "OK",
+      event.id,
+      false,
+      "rate-limited: quota exceeded; retry in 3s",
+    ]);
+    expect(await first).toBe(false);
+    expect(
+      await traffic.publishPresence("away", new AbortController().signal),
+    ).toEqual({ retryAfterMs: 4000 });
+    expect(outcomes.at(-1)).toEqual({ accepted: null, retryAfterMs: 4000 });
+    clock += 4000;
+    const next = traffic.publishPresence("away", new AbortController().signal);
+    await until(() => h.publications.length === 2);
+    expect(h.publications[1].event.content).toBe("away");
+    await socket.receive(["OK", h.publications[1].event.id, true, ""]);
+    expect(await next).toBe(true);
+  } finally {
+    traffic?.dispose();
+    vi.restoreAllMocks();
+    vi.unstubAllGlobals();
+    await h.close();
+  }
+});
+
 test("POST replacement and a second stream share server cooldown without pacing healthy starts; response close disposes WS", async () => {
   const h = await harness(1);
   try {

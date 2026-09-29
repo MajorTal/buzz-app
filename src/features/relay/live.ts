@@ -35,6 +35,10 @@ export function createLiveAdmission() {
       else pending.delete(owner);
     },
     presenceReady: () => performance.now() >= Math.max(cooldown, presenceNext),
+    presenceDelay: () =>
+      Math.ceil(
+        Math.max(0, Math.max(cooldown, presenceNext) - performance.now()),
+      ),
     tryPresence() {
       if (presenceBusy || !this.presenceReady()) return;
       presenceBusy = true;
@@ -112,6 +116,7 @@ export type LiveCallbacks = {
   telemetry?(event: VerifiedEvent, generation: number): void;
   /** Decoded host DTO on the browser transport. */
   observer?(frame: ObserverFrame, generation: number): void;
+  presence?(event: VerifiedEvent): void;
   state(snapshot: LiveSnapshot): void;
   established(channels?: string | readonly string[]): void;
   /** Periodic repair hint, not membership or historical-completeness evidence. */
@@ -126,14 +131,26 @@ export type LiveSubscription = {
   /** Host demand only: reorder existing pending routes, never grant new interests. */
   prioritize?(channels: readonly string[]): void;
   observe?(generation: number | null): void;
-  /** One ephemeral status: true = accepted, null = locally unsent, false = unconfirmed/refused. */
+  /** Ephemeral status: true = accepted, false = unconfirmed/refused, null = unsent.
+   * Admission skips report their remaining delay; no durable queue is created. */
   publishPresence?(
     status: "online" | "away" | "offline",
     signal: AbortSignal,
-  ): Promise<boolean | null>;
+  ): Promise<boolean | null | { retryAfterMs: number }>;
+  watchPresence?(authors: readonly string[]): void;
   retry(): void;
   dispose(): void;
 };
+/** Demand-scoped ephemeral authors, never a channel/history interest. */
+export function livePresenceAuthors(input: unknown): string[] {
+  if (
+    !Array.isArray(input) ||
+    input.length > 256 ||
+    input.some((key) => typeof key !== "string" || !/^[0-9a-f]{64}$/.test(key))
+  )
+    throw new Error("Invalid live presence authors");
+  return [...new Set(input as string[])].sort();
+}
 /** IDs, not names/previews, define interest identity. Never silently truncate. */
 export function liveChannels(input: unknown): string[] {
   if (
@@ -212,6 +229,7 @@ export function subscribeRelayTraffic(
   let denying: Set<string> | undefined;
   let priority: string[] = [];
   let observer: number | null = null;
+  let presenceAuthors: readonly string[] = [];
   let presenceReceipt:
     | { id: string; finish(accepted: boolean): void }
     | undefined;
@@ -325,13 +343,19 @@ export function subscribeRelayTraffic(
       ]),
     ];
     const admitted = new Set(
-      ranked.slice(0, LIVE_CHANNEL_CAPACITY - (observer !== null ? 1 : 0)),
+      ranked.slice(
+        0,
+        LIVE_CHANNEL_CAPACITY -
+          (observer !== null ? 1 : 0) -
+          (presenceAuthors.length ? 1 : 0),
+      ),
     );
     const remaining = new Set(interests);
     const globals = new Set([
       "profiles",
       "membership",
       ...(observer !== null ? ["observer"] : []),
+      ...(presenceAuthors.length ? ["presence"] : []),
     ]);
     // Scope is immutable for a wire. Retirement rebuilds only the affected batch;
     // navigation is scheduling, never a reason to rebalance healthy subscriptions.
@@ -376,7 +400,10 @@ export function subscribeRelayTraffic(
       routes.set(id, route);
       return route;
     };
-    for (const id of globals) add(id);
+    for (const id of globals) {
+      const route = add(id);
+      if (id === "presence") route.liveOnly = true;
+    }
     const batch: string[] = [];
     for (const id of remaining) {
       if (!admitted.has(id)) {
@@ -512,11 +539,13 @@ export function subscribeRelayTraffic(
             : scope(route).map((id) => [id])
           ).map((ids) => ({ kinds: CHANNEL_KINDS, "#h": ids }))
         : [
-            route.id === "profiles"
-              ? { kinds: [0, 10100, 30177] }
-              : route.id === "observer"
-                ? { kinds: [OBSERVER_KIND], "#p": [viewer] }
-                : { kinds: [44100, 44101], "#p": [viewer] },
+            route.id === "presence"
+              ? { kinds: [20001], authors: presenceAuthors }
+              : route.id === "profiles"
+                ? { kinds: [0, 10100, 30177] }
+                : route.id === "observer"
+                  ? { kinds: [OBSERVER_KIND], "#p": [viewer] }
+                  : { kinds: [44100, 44101], "#p": [viewer] },
           ];
       send([
         "REQ",
@@ -768,7 +797,13 @@ export function subscribeRelayTraffic(
         // The session still verifies access and auxiliary target evidence.
         if (incoming.kind === 20002 && !channelId) return;
         if (route.status === "pending" && !route.liveOnly) route.count++;
-        if (route.id === "observer") {
+        if (route.id === "presence") {
+          if (
+            incoming.kind === 20001 &&
+            presenceAuthors.includes(incoming.pubkey)
+          )
+            callbacks.presence?.(incoming);
+        } else if (route.id === "observer") {
           if (
             observer !== null &&
             incoming.kind === OBSERVER_KIND &&
@@ -797,7 +832,7 @@ export function subscribeRelayTraffic(
         route.replay = route.count >= LIVE_REPLAY_LIMIT ? "limited" : "unknown";
         notify();
         if (!valid() || wires.get(route.wire ?? "") !== route) return;
-        if (route.id !== "observer")
+        if (route.id !== "observer" && route.id !== "presence")
           callbacks.established(route.channelIds ?? route.channelId);
         if (valid()) pump();
       } else if (data[0] === "CLOSED") {
@@ -817,6 +852,18 @@ export function subscribeRelayTraffic(
   }
   connect();
   return {
+    watchPresence(authors) {
+      const next = livePresenceAuthors(authors);
+      if (closed || JSON.stringify(next) === JSON.stringify(presenceAuthors))
+        return;
+      presenceAuthors = next;
+      const route = routes.get("presence");
+      if (route) {
+        if (next.length) replace(route);
+        else remove(route);
+      }
+      sync();
+    },
     async publishPresence(status, signal) {
       if (
         (status !== "online" && status !== "away" && status !== "offline") ||
@@ -826,7 +873,11 @@ export function subscribeRelayTraffic(
       )
         return null;
       const release = admission.tryPresence();
-      if (!release) return null;
+      // Busy alone is not a retry deadline; only actual gates get boundary retries.
+      if (!release)
+        return admission.presenceReady()
+          ? null
+          : { retryAfterMs: admission.presenceDelay() };
       const current = generation;
       const bounded = AbortSignal.any([signal, AbortSignal.timeout(10000)]);
       try {
@@ -843,10 +894,11 @@ export function subscribeRelayTraffic(
           closed ||
           current !== generation ||
           !authenticated ||
-          socket?.readyState !== 1 ||
-          !admission.presenceReady()
+          socket?.readyState !== 1
         )
           return null;
+        if (!admission.presenceReady())
+          return { retryAfterMs: admission.presenceDelay() };
         if (
           event.pubkey !== viewer ||
           event.kind !== 20001 ||

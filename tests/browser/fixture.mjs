@@ -649,7 +649,14 @@ export const test = base.extend({
         );
       if (filter.kinds?.includes(20001))
         return filter.authors.map((author) =>
-          sign(20001, [["p", author]], "online"),
+          sign(
+            20001,
+            [["p", author]],
+            report.presencePublications?.findLast(
+              (entry) =>
+                entry.community === community && entry.event.pubkey === author,
+            )?.event.content ?? "online",
+          ),
         );
       if (filter.kinds?.includes(30622))
         return channelLifecycle
@@ -1576,6 +1583,17 @@ export const test = base.extend({
             for (const client of streams.get("primary") ?? [])
               if (client.channels.includes(channels[0]))
                 client.response.write(`data: ${JSON.stringify(event)}\n\n`);
+          return event;
+        },
+        presence(status, community = "primary") {
+          const event = sign(
+            20001,
+            [],
+            status,
+            peerKey,
+            Math.floor(Date.now() / 1000),
+          );
+          relay.presence(community, event);
           return event;
         },
         participants,

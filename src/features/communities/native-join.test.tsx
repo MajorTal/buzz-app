@@ -27,6 +27,7 @@ let profile: RelayEvent | undefined;
 let claim: () => Promise<void>;
 let publish: () => Promise<void>;
 let readProfile: () => Promise<void>;
+let query: () => Promise<void>;
 const journal = () => createJoinJournal(viewer.pubkey);
 beforeEach(() => {
   localStorage.clear();
@@ -36,6 +37,7 @@ beforeEach(() => {
   claim = async () => {};
   publish = async () => {};
   readProfile = async () => {};
+  query = async () => {};
   vi.stubEnv("VITE_BUZZ_LIVE", "0");
   vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
   vi.stubGlobal(
@@ -51,6 +53,7 @@ beforeEach(() => {
     }),
   );
   vi.mocked(invoke).mockImplementation(async (command, args) => {
+    if (command === "get_os_idle_seconds") return 0;
     if (command === "identity_restore") return viewer.pubkey;
     if (command === "relay_sign")
       return signed(viewer, (args as { event: EventTemplate }).event);
@@ -93,6 +96,7 @@ beforeEach(() => {
         await claim();
         return response({ status: "joined" });
       case "/query":
+        await query();
         if (!admitted) return response({ error: "membership required" }, 403);
         if (
           body.some((filter: { kinds?: number[] }) => filter.kinds?.includes(0))
@@ -498,7 +502,10 @@ it("restores a configured alias as a usable relay URL", async () => {
 
 it("retains pending admission during network failure without redeeming the invite again", async () => {
   journal().begin(community);
-  vi.mocked(invoke).mockRejectedValueOnce(new Error("Relay offline"));
+  // Fail the membership read, not unrelated native startup work.
+  query = async () => {
+    throw new Error("Relay offline");
+  };
   const user = userEvent.setup();
   await open();
   await user.click(screen.getByRole("button", { name: "Continue" }));
@@ -506,8 +513,10 @@ it("retains pending admission during network failure without redeeming the invit
   expect(journal().get(community)).toBeDefined();
   expect(calls.some((call) => call.path === "/api/invites/claim")).toBe(false);
   admitted = true;
+  query = async () => {};
   await user.click(screen.getByRole("button", { name: "Continue" }));
   await screen.findByLabelText("Display name");
+  expect(calls.some((call) => call.path === "/api/invites/claim")).toBe(false);
 });
 
 it("fences a late claim completion after the dialog is replaced", async () => {

@@ -13,6 +13,8 @@ mod host_command;
 mod host_request;
 mod identity;
 mod notifications;
+mod os_idle;
+use os_idle::get_os_idle_seconds;
 mod relay;
 use identity::{identity_create, identity_export, identity_import, identity_restore, IdentityHost};
 use relay::{relay_http, relay_sign};
@@ -354,6 +356,7 @@ fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         identity_export,
         relay_sign,
         relay_http,
+        get_os_idle_seconds,
         plugin_import_folder,
         plugin_import_git,
         plugin_import_install,

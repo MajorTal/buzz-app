@@ -22,6 +22,7 @@ fn main() {
             "identity_export",
             "relay_sign",
             "relay_http",
+            "get_os_idle_seconds",
             "plugin_import_folder",
             "plugin_import_git",
             "plugin_import_install",

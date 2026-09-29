@@ -20,11 +20,30 @@ afterEach(cleanup);
 it("keeps the header cutout and menu status in sync with presence", () => {
   const listeners = new Set<() => void>();
   let presence = {
-    status: "online" as "online" | "away" | "offline",
+    status: "online" as "online" | "away" | "offline" | "unknown",
     preference: "auto",
   };
-  const state = { profile: { name: "", picture: "" }, viewer: "a".repeat(64) };
-  const connection = { status: "unavailable", session: undefined, scope: "" };
+  const state = {
+    profile: { name: "", picture: "" },
+    viewer: "a".repeat(64),
+    selected: "https://relay.test",
+  };
+  const connection = {
+    status: "ready",
+    viewer: state.viewer,
+    session: {
+      presence: {
+        status: () => presence.status,
+        limited: () => false,
+        subscribe: (_key: string, listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      },
+      live: { subscribe: () => () => {}, snapshot: () => undefined },
+    },
+    scope: "",
+  };
   const subscribe = () => () => {};
   const communities = {
     subscribe,
@@ -35,10 +54,11 @@ it("keeps the header cutout and menu status in sync with presence", () => {
         listeners.add(listener);
         return () => listeners.delete(listener);
       },
-      snapshot: () => presence,
+      snapshot: () => intent,
       setPreference: () => {},
     },
   } as unknown as Communities;
+  const intent = { status: "online", preference: "auto", error: undefined };
   const actions: readonly [] = [];
   const accountActions = {
     subscribe,
@@ -71,21 +91,103 @@ it("keeps the header cutout and menu status in sync with presence", () => {
   for (const [status, label] of [
     ["away", "Away"],
     ["offline", "Offline"],
+    ["unknown", "Status unavailable"],
   ] as const) {
     act(() => {
       presence = { ...presence, status };
       for (const listener of listeners) listener();
     });
-    expect(button.querySelector(".buzz-avatar-status")).toHaveAttribute(
-      "data-status",
-      status,
-    );
+    if (status === "unknown")
+      expect(button.querySelector(".buzz-avatar-status")).not.toHaveAttribute(
+        "data-status",
+      );
+    else
+      expect(button.querySelector(".buzz-avatar-status")).toHaveAttribute(
+        "data-status",
+        status,
+      );
     expect(
       screen
         .getByRole("button", { name: `Availability: ${label}` })
         .closest("[data-status]"),
     ).toHaveAttribute("data-status", status);
   }
+});
+
+it("checks observed Away despite automatic Online intent and dispatches checked-item commands", async () => {
+  const user = userEvent.setup();
+  const viewer = "a".repeat(64);
+  const listeners = new Set<() => void>();
+  let observed = "away";
+  const subscribe = () => () => {};
+  const state = {
+    profile: { name: "", picture: "" },
+    viewer,
+    selected: "https://relay.test",
+  };
+  const intent = { status: "online", preference: "auto", error: undefined };
+  const setPreference = vi.fn();
+  const connection = {
+    status: "ready",
+    viewer,
+    scope: "",
+    session: {
+      presence: {
+        status: () => observed,
+        limited: () => false,
+        subscribe: (_key: string, listener: () => void) => {
+          listeners.add(listener);
+          return () => listeners.delete(listener);
+        },
+      },
+      live: { subscribe, snapshot: () => undefined },
+    },
+  };
+  const communities = {
+    subscribe,
+    snapshot: () => state,
+    relay: { subscribe, snapshot: () => connection },
+    presence: { subscribe, snapshot: () => intent, setPreference },
+  } as unknown as Communities;
+  const actions: readonly [] = [];
+  const accountActions = {
+    subscribe,
+    snapshot: () => actions,
+  } as unknown as AccountActionsService;
+  render(
+    <ProfileButton
+      communities={communities}
+      accountActions={accountActions}
+      settingsSelected={false}
+      onSettings={() => {}}
+    />,
+  );
+  await user.click(screen.getByRole("button", { name: "Your profile" }));
+  await user.click(
+    await screen.findByRole("button", { name: "Availability: Away" }),
+  );
+  expect(
+    await screen.findByRole("menuitemradio", { name: "Online" }),
+  ).not.toBeChecked();
+  const away = await screen.findByRole("menuitemradio", { name: "Away" });
+  expect(away).toBeChecked();
+  act(() => {
+    observed = "unknown";
+    for (const listener of listeners) listener();
+  });
+  for (const item of screen.getAllByRole("menuitemradio"))
+    expect(item).not.toBeChecked();
+  act(() => {
+    observed = "away";
+    for (const listener of listeners) listener();
+  });
+  expect(away).toBeChecked();
+  await user.click(away);
+  expect(setPreference).toHaveBeenCalledExactlyOnceWith("away");
+  // Command dispatch is not evidence. The control remains Away until observed.
+  expect(
+    screen.getByRole("button", { name: "Availability: Away" }),
+  ).toBeVisible();
 });
 
 it.each([false, true])(
@@ -227,7 +329,7 @@ it("shows the selected community name and authenticated avatar without saving a 
       await screen.findByRole("menu", { name: "Community name" }),
     ).toBeVisible();
     expect(
-      screen.getByRole("button", { name: "Availability: Online" }),
+      screen.getByRole("button", { name: "Availability: Status unavailable" }),
     ).toBeVisible();
     expect(media).toHaveBeenCalledWith(
       "https://community.test/media/avatar.png",
@@ -350,6 +452,7 @@ it.each(["online", "away", "offline"] as const)(
     const snapshot = {
       profile: { name: "Fixture", picture: "" },
       viewer: "fixture",
+      selected: "https://relay.test",
     };
     const presence = {
       status,
@@ -357,7 +460,21 @@ it.each(["online", "away", "offline"] as const)(
       error: null,
     };
     const setPreference = vi.fn();
-    const connection = { status: "unavailable", session: undefined, scope: "" };
+    const profileMap = new Map([["fixture", { name: "Fixture", picture: "" }]]);
+    const connection = {
+      status: "ready",
+      viewer: "fixture",
+      session: {
+        profiles: { subscribe: () => () => {}, snapshot: () => profileMap },
+        presence: {
+          status: () => status,
+          limited: () => false,
+          subscribe: () => () => {},
+        },
+        live: { subscribe: () => () => {}, snapshot: () => undefined },
+      },
+      scope: "",
+    };
     const subscribe = () => () => {};
     const actions: readonly [] = [];
     const accountActions = {
@@ -694,4 +811,141 @@ it("opens a contributed account action and removes it when its registration reti
   expect(
     screen.queryByRole("menuitem", { name: "Send feedback" }),
   ).not.toBeInTheDocument();
+});
+
+async function statusFeedbackFixture(disconnected = false) {
+  const listeners = new Set<() => void>();
+  let observed = "online";
+  let state = {
+    viewer: "a".repeat(64),
+    selected: "https://first.test",
+    profile: { name: "Fixture" },
+  };
+  const subscribe = (fn: () => void) => {
+    listeners.add(fn);
+    return () => {
+      listeners.delete(fn);
+    };
+  };
+  const connection = {
+    status: disconnected ? "error" : "ready",
+    viewer: state.viewer,
+    session: disconnected
+      ? undefined
+      : {
+          presence: {
+            status: () => observed,
+            limited: () => false,
+            subscribe: (_key: string, fn: () => void) => subscribe(fn),
+          },
+          live: { subscribe: () => () => {}, snapshot: () => undefined },
+        },
+  };
+  const intent = { status: "online", preference: "auto" };
+  const setPreference = vi.fn();
+  const actions: readonly [] = [];
+  render(
+    <ProfileButton
+      communities={
+        {
+          subscribe,
+          snapshot: () => state,
+          relay: { subscribe, snapshot: () => connection },
+          presence: { subscribe, snapshot: () => intent, setPreference },
+        } as unknown as Communities
+      }
+      accountActions={
+        {
+          subscribe,
+          snapshot: () => actions,
+        } as unknown as AccountActionsService
+      }
+      settingsSelected={false}
+      onSettings={() => {}}
+    />,
+  );
+  const user = userEvent.setup();
+  await user.click(screen.getByRole("button", { name: "Your profile" }));
+  await user.click(
+    await screen.findByRole("button", { name: /^Availability:/ }),
+  );
+  await screen.findByRole("menuitemradio", { name: "Away" });
+  return {
+    setPreference,
+    observe(status: string) {
+      act(() => {
+        observed = status;
+        for (const fn of listeners) fn();
+      });
+    },
+    community() {
+      act(() => {
+        state = { ...state, selected: "https://second.test" };
+        for (const fn of listeners) fn();
+      });
+    },
+  };
+}
+
+it("keeps confirmed indicators while pending, replaces attempts, times out, retries and clears late success", async () => {
+  const h = await statusFeedbackFixture();
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Away" }));
+    expect(screen.getByRole("status")).toHaveTextContent("Updating to away");
+    expect(screen.getByRole("menuitemradio", { name: "Online" })).toBeChecked();
+    expect(
+      screen
+        .getByRole("button", { name: "Your profile" })
+        .querySelector(".buzz-avatar-status"),
+    ).toHaveAttribute("data-status", "online");
+    act(() => vi.advanceTimersByTime(10000));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Offline" }));
+    act(() => vi.advanceTimersByTime(5000));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toHaveTextContent("Updating to offline");
+    h.observe("away"); // Late evidence for the superseded click cannot finish Offline.
+    expect(screen.getByRole("status")).toHaveTextContent("Updating to offline");
+    act(() => vi.advanceTimersByTime(9999));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not confirm your status",
+    );
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Offline" }));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(15000));
+    expect(screen.getByRole("alert")).toBeInTheDocument();
+    h.observe("offline");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("menuitemradio", { name: "Offline" }),
+    ).toBeChecked();
+    expect(h.setPreference.mock.calls.map(([value]) => value)).toEqual([
+      "away",
+      "offline",
+      "offline",
+    ]);
+  } finally {
+    cleanup();
+    vi.useRealTimers();
+  }
+});
+
+it("cancels feedback on disconnected community switches even when both sessions are absent", async () => {
+  const h = await statusFeedbackFixture(true);
+  vi.useFakeTimers();
+  try {
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "Away" }));
+    expect(screen.getByRole("status")).toBeInTheDocument();
+    h.community();
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(15000));
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  } finally {
+    cleanup();
+    vi.useRealTimers();
+  }
 });

@@ -1,5 +1,8 @@
 import { test, expect } from "./fixture.mjs";
 
+// A visible badge requires confirmed presence, not just local Online intent.
+test.use({ productionBroker: true });
+
 // Real CSS paint and shell geometry require a browser, not DOM emulation.
 test("profile avatar cutout shows the shell through hover, press and open menu", async ({
   page,

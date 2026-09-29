@@ -1,11 +1,15 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
+
 export type PresencePreference = "auto" | "online" | "away" | "offline";
 const preference = (value: unknown): PresencePreference =>
-  value === "online" || value === "away" || value === "offline"
-    ? value
-    : "auto";
+  value === "away" || value === "offline" ? value : "auto";
 
 /** One app input/preference source shared by retained community publishers. */
-export function createPresenceActivity() {
+export function createPresenceActivity(
+  readIdle: (() => Promise<number | null>) | undefined = isTauri()
+    ? () => invoke<number | null>("get_os_idle_seconds")
+    : undefined,
+) {
   const listeners = new Set<() => void>();
   let last = Date.now(),
     sharedAt = 0;
@@ -13,6 +17,7 @@ export function createPresenceActivity() {
   let viewer: string | undefined;
   let choice: PresencePreference = "auto";
   let error: string | undefined;
+  let command = 0;
   const status = (): "online" | "away" | "offline" =>
     choice === "auto" ? (away ? "away" : "online") : choice;
   let snapshot: {
@@ -27,7 +32,9 @@ export function createPresenceActivity() {
   const storageKey = () => `buzz-presence.v1:${viewer}`;
   const restore = () => {
     try {
-      choice = preference(localStorage.getItem(storageKey()));
+      const restored = preference(localStorage.getItem(storageKey()));
+      if (restored !== choice) command++;
+      choice = restored;
       error = undefined;
     } catch {
       error = "Could not read your saved status. Changes apply to this window.";
@@ -45,6 +52,26 @@ export function createPresenceActivity() {
       ? new BroadcastChannel("buzz-presence-input")
       : undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let idleTimer: ReturnType<typeof setTimeout> | undefined;
+  let disposed = false;
+  async function sampleIdle() {
+    try {
+      const seconds = await readIdle?.();
+      if (disposed) return;
+      if (
+        typeof seconds === "number" &&
+        Number.isFinite(seconds) &&
+        seconds >= 0
+      ) {
+        last = Math.max(last, Date.now() - seconds * 1000);
+      }
+    } catch {
+      // Unsupported/failed native sensing falls back to captured Buzz input.
+    }
+    if (disposed) return;
+    update();
+    idleTimer = setTimeout(() => void sampleIdle(), 30000);
+  }
   function update() {
     clearTimeout(timer);
     const nextAway = Date.now() - last >= 600000;
@@ -67,6 +94,11 @@ export function createPresenceActivity() {
   };
   if (channel)
     channel.onmessage = ({ data }) => {
+      if (viewer && data?.viewer === viewer && data?.preference === choice) {
+        command++;
+        emit();
+        return;
+      }
       if (
         typeof data === "number" &&
         Number.isFinite(data) &&
@@ -101,8 +133,10 @@ export function createPresenceActivity() {
     window.addEventListener("focus", activate);
     window.addEventListener("storage", stored);
   }
+  if (readIdle) void sampleIdle();
   return {
     status,
+    command: () => command,
     snapshot: () => snapshot,
     setViewer(value: string) {
       if (value === viewer) return;
@@ -112,9 +146,14 @@ export function createPresenceActivity() {
     },
     setPreference(value: PresencePreference) {
       if (!viewer) return;
+      const previous = choice;
       choice = preference(value);
+      command++;
       try {
         localStorage.setItem(storageKey(), choice);
+        // Same-value writes emit no storage event in the window holding the lock.
+        if (previous === choice)
+          channel?.postMessage({ viewer, preference: choice });
         error = undefined;
       } catch {
         error =
@@ -131,7 +170,9 @@ export function createPresenceActivity() {
       };
     },
     dispose() {
+      disposed = true;
       clearTimeout(timer);
+      clearTimeout(idleTimer);
       channel?.close();
       listeners.clear();
       if (typeof document !== "undefined") {
@@ -149,4 +190,4 @@ export function createPresenceActivity() {
 export type PresenceActivity = Pick<
   ReturnType<typeof createPresenceActivity>,
   "status" | "visible" | "subscribe" | "dispose"
->;
+> & { command?: () => number };

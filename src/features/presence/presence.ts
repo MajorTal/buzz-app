@@ -8,9 +8,10 @@ type Subject = {
   profiles: number;
   status: PresenceStatus;
   expires: number;
+  revision: number;
 };
 const minute = () => 60000 + Math.random() * 5000;
-/** Volatile session-owned evidence. No event retention, outbox or live observation. */
+/** Volatile session-owned evidence. No event retention or outbox. */
 export function createPresence(
   transport: ReadTransport | null,
   activity: PresenceActivity | undefined,
@@ -31,6 +32,41 @@ export function createPresence(
   let renewal: ReturnType<typeof setTimeout> | undefined;
   let stopPublisher: (() => void) | undefined;
   let lastStatus = activity?.status();
+  let lastCommand = activity?.command?.();
+  let stopObservation: (() => void) | undefined;
+  let observedKeys = "";
+  function observe() {
+    const keys = eligible() ? [...selected.keys()].sort() : [];
+    const identity = keys.join(",");
+    if (identity === observedKeys) return;
+    observedKeys = identity;
+    const stopPrevious = stopObservation;
+    stopObservation = keys.length
+      ? transport?.observePresence?.(keys, (event) => {
+          if (!eligible() || event.kind !== 20001) return;
+          const subject = selected.get(event.pubkey);
+          if (!subject) return;
+          let status: unknown = event.content;
+          if (event.content.startsWith("{")) {
+            try {
+              status = JSON.parse(event.content).status;
+            } catch {
+              status = undefined;
+            }
+          }
+          subject.revision++;
+          subject.expires = Date.now() + 75000;
+          change(
+            subject,
+            status === "online" || status === "away" || status === "offline"
+              ? status
+              : "unknown",
+          );
+          schedule();
+        })
+      : undefined;
+    stopPrevious?.();
+  }
   const change = (subject: Subject, status: PresenceStatus) => {
     if (subject.status === status) return;
     subject.status = status;
@@ -53,6 +89,8 @@ export function createPresence(
   function demand() {
     const previous = selected;
     selected = new Map();
+    const self = transport && subjects.get(transport.viewer);
+    if (self && transport) selected.set(transport.viewer, self);
     // Stop each source at the cap. Overflow and duplicate rows must not turn
     // mounting a thread into a full-directory scan per subscription.
     for (const source of [profiles, previous, subjects]) {
@@ -102,7 +140,11 @@ export function createPresence(
       schedule();
       return;
     }
+    observe();
     const captured = new Map(selected);
+    const revisions = new Map(
+      [...captured].map(([key, subject]) => [key, subject.revision]),
+    );
     const owned = new AbortController();
     controller = owned;
     reading = true;
@@ -122,7 +164,11 @@ export function createPresence(
         );
       else {
         for (const [key, subject] of captured)
-          if (subjects.get(key) === subject && selected.get(key) === subject) {
+          if (
+            subjects.get(key) === subject &&
+            selected.get(key) === subject &&
+            revisions.get(key) === subject.revision
+          ) {
             subject.expires = now + 75000;
             change(
               subject,
@@ -135,7 +181,8 @@ export function createPresence(
       }
     } catch (error) {
       if (closed || owned.signal.aborted || controller !== owned) return;
-      for (const subject of captured.values()) change(subject, "unknown");
+      for (const [key, subject] of captured)
+        if (revisions.get(key) === subject.revision) change(subject, "unknown");
       const retry =
         error &&
         typeof error === "object" &&
@@ -155,6 +202,9 @@ export function createPresence(
     }
   }
   function clear(publication = true) {
+    stopObservation?.();
+    stopObservation = undefined;
+    observedKeys = "";
     controller?.abort();
     controller = undefined;
     nextRead = Math.max(Date.now() + 100, readGate);
@@ -172,7 +222,7 @@ export function createPresence(
     stopPublisher?.();
     stopPublisher = undefined;
   }
-  function startPublishing() {
+  function startPublishing(immediate = false) {
     if (
       publisher ||
       !connected ||
@@ -200,17 +250,38 @@ export function createPresence(
               let delay = minute();
               try {
                 const status = activity.status();
+                const before = subjects.get(transport.viewer)?.revision;
                 const accepted = await publish(status, owned.signal);
+                if (!valid()) return;
+                if (accepted === true) {
+                  const subject = subjects.get(transport.viewer);
+                  if (
+                    subject &&
+                    subject.revision === before &&
+                    eligible() &&
+                    selected.has(transport.viewer)
+                  ) {
+                    subject.revision++;
+                    subject.expires = Date.now() + 75000;
+                    change(subject, status);
+                    schedule();
+                  }
+                }
                 // Offline is a clear, not a lease. Keep the lock, but stop
                 // renewing once accepted; failed/unsent clears still retry.
                 if (accepted === true && status === "offline") return;
                 if (accepted === null) delay = 5000 + Math.random() * 1000;
+                else if (typeof accepted === "object")
+                  delay = accepted.retryAfterMs + 50;
               } catch {
                 /* Lossy; next renewal owns current state. */
               }
               if (valid()) renewal = setTimeout(() => void renew(), delay);
             };
-            renewal = setTimeout(() => void renew(), 250 + Math.random() * 750);
+            renewal = setTimeout(
+              () => void renew(),
+              immediate ? 0 : 250 + Math.random() * 750,
+            );
           });
         },
       )
@@ -227,11 +298,15 @@ export function createPresence(
   const stopActivity = activity?.subscribe(() => {
     if (!activity.visible()) clear(false);
     else refresh();
-    if (lastStatus !== activity.status()) {
+    if (
+      lastStatus !== activity.status() ||
+      lastCommand !== activity.command?.()
+    ) {
       lastStatus = activity.status();
+      lastCommand = activity.command?.();
       // Replace desired state, not an event backlog. Restarting the lock cancels late signing.
       stopPublishing();
-      startPublishing();
+      startPublishing(true);
     }
   });
   return {
@@ -248,6 +323,7 @@ export function createPresence(
           profiles: 0,
           status: "unknown",
           expires: 0,
+          revision: 0,
         };
         subjects.set(key, subject);
       }
@@ -258,7 +334,8 @@ export function createPresence(
       if (subject.profiles) profiles.set(key, subject);
       else profiles.delete(key);
       if (
-        (!selected.has(key) && selected.size < 256) ||
+        (!selected.has(key) &&
+          (selected.size < 256 || key === transport?.viewer)) ||
         priority !== subject.profiles > 0
       )
         demand();
@@ -277,6 +354,7 @@ export function createPresence(
           nextRead = Infinity;
           controller?.abort();
           clearTimeout(timer);
+          observe();
         } else if (selected.size < 256 || priority !== subject.profiles > 0)
           queueDemand();
       };
@@ -291,6 +369,7 @@ export function createPresence(
     dispose() {
       closed = true;
       stopActivity?.();
+      stopObservation?.();
       stopPublishing();
       clearTimeout(timer);
       controller?.abort();

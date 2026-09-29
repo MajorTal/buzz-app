@@ -132,18 +132,18 @@ jobs:
 
   browser:
     if: github.event_name != 'workflow_dispatch'
-    name: Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/4)
+    name: Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/6)
     # Measurements stay isolated on their own runner, not on our critical path.
     # CI required still requires their success independently of these jobs.
     runs-on: ubuntu-24.04
-    # Leave room for cold tool/cache setup and artifact cleanup: three shards
-    # reached this limit even with passing tests. Keep two workers per shard.
+    # Six file-level shards split the large file groups that remain together
+    # with four or five shards, leaving room for setup inside the same deadline.
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
         engine: [chromium, webkit]
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -184,7 +184,7 @@ jobs:
       - name: Functional journeys
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/browser/ci-report.json
-        run: node scripts/ci-test-report.mjs kind=playwright report=test-results/browser/ci-report.json evidence=test-results/browser/ci-timing.json title="Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/4)" -- pnpm test:browser:ci --project ${{ matrix.engine }} --no-deps --shard=${{ matrix.shard }}/4 --reporter=list,json
+        run: node scripts/ci-test-report.mjs kind=playwright report=test-results/browser/ci-report.json evidence=test-results/browser/ci-timing.json title="Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/6)" -- pnpm test:browser:ci --project ${{ matrix.engine }} --no-deps --shard=${{ matrix.shard }}/6 --reporter=list,json
       - name: Browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

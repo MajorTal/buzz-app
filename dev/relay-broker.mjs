@@ -84,6 +84,7 @@ import {
   liveChannels,
   liveJoined,
   subscribeRelayTraffic,
+  livePresenceAuthors,
 } from "../src/features/relay/live.ts";
 import {
   communityDestination,
@@ -1451,10 +1452,13 @@ export function relayBrokerPlugin({
               "/api/relay/stream-interests",
               "/api/relay/stream-observer",
               "/api/relay/stream-presence",
+              "/api/relay/stream-presence-authors",
             ].includes(route) &&
             req.method === "POST"
           ) {
             const publishingPresence = route === "/api/relay/stream-presence";
+            const watchingPresence =
+              route === "/api/relay/stream-presence-authors";
             const prioritizing = route === "/api/relay/stream-priority";
             const observing = route === "/api/relay/stream-observer";
             const updating = route === "/api/relay/stream-interests";
@@ -1463,11 +1467,18 @@ export function relayBrokerPlugin({
               raw += part;
               if (
                 Buffer.byteLength(raw) >
-                (updating ? 450000 : prioritizing ? 9000 : 256)
+                (updating
+                  ? 450000
+                  : watchingPresence
+                    ? 20000
+                    : prioritizing
+                      ? 9000
+                      : 256)
               )
                 return json(res, 413, { error: "Live control too large" });
             }
             let streamId,
+              presenceAuthors,
               priority,
               observer,
               status,
@@ -1488,6 +1499,8 @@ export function relayBrokerPlugin({
                   throw new Error("Invalid presence");
               }
               if (observing) observer = observerGeneration(body.observer);
+              if (watchingPresence)
+                presenceAuthors = livePresenceAuthors(body.authors);
               if (updating) {
                 interests = liveChannels(body.channels);
                 joined = liveJoined(interests, body.joined ?? []);
@@ -1514,7 +1527,10 @@ export function relayBrokerPlugin({
             )
               return json(res, 400, { error: "Invalid live control" });
             const stream = streams.get(streamId);
-            if (publishingPresence && (!stream || stream.relay !== relay))
+            if (
+              (publishingPresence || watchingPresence) &&
+              (!stream || stream.relay !== relay)
+            )
               return json(res, 200, { accepted: null });
             if (!stream || stream.relay !== relay)
               return json(res, 404, {
@@ -1529,7 +1545,14 @@ export function relayBrokerPlugin({
                   status,
                   cancel.signal,
                 );
-                if (!res.destroyed) return json(res, 200, { accepted });
+                if (!res.destroyed)
+                  return json(
+                    res,
+                    200,
+                    accepted && typeof accepted === "object"
+                      ? { accepted: null, retryAfterMs: accepted.retryAfterMs }
+                      : { accepted },
+                  );
               } finally {
                 res.off("close", abort);
               }
@@ -1552,6 +1575,8 @@ export function relayBrokerPlugin({
               stream.traffic.update(interests, joined);
             } else if (prioritizing) stream.traffic.prioritize(priority);
             else if (observing) stream.traffic.observe(observer);
+            else if (watchingPresence)
+              stream.traffic.watchPresence(presenceAuthors);
             else stream.traffic.retry();
             return json(res, 200, { accepted: true });
           }
@@ -1562,7 +1587,12 @@ export function relayBrokerPlugin({
               if (Buffer.byteLength(raw) > 300000)
                 return json(res, 413, { error: "Live interests too large" });
             }
-            let channels, joined, priority, observer, interestRevision;
+            let channels,
+              joined,
+              priority,
+              observer,
+              interestRevision,
+              presenceAuthors;
             try {
               const body = JSON.parse(raw);
               channels = liveChannels(body.channels);
@@ -1574,6 +1604,7 @@ export function relayBrokerPlugin({
               )
                 throw new Error("Invalid interest revision");
               observer = observerGeneration(body.observer ?? null);
+              presenceAuthors = livePresenceAuthors(body.presenceAuthors ?? []);
               liveChannels(body.priority ?? []);
               if (body.priority?.length > 64)
                 throw new Error("Priority capacity reached");
@@ -1668,6 +1699,7 @@ export function relayBrokerPlugin({
                       interestRevision: stream.interestRevision,
                     });
                 },
+                presence: (event) => write("presence", event),
                 telemetry: (event, generation) => {
                   if (res.destroyed) return;
                   try {
@@ -1704,6 +1736,7 @@ export function relayBrokerPlugin({
             );
             principal.streams++;
             traffic.observe(observer);
+            traffic.watchPresence(presenceAuthors);
             traffic.prioritize(priority);
             traffic.update(channels, joined);
             const keepAlive = setInterval(

@@ -72,9 +72,9 @@ export type MessageRowProps = {
     | undefined;
   onReply?: ((messageId: string) => void) | undefined;
   quickControls?: ReactNode;
-  branchControl?: ReactNode;
   overflowItems?: ReactNode;
   layout?: "timeline" | "thread" | "continuation";
+  compactAvatar?: boolean;
   mediaMode?: "inline" | "thread";
   mediaSeekTo?: number;
   mediaSeekRequest?: number;
@@ -104,10 +104,10 @@ export const MessageRow = memo(function MessageRow({
   onOpenThread,
   onReply,
   quickControls,
-  branchControl,
   overflowItems,
   participantProfiles,
   layout = "timeline",
+  compactAvatar = false,
   mediaMode = "inline",
   mediaSeekTo,
   mediaSeekRequest,
@@ -291,7 +291,7 @@ export const MessageRow = memo(function MessageRow({
                   alt=""
                   thinkingDescriptionId={thinkingId}
                   fallback={name}
-                  size="fill"
+                  size={compactAvatar ? "small" : "fill"}
                   shape={avatarShape}
                   statusBadge={presence === "unknown" ? undefined : presence}
                 />
@@ -304,85 +304,33 @@ export const MessageRow = memo(function MessageRow({
             }
           />
         ) : (
-          <AgentAvatar
-            session={session}
-            agentPubkey={row.authorId}
-            channelId={row.channelId}
-            src={picture}
-            alt={
-              presence === "unknown"
-                ? ""
-                : avatarShape === "squircle"
-                  ? "Agent"
-                  : `${name} avatar`
-            }
-            fallback={name}
-            size={layout === "timeline" ? "large" : "default"}
-            shape={avatarShape}
-            statusBadge={presence === "unknown" ? undefined : presence}
-          />
+          <span className={compactAvatar ? styles.nestedAvatar : "contents"}>
+            <AgentAvatar
+              session={session}
+              agentPubkey={row.authorId}
+              channelId={row.channelId}
+              src={picture}
+              alt={
+                presence === "unknown"
+                  ? ""
+                  : avatarShape === "squircle"
+                    ? "Agent"
+                    : `${name} avatar`
+              }
+              fallback={name}
+              size={
+                compactAvatar
+                  ? "small"
+                  : layout === "timeline"
+                    ? "large"
+                    : "default"
+              }
+              shape={avatarShape}
+              statusBadge={presence === "unknown" ? undefined : presence}
+            />
+          </span>
         )}
         <div className={styles.messageBody}>
-          {!row.membership && (
-            <MessageActionBar
-              branchControl={branchControl}
-              menuTriggerRef={menuTrigger}
-              messageId={row.id}
-              onReply={
-                (onReply ? () => onReply(row.id) : undefined) ??
-                (onOpenThread
-                  ? () =>
-                      onOpenThread(
-                        row.threadRootId ?? row.id,
-                        row.threadRootId ?? row.id,
-                        "reply",
-                      )
-                  : undefined)
-              }
-              replyDisabled={
-                !!(
-                  row.delivery && !["accepted", "seen"].includes(row.delivery)
-                ) ||
-                !!channelList.channels.find(
-                  (channel) => channel.id === row.channelId,
-                )?.archived ||
-                (!!session?.channels.get &&
-                  !channelList.channels.some(
-                    (channel) =>
-                      channel.id === row.channelId && !channel.readOnly,
-                  ))
-              }
-              link={messageCopyLink(row, scope)}
-              copyText={() =>
-                messageCopyText(row, directory.profiles, directory.agents)
-              }
-              quickControls={
-                quickControls ??
-                (canReact && session && scope && extensions ? (
-                  <MessageReactionControls
-                    row={row}
-                    session={session}
-                    scope={scope}
-                    tools={extensions.tools}
-                    inline={extensions.inline}
-                    disabled={
-                      !!row.delivery &&
-                      !["accepted", "seen"].includes(row.delivery)
-                    }
-                  />
-                ) : undefined)
-              }
-              overflowItems={
-                <>
-                  {overflowItems ??
-                    (session ? (
-                      <MessageManagementItems row={row} session={session} />
-                    ) : undefined)}
-                  {reportItem}
-                </>
-              }
-            />
-          )}
           {report && reporting === "open" && (
             <ReportMessageDialog
               report={(type, note) => report(row.id, type, note)}
@@ -400,15 +348,74 @@ export const MessageRow = memo(function MessageRow({
               onDismiss={() => setReporting(undefined)}
             />
           )}
-          <div
-            className={layout === "continuation" ? "sr-only" : styles.byline}
-          >
-            <span className={styles.author}>
-              <strong>{name}</strong>
-            </span>
-            {layout !== "continuation" && (
-              <MessageTimestamp createdAt={row.createdAt} />
+          <div className={styles.messageHeader}>
+            {!row.membership && (
+              <MessageActionBar
+                menuTriggerRef={menuTrigger}
+                messageId={row.id}
+                onReply={
+                  (onReply ? () => onReply(row.id) : undefined) ??
+                  (onOpenThread
+                    ? () =>
+                        onOpenThread(
+                          row.threadRootId ?? row.id,
+                          row.threadRootId ?? row.id,
+                          "reply",
+                        )
+                    : undefined)
+                }
+                replyDisabled={
+                  !!(
+                    row.delivery && !["accepted", "seen"].includes(row.delivery)
+                  ) ||
+                  !!channelList.channels.find(
+                    (channel) => channel.id === row.channelId,
+                  )?.archived ||
+                  (!!session?.channels.get &&
+                    !channelList.channels.some(
+                      (channel) =>
+                        channel.id === row.channelId && !channel.readOnly,
+                    ))
+                }
+                link={messageCopyLink(row, scope)}
+                copyText={() =>
+                  messageCopyText(row, directory.profiles, directory.agents)
+                }
+                quickControls={
+                  quickControls ??
+                  (canReact && session && scope && extensions ? (
+                    <MessageReactionControls
+                      row={row}
+                      session={session}
+                      scope={scope}
+                      tools={extensions.tools}
+                      inline={extensions.inline}
+                      disabled={
+                        !!row.delivery &&
+                        !["accepted", "seen"].includes(row.delivery)
+                      }
+                    />
+                  ) : undefined)
+                }
+                overflowItems={
+                  <>
+                    {overflowItems ??
+                      (session ? (
+                        <MessageManagementItems row={row} session={session} />
+                      ) : undefined)}
+                    {reportItem}
+                  </>
+                }
+              />
             )}
+            <div
+              className={layout === "continuation" ? "sr-only" : styles.byline}
+            >
+              <strong className={styles.author}>{name}</strong>
+              {layout !== "continuation" && (
+                <MessageTimestamp createdAt={row.createdAt} />
+              )}
+            </div>
           </div>
           {timeReply && (
             <span className={styles.mediaTimeLink}>

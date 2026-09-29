@@ -27,7 +27,10 @@ export function MessageTimestamp({
     timeStyle: "long",
   });
   return (
-    <Tooltip content={fullDate} delay={500}>
+    // The hovered action bar can sit over the byline by design, and a tooltip
+    // outranks it in the layer stack. A hoverable popup would then swallow the
+    // bar's clicks, so this hint stays non-interactive, as button hints do.
+    <Tooltip content={fullDate} delay={500} disableHoverablePopup>
       <time
         dateTime={date.toISOString()}
         style={{ cursor: "default" }}

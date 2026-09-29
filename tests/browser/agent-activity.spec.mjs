@@ -68,8 +68,10 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
   page,
   app,
 }) => {
-  // Hold an explicit profile's first read before broker admission. Add telemetry demand
-  // while it is pending, so a fast runner cannot coalesce both into one read.
+  // Hold the first explicit profile read before broker admission so telemetry
+  // demand cannot coalesce into it; hold all upstream presence responses too,
+  // including a replacement if that first request is cancelled.
+  app.relay.holdPresence();
   const firstSnapshot = Promise.withResolvers();
   let firstAuthors;
   await page.route("**/presence-snapshot", async (route) => {
@@ -126,10 +128,21 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
     await expect(firstEntry).toBeVisible();
     expect(firstAuthors).not.toContain(first);
     expect(firstAuthors).not.toContain(second);
+    // Neither agent publishes live presence in this fixture. Even if demand
+    // cancels and retries the held snapshot, neither response can label it yet.
     await expect(firstEntry).not.toHaveAccessibleName(/, Presence:/);
   } finally {
     firstSnapshot.resolve();
+    app.relay.releasePresence();
   }
+  await expect
+    .poll(() =>
+      app.report.presenceSnapshots.some(
+        ({ filter, pending, aborted }) =>
+          filter.authors.includes(first) && !pending && !aborted,
+      ),
+    )
+    .toBe(true);
   await expect(firstEntry).toHaveAccessibleName(/, Presence: online$/);
   await page.getByRole("button", { name: "Close channel panel" }).click();
   // A busy skip followed by a successful retry must not masquerade as recovery.

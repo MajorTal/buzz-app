@@ -359,17 +359,17 @@ for (const nested of [false, true])
             ).toBe(!nested);
             await expect(moveFocus ? close : row).toBeFocused();
             if (nested && !moveFocus) {
-              // Programmatic collapse removes a focused target without first moving
-              // focus to a trigger. Reopening later must not revive that old intent.
-              await page
-                .getByRole("button", { name: "Hide replies", exact: true })
-                .evaluate((element) => element.click());
-              await expect(row).toHaveCount(0);
-              await page
-                .getByRole("button", { name: /^View 1 reply/ })
-                .evaluate((element) => element.click());
+              // A later arrival cannot close or refocus an already revealed branch.
+              await close.focus();
+              app.reply(app.exact.root.id);
+              await expect(
+                thread(page).getByText("New peer reply", { exact: true }),
+              ).toBeVisible();
               await expect(row).toBeVisible();
-              await expect(row).not.toBeFocused();
+              await expect(close).toBeFocused();
+              await expect(
+                page.getByRole("button", { name: "Hide replies", exact: true }),
+              ).toHaveCount(0);
             }
           } finally {
             await originalRow?.dispose();
@@ -921,9 +921,9 @@ for (const movedFocus of [false, true])
       ).toBeVisible();
       // Opening moves focus intentionally; establish the owned/moved focus anew.
       await expect(
-        branch.getByRole("button", { name: "Hide replies", exact: true }),
+        region.locator(`[data-message-id="${child.id}"]`),
       ).toBeFocused();
-      await focusTarget.focus();
+      if (movedFocus) await focusTarget.focus();
       app.deleteTarget(child);
       await expect(
         region.getByText("First live child", { exact: true }),
@@ -1022,6 +1022,25 @@ liveTest(
       region.locator(`[data-message-id="${app.exact.root.id}"]`),
     ).toBeAttached();
     await expect(region.locator("[data-message-id]")).toHaveCount(80);
+    await expect(region).toBeFocused();
+    await expect(region).toHaveAttribute("tabindex", "0");
+    app.append(
+      "primary",
+      "alpha",
+      "Reply after selected deletion",
+      true,
+      true,
+      app.exact.root.id,
+    );
+    await expect(
+      region.getByText("Reply after selected deletion", { exact: true }),
+    ).toBeVisible();
+    await expect(region).toHaveAttribute("tabindex", "0");
+    await page
+      .getByRole("button", { name: "Close thread", exact: true })
+      .focus();
+    await page.keyboard.press("Tab");
+    await expect(region).toBeFocused();
     await expect(
       region.getByText("Selected message unavailable."),
     ).toBeVisible();

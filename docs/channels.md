@@ -580,11 +580,15 @@ Read-only connections keep the existing composer capability notice; missing/revo
 roots do not expose a composer. Exact navigation can retain and focus a selected
 reply beyond the traversal range; it does not extend that range or promise complete history.
 
-Replies form nested lists, with ascending timestamp/event-ID order among siblings.
-Branches start collapsed, expand one level at a time, and forget descendant expansion
-when collapsed. Labeled controls remain available when visual indentation is capped
-in narrow panels. Exact links reveal available ancestors; a reply whose parent is
-outside loaded history remains visible with a notice. Sessions remain inline.
+Ordinary replies remain flat beneath the root. Replies to those replies form nested
+lists, with ascending timestamp/event-ID order among siblings. Nested branches start
+closed and expand one level at a time; once opened, they stay open for the lifetime
+of the thread view, including through child disappearance and rearrival. Expanding
+moves focus to the first revealed reply; deleting a focused reply returns focus to
+its available parent or thread history. Labeled expansion controls remain available
+when visual indentation is capped in narrow panels. Exact links reveal available
+ancestors; a reply whose parent is outside loaded history remains visible with a
+notice. Sessions remain inline.
 Retry appears only after a failed read; there is no routine Refresh control. Names
 are optional shared background enrichment. The panel describes **replies loaded**,
 not visible rows or complete history.

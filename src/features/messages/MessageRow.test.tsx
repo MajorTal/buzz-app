@@ -1191,3 +1191,35 @@ it("keeps audio and video players between their original image runs", () => {
     html.indexOf('href="https://image.test/last.png"'),
   );
 });
+
+it.each([true, false])(
+  "uses the shared small avatar without shrinking profile controls (clickable=%s)",
+  (clickable) => {
+    const props = {
+      row: { ...row, authorId: "a".repeat(64) },
+      profile: undefined,
+      media: () => undefined,
+      onOpenLink: () => false,
+      canOpenLink: () => clickable,
+      day: false,
+      retry: undefined,
+      layout: "thread" as const,
+    };
+    const view = renderDom(<MessageRow {...props} compactAvatar />);
+    expect(view.container.querySelector(".buzz-avatar")).toHaveAttribute(
+      "data-size",
+      "small",
+    );
+    if (clickable) {
+      expect(
+        view.getByRole("button", { name: "View aaaaaaaaaa profile" }),
+      ).toHaveAttribute("data-size", "sm");
+    }
+    view.rerender(<MessageRow {...props} />);
+    expect(view.container.querySelector(".buzz-avatar")).toHaveAttribute(
+      "data-size",
+      clickable ? "fill" : "default",
+    );
+    view.unmount();
+  },
+);

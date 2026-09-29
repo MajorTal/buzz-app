@@ -93,6 +93,12 @@
 .feed .message[data-layout="continuation"] {
   gap: var(--space-3);
 }
+.nestedAvatar {
+  display: grid;
+  place-items: center;
+  flex: 0 0 var(--size-control-sm);
+  height: var(--size-control-sm);
+}
 .messageGutter {
   flex: 0 0 var(--size-control-sm);
 }
@@ -111,9 +117,6 @@
   line-height: var(--text-body-sm--line-height);
   letter-spacing: var(--text-body-sm--letter-spacing);
 }
-.author strong {
-  font-weight: var(--type-weight-medium);
-}
 .byline time {
   color: var(--text-subtle);
   font-size: var(--text-caption);
@@ -121,11 +124,8 @@
   letter-spacing: var(--text-caption--letter-spacing);
 }
 .author {
-  --user-status-emoji-size: 14px;
-  display: inline-flex;
-  align-items: baseline;
+  font-weight: var(--type-weight-medium);
   min-width: 0;
-  gap: var(--space-1);
 }
 .text {
   margin: var(--space-1) 0 0;
@@ -1558,22 +1558,35 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
   }
 }
 @media (hover: hover) and (pointer: fine) {
-  /* Float above prose without reserving message height. */
-  .messageBody {
-    position: relative;
-  }
   .messageActions {
     position: absolute;
+    flex-wrap: nowrap;
+    max-width: none;
     inset-inline-end: 0;
-    bottom: 100%;
+    top: calc(100% + var(--space-1));
+    translate: 0 -100%;
     z-index: 2;
     opacity: 0;
     pointer-events: none;
     margin-inline-start: 0;
   }
-  .message:not([data-layout="continuation"]) .messageActions {
-    /* Bound the lower edge even when a narrow toolbar wraps. */
-    bottom: calc(100% - var(--text-body-sm) * var(--text-body-sm--line-height));
+  /* Anchor to the real author line, including when its metadata wraps. */
+  .messageHeader {
+    position: relative;
+  }
+  /* A continuation has no visible author line; end the bar at its header
+     instead of deriving clearance from row padding or half the bar's height. */
+  .message[data-layout="continuation"] .messageActions {
+    top: 0;
+  }
+  /* Keep pointer travel to the lifted bar inside the hovered row without
+     changing spacing or intercepting the preceding row while at rest. */
+  .message:hover::before {
+    content: "";
+    position: absolute;
+    bottom: 100%;
+    inset-inline: 0;
+    height: var(--space-2);
   }
   .message:hover .messageActions,
   .message:focus-within .messageActions,
@@ -1588,11 +1601,10 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
   position: relative;
   --reply-spine-start: calc(var(--size-control-sm) + var(--space-2));
   --reply-indent: var(--size-control);
-  --reply-spine-offset: var(--space-4);
-  --reply-guide: var(--border-standard);
+  --reply-spine-offset: calc(var(--size-control-sm) / 2);
 }
 .replyBranchSummary {
-  margin-inline-start: var(--size-control);
+  margin-inline-start: calc(var(--size-control-sm) + var(--space-2));
 }
 /* Summary metadata can reflow as whole avatar/count groups at narrow widths. */
 .replyBranchSummary > button {
@@ -1607,29 +1619,29 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
 .replyItem {
   position: relative;
 }
+.replyBranchPanel > ol > .replyItem::before {
+  content: "";
+  position: absolute;
+  inset-inline-start: calc(var(--reply-spine-offset) - var(--reply-indent));
+  inset-block-start: 0;
+  inline-size: calc(
+    var(--reply-indent) -
+    var(--reply-spine-offset) -
+    var(--space-1)
+  );
+  block-size: calc(var(--space-1) + var(--size-control-sm) / 2);
+  border-inline-start: 1px solid var(--border-standard);
+  border-block-end: 1px solid var(--border-standard);
+  border-end-start-radius: var(--radius-control);
+  pointer-events: none;
+}
 .replyBranchPanel > ol > .replyItem:not(:last-child)::after {
   content: "";
   position: absolute;
   inset-inline-start: calc(var(--reply-spine-offset) - var(--reply-indent));
   inset-block: 0;
-  border-inline-start: 1px solid var(--reply-guide);
+  border-inline-start: 1px solid var(--border-standard);
   pointer-events: none;
-}
-.replyBranchRail {
-  position: absolute;
-  inset-block: var(--reply-spine-start) 0;
-  inset-inline-start: calc(var(--reply-spine-offset) - var(--space-3));
-  width: var(--space-6);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  cursor: pointer;
-}
-.replyBranch:has(> .replyBranchPanel > .replyBranchRail:hover) {
-  --reply-guide: var(--border-prominent);
-}
-.replyBranch:has(> .replyBranchPanel > .replyBranchRail:active) {
-  --reply-guide: var(--border-focus);
 }
 .replyContext {
   display: flex;
@@ -1658,22 +1670,12 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
   margin-top: 0;
 }
 
-@media (hover: hover) and (pointer: fine) {
-  .replyBranch[data-open="true"] > .replyBranchSummary {
-    display: none;
-  }
-}
-html[data-keyboard-navigation]
-  .replyBranch:has(> .replyBranchPanel > .replyBranchRail:focus-visible) {
-  --reply-guide: var(--border-prominent);
-}
-html[data-keyboard-navigation] .replyBranchRail:focus-visible {
-  outline: 2px solid var(--border-focus);
-  outline-offset: 2px;
-  border-radius: var(--radius-row);
-}
 .replyBranch[data-layout="continuation"] {
-  --reply-spine-start: var(--space-1);
+  --reply-spine-start: calc(
+    var(--space-1) +
+    var(--text-caption) *
+    var(--text-caption--line-height)
+  );
 }
 .replyBranchMessage {
   position: relative;
@@ -1683,21 +1685,21 @@ html[data-keyboard-navigation] .replyBranchRail:focus-visible {
   position: absolute;
   inset-inline-start: var(--reply-spine-offset);
   inset-block: var(--reply-spine-start) 0;
-  border-inline-start: 1px solid var(--reply-guide);
+  border-inline-start: 1px solid var(--border-standard);
   pointer-events: none;
 }
 
-/* Capping stops horizontal growth, not the branch's visible/clickable spine. */
+/* Bound visual indentation without limiting reply ancestry. */
 .replyBranch[data-depth="6"] {
   --reply-indent: 0px;
-  --reply-spine-offset: calc(var(--space-4) - var(--size-control));
+  --reply-spine-offset: calc(0px - var(--space-3));
   --reply-spine-start: 0px;
 }
 @container messages (max-width: 360px) {
   .replyBranch[data-depth="3"],
   .replyBranch[data-depth="3"] .replyBranch {
     --reply-indent: 0px;
-    --reply-spine-offset: calc(var(--space-4) - var(--size-control));
+    --reply-spine-offset: calc(0px - var(--space-3));
     --reply-spine-start: 0px;
   }
 }
@@ -1705,24 +1707,8 @@ html[data-keyboard-navigation] .replyBranchRail:focus-visible {
   .replyBranch[data-depth="4"],
   .replyBranch[data-depth="4"] .replyBranch {
     --reply-indent: 0px;
-    --reply-spine-offset: calc(var(--space-4) - var(--size-control));
+    --reply-spine-offset: calc(0px - var(--space-3));
     --reply-spine-start: 0px;
-  }
-}
-.replyBranchSummary {
-  position: relative;
-}
-.replyBranch[data-open="true"] > .replyBranchSummary::before {
-  content: "";
-  position: absolute;
-  inset-inline-start: calc(var(--reply-spine-offset) - var(--size-control));
-  inset-block: 0;
-  border-inline-start: 1px solid var(--reply-guide);
-  pointer-events: none;
-}
-@media (hover: none), (pointer: coarse) {
-  .replyBranchRail {
-    display: none;
   }
 }
 
@@ -1758,37 +1744,6 @@ html[data-keyboard-navigation] .replyBranchRail:focus-visible {
     display: none;
   }
 }
-.replyBranchRowControl {
-  display: none;
-}
-@media (hover: hover) and (pointer: fine) {
-  .replyBranch[data-depth="6"] > .replyBranchPanel > .replyBranchRail {
-    display: none;
-  }
-  .replyBranch[data-depth="6"] > .replyBranchMessage .replyBranchRowControl {
-    display: block;
-  }
-  @container messages (max-width: 360px) {
-    .replyBranch[data-depth="3"] > .replyBranchPanel > .replyBranchRail,
-    .replyBranch[data-depth="3"] .replyBranchRail {
-      display: none;
-    }
-    .replyBranch[data-depth="3"] > .replyBranchMessage .replyBranchRowControl,
-    .replyBranch[data-depth="3"] .replyBranchRowControl {
-      display: block;
-    }
-  }
-  @container messages (min-width: 361px) and (max-width: 480px) {
-    .replyBranch[data-depth="4"] > .replyBranchPanel > .replyBranchRail,
-    .replyBranch[data-depth="4"] .replyBranchRail {
-      display: none;
-    }
-    .replyBranch[data-depth="4"] > .replyBranchMessage .replyBranchRowControl,
-    .replyBranch[data-depth="4"] .replyBranchRowControl {
-      display: block;
-    }
-  }
-}
 /* A persistent sidebar can leave less than one indent of spare reading space. */
 @container messages (max-width: 320px) {
   .threadHistory {
@@ -1797,21 +1752,9 @@ html[data-keyboard-navigation] .replyBranchRail:focus-visible {
   .replyBranch[data-depth="0"],
   .replyBranch[data-depth="0"] .replyBranch {
     --reply-indent: 0px;
-    --reply-spine-offset: calc(var(--space-4) - var(--size-control));
+    --reply-spine-offset: calc(0px - var(--space-3));
     --reply-spine-start: 0px;
   }
-  @media (hover: hover) and (pointer: fine) {
-    .replyBranch[data-depth="0"] .replyBranchRail {
-      display: none;
-    }
-    .replyBranch[data-depth="0"] .replyBranchRowControl {
-      display: block;
-    }
-  }
-}
-.replyBranch:has(> .replyBranchMessage .replyBranchRowControl:hover),
-.replyBranch:has(> .replyBranchMessage .replyBranchRowControl:focus-within) {
-  --reply-guide: var(--border-prominent);
 }
 
 .spoiler {

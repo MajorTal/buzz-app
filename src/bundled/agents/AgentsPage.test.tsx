@@ -2,6 +2,8 @@ import { bindNames } from "../../features/identity-names/service";
 import { createAgentDirectory } from "../../features/identity-names/testing";
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { stubAvatarBrowserApis } from "../../features/agents/avatar-testing";
+stubAvatarBrowserApis();
 import { npubEncode } from "nostr-tools/nip19";
 import { afterEach, expect, it, vi } from "vitest";
 import {

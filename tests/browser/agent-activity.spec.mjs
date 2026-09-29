@@ -68,7 +68,7 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
   page,
   app,
 }) => {
-  // Hold the byline's first read before broker admission. Add telemetry demand
+  // Hold an explicit profile's first read before broker admission. Add telemetry demand
   // while it is pending, so a fast runner cannot coalesce both into one read.
   const firstSnapshot = Promise.withResolvers();
   let firstAuthors;
@@ -89,6 +89,10 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
   let unsafe;
   try {
     await open(page, app);
+    await page
+      .getByRole("button", { name: "View Alice Fixture profile", exact: true })
+      .first()
+      .click();
     await expect.poll(() => firstAuthors).toBeDefined();
     await expect(
       page.getByRole("button", { name: "Agent Activity", exact: true }),
@@ -127,6 +131,7 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
     firstSnapshot.resolve();
   }
   await expect(firstEntry).toHaveAccessibleName(/, Presence: online$/);
+  await page.getByRole("button", { name: "Close channel panel" }).click();
   // A busy skip followed by a successful retry must not masquerade as recovery.
   expect(
     app.report.brokerRequests.filter(({ url }) =>
@@ -278,10 +283,9 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
     firstKey,
   );
   await expect(agentEntry(page, first)).toContainText("status unknown");
-  await expect(agentEntry(page, first).locator("svg")).toHaveCSS(
-    "animation-name",
-    "none",
-  );
+  await expect(
+    agentEntry(page, first).locator(".navigation-item-trailing svg"),
+  ).toHaveCSS("animation-name", "none");
   app.observer(activity("turn_liveness", "alpha", "fresh"), firstKey);
   await expect(agentEntry(page, first)).toContainText("working");
   app.observer(activity("turn_completed", "alpha", "fresh"), firstKey);

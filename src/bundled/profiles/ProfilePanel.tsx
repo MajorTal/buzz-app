@@ -27,13 +27,14 @@ import {
 import {
   type ReactNode,
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
   useSyncExternalStore,
 } from "react";
 import { CopyIcon } from "../../shared/design-system/icons/index";
-import { Avatar } from "../../shared/design-system/ui/Avatar";
+import { AgentAvatar } from "../../features/agents/AgentAvatar";
 import { useKnownAgentPubkeys } from "../../features/agents/use-known";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Tabs } from "../../shared/design-system/ui/Tabs";
@@ -188,6 +189,9 @@ function ProfileDetails({
   const agentPubkeys = useKnownAgentPubkeys(session, profiles);
   const presence = usePresenceStatus(session.presence, pubkey, true);
   const knownAgent = agentPubkeys.has(pubkey);
+  const thinkingId = useId();
+  const describeThinking =
+    knownAgent && tab === "info" && presence !== "unknown";
   const ownership = useAgentOwnerEvidence(
     session,
     knownAgent ? pubkey : undefined,
@@ -319,6 +323,7 @@ function ProfileDetails({
       ref={region}
       data-buzz-ui=""
       aria-label="Profile details"
+      aria-describedby={describeThinking ? thinkingId : undefined}
       tabIndex={-1}
       className={styles.root}
     >
@@ -335,11 +340,15 @@ function ProfileDetails({
         />
       ) : (
         <>
-          <div
-            className={`${styles.identity} ${picture ? styles.withPortrait : ""}`}
-          >
-            <div className={picture ? styles.portrait : undefined}>
-              <Avatar
+          <div className={styles.identity}>
+            <div className={styles.portrait}>
+              <AgentAvatar
+                session={session}
+                agentPubkey={pubkey}
+                channelId={context?.channelId}
+                thinkingDescriptionId={
+                  describeThinking ? thinkingId : undefined
+                }
                 src={picture}
                 alt={
                   tab === "info" && presence !== "unknown"
@@ -347,7 +356,7 @@ function ProfileDetails({
                     : `${name} avatar`
                 }
                 fallback={name}
-                size={picture ? "fill" : "large"}
+                size="fill"
                 shape={agentPubkeys.has(pubkey) ? "squircle" : "circle"}
                 statusBadge={presence === "unknown" ? undefined : presence}
               />

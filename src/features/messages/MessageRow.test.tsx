@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { stubAvatarBrowserApis } from "../agents/avatar-testing";
+stubAvatarBrowserApis();
 import { expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render as renderDom,
@@ -18,6 +21,12 @@ import type { UnreadCapability, UnreadSnapshot } from "../relay/unread";
 import type { RelaySession } from "../relay/session";
 import { LinkLabel } from "../../bundled/links/InlineLink";
 
+vi.mock("../../shared/design-system/ui/agent-thinking/ThinkingBadge", () => ({
+  ThinkingBadge: ({ children }: { children: React.ReactNode }) => (
+    <span className="badge-pill-root">{children}</span>
+  ),
+}));
+
 const row: ChannelMessage = {
   id: "root",
   channelId: "channel",
@@ -31,12 +40,34 @@ const row: ChannelMessage = {
   replyCount: 23,
 };
 
-it("badges agent and human bylines with known presence", () => {
+it("keeps agent badges but omits human presence and status symbols from messages", () => {
   const agentRow = { ...row, authorId: "a".repeat(64) };
   const subscribe = vi.fn(() => () => {});
   const status = vi.fn<() => "online" | "unknown">(() => "online");
   const channels = { channels: [], status: "ready" };
+  let working = false;
+  const activityListeners = new Set<() => void>();
   const session = {
+    agentActivity: {
+      snapshot: () => ({
+        turns: working
+          ? [
+              {
+                agent: agentRow.authorId,
+                channelId: row.channelId,
+                state: "working",
+              },
+            ]
+          : [],
+        typing: [],
+      }),
+      subscribe: (listener: () => void) => {
+        activityListeners.add(listener);
+        return () => {
+          activityListeners.delete(listener);
+        };
+      },
+    },
     presence: { subscribe, status, limited: () => false },
     messages: { report: undefined },
     channels: {
@@ -58,12 +89,12 @@ it("badges agent and human bylines with known presence", () => {
       />,
     );
   const agent = show(true);
-  expect(agent).toContain('data-status="online"');
-  expect(agent).toContain('aria-label="Agent, online"');
+  expect(agent).toContain('class="badge-pill-root"');
+  expect(agent).toContain('aria-label="Agent, available"');
   const human = show(false);
-  expect(human).toContain('data-status="online"');
-  expect(human).toContain('aria-label="aaaaaaaaaa avatar, online"');
-  expect(status).toHaveBeenCalledTimes(2);
+  expect(human).not.toContain('data-status="online"');
+  expect(human).not.toContain("data-compact");
+  expect(status).toHaveBeenCalledTimes(1);
   const props = {
     row: agentRow,
     session,
@@ -90,7 +121,25 @@ it("badges agent and human bylines with known presence", () => {
   );
   expect(
     screen.getByRole("button", { name: "View aaaaaaaaaa profile" }),
-  ).toHaveAccessibleDescription("Presence: online");
+  ).toHaveAccessibleDescription(/^Presence: online\s*$/);
+  act(() => {
+    working = true;
+    for (const listener of activityListeners) listener();
+  });
+  expect(
+    screen.getByRole("button", { name: "View aaaaaaaaaa profile" }),
+  ).toHaveAccessibleDescription("Presence: online Agent is thinking");
+  expect(document.querySelector(".agent-motion-avatar")).toHaveAttribute(
+    "aria-hidden",
+    "true",
+  );
+  act(() => {
+    working = false;
+    for (const listener of activityListeners) listener();
+  });
+  expect(
+    screen.getByRole("button", { name: "View aaaaaaaaaa profile" }),
+  ).toHaveAccessibleDescription(/^Presence: online\s*$/);
   mounted.unmount();
   status.mockReturnValue("unknown");
   const unknown = renderDom(<MessageRow {...props} canOpenLink={() => true} />);
@@ -100,11 +149,7 @@ it("badges agent and human bylines with known presence", () => {
   unknown.unmount();
   subscribe.mockClear();
   renderDom(<MessageRow {...props} />);
-  expect(subscribe).toHaveBeenCalledWith(
-    agentRow.authorId,
-    expect.any(Function),
-    false,
-  );
+  expect(subscribe).not.toHaveBeenCalled();
   cleanup();
 });
 it.each(["bare", "angle", "markdown", "escaped"] as const)(

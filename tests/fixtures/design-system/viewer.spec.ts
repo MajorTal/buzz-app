@@ -5,6 +5,100 @@ import { PHOSPHOR_ICONS } from "../../../src/shared/design-system/icons/inventor
 
 const viewer = "/tests/fixtures/design-system.html";
 
+test("badge motion centered pill scales with its avatar and reverses without jumping", async ({
+  page,
+}) => {
+  await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
+  await page.clock.pauseAt(new Date("2026-01-01T01:00:00Z"));
+  await page.goto("/tests/fixtures/design-system/thinking-avatar.html");
+  const card = page.getByRole("article", {
+    name: "Centered Start pill",
+    exact: true,
+  });
+  const ink = card.locator(".badge-pill-ink");
+  const root = card.locator(".badge-pill-root");
+  const dots = card.locator(".badge-pill-dots");
+  const artwork = card.locator(".badge-motion-artwork");
+  const restMask = await artwork.getAttribute("style");
+  const notch = card.locator(".badge-pill-notch");
+  const checkJoins = async () => {
+    const path = await notch.getAttribute("d");
+    expect(path?.match(/ C /g)).toHaveLength(2);
+    expect(path).not.toMatch(/NaN|Infinity/);
+    await expect(artwork).toHaveAttribute("style", restMask ?? "");
+  };
+  await card.getByRole("button", { name: "Thinking", exact: true }).click();
+  await page.clock.runFor(150);
+  await checkJoins();
+  await expect(dots).toHaveCSS("opacity", "1");
+  await expect(root).toHaveAttribute("data-phase", "morphing");
+  const middle = await ink.getAttribute("style");
+  await card.getByRole("button", { name: "Available", exact: true }).click();
+  expect(await ink.getAttribute("style")).toBe(middle);
+  await page.clock.runFor(150);
+  await expect(dots).toHaveCSS("opacity", "0");
+  await expect(root).toHaveAttribute("data-phase", "morphing");
+  await page.clock.runFor(170);
+  await expect(root).toHaveAttribute("data-phase", "available");
+  await expect(artwork).toHaveAttribute("style", restMask ?? "");
+  await expect(ink).toHaveCSS("width", "22px");
+  await card.getByRole("button", { name: "Thinking", exact: true }).click();
+  await page.clock.runFor(320);
+  await checkJoins();
+  const metrics = await card.locator(".badge-pill-measure").evaluate((el) => ({
+    width: (el as HTMLElement).offsetWidth,
+    height: (el as HTMLElement).offsetHeight,
+  }));
+  const actual = await ink.boundingBox();
+  expect(actual?.width).toBeCloseTo(metrics.width, 0);
+  expect(actual?.height).toBeCloseTo(metrics.height, 0);
+  await expect(ink).toHaveCSS("left", "44px");
+  await expect(ink).toHaveCSS("top", "88px");
+  const dot = card.locator(".badge-pill-dots i").first();
+  const dotWidth = (await dot.boundingBox())?.width ?? 0;
+  expect(dotWidth).toBeGreaterThan(0);
+  // Exercise actual renderer sizing, including a profile portrait.
+  for (const size of [24, 32, 40, 80, 88, 256]) {
+    await page
+      .getByRole("combobox", { name: "Avatar size" })
+      .selectOption(String(size));
+    await page.clock.runFor(320);
+    const scaled = await ink.boundingBox();
+    const detailScale = (size / 88) * Math.sqrt(Math.min(1, 88 / size));
+    expect(scaled?.width).toBeCloseTo(metrics.width * detailScale, 0);
+    expect(scaled?.height).toBeCloseTo(metrics.height * detailScale, 0);
+    expect((await dot.boundingBox())?.width).toBeCloseTo(
+      dotWidth * detailScale,
+      1,
+    );
+    const avatar = await artwork.boundingBox();
+    expect((scaled?.y ?? 0) + (scaled?.height ?? 0) / 2).toBeCloseTo(
+      (avatar?.y ?? 0) + size,
+      0,
+    );
+    await checkJoins();
+    await card.getByRole("button", { name: "Available", exact: true }).click();
+    await page.clock.runFor(320);
+    const restingBadge = await ink.boundingBox();
+    expect(restingBadge?.width).toBeCloseTo(size / 4, 1);
+    expect((restingBadge?.x ?? 0) + (restingBadge?.width ?? 0) / 2).toBeCloseTo(
+      (avatar?.x ?? 0) + size * 0.85,
+      1,
+    );
+    expect(
+      (restingBadge?.y ?? 0) + (restingBadge?.height ?? 0) / 2,
+    ).toBeCloseTo((avatar?.y ?? 0) + size * 0.85, 1);
+    await checkJoins();
+    await card.getByRole("button", { name: "Thinking", exact: true }).click();
+    await page.clock.runFor(320);
+  }
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await card.getByRole("button", { name: "Available", exact: true }).click();
+  await page.clock.runFor(20);
+  await expect(root).toHaveAttribute("data-phase", "available");
+});
+
 test("status badges keep avatar sizes and show a clear cutout in both modes", async ({
   page,
 }) => {

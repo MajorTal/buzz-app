@@ -12,7 +12,7 @@ import { ChoiceRow } from "../../shared/design-system/ui/ChoiceRow";
 import { useAvatarPreview } from "../../features/profiles/use-avatar-preview";
 import { DotsThreeIcon } from "../../shared/design-system/icons/index";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { Avatar } from "../../shared/design-system/ui/Avatar";
+import { AgentAvatar } from "../../features/agents/AgentAvatar";
 import { Button } from "../../shared/design-system/ui/Button";
 import {
   PopoverRoot,
@@ -191,7 +191,11 @@ export function AgentCard({
         }
       >
         <div className={children ? "shrink-0" : "size-20 shrink-0"}>
-          <Avatar
+          <AgentAvatar
+            session={session}
+            agentPubkey={
+              identities.length === 1 ? identities[0]?.pubkey : undefined
+            }
             alt={name}
             fallback={name}
             src={picture ?? null}

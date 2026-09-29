@@ -2,8 +2,12 @@
 
 Profiles show Active, Away, or Offline with text, while avatar badges use
 solid status fills. Pending, failed, stale, or unavailable evidence renders no
-status; it is not relabeled Offline. Message and thread bylines display badges
-and demand presence when mounted, as do one-to-one DM avatars in the sidebar.
+status; it is not relabeled Offline. People's message and thread bylines omit presence badges and custom status symbols.
+One-to-one DM avatars and profiles retain them. Agent message avatars retain presence
+badges and demand presence when mounted. Their online badge morphs into a centered
+three-dot pill while the existing agent activity feed reports working or typing;
+activity is scoped to the displayed conversation when one is supplied. The same
+indicator is used in DM rows and agent profiles. It publishes no presence changes.
 This describes recent Buzz session status in this community, not proof that a
 person is available. Signed live status changes arrive on the existing socket;
 bounded snapshots repair missed events and disconnects. The relay stores one status per community/pubkey:

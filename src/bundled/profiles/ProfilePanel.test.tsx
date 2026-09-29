@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
+import { stubAvatarBrowserApis } from "../../features/agents/avatar-testing";
+stubAvatarBrowserApis();
 import userEvent from "@testing-library/user-event";
 import { createAgentActivity } from "../../features/agents/activity";
 import { createAgentControl } from "../../features/agents/control";
@@ -462,3 +464,83 @@ it.each(["ambiguous", "unmatched"])(
     }
   },
 );
+
+it("exposes thinking in Profile Info while its identity artwork is decorative", async () => {
+  const agent = keypair();
+  const owner = createRelaySession({
+    viewer: key,
+    relayAuthor: keypair().pubkey,
+    media: () => undefined,
+    query: async () => [
+      profile(agent, { name: "Thinking agent", is_agent: true }),
+    ],
+  });
+  await owner.session.profiles.ensure([agent.pubkey]);
+  vi.spyOn(owner.session.presence, "status").mockReturnValue("online");
+  let activity = owner.session.agentActivity.snapshot();
+  const listeners = new Set<() => void>();
+  const session = {
+    ...owner.session,
+    agentActivity: {
+      ...owner.session.agentActivity,
+      snapshot: () => activity,
+      subscribe: (listener: () => void) => {
+        listeners.add(listener);
+        return () => {
+          listeners.delete(listener);
+        };
+      },
+    },
+  };
+  const snapshot = { status: "ready" as const, generation: 1, session };
+  const relay: RelayData = {
+    snapshot: () => snapshot,
+    subscribe: () => () => {},
+    retry() {},
+    disconnect() {},
+    clearCache: async () => {},
+  };
+  try {
+    render(
+      <ProfilePanel
+        relay={relay}
+        target={profileTarget(agent.pubkey) ?? ""}
+        close={() => {}}
+      />,
+    );
+    expect(
+      await screen.findByRole("heading", { name: "Thinking agent" }),
+    ).toBeTruthy();
+    const details = screen.getByRole("region", { name: "Profile details" });
+    expect(details).not.toHaveAccessibleDescription();
+    expect(document.querySelector(".agent-motion-avatar")).toHaveAttribute(
+      "aria-hidden",
+      "true",
+    );
+    act(() => {
+      activity = {
+        ...activity,
+        turns: [
+          {
+            agent: agent.pubkey,
+            channelId: "alpha",
+            turnId: "one",
+            timestamp: 0,
+            state: "working",
+          },
+        ],
+      };
+      for (const listener of listeners) listener();
+    });
+    expect(details).toHaveAccessibleDescription("Agent is thinking");
+    expect(screen.getByRole("img", { name: "Presence: Active" })).toBeTruthy();
+    act(() => {
+      activity = { ...activity, turns: [] };
+      for (const listener of listeners) listener();
+    });
+    expect(details).not.toHaveAccessibleDescription();
+  } finally {
+    cleanup();
+    owner.dispose();
+  }
+});

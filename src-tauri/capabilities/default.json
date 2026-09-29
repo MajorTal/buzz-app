@@ -46,6 +46,8 @@
     "allow-notification-show",
     "allow-dock-permission",
     "allow-unread-indicator-set",
+    "allow-deep-link-take",
+    "allow-deep-link-watch",
     "allow-terminal-create-owner",
     "allow-terminal-spawn",
     "allow-terminal-read",

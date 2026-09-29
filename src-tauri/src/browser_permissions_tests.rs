@@ -102,6 +102,8 @@ fn native_command_permissions_allow_only_main_webview() {
         "notification_show",
         "dock_permission",
         "unread_indicator_set",
+        "deep_link_take",
+        "deep_link_watch",
         "terminal_create_owner",
         "terminal_spawn",
         "terminal_read",

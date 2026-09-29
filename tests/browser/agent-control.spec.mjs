@@ -330,6 +330,9 @@ for (const previouslyStopped of [false, true]) {
     });
     await server.listen();
     try {
+      // Install before the five-second status poll exists; paused below at a
+      // fixed instant beyond this test's timeout, never runner "now".
+      await page.clock.install({ time: new Date("2026-01-01T00:00:00Z") });
       await page.goto(
         `http://127.0.0.1:${server.httpServer.address().port}/tests/fixtures/agent-control.html`,
       );
@@ -395,6 +398,9 @@ for (const previouslyStopped of [false, true]) {
           (call) => call.action !== "snapshot",
         ),
       );
+      // From here only explicit actions may read or write: a poll tick would
+      // replace the failed Stop's guidance, or recover before the explicit retry.
+      await page.clock.pauseAt(new Date("2026-01-01T01:00:00Z"));
       await stop.click();
       await expect(page.getByRole("alert")).toContainText(
         "could not persist disabled settings",

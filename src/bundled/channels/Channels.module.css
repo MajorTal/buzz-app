@@ -682,14 +682,13 @@
   letter-spacing: var(--text-caption--letter-spacing);
 }
 .activityList {
+  /* Follow the popup's inner curve after its list inset and 1px border. */
+  --radius-row: calc(var(--radius-panel) - var(--space-1) - 1px);
   max-height: 360px;
   overflow-y: auto;
 }
 .activityItem {
   width: 100%;
-}
-.activityItem + .activityItem {
-  border-top: 1px solid var(--border-standard);
 }
 .activityAvatar {
   width: 30px;

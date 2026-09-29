@@ -98,8 +98,8 @@ generic category text.
 
 The browser adapter works only in a running tab with the Notification API.
 Desktop builds use one small Tauri bridge into maintained native backends:
-mac-notification-sys on macOS, the freedesktop notification interface through
-zbus on Linux, and tauri-winrt-notification on Windows. Linux uses the already
+a locally patched mac-notification-sys 0.6.15 on macOS, the freedesktop notification
+interface through zbus on Linux, and tauri-winrt-notification on Windows. Linux uses the already
 locked zbus dependency directly because notify-rust's send-then-listen wrapper
 can lose early actions. No dependency upgrade or new native FFI is needed.
 Banner permission remains system-controlled; alert sound is app-owned and plays
@@ -112,7 +112,12 @@ submission.
 
 Desktop clicks restore/foreground Buzz and then call the existing activation
 closure. macOS explicitly waits for a body click off the UI thread (the generic
-notify-rust wrapper omits that flag). Windows retains its callback when the
+notify-rust wrapper omits that flag). Its local dependency patch shares one
+main-run-loop dismissal poll across all waiting notifications: one synchronous
+Notification Center query per 0.5-second tick, rather than one per card. The poll
+stops when no waits remain; retained cards do not expire. See
+[`BUZZ_PATCH.md`](../vendor/mac-notification-sys/BUZZ_PATCH.md) for provenance and
+regression coverage. Windows retains its callback when the
 banner fades, because timeout is not removal from Notification Center. Linux
 requests the standard default action and checks that the notification service
 supports actions. A single, sender-filtered receiver is armed on the same D-Bus

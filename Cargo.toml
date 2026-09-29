@@ -2,3 +2,8 @@
 members = ["crates/plugin-manager", "crates/agent-controller", "crates/credential-store", "src-tauri"]
 default-members = ["crates/plugin-manager"]
 resolver = "2"
+exclude = ["vendor/mac-notification-sys"]
+
+[patch.crates-io]
+# Query Notification Center once per poll, not once per retained card.
+mac-notification-sys = { path = "vendor/mac-notification-sys" }

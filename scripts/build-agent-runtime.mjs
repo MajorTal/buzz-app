@@ -1,5 +1,5 @@
 // Build only. Never launches the app, authenticates, or reads an old Buzz library.
-import { spawn } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   readFile,
@@ -14,24 +14,30 @@ import {
   rename,
   rm,
 } from "node:fs/promises";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const spec = JSON.parse(
   await readFile(join(root, "runtime/agent-runtime.json"), "utf8"),
 );
+// Drop injected credentials and per-shell compiler overrides so cache entries
+// for a key come from the same pin, toolchain and build arguments. User-level
+// Cargo config and native compiler inputs (CC, CFLAGS) still apply unkeyed.
 const env = Object.fromEntries(
   Object.entries(process.env).filter(
     ([key]) =>
-      !/^(BUZZ_|BUZZODZ_|NOSTR_|DATABRICKS_|CARGO_TARGET_DIR$)/.test(key),
+      !/^(BUZZ_|BUZZODZ_|NOSTR_|DATABRICKS_|CARGO_(BUILD|ENCODED|PROFILE|TARGET)_|RUSTC$|RUSTC_|RUSTFLAGS$|RUSTDOCFLAGS$)/.test(
+        key,
+      ),
   ),
 );
 env.PATH = `${join(root, "bin")}:${env.PATH ?? ""}`;
-env.CARGO_TARGET_DIR = join(root, "target/agent-runtime-build");
-async function run(command, args, capture = false) {
+async function run(command, args, capture = false, cwd = root) {
   return new Promise((accept, reject) => {
     const child = spawn(command, args, {
-      cwd: root,
+      cwd,
       env,
       stdio: ["ignore", capture ? "pipe" : "inherit", "inherit"],
     });
@@ -47,18 +53,54 @@ async function run(command, args, capture = false) {
     );
   });
 }
-const target = (await run(join(root, "bin/rustc"), ["-vV"], true)).match(
-  /^host: (.+)$/m,
-)?.[1];
+const toolchain = await run(join(root, "bin/rustc"), ["-vV"], true);
+const target = toolchain.match(/^host: (.+)$/m)?.[1];
 if (!target) throw new Error("Could not resolve pinned Rust target");
 const destination = join(root, "src-tauri/resources/agent-runtime");
 const filenames = spec.tools.map((name) =>
   process.platform === "win32" ? `${name}.exe` : name,
 );
-async function currentBundle() {
+// One source revision and one frozen workspace lock, no local path/ambient tools.
+// A single build shares dependency compilation across the five tools.
+const packages = [
+  "buzz-acp",
+  "buzz-agent",
+  "buzz-dev-mcp",
+  "buzz-cli",
+  "git-credential-nostr",
+];
+// An explicit host target fixes the output directory even when a user-level
+// Cargo config sets build.target.
+const buildArgs = [
+  "build",
+  "--release",
+  "--locked",
+  "--bins",
+  "--target",
+  target,
+].concat(...packages.map((name) => ["-p", name]));
+// Worktrees of one clone share finished bundles built from identical inputs.
+function cachedBundle() {
+  let common;
   try {
-    if (!(await lstat(destination)).isDirectory()) return false;
-    const manifestPath = join(destination, "manifest.json");
+    common = execFileSync(
+      "git",
+      ["rev-parse", "--path-format=absolute", "--git-common-dir"],
+      { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "ignore"] },
+    ).trim();
+  } catch {
+    return undefined;
+  }
+  const key = createHash("sha256")
+    .update(JSON.stringify([spec, toolchain, buildArgs]))
+    .digest("hex")
+    .slice(0, 16);
+  return join(common, "buzz-agent-runtime", key);
+}
+async function verifiedBundle(directory) {
+  try {
+    if (!(await lstat(directory)).isDirectory()) return false;
+    const manifestPath = join(directory, "manifest.json");
     const meta = await lstat(manifestPath);
     if (!meta.isFile() || meta.size > 16384) return false;
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
@@ -71,7 +113,7 @@ async function currentBundle() {
     )
       return false;
     for (const filename of filenames) {
-      const path = join(destination, filename);
+      const path = join(directory, filename);
       if (!(await lstat(path)).isFile()) return false;
       await access(path, constants.X_OK);
       const hash = createHash("sha256")
@@ -84,60 +126,104 @@ async function currentBundle() {
     return false;
   }
 }
-if (await currentBundle()) {
+// Copy files first and publish the manifest last: an interrupted copy is
+// detected as mismatched, not ready. APFS and similar filesystems clone.
+async function publish(source, directory) {
+  await mkdir(directory, { recursive: true });
+  const files = {};
+  for (const filename of filenames) {
+    const temporary = join(directory, `${filename}.new`);
+    await copyFile(
+      join(source, filename),
+      temporary,
+      constants.COPYFILE_FICLONE,
+    );
+    await chmod(temporary, 0o755);
+    files[filename] = createHash("sha256")
+      .update(await readFile(temporary))
+      .digest("hex");
+    await rename(temporary, join(directory, filename));
+  }
+  const manifest = { version: 1, revision: spec.revision, target, files };
+  await writeFile(
+    join(directory, "manifest.json.new"),
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
+  await rename(
+    join(directory, "manifest.json.new"),
+    join(directory, "manifest.json"),
+  );
+  return manifest;
+}
+if (await verifiedBundle(destination)) {
   console.log(`Agent runtime ready (${spec.revision}, ${target})`);
   process.exit(0);
+}
+const cache = cachedBundle();
+const existing = cache && (await lstat(cache).catch(() => undefined));
+const cached = existing && (await verifiedBundle(cache));
+if (cached) {
+  // A copy that fails (e.g. the entry was removed mid-copy) rebuilds below.
+  const restored = await publish(cache, destination).catch(() => undefined);
+  if (restored) {
+    console.log(
+      `Verified inputs restored from ${cache} (${spec.revision}, ${target})`,
+    );
+    process.exit(0);
+  }
+} else if (existing) {
+  // Seen before verifying: entries appear whole by rename, so this one was
+  // edited. A key missing at check time is never removed, since a concurrent
+  // build may publish it.
+  await rm(cache, { recursive: true, force: true });
 }
 console.log(
   "Preparing the agent runtime; the first build can take several minutes.",
 );
-await mkdir(join(root, "target"), { recursive: true });
-const stage = await mkdtemp(join(root, "target/agent-runtime-stage-"));
+// The source is fetched outside the worktree, so this checkout's Cargo config
+// does not reach the build. The target persists in this checkout, so an
+// interrupted build resumes; Cargo's lock serializes concurrent builds.
+const stage = await mkdtemp(join(tmpdir(), "buzz-agent-runtime-"));
+for (const signal of ["SIGINT", "SIGTERM"])
+  process.once(signal, () => {
+    rmSync(stage, { recursive: true, force: true });
+    process.exit(1);
+  });
 try {
-  // One source revision and one frozen workspace lock, no local path/ambient tools.
-  await run(join(root, "bin/cargo"), [
-    "install",
-    "--git",
-    spec.repository,
-    "--rev",
-    spec.revision,
-    "--locked",
-    "--root",
-    stage,
-    "buzz-acp",
-    "buzz-agent",
-    "buzz-dev-mcp",
-    "buzz-cli",
-    "git-credential-nostr",
-  ]);
-  await mkdir(destination, { recursive: true });
-  const files = {};
-  for (const name of spec.tools) {
-    const filename = process.platform === "win32" ? `${name}.exe` : name;
-    const source = join(stage, "bin", filename);
-    files[filename] = createHash("sha256")
-      .update(await readFile(source))
-      .digest("hex");
-    await copyFile(source, join(destination, `${filename}.new`));
-    await chmod(join(destination, `${filename}.new`), 0o755);
-    await rename(
-      join(destination, `${filename}.new`),
-      join(destination, filename),
-    );
-  }
-  // Publish manifest last: interrupted staging is detected as mismatched, not ready.
-  const manifest = { version: 1, revision: spec.revision, target, files };
-  await writeFile(
-    join(destination, "manifest.json.new"),
-    `${JSON.stringify(manifest, null, 2)}\n`,
+  const source = join(stage, "source");
+  await mkdir(source);
+  await run("git", ["init", "--quiet"], false, source);
+  await run(
+    "git",
+    ["fetch", "--quiet", "--depth", "1", spec.repository, spec.revision],
+    false,
+    source,
   );
-  await rename(
-    join(destination, "manifest.json.new"),
-    join(destination, "manifest.json"),
+  await run(
+    "git",
+    ["checkout", "--quiet", "--detach", spec.revision],
+    false,
+    source,
   );
+  env.CARGO_TARGET_DIR = join(root, "target/agent-runtime-build");
+  await run(join(root, "bin/cargo"), buildArgs, false, source);
+  await publish(join(env.CARGO_TARGET_DIR, target, "release"), destination);
   console.log(
     `Verified inputs staged at ${destination} (${spec.revision}, ${target})`,
   );
+  // Entries are published whole by rename; caching is best-effort.
+  if (cache && !cached) {
+    const entry = `${cache}.${process.pid}.new`;
+    try {
+      await publish(destination, entry);
+      // Renaming onto an existing entry fails: a concurrent build published first.
+      await rename(entry, cache);
+    } catch {
+      // Keep the other build's entry.
+    } finally {
+      await rm(entry, { recursive: true, force: true });
+    }
+  }
 } finally {
   await rm(stage, { recursive: true, force: true });
 }

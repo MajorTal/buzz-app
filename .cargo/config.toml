@@ -1,0 +1,5 @@
+# Each checkout builds into its own target/, even when a user-level Cargo config
+# sets a shared target-dir. The app binary and its bundled resources must come
+# from the same worktree's sources; Tauri also resolves resources beside it.
+[build]
+target-dir = "target"

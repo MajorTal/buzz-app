@@ -125,8 +125,12 @@ isolated test buses, never use the desktop session bus or display real banners. 
 
 Installs run on every invocation to account for branch and lockfile changes.
 pnpm reuses its shared package cache; no node_modules directory needs to be copied
-into a new worktree. Native dependencies are fetched by Cargo as needed. Initial
-downloads and native compilation can take time. Parallel worktrees normally need
+into a new worktree. Native dependencies are fetched by Cargo as needed into the
+shared `~/.cargo`. Each worktree compiles into its own `target/`, overriding any
+user-level `target-dir`, so its app and bundled resources always match its sources;
+remove stale worktrees (or run `bin/cargo clean` in them) to reclaim that space.
+The pinned agent runtime is built once per clone and reused by worktrees with the
+same pin and toolchain. Native compilation still takes time in each new worktree. Parallel worktrees normally need
 no port flags: each derives a stable default from its path. Pass `--port` if paths
 collide, the default is occupied, or you run a second instance from one checkout;
 ports must be integers from 1 to 65535. Browser dev

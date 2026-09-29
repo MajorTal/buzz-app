@@ -32,8 +32,6 @@ import { useReading } from "./use-reading";
 import { useMessageReveal } from "./use-message-reveal";
 import type { PageNavigation } from "../navigation/service";
 import { messageViewKey } from "./view-key";
-import type { MediaPlayback } from "./MediaAttachment";
-import { formatMediaTime } from "./media-timecode";
 import { useKnownAgentPubkeys } from "../agents/use-known";
 
 export type ThreadPanelProps = {
@@ -387,8 +385,6 @@ function ThreadMessages({
   useEffect(() => {
     if (replyRequest) focusReply();
   }, [replyRequest, focusReply]);
-  const [mediaPlayback, setMediaPlayback] = useState<MediaPlayback>();
-  const [mediaCommentTime, setMediaCommentTime] = useState<number>();
   const [mediaSeek, setMediaSeek] = useState<{
     seconds: number;
     request: number;
@@ -651,46 +647,30 @@ function ThreadMessages({
         tabIndex={0}
       >
         {snapshot.root ? (
-          <>
-            <MessageRow
-              extensions={extensions}
-              session={session}
-              scope={scope}
-              onReply={focusReply}
-              row={snapshot.root}
-              profile={profiles.get(snapshot.root.authorId)}
-              participantProfiles={profiles}
-              agentPubkeys={agentPubkeys}
-              media={session.media}
-              onOpenLink={onOpenLink}
-              canOpenLink={canOpenLink}
-              day={false}
-              layout="thread"
-              retry={session.messages.retry}
-              mediaMode="thread"
-              {...(mediaSeek
-                ? {
-                    mediaSeekTo: mediaSeek.seconds,
-                    mediaSeekRequest: mediaSeek.request,
-                  }
-                : {})}
-              onMediaPlayback={setMediaPlayback}
-              {...(onOpenMediaReview
-                ? { onOpenMediaReview: openRootMedia }
-                : {})}
-            />
-            {videoOwner?.id === rootId && videoAttachment && mediaPlayback && (
-              <span className={styles.mediaCommentAction}>
-                <Button
-                  size="sm"
-                  type="button"
-                  onClick={() => setMediaCommentTime(mediaPlayback.seconds)}
-                >
-                  Comment at {formatMediaTime(mediaPlayback.seconds)}
-                </Button>
-              </span>
-            )}
-          </>
+          <MessageRow
+            extensions={extensions}
+            session={session}
+            scope={scope}
+            onReply={focusReply}
+            row={snapshot.root}
+            profile={profiles.get(snapshot.root.authorId)}
+            participantProfiles={profiles}
+            agentPubkeys={agentPubkeys}
+            media={session.media}
+            onOpenLink={onOpenLink}
+            canOpenLink={canOpenLink}
+            day={false}
+            layout="thread"
+            retry={session.messages.retry}
+            mediaMode="thread"
+            {...(mediaSeek
+              ? {
+                  mediaSeekTo: mediaSeek.seconds,
+                  mediaSeekRequest: mediaSeek.request,
+                }
+              : {})}
+            {...(onOpenMediaReview ? { onOpenMediaReview: openRootMedia } : {})}
+          />
         ) : snapshot.status !== "loading" ? (
           <p className={styles.empty}>Original message unavailable.</p>
         ) : null}
@@ -764,10 +744,6 @@ function ThreadMessages({
           focusRequest={replyFocus}
           onOpenLink={onOpenLink}
           canOpenLink={canOpenLink}
-          {...(videoAttachment && mediaCommentTime !== undefined
-            ? { mediaTimeSeconds: mediaCommentTime }
-            : {})}
-          clearMediaTime={() => setMediaCommentTime(undefined)}
           onSend={(id) => {
             targetAnchor.current = undefined;
             positioned.current = true;

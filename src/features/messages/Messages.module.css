@@ -1071,12 +1071,6 @@ button.mediaPreview {
   }
 }
 
-.mediaCommentAction {
-  align-self: flex-start;
-  margin: 0 0 var(--space-3) var(--space-16);
-  font-variant-numeric: tabular-nums;
-}
-
 .imageReviewStage {
   position: relative;
   display: block;

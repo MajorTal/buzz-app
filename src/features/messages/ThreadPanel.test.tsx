@@ -29,9 +29,33 @@ vi.mock("../relay/react", () => {
   return { useRowProfiles: () => profiles };
 });
 vi.mock("./MessageRow", () => ({
-  MessageRow: ({ row, scope, retry, onOpenMediaReview }: MessageRowProps) => (
+  MessageRow: ({
+    row,
+    scope,
+    retry,
+    onOpenMediaReview,
+    onMediaPlayback,
+  }: MessageRowProps) => (
     <article data-message-id={row.id} data-scope={scope}>
       <span>{row.content}</span>
+      {row.attachments
+        .filter((attachment) => attachment.kind === "video")
+        .flatMap((attachment) =>
+          [0, 42].map((seconds) => (
+            <button
+              key={`${attachment.url}:${seconds}`}
+              type="button"
+              onClick={() =>
+                onMediaPlayback?.({
+                  attachmentUrl: attachment.url,
+                  seconds,
+                })
+              }
+            >
+              Report playback {seconds}
+            </button>
+          )),
+        )}
       <button type="button" onClick={() => retry?.(row.id)}>
         Retry {row.id}
       </button>
@@ -370,6 +394,24 @@ it("preserves reading above the bottom through live updates and refresh, then re
   h.render();
   expect(h.element.scrollTop).toBe(4900);
 });
+it("keeps video threads free of the timestamp comment shortcut at any playback position", () => {
+  const h = messagesHarness();
+  h.snapshot.root = {
+    ...row,
+    attachments: [{ url: "https://safe/video.mp4", kind: "video" }],
+  };
+  h.render();
+  for (const seconds of [0, 42]) {
+    fireEvent.click(
+      screen.getByRole("button", { name: `Report playback ${seconds}` }),
+    );
+    expect(
+      screen.queryByRole("button", { name: /^Comment at / }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Composer" })).toBeVisible();
+  }
+});
+
 it("routes media in replies through the resolved root review workspace", () => {
   const open = vi.fn();
   const h = messagesHarness(undefined, open);

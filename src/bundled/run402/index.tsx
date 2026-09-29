@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ExternalLink, RefreshCw } from "lucide-react";
+import {
+  ArrowClockwiseIcon,
+  ArrowSquareOutIcon,
+} from "../../shared/design-system/icons";
 import type { PluginModule } from "../../plugins/api";
 import type { PanelProps } from "../../features/panels/service";
 import { Button } from "../../shared/design-system/ui/Button";
@@ -187,7 +190,7 @@ export function SiteView({
           aria-label="Reload site"
           onClick={() => reload(reloads + 1)}
         >
-          <RefreshCw size={14} aria-hidden="true" /> Reload
+          <ArrowClockwiseIcon size={14} /> Reload
         </Button>
         <OpenInBrowser site={site} />
       </div>
@@ -214,7 +217,7 @@ function OpenInBrowser({ site, block }: { site: Run402Site; block?: boolean }) {
       target="_blank"
       rel="noreferrer"
     >
-      Open in browser <ExternalLink size={14} aria-hidden="true" />
+      Open in browser <ArrowSquareOutIcon size={14} />
     </a>
   );
 }

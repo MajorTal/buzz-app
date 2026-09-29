@@ -1,4 +1,6 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
+import { getVersion } from "@tauri-apps/api/app";
+import { isTauri } from "@tauri-apps/api/core";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Header } from "../../shared/design-system/ui/Header";
 import type { Updates } from "./updates";
@@ -19,6 +21,20 @@ export function UpdateSettings({
     () => (active ? updates.showInline() : undefined),
     [active, updates],
   );
+  // Browser builds have no native version; leave it unset there.
+  const [version, setVersion] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isTauri()) return;
+    let cancelled = false;
+    getVersion()
+      .then((found) => {
+        if (!cancelled) setVersion(found);
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
   const pending = [
     "checking",
     "available",
@@ -50,7 +66,17 @@ export function UpdateSettings({
       <Header
         id="update-settings-title"
         title="Software Updates"
-        subtitle="Keep Buzz up to date with the latest features and fixes."
+        subtitle={
+          version ? (
+            <>
+              Version {version}
+              <br />
+              Keep Buzz up to date with the latest features and fixes.
+            </>
+          ) : (
+            "Keep Buzz up to date with the latest features and fixes."
+          )
+        }
       />
       <div className="flex flex-wrap items-center justify-between gap-3 py-3">
         <p role="status" className="m-0 min-w-0 text-body-sm text-subtle">

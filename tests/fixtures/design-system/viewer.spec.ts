@@ -68,12 +68,12 @@ test("status badges keep avatar sizes and show a clear cutout in both modes", as
       mode === "light"
         ? {
             online: "rgb(33, 131, 88)",
-            away: "rgb(171, 100, 0)",
+            away: "rgb(255, 186, 24)",
             offline: "rgb(128, 128, 128)",
           }
         : {
             online: "rgb(61, 214, 140)",
-            away: "rgb(255, 202, 22)",
+            away: "rgb(255, 214, 10)",
             offline: "rgb(164, 164, 164)",
           },
     )) {
@@ -86,7 +86,7 @@ test("status badges keep avatar sizes and show a clear cutout in both modes", as
       await expect(dot).toHaveCSS("background-image", "none");
       await expect(dot).toHaveCSS("box-shadow", "none");
     }
-    // The same-status outline is what meets the surrounding surface. Check
+    // Only Online retains an outline. Away and Offline expose solid fills. Check
     // the actual CSS paint stack in the browser, including squircle masks.
     for (const status of ["online", "away", "offline"]) {
       const dots = page.locator(
@@ -106,20 +106,14 @@ test("status badges keep avatar sizes and show a clear cutout in both modes", as
         }),
       );
       for (const center of centers) {
-        if (status === "offline") {
+        if (status !== "online") {
           expect(center.content).toBe("none");
         } else {
           expect(center.content).toBe('""');
           expect(center.inset).toBe("1px");
           expect(center.mask).toBe(center.outerMask);
           expect(center.color).toBe(
-            status === "online"
-              ? mode === "light"
-                ? "rgb(43, 154, 102)"
-                : "rgb(51, 176, 116)"
-              : mode === "light"
-                ? "rgb(255, 186, 24)"
-                : "rgb(255, 214, 10)",
+            mode === "light" ? "rgb(43, 154, 102)" : "rgb(51, 176, 116)",
           );
         }
       }

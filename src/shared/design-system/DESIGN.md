@@ -67,12 +67,15 @@ clipped artwork, and avatars without a badge retain their full shape. The agent
 cutout and badge follow the squircle contour; agent badges use live presence and leave
 unknown status unbadged. All three statuses use solid fills: green for Online,
 yellow for Away, and grey for Offline, with semantic light and dark values.
-Online and Away retain step-10 centers inside a 1px inset, same-hue step-11
-outline. The outline supplies the 3:1 non-text boundary on panel, popup,
-selected and hover surfaces; measure that rendered boundary, not the inset
-center against a surface it does not touch. Offline stays unoutlined. The
-badge footprint and Bézier artwork cutout are unchanged. This establishes
-boundary contrast, not a blanket WCAG conformance claim for presence.
+Online retains its step-10 center inside a 1px inset, same-hue step-11
+outline, which supplies the 3:1 non-text boundary on supported opaque surfaces.
+Away uses an unoutlined Amber 10 fill at the designer's explicit request.
+**Known accessibility tradeoff:** the light Away badge falls below the WCAG
+1.4.11 3:1 non-text contrast target on supported neutral surfaces. The contrast
+guard reports exact accepted light-mode role/color/surface pairs; other pairs
+remain enforced. This exception is not an accessibility pass. Dark Away meets
+3:1 on these opaque surfaces. Offline stays unoutlined. Badge footprints,
+Bézier artwork cutouts, presence behavior and accessible names are unchanged.
 
 ## Public identity text
 

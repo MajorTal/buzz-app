@@ -581,15 +581,13 @@ test("avatar choices publish through the existing socket and persist across relo
     presenceAttempts: attempts,
     note: "includes the explicit pending-UI assertion gate and browser automation",
   });
-  await expect(badge).toHaveCSS("background-color", "rgb(171, 100, 0)");
+  await expect(badge).toHaveCSS("background-color", "rgb(255, 186, 24)");
   await expect(ownBadge).toHaveAttribute("data-status", "away");
   await expect
     .poll(() =>
-      badge.evaluate(
-        (element) => getComputedStyle(element, "::after").backgroundColor,
-      ),
+      badge.evaluate((element) => getComputedStyle(element, "::after").content),
     )
-    .toBe("rgb(255, 186, 24)");
+    .toBe("none");
   await expect(
     page.getByRole("button", { name: "Availability: Away", exact: true }),
   ).toHaveCSS("color", "rgb(79, 52, 34)");

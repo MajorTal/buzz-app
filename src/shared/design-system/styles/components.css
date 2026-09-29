@@ -369,9 +369,9 @@
     pointer-events: none;
   }
 
-  /* A same-hue outline carries the status boundary while preserving the
+  /* Online retains a same-hue outline while preserving the
      requested step-10 center. Inheriting the mask also outlines squircles. */
-  .buzz-avatar-status-dot::after {
+  .buzz-avatar-status[data-status="online"] .buzz-avatar-status-dot::after {
     content: "";
     position: absolute;
     inset: 1px;
@@ -381,16 +381,11 @@
   }
 
   .buzz-avatar-status[data-status="away"] .buzz-avatar-status-dot {
-    --avatar-status-fill: var(--status-away);
-    background: var(--status-avatar-away-border);
+    background: var(--status-away);
   }
 
   .buzz-avatar-status[data-status="offline"] .buzz-avatar-status-dot {
     background: var(--status-offline);
-  }
-
-  .buzz-avatar-status[data-status="offline"] .buzz-avatar-status-dot::after {
-    content: none;
   }
 
   /* A panel is the default opaque reading surface over the atmospheric

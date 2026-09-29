@@ -201,6 +201,59 @@ readingTest(
   },
 );
 
+// Browser boundary: successful sends must not replay their reveal instruction
+// over Virtua's saved message/Y when the real sidebar remounts a conversation.
+const sendTest = readingTest.extend({
+  productionBroker: true,
+  historyCounts: { alpha: 20, beta: 1 },
+});
+sendTest(
+  "a prior send preserves the reading anchor on return, while a fresh send reveals",
+  async ({ page, app }) => {
+    await open(page, app);
+    const input = composer(page, "Alpha");
+    const publications = () =>
+      app.report.publications.filter(({ event }) => event.kind === 9);
+    await input.fill("First sent message");
+    await input.press("Enter");
+    await expect.poll(() => publications().length).toBe(1);
+    await expect(
+      history(page).locator(
+        `[data-message-id="${publications()[0].event.id}"]`,
+      ),
+    ).toBeInViewport();
+    await expect(input).toHaveJSProperty("value", "");
+    const saved = await upper(page);
+    await expectOutsidePrefetch(page);
+    await button(page, "Beta").click();
+    await composer(page, "Beta").waitFor();
+    await button(page, "Alpha").click();
+    await settle(page);
+    await expectAnchor(page, saved);
+    app.report.measurements.push({
+      scenario: "send-then-return",
+      before: saved,
+      after: await anchor(page),
+    });
+    await input.fill("Fresh send from reading position");
+    await input.press("Enter");
+    await expect.poll(() => publications().length).toBe(2);
+    await expect(
+      history(page).locator(
+        `[data-message-id="${publications()[1].event.id}"]`,
+      ),
+    ).toBeInViewport();
+    await settle(page);
+    await expect
+      .poll(() =>
+        history(page).evaluate(
+          (el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+        ),
+      )
+      .toBeLessThan(4);
+  },
+);
+
 test("cursor paging preserves visible anchors and keeps a large history virtualized", {
   tag: "@local-webkit",
 }, async ({ page, app, browserName }) => {

@@ -60,6 +60,11 @@
     "allow-browser-action",
     "allow-browser-status",
     "core:app:allow-version",
+    "updater:allow-check",
+    "updater:allow-download",
+    "updater:allow-install",
+    "core:resources:allow-close",
+    "allow-update-restart",
     "core:window:allow-start-dragging",
     "core:window:allow-internal-toggle-maximize",
     {

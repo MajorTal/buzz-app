@@ -109,6 +109,7 @@ export function useAppNavigation(services: AppServices) {
       "shortcuts",
       "agents",
       "notifications",
+      "updates",
     ].includes(target.section) &&
     !(developerMode && target.section === "developer")
   ) {

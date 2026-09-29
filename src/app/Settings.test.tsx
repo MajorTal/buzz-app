@@ -70,6 +70,7 @@ for (const [path, name] of [
   ["./ProfileSettings", "ProfileSettings"],
   ["./AgentSettings", "AgentSettings"],
   ["./DeveloperSettings", "DeveloperSettings"],
+  ["../features/updates/UpdateSettings", "UpdateSettings"],
 ] as const)
   vi.doMock(path, () => ({ [name]: () => null }));
 const { Settings } = await import("./Settings");

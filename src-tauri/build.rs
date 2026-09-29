@@ -1,4 +1,13 @@
 fn main() {
+    // Release builds enable the updater only when both values are supplied; its
+    // `plugins.updater` config comes from the same values via `tauri build --config`.
+    println!("cargo:rerun-if-env-changed=BUZZ_UPDATER_PUBLIC_KEY");
+    println!("cargo:rerun-if-env-changed=BUZZ_UPDATER_ENDPOINT");
+    println!("cargo:rustc-check-cfg=cfg(buzz_updater_enabled)");
+    let configured = |name| std::env::var(name).is_ok_and(|value| !value.trim().is_empty());
+    if configured("BUZZ_UPDATER_PUBLIC_KEY") && configured("BUZZ_UPDATER_ENDPOINT") {
+        println!("cargo:rustc-cfg=buzz_updater_enabled");
+    }
     let mut attributes = tauri_build::Attributes::new();
     if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows")
         && std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc")
@@ -66,6 +75,7 @@ fn main() {
             "terminal_resize",
             "terminal_close",
             "terminal_close_owner",
+            "update_restart",
             "browser_attach",
             "browser_set_bounds",
             "browser_detach",

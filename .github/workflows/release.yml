@@ -35,6 +35,9 @@ jobs:
     env:
       CI: "true"
       CARGO_TERM_COLOR: always
+      # Public verification inputs; the native build and plugins.updater must match.
+      BUZZ_UPDATER_PUBLIC_KEY: dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDJDQjQ2RDZFMUEwOERFMTEKUldRUjNnZ2FibTIwTE10QkVaMzFyYkZlY0R4ajhmbFBjdncvNVRCYnNpSm9kaFNBaHQzemZlZHkK
+      BUZZ_UPDATER_ENDPOINT: https://github.com/block/buzz-app/releases/download/preview-feed/latest.json
     steps:
       - name: Require main and signing configuration
         env:
@@ -66,7 +69,11 @@ jobs:
           const base = config.version.split('-')[0];
           if (!/^\d+\.\d+\.\d+$/.test(base)) throw new Error('Expected a numeric Tauri version');
           const version = `${base}-preview.${process.env.GITHUB_RUN_NUMBER}.${process.env.GITHUB_RUN_ATTEMPT}`;
-          writeFileSync(`${process.env.RUNNER_TEMP}/release.json`, JSON.stringify({ version, bundle: { createUpdaterArtifacts: false } }));
+          writeFileSync(`${process.env.RUNNER_TEMP}/release.json`, JSON.stringify({
+            version,
+            bundle: { createUpdaterArtifacts: false },
+            plugins: { updater: { pubkey: process.env.BUZZ_UPDATER_PUBLIC_KEY, endpoints: [process.env.BUZZ_UPDATER_ENDPOINT] } },
+          }));
           appendFileSync(process.env.GITHUB_OUTPUT, `version=${version}\n`);
           JS
 

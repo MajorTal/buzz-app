@@ -22,7 +22,8 @@ This includes scheduled runs and manual builds without `promote_version`.
 An updater-less artifact, invalid signature, or rollback leaves the existing feed
 unchanged, but the promotion job fails and needs investigation. The workflow
 does **not** publish to the legacy `block/buzz` updater. Older installed apps
-cannot use the feed until an updater-enabled build is installed.
+cannot use the feed until an updater-enabled build is installed. Preview builds
+are built with the updater enabled and check the preview endpoint below.
 
 ## macOS preview updater feed (automatic promotion, manual recovery)
 

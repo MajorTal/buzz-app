@@ -479,6 +479,10 @@ confirmedPresence(
       await tab();
       await expect(plugins).toBeFocused();
       await tab();
+      await expect(
+        sections.getByRole("button", { name: "Updates", exact: true }),
+      ).toBeFocused();
+      await tab();
       // The current profile form begins with its avatar editor before text fields.
       await expect(
         page.getByRole("button", { name: "Edit avatar", exact: true }),

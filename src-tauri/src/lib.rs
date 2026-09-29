@@ -349,6 +349,23 @@ async fn plugin_recover(
 ) -> Result<InstallationResult, String> {
     with_manager(manager, |m| m.recover().map(|catalog| ready(&m, catalog))).await
 }
+/// Tauri's restart ignores `prevent_exit`, so confirm the same agent teardown
+/// that gates Quit before requesting it; a failure keeps the app running.
+#[tauri::command]
+async fn update_restart<R: tauri::Runtime>(app: tauri::AppHandle<R>) -> Result<(), String> {
+    let handle = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        handle.state::<ModelHost>().shutdown();
+        handle.state::<AgentHost>().shutdown()
+    })
+    .await
+    .map_err(|_| "Agent shutdown could not be confirmed".to_owned())?
+    .map_err(|error| {
+        format!("Agent shutdown incomplete; restart Buzz to finish the update: {error}")
+    })?;
+    app.request_restart();
+    Ok(())
+}
 fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Send + Sync + 'static {
     tauri::generate_handler![
         identity_restore,
@@ -402,7 +419,8 @@ fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         terminal_write,
         terminal_resize,
         terminal_close,
-        terminal_close_owner
+        terminal_close_owner,
+        update_restart
     ]
 }
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -461,6 +479,13 @@ pub fn run() {
         });
     #[cfg(target_os = "macos")]
     let builder = builder.manage(TitleBarFillFrames::default());
+    // Register the updater only in configured release builds; omit it locally.
+    #[cfg(buzz_updater_enabled)]
+    let builder = if tauri::is_dev() {
+        builder
+    } else {
+        builder.plugin(tauri_plugin_updater::Builder::new().build())
+    };
     builder
         .manage(IdentityHost::default())
         .manage(Imports::default())

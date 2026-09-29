@@ -673,11 +673,11 @@ function ChannelWorkspace({
     hasComments: boolean;
     entryId?: string | undefined;
   }>();
-  const showingMediaReview = mediaReviewForDestination(
-    mediaReview,
-    current?.id,
-    navigation?.entryId,
-  );
+  // The current destination may be an authorized public preview, which is
+  // intentionally absent from the joined-channel list.
+  const showingMediaReview = current?.archived
+    ? undefined
+    : mediaReviewForDestination(mediaReview, current?.id, navigation?.entryId);
   useEffect(() => {
     if (mediaReview && !showingMediaReview) setMediaReview(undefined);
   }, [mediaReview, showingMediaReview]);
@@ -714,17 +714,6 @@ function ChannelWorkspace({
     },
     [],
   );
-  useEffect(() => {
-    if (
-      mediaReview &&
-      list.status === "ready" &&
-      list.coverage !== "partial" &&
-      !list.channels.some(
-        (channel) => channel.id === mediaReview.channelId && !channel.archived,
-      )
-    )
-      setMediaReview(undefined);
-  }, [mediaReview, list]);
   const closeThread = () => {
     setReplyRequest(undefined);
     if (showingThread?.navigation && current) select(current.id);

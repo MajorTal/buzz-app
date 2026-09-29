@@ -168,6 +168,9 @@
   min-width: 0;
   box-sizing: border-box;
   overflow-y: auto;
+  /* Paint positioned rows with the scrolled contents; otherwise WebKit gives
+     each row a proxy layer that lags behind fast scrolls. */
+  isolation: isolate;
   padding-block: var(--sidebar-padding);
   --channel-row-fill-start: var(--space-1);
   /* The scroll frame/list extend 6px beyond the panel content box so the native

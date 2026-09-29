@@ -1,7 +1,8 @@
 # Desktop test releases
 
 The **Desktop previews** workflow builds and signs Apple Silicon test builds from
-`main`. It publishes a DMG and `SHA256SUMS` as a GitHub prerelease, tagged
+`main`. It publishes a DMG, a signed updater archive with its `.sig`, and
+`SHA256SUMS` as a GitHub prerelease, tagged
 `v<app-version>-preview.<run-number>.<attempt>` at the built commit.
 
 Runs are scheduled at **00:17, 06:17, 12:17, and 18:17 UTC**. To start one manually:
@@ -10,8 +11,15 @@ Runs are scheduled at **00:17, 06:17, 12:17, and 18:17 UTC**. To start one manua
 gh workflow run release.yml --repo block/buzz-app --ref main
 ```
 
-These builds use `macos-latest` and the repository's pinned toolchain. They do not
-generate Tauri updater artifacts or upload to the legacy `block/buzz` updater.
+These builds use `macos-latest` and the repository's pinned toolchain. The
+workflow publishes an Apple-signed/notarized DMG and a separately Tauri-signed
+updater `.app.tar.gz` and `.sig` for Apple Silicon. The updater archive is
+rebuilt from the verified app in the signed DMG; built-in Tauri artifact
+creation remains disabled because this DMG-only build does not emit an updater
+archive. The release does **not** publish an updater manifest or upload to the
+legacy `block/buzz` updater. An installed app cannot update from these assets
+until an updater-enabled build and a separately hosted preview manifest are
+configured and validated.
 
 ## Prerequisites
 
@@ -20,6 +28,18 @@ and set these repository Actions secrets:
 
 - `OSX_CODESIGN_ROLE`: ARN of `block-buzz-app-codesign-role`.
 - `CODESIGN_S3_BUCKET`: `block-buzz-app-artifacts-bucket-<environment>`.
+- `TAURI_SIGNING_PRIVATE_KEY`: persistent Tauri updater private key (not the
+  Apple Developer ID signing identity). Restrict access to release CI and back
+  it up outside Actions; losing it prevents old updater-enabled builds from
+  trusting new releases.
+- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`: password for that key.
+
+Keep the matching updater public key in updater-enabled app builds. Rotate only
+with a planned transition/recovery path (a manually installed signed DMG if
+necessary); changing the key alone strands existing installations. Do not
+publish a preview `latest.json` until its archive and signature are available
+at stable HTTPS URLs, and verify old-build → new-build installation before
+advertising the feed.
 
 The manifest records hashes before signing. Packaged macOS apps accept changed
 hashes only after verifying their enclosing app's resource seal and Block Developer

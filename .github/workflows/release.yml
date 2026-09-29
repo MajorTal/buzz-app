@@ -37,9 +37,12 @@ jobs:
           SOURCE_REF: ${{ github.ref }}
           SIGNING_ROLE: ${{ secrets.OSX_CODESIGN_ROLE }}
           SIGNING_BUCKET: ${{ secrets.CODESIGN_S3_BUCKET }}
+          UPDATER_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          UPDATER_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
           test "$SOURCE_REF" = refs/heads/main || { echo '::error::Releases must run from main'; exit 1; }
           test -n "$SIGNING_ROLE" && test -n "$SIGNING_BUCKET" || { echo '::error::Set OSX_CODESIGN_ROLE and CODESIGN_S3_BUCKET'; exit 1; }
+          test -n "$UPDATER_KEY" && test -n "$UPDATER_PASSWORD" || { echo '::error::Set TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD'; exit 1; }
 
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -64,11 +67,11 @@ jobs:
           JS
 
       - name: Build unsigned app and DMG
+        env:
+          TAURI_BUNDLER_DMG_IGNORE_CI: "true"
         run: |
           rm -rf target/release/bundle
           pnpm tauri build --ci --no-sign --bundles dmg --config "$RUNNER_TEMP/release.json" -- --locked
-        env:
-          TAURI_BUNDLER_DMG_IGNORE_CI: "true"
 
       - name: Locate unsigned DMG
         id: unsigned
@@ -116,15 +119,32 @@ jobs:
           }
           JS
 
-      - name: Stage release asset and checksum
+      - name: Stage release assets and checksums
         env:
           SIGNED_DMG: ${{ steps.codesign.outputs.signed-dmg-path }}
           VERSION: ${{ steps.version.outputs.version }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: |
+          set -euo pipefail
           mkdir release-assets
           cp "$SIGNED_DMG" "release-assets/Buzz_${VERSION}_aarch64.dmg"
-          cd release-assets
-          shasum -a 256 ./*.dmg > SHA256SUMS
+
+          # Package the verified, Apple-signed and stapled app from the release DMG.
+          app_dir=$(mktemp -d "$RUNNER_TEMP/updater-app.XXXXXX")
+          hdiutil attach "$SIGNED_DMG" -readonly -nobrowse -mountpoint "$app_dir" >/dev/null
+          trap 'hdiutil detach "$app_dir" >/dev/null' EXIT
+          app="$app_dir/Buzz Foundation.app"
+          test -d "$app" || { echo '::error::Signed DMG contains no app'; exit 1; }
+          archive="$PWD/release-assets/Buzz_${VERSION}_aarch64.app.tar.gz"
+          # ditto copies the complete signed bundle (including symlinks and metadata).
+          staged_app=$(mktemp -d "$RUNNER_TEMP/updater-staging.XXXXXX")
+          ditto "$app" "$staged_app/Buzz Foundation.app"
+          codesign --verify --deep --strict "$staged_app/Buzz Foundation.app"
+          (cd "$staged_app" && COPYFILE_DISABLE=1 tar -czf "$archive" 'Buzz Foundation.app')
+          pnpm tauri signer sign "$archive"
+          test -s "$archive" && test -s "$archive.sig" || { echo '::error::Updater signing failed'; exit 1; }
+          (cd release-assets && shasum -a 256 ./*.dmg ./*.tar.gz > SHA256SUMS)
 
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:

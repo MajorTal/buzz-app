@@ -30,7 +30,9 @@ pub use config::{AgentEdit, AgentView, ControlSnapshot, HarnessEdit, ProcessStat
 pub use create::{CreationProfile, NewAgent};
 pub use credentials::PlatformCredentials;
 pub use defaults::{build_defaults, BuildDefaults};
-pub use import::{CredentialedImport, ImportPreview, Imports, LegacySource, PreparedImport};
+pub use import::{
+    CloneSettings, CredentialedImport, ImportPreview, Imports, LegacySource, PreparedImport,
+};
 pub use restart::{RestartChange, RestartDiffEntry};
 pub use runtime::{installed, managed_tool, Action, Controller, GooseModelContext, ModelContext};
 pub use secret::{Credentials, Secret};

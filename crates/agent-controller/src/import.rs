@@ -48,6 +48,14 @@ pub struct Candidate {
     pub relay_url: String,
     pub name: String,
 }
+/// Reviewed text only. Never project legacy environment, commands, arguments,
+/// credentials, paths, owner authorization or retained source records for cloning.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CloneSettings {
+    pub name: String,
+    pub system_prompt: String,
+}
 #[derive(Clone)]
 struct Pending {
     preview: ImportPreview,
@@ -69,6 +77,30 @@ struct Source {
     digest: String,
 }
 impl Imports {
+    pub fn clone_settings(
+        source_kind: LegacySource,
+        app_data_parent: PathBuf,
+        pubkey: &str,
+    ) -> Result<CloneSettings> {
+        if !canonical_key(pubkey) {
+            return Err("Invalid source identity".into());
+        }
+        let data = read_source(&app_data_parent.join(source_kind.app_directory()))?;
+        let records: Vec<_> = data
+            .records
+            .iter()
+            .filter(|record| string(record, "pubkey") == pubkey)
+            .collect();
+        if records.len() != 1 {
+            return Err("Choose one existing source identity".into());
+        }
+        let record = records[0];
+        let definition = source_definition(&data, record)?;
+        Ok(CloneSettings {
+            name: string(record, "name").into(),
+            system_prompt: string(definition, "system_prompt").into(),
+        })
+    }
     pub fn discard(&mut self) {
         self.pending = None;
     }
@@ -82,7 +114,12 @@ impl Imports {
         destination: &str,
     ) -> Result<ImportPreview> {
         self.pending = None;
-        let relay = canonical_relay(destination)?;
+        // Browsing local files needs no destination and grants no import authority.
+        let relay = if destination.is_empty() {
+            String::new()
+        } else {
+            canonical_relay(destination)?
+        };
         let source = app_data_parent.join(source_kind.app_directory());
         let data = read_source(&source)?;
         let mut candidates = Vec::new();
@@ -110,7 +147,7 @@ impl Imports {
             .sequence
             .checked_add(1)
             .ok_or("Import preview exhausted")?;
-        let preview = ImportPreview {
+        let mut preview = ImportPreview {
             token: format!("{}-{}", self.sequence, data.digest),
             source_path: source.join("agents/managed-agents.json").display().to_string(),
             candidates,
@@ -121,6 +158,13 @@ impl Imports {
                 "This copies selected identities and resolved settings; old Buzz remains unchanged.".into(),
             ],
         };
+        if relay.is_empty() {
+            preview.token.clear();
+            preview.warnings = vec![
+                "Local identities only. Choose a destination before reviewing an import.".into(),
+            ];
+            return Ok(preview);
+        }
         self.pending = Some(Pending {
             preview: preview.clone(),
             source,
@@ -303,8 +347,8 @@ fn object(value: &Value) -> Result<BTreeMap<String, String>> {
     serde_json::from_value(value.clone())
         .map_err(|_| "Source environment must contain string values".into())
 }
-fn resolve(data: &Source, record: &Value, workspace: &Path, destination: &str) -> Result<Agent> {
-    let definition = if string(record, "persona_id").is_empty() {
+fn source_definition<'a>(data: &'a Source, record: &'a Value) -> Result<&'a Value> {
+    Ok(if string(record, "persona_id").is_empty() {
         record
     } else {
         data.records
@@ -313,7 +357,10 @@ fn resolve(data: &Source, record: &Value, workspace: &Path, destination: &str) -
                 string(r, "pubkey").is_empty() && string(r, "slug") == string(record, "persona_id")
             })
             .ok_or("Linked agent definition is missing; source left unchanged")?
-    };
+    })
+}
+fn resolve(data: &Source, record: &Value, workspace: &Path, destination: &str) -> Result<Agent> {
+    let definition = source_definition(data, record)?;
     let fallback = |key| {
         let selected = string(definition, key);
         if selected.trim().is_empty() {

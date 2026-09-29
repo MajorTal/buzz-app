@@ -530,7 +530,7 @@ fn invalid_destination_discards_pending_without_echoing_inputs_or_acquiring_keys
     let mut store = Store::open(dest.path().into()).unwrap();
     let keys = Memory::default();
     for invalid in [
-        "",
+        " ",
         "not a URL",
         "ws://raw.example",
         "http://raw.example",
@@ -828,6 +828,97 @@ fn team_snapshot_handles_empty_deleted_and_invalid_teams() {
         assert!(team_instructions(&data, &data.records[1]).is_err());
     }
 }
+#[test]
+fn local_browse_without_destination_cannot_commit_or_reuse_prior_authority() {
+    let old = tempfile::tempdir().unwrap();
+    let dest = tempfile::tempdir().unwrap();
+    let bytes = source(old.path());
+    let mut imports = Imports::default();
+    let mut store = Store::open(dest.path().into()).unwrap();
+    let keys = Memory::default();
+    let prior = imports
+        .preview(
+            LegacySource::Installed,
+            old.path().into(),
+            dest.path().into(),
+            "wss://chosen.example",
+        )
+        .unwrap();
+    let browse = imports
+        .preview(
+            LegacySource::Installed,
+            old.path().into(),
+            dest.path().into(),
+            "",
+        )
+        .unwrap();
+    assert_eq!(browse.candidates.len(), 1);
+    assert_eq!(browse.candidates[0].pubkey, PUB);
+    assert!(browse.candidates[0].relay_url.is_empty());
+    assert!(browse.token.is_empty());
+    for (token, id) in [
+        (&browse.token, &browse.candidates[0].id),
+        (&prior.token, &prior.candidates[0].id),
+    ] {
+        assert!(imports
+            .commit(token, std::slice::from_ref(id), &mut store, &keys)
+            .is_err());
+    }
+    assert_eq!(keys.reads.load(Ordering::SeqCst), 0);
+    assert!(keys.keys.lock().unwrap().is_empty());
+    assert!(store.agents().unwrap().is_empty());
+    assert_eq!(
+        fs::read(
+            old.path()
+                .join(LegacySource::Installed.app_directory())
+                .join("agents/managed-agents.json")
+        )
+        .unwrap(),
+        bytes
+    );
+    let serialized = serde_json::to_string(&browse).unwrap();
+    assert!(!serialized.contains("private_key"));
+}
+
+#[test]
+fn clone_settings_projects_only_reviewed_text_without_source_or_credential_writes() {
+    let old = tempfile::tempdir().unwrap();
+    let before = source(old.path());
+    let settings =
+        Imports::clone_settings(LegacySource::Installed, old.path().into(), PUB).unwrap();
+    assert_eq!(
+        serde_json::to_value(settings).unwrap(),
+        json!({
+            "name": "Brain", "systemPrompt": "definition-prompt"
+        })
+    );
+    assert_eq!(
+        fs::read(
+            old.path()
+                .join(LegacySource::Installed.app_directory())
+                .join("agents/managed-agents.json")
+        )
+        .unwrap(),
+        before
+    );
+    assert!(Imports::clone_settings(LegacySource::Development, old.path().into(), PUB).is_err());
+    assert!(
+        Imports::clone_settings(LegacySource::Installed, old.path().into(), "../path").is_err()
+    );
+    assert!(
+        Imports::clone_settings(LegacySource::Installed, old.path().into(), &"ab".repeat(32))
+            .is_err()
+    );
+    let path = old
+        .path()
+        .join(LegacySource::Installed.app_directory())
+        .join("agents/managed-agents.json");
+    let mut records: Vec<Value> = serde_json::from_slice(&before).unwrap();
+    records.push(records[1].clone());
+    fs::write(path, serde_json::to_vec(&records).unwrap()).unwrap();
+    assert!(Imports::clone_settings(LegacySource::Installed, old.path().into(), PUB).is_err());
+}
+
 #[test]
 fn import_excludes_overlapping_destinations_before_credentials_through_commit() {
     let old = tempfile::tempdir().unwrap();

@@ -516,7 +516,7 @@ it("focuses the imported managed identity without starting it", async () => {
   const { f } = setup();
   await screen.findAllByRole("article", { name: "Agent Fixture agent" });
   fireEvent.click(
-    screen.getByRole("button", { name: "Not imported from old Buzz" }),
+    screen.getByRole("button", { name: "Import from another installation" }),
   );
   fireEvent.change(screen.getByLabelText("Destination community"), {
     target: { value: "wss://third.example" },
@@ -1086,7 +1086,9 @@ it("does not offer an identity for import when its key is already set up in anot
     });
   });
   fireEvent.click(
-    await screen.findByRole("button", { name: "Not imported from old Buzz" }),
+    await screen.findByRole("button", {
+      name: "Import from another installation",
+    }),
   );
   fireEvent.change(screen.getByLabelText("Destination community"), {
     target: { value: "wss://third.example" },
@@ -1130,7 +1132,7 @@ it("credential import keeps real Stop controls reachable without trapping the ed
     const [first, other] = cards;
     if (!first || !other) throw Error("Missing managed cards");
     fireEvent.click(
-      screen.getByRole("button", { name: "Not imported from old Buzz" }),
+      screen.getByRole("button", { name: "Import from another installation" }),
     );
     fireEvent.change(screen.getByLabelText("Destination community"), {
       target: { value: "wss://third.example" },
@@ -2115,7 +2117,9 @@ it("offers explicit repair for an existing team import without replacing or star
   });
   await screen.findAllByRole("article", { name: "Agent Fixture agent" });
   fireEvent.click(
-    screen.getByRole("button", { name: "Import or repair from old Buzz" }),
+    screen.getByRole("button", {
+      name: "Import or repair from another installation",
+    }),
   );
   fireEvent.change(screen.getByLabelText("Destination community"), {
     target: { value: f.agent.relayUrl },
@@ -2181,7 +2185,9 @@ it("refreshes the consumed preview after a repair so the next agent can be repai
   });
   await screen.findAllByRole("article", { name: "Agent Fixture agent" });
   fireEvent.click(
-    screen.getByRole("button", { name: "Import or repair from old Buzz" }),
+    screen.getByRole("button", {
+      name: "Import or repair from another installation",
+    }),
   );
   fireEvent.change(screen.getByLabelText("Destination community"), {
     target: { value: f.agent.relayUrl },
@@ -2226,7 +2232,7 @@ it.each([
   {
     name: "unknown control failure",
     rejection: { detail: "raw private diagnostic" },
-    expected: "Import did not complete. Reload the list before trying again.",
+    expected: "Import didn’t finish. Reload the source before trying again.",
     fromControl: true,
   },
 ])(
@@ -2249,7 +2255,9 @@ it.each([
       vi.spyOn(control, "commitImport").mockImplementation(commit);
     await screen.findAllByRole("article", { name: "Agent Fixture agent" });
     fireEvent.click(
-      screen.getByRole("button", { name: "Import or repair from old Buzz" }),
+      screen.getByRole("button", {
+        name: "Import or repair from another installation",
+      }),
     );
     fireEvent.change(screen.getByLabelText("Destination community"), {
       target: { value: f.agent.relayUrl },
@@ -2364,4 +2372,147 @@ it("Use here retries owner confirmation and keeps setup stopped until a separate
   await waitFor(() =>
     expect(f.calls.some((call) => call.action === "start")).toBe(true),
   );
+});
+
+it("browses both local libraries without a community and requires a destination preview to import", async () => {
+  const { f, read } = setup("disconnected");
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Import from another installation",
+    }),
+  );
+  const section = screen.getByRole("region", { name: "Import from old Buzz" });
+  expect(
+    await within(section).findByRole("button", {
+      name: "Import Fixture agent",
+    }),
+  ).toBeDisabled();
+  expect(f.calls).toContainEqual({
+    action: "preview",
+    payload: { source: "installed", destination: "" },
+  });
+  expect(read).toHaveBeenCalledTimes(1);
+  await userEvent.click(screen.getByLabelText("Source library"));
+  await userEvent.click(
+    await screen.findByRole("option", { name: "Development Buzz" }),
+  );
+  await waitFor(() =>
+    expect(f.calls).toContainEqual({
+      action: "preview",
+      payload: { source: "development", destination: "" },
+    }),
+  );
+  expect(
+    await within(section).findByRole("button", {
+      name: "Import Fixture agent",
+    }),
+  ).toBeDisabled();
+  fireEvent.change(screen.getByLabelText("Destination community"), {
+    target: { value: "wss://chosen.example" },
+  });
+  expect(
+    within(section).queryByRole("button", { name: "Import Fixture agent" }),
+  ).not.toBeInTheDocument();
+  fireEvent.click(screen.getByRole("button", { name: "Load agents" }));
+  await waitFor(() =>
+    expect(
+      within(section).getByRole("button", { name: "Import Fixture agent" }),
+    ).toBeEnabled(),
+  );
+  expect(
+    f.calls.filter((call) =>
+      ["import", "start", "restart"].includes(call.action),
+    ),
+  ).toEqual([]);
+  expect(read).toHaveBeenCalledTimes(1);
+});
+
+it("clones reviewed text through fresh identity creation without importing source credentials", async () => {
+  const prepare = vi.fn(async () => ({
+    id: "fresh-clone",
+    pubkey: "ba".repeat(32),
+  }));
+  const cloneSettings = vi.fn(async () => ({
+    name: "Source helper",
+    systemPrompt: "Reviewed instructions",
+  }));
+  const authorization = vi
+    .spyOn(communityApi, "communityRequest")
+    .mockResolvedValue({ auth: ["auth"] });
+  const start = vi.fn();
+  const { f } = setup("connected", (fixture) => {
+    fixture.data.createAvailable = true;
+    fixture.data.defaultWorkspace = "/new/workspace";
+    fixture.host.cloneSettings = cloneSettings;
+    fixture.host.prepareCreate = prepare;
+    fixture.host.commitCreate = vi.fn(async (_request, edit) => {
+      fixture.calls.push({ action: "create", payload: edit });
+      fixture.data.agents.push({
+        ...structuredClone(fixture.agent),
+        ...edit,
+        id: "fresh-clone",
+        pubkey: "ba".repeat(32),
+        harness: { ...edit.harness, environmentKeys: [] },
+        status: "stopped",
+        enabled: false,
+      });
+      return structuredClone(fixture.data);
+    });
+    fixture.host.publishProfile = vi.fn(async () =>
+      structuredClone(fixture.data),
+    );
+    fixture.host.action = start.mockImplementation(async (id, action) => {
+      const agent = fixture.data.agents.find((item) => item.id === id);
+      if (!agent || action !== "start") throw Error("Unexpected agent action");
+      agent.enabled = true;
+      agent.status = "running";
+      return structuredClone(fixture.data);
+    });
+  });
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Import from another installation",
+    }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Clone Fixture agent" }),
+  );
+  const dialog = await screen.findByRole("dialog", { name: "Clone agent" });
+  expect(within(dialog).getByLabelText("Name")).toHaveValue("Source helper");
+  expect(within(dialog).getByLabelText("Agent instructions")).toHaveValue(
+    "Reviewed instructions",
+  );
+  expect(prepare).not.toHaveBeenCalled();
+  fireEvent.click(within(dialog).getByRole("button", { name: "Clone agent" }));
+  await waitFor(() =>
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+  );
+  expect(prepare).toHaveBeenCalledWith(
+    expect.any(String),
+    "https://relay.example.test",
+    "de".repeat(32),
+  );
+  expect(authorization).toHaveBeenCalledWith(
+    "https://relay.example.test",
+    "authorize-agent",
+    { pubkey: "ba".repeat(32), owner: "de".repeat(32) },
+  );
+  expect(
+    f.calls.find((call) => call.action === "create")?.payload,
+  ).toMatchObject({
+    name: "Source helper",
+    systemPrompt: "Reviewed instructions",
+    workspace: "/new/workspace",
+    environment: {},
+  });
+  expect(f.calls.filter((call) => call.action === "import")).toEqual([]);
+  // Create now starts the new agent; the clone starts only its fresh identity.
+  expect(start).toHaveBeenCalledExactlyOnceWith("fresh-clone", "start");
+  expect(
+    f.data.agents.find((agent) => agent.id === "fresh-clone"),
+  ).toMatchObject({
+    pubkey: "ba".repeat(32),
+    enabled: true,
+    status: "running",
+  });
 });

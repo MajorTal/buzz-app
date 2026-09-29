@@ -1086,6 +1086,17 @@ pub(crate) async fn agent_control_use_here(
     .await
 }
 #[tauri::command]
+pub(crate) async fn agent_control_clone_settings(
+    state: tauri::State<'_, AgentHost>,
+    source: LegacySource,
+    pubkey: String,
+) -> Result<buzz_agent_controller::CloneSettings, String> {
+    run(state.inner().clone(), move |host| {
+        Imports::clone_settings(source, host.legacy_parent.clone(), &pubkey)
+    })
+    .await
+}
+#[tauri::command]
 pub(crate) async fn agent_control_import_preview(
     state: tauri::State<'_, AgentHost>,
     source: LegacySource,

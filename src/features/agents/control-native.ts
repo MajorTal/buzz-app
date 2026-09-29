@@ -53,6 +53,8 @@ export function nativeAgentControlHost(): AgentControlHost | null {
       }),
     configureHere: (id, resolution) =>
       invoke("agent_control_use_here", { id, resolution }),
+    cloneSettings: (source, pubkey) =>
+      invoke("agent_control_clone_settings", { source, pubkey }),
     previewImport: (source, destination) =>
       invoke("agent_control_import_preview", { source, destination }),
     commitImport: (token, ids) =>

@@ -11,7 +11,10 @@ async function closeEditor(page) {
 }
 async function openImport(panel) {
   await panel
-    .getByRole("button", { name: "Not imported from old Buzz", exact: true })
+    .getByRole("button", {
+      name: "Import from another installation",
+      exact: true,
+    })
     .click();
   await expect(
     panel.getByRole("button", { name: "Import Fixture agent" }),

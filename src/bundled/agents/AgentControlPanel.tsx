@@ -10,6 +10,7 @@ import type {
   AgentControl,
   AgentControlState,
   AgentView,
+  CloneSettings,
 } from "../../features/agents/control";
 import { PlusIcon } from "../../shared/design-system/icons/index";
 import { Button } from "../../shared/design-system/ui/Button";
@@ -54,6 +55,7 @@ export function AgentControlPanel({
     destination: string;
     owner: string;
     source?: AgentView;
+    initialSettings?: CloneSettings;
   } | null>(null);
   const [importSections, setImportSections] = useState<string[]>([]);
   const [importedId, setImportedId] = useState<string | null>(null);
@@ -194,8 +196,8 @@ export function AgentControlPanel({
             {
               value: "old-buzz",
               title: state.data.agents.some((agent) => agent.needsTeamImport)
-                ? "Import or repair from old Buzz"
-                : "Not imported from old Buzz",
+                ? "Import or repair from another installation"
+                : "Import from another installation",
               content: importSections.includes("old-buzz") ? (
                 <AgentImport
                   key={importDestination}
@@ -205,6 +207,18 @@ export function AgentControlPanel({
                   commitAvailable={
                     state.status === "ready" &&
                     state.data.importAvailable !== false
+                  }
+                  onClone={
+                    control.cloneSettings && createOwner && importDestination
+                      ? (initialSettings) => {
+                          setImportSections([]);
+                          setAdding({
+                            destination: importDestination,
+                            owner: createOwner,
+                            initialSettings,
+                          });
+                        }
+                      : undefined
                   }
                   disabled={state.busy}
                   onImported={(agents) => {
@@ -224,6 +238,9 @@ export function AgentControlPanel({
           destination={adding.destination}
           owner={adding.owner}
           {...(adding.source ? { source: adding.source } : {})}
+          {...(adding.initialSettings
+            ? { initialSettings: adding.initialSettings }
+            : {})}
           onClose={() => setAdding(null)}
           onOpenHarnesses={onOpenHarnesses}
         />

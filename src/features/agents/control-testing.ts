@@ -129,7 +129,7 @@ export function controlFixture() {
       calls.push({ action: "preview", payload: { source, destination } });
       importDestination = destination;
       return {
-        token: "fixture-preview",
+        token: destination ? "fixture-preview" : "",
         sourcePath: `/fixture/${source}/managed-agents.json`,
         warnings: ["Fixture source only."],
         candidates: [

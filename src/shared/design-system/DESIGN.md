@@ -304,6 +304,10 @@ close button and actions. Pending operations set preventClose so Escape and the
 close button agree. It retains the app's explicit dismissal behavior: outside
 clicks do not discard a form. Provide initialFocus for search dialogs and
 finalFocus when a flow has an external trigger or opens a second dialog.
+An explicit finalFocus applies only while focus is still in the closing popup
+or on the page body. If the user already moved focus elsewhere, closing leaves
+it there, as the default `true` does (`ui/finalFocus.ts`, shared by Menu,
+Popover and Dialog).
 Editors can supply `headerActions` beside Close and `leadingActions` before the
 trailing footer actions. Footer actions wrap as whole controls, never shrinking
 single-line labels. When one action exceeds the available width, the footer

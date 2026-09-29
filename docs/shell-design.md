@@ -100,7 +100,11 @@ Enter/Space selects without closing the menu. See
 [presence ownership and limitations](presence.md). Escape, outside click and Tab
 leaving dismiss the menu; Escape returns focus to the avatar. Selecting Settings
 focuses the main region after the menu finishes closing, unless focus has already
-moved into the page.
+moved into the page. With a community selected, the avatar inside the menu is a
+menu item that opens the viewer's own profile in the shell companion slot, using
+the same `profile` panel as other profile links; the panel takes focus, and
+closing it returns focus to the header avatar. Personal space has no community
+profile, so its menu avatar stays presentational.
 The avatar does not display the selected community's profile. It uses a configured
 HTTPS picture directly, with the name's first letter on a missing/failed picture
 or a person icon when unnamed. No sample person's photo is used as the user's

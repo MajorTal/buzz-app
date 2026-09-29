@@ -859,9 +859,10 @@ function ChannelWorkspace({
   const drawer = useChannelPanels(panels, drawerContext, () =>
     setSettings(undefined),
   );
-  const showingPanel =
+  const showingChannelPanel =
     !composingMessage &&
-    (showingSettings || panel || showingThread || companion || drawer.side);
+    (showingSettings || panel || showingThread || drawer.side);
+  const showingPanel = companion || showingChannelPanel;
   const workspace = (
     <div className={`${styles.board} ${showingPanel ? styles.withPanel : ""}`}>
       {current && !current.readOnly && canvasOpen && (
@@ -1089,7 +1090,7 @@ function ChannelWorkspace({
       )}
       {showingPanel && !showingMediaReview && (
         <div className={styles.panelStack}>
-          {showingSettings && (
+          {showingChannelPanel && showingSettings && (
             <ChannelSettingsPanel
               setupTools={
                 current && (
@@ -1219,7 +1220,7 @@ function ChannelWorkspace({
               )}
             </ChannelSettingsPanel>
           )}
-          {showingThread && (
+          {showingChannelPanel && showingThread && (
             <div className={styles.retainedPanel} inert={showingSettings}>
               <ThreadPanel
                 sessionConversation={current?.channelType === "session"}
@@ -1245,7 +1246,7 @@ function ChannelWorkspace({
             </div>
           )}
 
-          {panel && opened && (
+          {showingChannelPanel && panel && opened && (
             <div className={styles.retainedPanel} inert={showingSettings}>
               <PanelCard
                 key="target"
@@ -1257,7 +1258,7 @@ function ChannelWorkspace({
               />
             </div>
           )}
-          {drawer.side && (
+          {showingChannelPanel && drawer.side && (
             <div className={styles.retainedPanel} hidden={showingSettings}>
               {drawer.side}
             </div>

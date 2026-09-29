@@ -356,7 +356,7 @@ impl Controller {
         }
     }
     pub fn snapshot(&mut self) -> Result<ControlSnapshot> {
-        let saved = self.store.agents()?;
+        let (saved, parked) = self.store.inventory()?;
         let defaults = self.store.defaults()?;
         let command = |name| {
             let path = self.bundle.as_ref().ok()?.display_path(name)?;
@@ -365,6 +365,7 @@ impl Controller {
         let (acp_command, mcp_command) = (command("buzz-acp"), command("buzz-dev-mcp"));
         let mut snapshot = ControlSnapshot {
             agents: saved.iter().map(|a| a.view(&defaults)).collect(),
+            parked,
             runtime_available: self.bundle.is_ok(),
             runtime_message: self.bundle.as_ref().err().cloned(),
             default_settings: defaults.view(),

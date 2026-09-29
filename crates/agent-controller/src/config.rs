@@ -38,6 +38,7 @@ fn policy_edit<'de, D: Deserializer<'de>>(
 #[serde(rename_all = "camelCase")]
 pub struct ControlSnapshot {
     pub agents: Vec<AgentView>,
+    pub parked: Vec<crate::store::ParkedIdentity>,
     pub runtime_available: bool,
     pub runtime_message: Option<String>,
     /// Device-wide defaults; environment keys only.

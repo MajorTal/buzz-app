@@ -147,7 +147,7 @@ function setup(
     },
   };
 }
-it("shows one managed card per exact destination and keeps unimported templates out of My agents", async () => {
+it("shows native controls per exact destination and separate read-only discovered identities", async () => {
   const { f } = setup();
   const cards = await screen.findAllByRole("article", {
     name: "Agent Fixture agent",
@@ -159,10 +159,10 @@ it("shows one managed card per exact destination and keeps unimported templates 
   );
   if (!card) throw Error("Second destination missing");
   expect(
-    within(screen.getByRole("region", { name: "My agents" })).queryByText(
-      "Not imported",
-    ),
-  ).toBeNull();
+    within(
+      screen.getByRole("region", { name: "Library identities" }),
+    ).getByRole("article", { name: "Agent Not imported" }),
+  ).toBeTruthy();
   fireEvent.click(
     within(card).getByRole("button", { name: "Actions for Fixture agent" }),
   );
@@ -187,8 +187,8 @@ it("shows one managed card per exact destination and keeps unimported templates 
   );
   fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
   expect(
-    screen.queryByRole("article", { name: "Agent Not imported" }),
-  ).toBeNull();
+    screen.getByRole("article", { name: "Agent Not imported" }),
+  ).toBeTruthy();
   expect(screen.queryByText("Old Buzz library", { exact: true })).toBeNull();
   expect(screen.getByText("Add agent", { exact: true })).toBeVisible();
   expect(f.calls.some((call) => call.action === "import")).toBe(false);
@@ -512,6 +512,40 @@ it("confirms local deletion, keeps the card on failure, and removes it only afte
   );
   await waitFor(() => expect(remove).toHaveBeenCalledTimes(2));
   await waitFor(() => expect(card).not.toBeInTheDocument());
+});
+
+it("keeps Duplicate and Delete on local cards in the unified inventory", async () => {
+  setup("connected", (f) => {
+    f.data.parked = [];
+    f.host.delete = vi.fn(async () => structuredClone(f.data));
+  });
+  const card = await screen.findByRole("article", {
+    name: "Agent Fixture agent",
+  });
+  // Unified inventory cards carry identity sources; legacy cards do not.
+  expect(within(card).getByText("Identity & sources")).toBeInTheDocument();
+  fireEvent.click(
+    within(card).getByRole("button", { name: "Actions for Fixture agent" }),
+  );
+  // Both saved setups of this key keep exact controls, including the one outside this community.
+  const duplicates = await screen.findAllByRole("menuitem", {
+    name: /^Duplicate /,
+  });
+  expect(duplicates).toHaveLength(2);
+  fireEvent.click(duplicates[0] as HTMLElement);
+  const duplicate = screen.getByRole("dialog", {
+    name: "Duplicate Fixture agent",
+  });
+  fireEvent.click(within(duplicate).getByRole("button", { name: "Cancel" }));
+  fireEvent.click(
+    within(card).getByRole("button", { name: "Actions for Fixture agent" }),
+  );
+  const deletes = await screen.findAllByRole("menuitem", { name: /^Delete / });
+  expect(deletes).toHaveLength(2);
+  fireEvent.click(deletes[0] as HTMLElement);
+  expect(
+    screen.getByRole("dialog", { name: "Delete Fixture agent?" }),
+  ).toBeVisible();
 });
 
 it("focuses the imported managed identity without starting it", async () => {
@@ -2536,4 +2570,32 @@ it("clones reviewed text through fresh identity creation without importing sourc
     enabled: true,
     status: "running",
   });
+});
+
+it("uses snapshot capabilities rather than JS wrappers and retains older-host import", async () => {
+  const { f } = setup("connected", (fixture) => {
+    delete fixture.data.localInventoryActions;
+    const commit = fixture.host.commitImport;
+    fixture.host.commitImport = async (...args) => {
+      const result = await commit(...args);
+      for (const agent of result.agents) delete agent.configured;
+      return result;
+    };
+  });
+  fireEvent.click(
+    await screen.findByRole("button", {
+      name: "Import from another installation",
+    }),
+  );
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Import Fixture agent" }),
+  );
+  const notice = await screen.findByText(
+    "Imported, not started. Start it when you are ready.",
+  );
+  const card = notice.closest("article");
+  if (!card) throw Error("Imported card missing");
+  expect(within(card).getByRole("button", { name: "Start" })).toBeEnabled();
+  expect(within(card).queryByRole("button", { name: "Use here" })).toBeNull();
+  expect(f.calls.filter((call) => call.action === "import")).toHaveLength(1);
 });

@@ -3,7 +3,7 @@ import type { Appearance } from "../shared/theme/service";
 
 /** Host actions use the same binding/dispatch rules as plugins, without fake plugin ownership. */
 // Settings presents the host category in functional sections: navigation,
-// text sizing, search/settings, then development-only actions.
+// text sizing, search/settings, then app reload.
 export const HOST_SHORTCUT_ORDER = {
   home: 10,
   navigationBack: 20,
@@ -13,7 +13,7 @@ export const HOST_SHORTCUT_ORDER = {
   textSizeReset: 60,
   search: 70,
   settings: 80,
-  development: 90,
+  reload: 90,
 } as const;
 
 export function registerAppShortcuts(
@@ -74,19 +74,17 @@ export function registerAppShortcuts(
       }),
     ),
   ];
-  if (import.meta.env.DEV) {
-    remove.push(
-      shortcuts.registerHost({
-        id: "development-reload",
-        title: "Reload development app",
-        binding: { key: "r", mod: true },
-        order: HOST_SHORTCUT_ORDER.development,
-        allowInEditable: true,
-        allowInModal: true,
-        run: () => window.location.reload(),
-      }),
-    );
-  }
+  remove.push(
+    shortcuts.registerHost({
+      id: "app-reload",
+      title: "Reload Buzz",
+      binding: { key: "r", mod: true },
+      order: HOST_SHORTCUT_ORDER.reload,
+      allowInEditable: true,
+      allowInModal: true,
+      run: () => window.location.reload(),
+    }),
+  );
   return () => {
     for (const dispose of remove) dispose();
   };

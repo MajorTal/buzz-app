@@ -289,7 +289,7 @@ it("presents actual host registrations in navigation, text sizing, search/settin
       "Search Buzz",
       "Search this conversation",
       "Open Settings",
-      ...(import.meta.env.DEV ? ["Reload development app"] : []),
+      "Reload Buzz",
     ]);
   } finally {
     cleanup();

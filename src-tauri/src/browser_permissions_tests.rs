@@ -75,6 +75,11 @@ fn native_command_permissions_allow_only_main_webview() {
         "relay_direct_message",
         "relay_decode_sidebar",
         "relay_sign_sidebar",
+        "relay_agent_resolve",
+        "relay_agent_log_proof",
+        "relay_agent_observer",
+        "relay_agent_memories_read",
+        "relay_agent_library",
         "get_os_idle_seconds",
         "plugin_import_folder",
         "plugin_import_git",
@@ -134,6 +139,8 @@ fn native_command_permissions_allow_only_main_webview() {
     } else {
         "tauri://localhost"
     };
+    // The removed owner attestation cannot acquire a main-webview grant.
+    assert!(invoke(&main, "relay_agent_authorize", local_origin).is_err());
     for command in application_commands {
         assert!(invoke(&main, command, local_origin).is_ok(), "{command}");
         for origin in [local_origin, "https://example.org", "http://localhost:1430"] {

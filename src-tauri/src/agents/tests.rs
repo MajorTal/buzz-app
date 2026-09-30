@@ -2223,6 +2223,17 @@ fn native_create_authorization_binds_the_prepared_key_owner_and_identity() {
     // A requested owner or key other than the prepared one is never signed.
     assert_eq!(authorize(&other, &pubkey).unwrap_err(), mismatch);
     assert_eq!(authorize(identity, &"ab".repeat(32)).unwrap_err(), mismatch);
+    assert_eq!(
+        invoke(
+            &view,
+            "agent_control_create_authorize",
+            json!({
+                "destination": "https://other.example", "owner": identity, "pubkey": pubkey
+            })
+        )
+        .unwrap_err(),
+        mismatch
+    );
     let auth = authorize(identity, &pubkey).unwrap();
     assert_eq!(auth[1], identity);
     let commit = |auth: &Value| {

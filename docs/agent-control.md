@@ -39,8 +39,9 @@ cannot be confirmed, refresh status before repeating it.
 Create is blocked with an explanation if this app’s runtime is unavailable;
 existing agents and profile retry remain intact.
 Without the dev broker, the native identity signs the owner authorization only
-for the key this host prepared for the pending Create; other broker-only helpers
-remain unavailable.
+for the key this host prepared for the pending Create. Native owner-scoped
+community resolution is also available; other broker-only helpers remain
+unavailable. Packaged support still requires attended native acceptance.
 
 **Not imported from old Buzz** is a separate collapsible section. Expanding it
 loads installed identities for the connected community; already-managed exact

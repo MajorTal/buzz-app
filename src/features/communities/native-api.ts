@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { communityDestination } from "./destination";
 import { avatarPictureError } from "../profiles/avatar-upload";
 import {
   connectNativeTransport,
@@ -95,6 +96,27 @@ export async function nativeCommunityRequest(
     )
       throw new Error("Policy acceptance was not confirmed");
     return result;
+  }
+  if (route === "resolve-agent-community") {
+    const target = body as
+      | { owner?: unknown; pubkey?: unknown; confirmed?: unknown }
+      | undefined;
+    if (
+      !target ||
+      typeof target.owner !== "string" ||
+      typeof target.pubkey !== "string" ||
+      !/^[0-9a-f]{64}$/.test(target.owner) ||
+      !/^[0-9a-f]{64}$/.test(target.pubkey) ||
+      target.owner === target.pubkey ||
+      Object.keys(target).length !== 3 ||
+      target.confirmed !== true
+    )
+      throw new Error("Explicit owner community resolution required");
+    signal.throwIfAborted();
+    return invoke("relay_agent_resolve", {
+      community: communityDestination(community).url,
+      target,
+    });
   }
   if (route === "profile") {
     const profile = body as PersonalProfile & {

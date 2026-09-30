@@ -415,27 +415,38 @@ test("shell toggle restores the shared sidebar for Channels and Agents", async (
   });
   expect(openGap).toBe(gutterWidth);
   // Seek a paused real transition so runner speed cannot hide an immediate jump.
+  // Pause it when the toggle commits, before any frame: transitionrun arrives in
+  // a later frame, and a stalled WebKit frame can finish the 220ms transition
+  // first. Descendant transitions (the resize help) also bubble transitionrun.
   for (const label of ["Hide Channel sidebar", "Show Channel sidebar"]) {
     const samples = await page.evaluate(async (label) => {
       const nav = document.querySelector("#shell-navigation");
       const button = document.querySelector(`button[aria-label="${label}"]`);
-      const started = new Promise((resolve) => {
-        nav.addEventListener("transitionrun", resolve, { once: true });
+      const committed = new Promise((resolve) => {
+        const observer = new MutationObserver(() => {
+          observer.disconnect();
+          // getAnimations() flushes style, so the toggle's transitions exist.
+          const transitions = nav.getAnimations();
+          for (const transition of transitions) transition.pause();
+          resolve(transitions);
+        });
+        observer.observe(nav, {
+          attributes: true,
+          attributeFilter: ["aria-hidden"],
+        });
       });
       button.click();
-      await started;
-      const animation = nav
-        .getAnimations()
-        .find((animation) => animation.transitionProperty === "max-width");
+      const transitions = await committed;
+      const animation = transitions.find(
+        (animation) => animation.transitionProperty === "max-width",
+      );
       if (!animation) throw new Error("Missing sidebar transition");
-      animation.pause();
       try {
         const duration = animation.effect.getTiming().duration;
-        const clipping = nav
-          .getAnimations()
-          .find((animation) => animation.transitionProperty === "clip-path");
+        const clipping = transitions.find(
+          (animation) => animation.transitionProperty === "clip-path",
+        );
         if (!clipping) throw new Error("Missing containment transition");
-        clipping.pause();
         try {
           return [0, 0.25, 0.5, 0.75, 1].map((progress) => {
             animation.currentTime = duration * progress;

@@ -177,6 +177,73 @@ test("production transport obtains scoped broker harness log proofs for aliases 
   }
 });
 
+test("sign-in binding route signs only the exact kind-24243 binding with the viewer key", async () => {
+  const h = await harness(success);
+  const key = new Uint8Array(32);
+  key[31] = 7;
+  const expires = new Date(Date.now() + 5 * 60_000).toISOString();
+  const tags = [
+    ["challenge_id", "0f8fad5b-d9cb-469f-a165-70867728950e"],
+    ["nonce", "n".repeat(43)],
+    ["verification_code", "123456"],
+    ["audience", "buzz:nostr-identity"],
+    ["action", "bind_nostr_identity"],
+    ["protocol", "buzz-nostr-identity"],
+    ["version", "1"],
+    ["origin", "https://buzz-todo.run402.com"],
+    ["expires_at", expires],
+  ];
+  const template = { kind: 24243, content: "", tags };
+  const replace = (index, value) =>
+    tags.map((tag, i) => (i === index ? [tag[0], value] : tag));
+  try {
+    for (const invalid of [
+      { ...template, kind: 1 },
+      { ...template, content: "x" },
+      { ...template, created_at: 1 },
+      { ...template, tags: tags.slice(0, 8) },
+      { ...template, tags: [...tags, ["p", "ab".repeat(32)]] },
+      { ...template, tags: [tags[1], tags[0], ...tags.slice(2)] },
+      { ...template, tags: replace(3, "buzz:other") },
+      { ...template, tags: replace(4, "transfer") },
+      { ...template, tags: replace(7, "http://buzz-todo.run402.com") },
+      { ...template, tags: replace(7, "https://buzz-todo.run402.com/") },
+      {
+        ...template,
+        tags: replace(8, new Date(Date.now() - 1000).toISOString()),
+      },
+      {
+        ...template,
+        tags: replace(8, new Date(Date.now() + 3_600_000).toISOString()),
+      },
+    ])
+      expect((await h.post("nostr-bind-sign", invalid)).status).toBe(400);
+    // The general signer still refuses the binding kind.
+    expect(
+      (
+        await h.post("sign", {
+          ...template,
+          created_at: Math.floor(Date.now() / 1000),
+        })
+      ).status,
+    ).not.toBe(200);
+    const response = await h.post("nostr-bind-sign", template);
+    expect(response.status).toBe(200);
+    const { event } = await response.json();
+    expect(verifyEvent(event)).toBe(true);
+    expect(event).toMatchObject({
+      kind: 24243,
+      content: "",
+      tags,
+      pubkey: getPublicKey(key),
+      created_at: Math.floor(Date.now() / 1000),
+    });
+    expect(h.calls).toEqual([]);
+  } finally {
+    await h.close();
+  }
+});
+
 test("harness log proof signs only exact scoped community and agent inputs", async () => {
   const h = await harness(success);
   const key = new Uint8Array(32);

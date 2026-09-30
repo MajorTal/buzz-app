@@ -16,6 +16,7 @@ import { parseGitRead } from "../src/features/projects/git.ts";
 import { validateLifecycleTemplate } from "../src/features/relay/channel-lifecycle-protocol.ts";
 import { validateDetailsTemplate } from "../src/features/relay/channel-details-protocol.ts";
 import { validateArchiveRequestTemplate } from "../src/features/relay/identity-archive-protocol.ts";
+import { validateNostrBindTemplate } from "../src/features/identity/nostr-bind.ts";
 import {
   prepareChannelKit,
   decodeChannelKit,
@@ -854,6 +855,37 @@ export function relayBrokerPlugin({
             return json(res, 200, { ...stats, connects: upstream.connects() });
           if (url.pathname === "/api/relay/identity" && req.method === "GET")
             return json(res, 200, { viewer });
+          if (
+            url.pathname === "/api/relay/nostr-bind-sign" &&
+            req.method === "POST"
+          ) {
+            // "Sign in with Buzz" for a framed site the host already bound and the
+            // user approved. Only the exact kind-24243 binding, never a general signer.
+            let raw = "";
+            for await (const part of req) {
+              raw += part;
+              if (raw.length > 4096)
+                return json(res, 413, { error: "Request too large" });
+            }
+            let template;
+            try {
+              template = JSON.parse(raw);
+              validateNostrBindTemplate(template, Date.now());
+            } catch {
+              return json(res, 400, { error: "Invalid sign-in request" });
+            }
+            cancel.signal.throwIfAborted();
+            const event = finalizeEvent(
+              {
+                kind: template.kind,
+                content: "",
+                tags: template.tags,
+                created_at: Math.floor(Date.now() / 1000),
+              },
+              key,
+            );
+            return json(res, 200, { event });
+          }
           const parts = url.pathname.split("/").filter(Boolean);
           const scoped = parts.length === 4;
           let id;

@@ -2,6 +2,7 @@
 import "@testing-library/jest-dom/vitest";
 import { afterEach, assert, expect, it, vi } from "vitest";
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -197,4 +198,137 @@ it("posts nothing into a frame opened without a conversation", () => {
   const post = vi.spyOn(frame.contentWindow, "postMessage");
   fireEvent.load(frame);
   expect(post).not.toHaveBeenCalled();
+});
+
+const siteOrigin = "https://buzz-preview-demo.run402.com";
+function bindRequest(challenge: string, origin = siteOrigin) {
+  const url = new URL("buzz://nostr-bind");
+  for (const [name, value] of Object.entries({
+    challenge_id: challenge,
+    nonce: "n".repeat(43),
+    verification_code: "123456",
+    audience: "buzz:nostr-identity",
+    action: "bind_nostr_identity",
+    protocol: "buzz-nostr-identity",
+    version: "1",
+    origin,
+    expires_at: new Date(Date.now() + 5 * 60_000).toISOString(),
+    return: "browser_fragment_v1",
+    callback_url: `${origin}/callback`,
+  }))
+    url.searchParams.set(name, value);
+  return { type: "buzz.nostr-bind.request", version: 1, deepLink: url.href };
+}
+const challengeA = "0f8fad5b-d9cb-469f-a165-70867728950e";
+const challengeB = "7c9e6679-7425-40de-944b-e07fc1f90ae7";
+function renderSignIn(sign?: (tags: unknown) => Promise<never>) {
+  assert.exists(site);
+  render(
+    <SiteView
+      site={site}
+      signIn={{ sign, viewerName: () => "Tal" }}
+      result={{ kind: "embeddable", projectId: "prj_1" }}
+      retry={noop}
+    />,
+  );
+  const frame = screen.getByTitle(
+    "buzz-preview-demo.run402.com",
+  ) as HTMLIFrameElement;
+  assert.exists(frame.contentWindow);
+  const source = frame.contentWindow;
+  const post = vi.spyOn(source, "postMessage");
+  const send = (data: unknown, origin = siteOrigin, from: Window = source) =>
+    act(() => {
+      window.dispatchEvent(
+        new MessageEvent("message", { data, origin, source: from }),
+      );
+    });
+  return { post, send };
+}
+
+it("asks before signing a framed site in and answers only that origin", async () => {
+  const signed = { id: "e", kind: 24243 };
+  let release!: (event: unknown) => void;
+  const sign = vi.fn(
+    (_tags: unknown) =>
+      new Promise<never>((resolve) => {
+        release = resolve as (event: unknown) => void;
+      }),
+  );
+  const { post, send } = renderSignIn(sign);
+  // Without channel context, but never from another origin or window.
+  send(bindRequest(challengeA), "https://evil.example");
+  send(bindRequest(challengeA), siteOrigin, window);
+  expect(screen.queryByRole("region", { name: "Sign-in request" })).toBeNull();
+  send(bindRequest(challengeA));
+  const bar = screen.getByRole("region", { name: "Sign-in request" });
+  expect(bar).toHaveTextContent(`${siteOrigin} wants to sign you in as Tal`);
+  expect(sign).not.toHaveBeenCalled();
+  // One request at a time; a repeated challenge is not asked twice.
+  send(bindRequest(challengeB));
+  send(bindRequest(challengeA));
+  expect(post.mock.calls).toEqual([
+    [
+      {
+        type: "buzz.nostr-bind.result",
+        version: 1,
+        challengeId: challengeB,
+        error: "unavailable",
+      },
+      siteOrigin,
+    ],
+  ]);
+  post.mockClear();
+  await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  expect(sign).toHaveBeenCalledTimes(1);
+  expect(sign.mock.calls[0]?.[0]).toContainEqual(["origin", siteOrigin]);
+  expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+  expect(post).not.toHaveBeenCalled();
+  release(signed);
+  await waitFor(() =>
+    expect(post).toHaveBeenCalledWith(
+      {
+        type: "buzz.nostr-bind.result",
+        version: 1,
+        challengeId: challengeA,
+        event: signed,
+      },
+      siteOrigin,
+    ),
+  );
+  expect(screen.queryByRole("region", { name: "Sign-in request" })).toBeNull();
+});
+
+it("declines without signing, and answers invalid or unsigned requests at once", async () => {
+  const sign = vi.fn();
+  const { post, send } = renderSignIn(sign);
+  send(bindRequest(challengeA));
+  await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+  expect(sign).not.toHaveBeenCalled();
+  expect(post).toHaveBeenCalledWith(
+    {
+      type: "buzz.nostr-bind.result",
+      version: 1,
+      challengeId: challengeA,
+      error: "declined",
+    },
+    siteOrigin,
+  );
+  post.mockClear();
+  send(bindRequest(challengeA));
+  expect(post).not.toHaveBeenCalled();
+  send(bindRequest(challengeB, "https://evil.run402.com"));
+  expect(post).toHaveBeenCalledWith(
+    expect.objectContaining({ challengeId: challengeB, error: "invalid" }),
+    siteOrigin,
+  );
+  expect(screen.queryByRole("region", { name: "Sign-in request" })).toBeNull();
+  cleanup();
+  const unsigned = renderSignIn(undefined);
+  unsigned.send(bindRequest(challengeA));
+  expect(unsigned.post).toHaveBeenCalledWith(
+    expect.objectContaining({ challengeId: challengeA, error: "unavailable" }),
+    siteOrigin,
+  );
+  expect(screen.queryByRole("region", { name: "Sign-in request" })).toBeNull();
 });

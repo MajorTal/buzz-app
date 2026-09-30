@@ -8,17 +8,49 @@ import type { PanelProps } from "../../features/panels/service";
 import { Button } from "../../shared/design-system/ui/Button";
 import { parseRun402Site, type Run402Site } from "./references";
 import { loadEmbeddingPolicy, type EmbeddingPolicy } from "./config";
+import {
+  parseNostrBindRequest,
+  type NostrBindError,
+  type NostrBindRequest,
+  type NostrBindResult,
+} from "./nostr-bind";
+import {
+  signNostrBind,
+  type NostrBindEvent,
+  type NostrBindTags,
+} from "../../features/identity/nostr-bind";
+import { nativeIdentityEnabled } from "../../features/identity/service";
+import type { RelayData } from "../../features/relay/service";
+import { npubEncode } from "nostr-tools/nip19";
 import styles from "./Run402.module.css";
 
-export const inject = ["panels"];
+export const inject = ["panels", "relay"];
 export const apply: PluginModule["apply"] = (ctx) => {
+  const signIn: SignIn = {
+    // Only the dev broker signs sign-in bindings; native identity has no signer yet.
+    sign: nativeIdentityEnabled() ? undefined : signNostrBind,
+    viewerName: () => viewerName(ctx.relay),
+  };
   ctx.panels.register({
     id: "site",
     title: "Run402",
     matches: (target) => !!parseRun402Site(target),
-    component: Run402Panel,
+    component: (props) => <Run402Panel {...props} signIn={signIn} />,
   });
 };
+
+/** The host's half of "Sign in with Buzz" (docs/run402-sign-in.md). */
+export type SignIn = Readonly<{
+  sign: ((tags: NostrBindTags) => Promise<NostrBindEvent>) | undefined;
+  viewerName(): string;
+}>;
+
+function viewerName(relay: RelayData) {
+  const { viewer, session } = relay.snapshot();
+  if (!viewer) return "your Buzz identity";
+  const name = session.profiles.snapshot().get(viewer)?.name.trim();
+  return name || `${npubEncode(viewer).slice(0, 12)}…`;
+}
 
 /** Sandbox for a cross-origin tenant site: its own origin, scripts and forms; never the top window. */
 export const FRAME_SANDBOX =
@@ -56,7 +88,12 @@ export function frameContext(
   };
 }
 
-export function Run402Panel({ target, context, channelContext }: PanelProps) {
+export function Run402Panel({
+  target,
+  context,
+  channelContext,
+  signIn,
+}: PanelProps & { signIn?: SignIn }) {
   const [attempt, retry] = useState(0);
   const site = useMemo(() => parseRun402Site(target), [target]);
   const buzz = useMemo(
@@ -68,6 +105,7 @@ export function Run402Panel({ target, context, channelContext }: PanelProps) {
       key={`${site.url}:${attempt}`}
       site={site}
       buzz={buzz}
+      signIn={signIn}
       retry={() => retry(attempt + 1)}
     />
   ) : (
@@ -78,10 +116,12 @@ export function Run402Panel({ target, context, channelContext }: PanelProps) {
 function SitePanel({
   site,
   buzz,
+  signIn,
   retry,
 }: {
   site: Run402Site;
   buzz: BuzzFrameContext | undefined;
+  signIn: SignIn | undefined;
   retry(): void;
 }) {
   const [result, setResult] = useState<EmbeddingPolicy | string>();
@@ -102,18 +142,28 @@ function SitePanel({
       });
     return () => controller.abort();
   }, [site]);
-  return <SiteView site={site} buzz={buzz} result={result} retry={retry} />;
+  return (
+    <SiteView
+      site={site}
+      buzz={buzz}
+      signIn={signIn}
+      result={result}
+      retry={retry}
+    />
+  );
 }
 
 /** Presentation for every state; only `embeddable` renders a frame. */
 export function SiteView({
   site,
   buzz,
+  signIn,
   result,
   retry,
 }: {
   site: Run402Site;
   buzz?: BuzzFrameContext | undefined;
+  signIn?: SignIn | undefined;
   result: EmbeddingPolicy | string | undefined;
   retry(): void;
 }) {
@@ -124,16 +174,70 @@ export function SiteView({
     if (buzz && frame.current?.contentWindow)
       frame.current.contentWindow.postMessage(buzz, origin);
   };
+  // One sign-in request at a time; the ref answers bursts before React re-renders.
+  const [consent, setConsent] = useState<Consent>();
+  const pending = useRef<Consent>(undefined);
+  const answered = useRef(new Set<string>());
+  const settle = (next?: Consent) => {
+    pending.current = next;
+    setConsent(next);
+  };
+  const reply = (
+    challengeId: string,
+    outcome: { event: NostrBindEvent } | { error: NostrBindError },
+  ) => {
+    const result: NostrBindResult = {
+      type: "buzz.nostr-bind.result",
+      version: 1,
+      challengeId,
+      ...outcome,
+    };
+    frame.current?.contentWindow?.postMessage(result, origin);
+  };
+  const approve = async (request: Consent) => {
+    settle({ ...request, busy: true });
+    let outcome: { event: NostrBindEvent } | { error: NostrBindError };
+    if (Date.parse(request.expiresAt) <= Date.now())
+      outcome = { error: "expired" };
+    else
+      try {
+        outcome = signIn?.sign
+          ? { event: await signIn.sign(request.tags) }
+          : { error: "unavailable" };
+      } catch {
+        outcome = { error: "unavailable" };
+      }
+    // A reload or newer render retired this request; its document gets nothing.
+    if (pending.current?.challengeId !== request.challengeId) return;
+    settle();
+    reply(request.challengeId, outcome);
+  };
   // The site may boot before or after the load event; answer its request too.
   useEffect(() => {
-    if (!buzz) return;
     const listener = (event: MessageEvent) => {
       if (
-        event.origin === origin &&
-        event.source === frame.current?.contentWindow &&
-        event.data?.type === "buzz.context.request"
+        event.origin !== origin ||
+        event.source !== frame.current?.contentWindow
       )
-        post();
+        return;
+      if (event.data?.type === "buzz.context.request") return post();
+      if (
+        event.data?.type !== "buzz.nostr-bind.request" ||
+        event.data.version !== 1
+      )
+        return;
+      const request = parseNostrBindRequest(
+        event.data.deepLink,
+        origin,
+        Date.now(),
+      );
+      if (!request || answered.current.has(request.challengeId)) return;
+      answered.current.add(request.challengeId);
+      if ("error" in request)
+        reply(request.challengeId, { error: request.error });
+      else if (pending.current || !signIn?.sign)
+        reply(request.challengeId, { error: "unavailable" });
+      else settle({ ...request, name: signIn.viewerName() });
     };
     window.addEventListener("message", listener);
     return () => window.removeEventListener("message", listener);
@@ -188,12 +292,43 @@ export function SiteView({
           variant="ghost"
           size="compact"
           aria-label="Reload site"
-          onClick={() => reload(reloads + 1)}
+          onClick={() => {
+            settle();
+            reload(reloads + 1);
+          }}
         >
           <ArrowClockwiseIcon size={14} /> Reload
         </Button>
         <OpenInBrowser site={site} />
       </div>
+      {consent && (
+        <section className={styles.consent} aria-label="Sign-in request">
+          <p>
+            <strong>{origin}</strong> wants to sign you in as{" "}
+            <strong>{consent.name}</strong>
+          </p>
+          <Button
+            variant="quiet"
+            size="compact"
+            disabled={!!consent.busy}
+            onClick={() => {
+              settle();
+              reply(consent.challengeId, { error: "declined" });
+            }}
+          >
+            Not now
+          </Button>
+          <Button
+            variant="primary"
+            size="compact"
+            loading={!!consent.busy}
+            disabled={!!consent.busy}
+            onClick={() => void approve(consent)}
+          >
+            Sign in
+          </Button>
+        </section>
+      )}
       <iframe
         key={reloads}
         ref={frame}
@@ -208,6 +343,8 @@ export function SiteView({
     </div>
   );
 }
+
+type Consent = NostrBindRequest & { name: string; busy?: boolean };
 
 function OpenInBrowser({ site, block }: { site: Run402Site; block?: boolean }) {
   return (

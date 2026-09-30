@@ -26,7 +26,7 @@ export function ManagedAgentActions({
   imported: boolean;
   destination?: string;
   owner?: string;
-  onUseHere?: ((pubkey: string) => void) | undefined;
+  onUseHere?: ((pubkey: string, action: "use" | "clone") => void) | undefined;
 }) {
   const [settingUp, setSettingUp] = useState(false);
   const details = useRef<HTMLDivElement>(null);
@@ -101,7 +101,7 @@ export function ManagedAgentActions({
         (onUseHere ? (
           <Button
             disabled={state.busy || state.status !== "ready"}
-            onClick={() => onUseHere(agent.pubkey)}
+            onClick={() => onUseHere(agent.pubkey, "use")}
           >
             Use here
           </Button>
@@ -109,11 +109,13 @@ export function ManagedAgentActions({
           <LocalInventoryAction
             control={control}
             agent={agent}
+            action="use"
             destination={destination}
             owner={owner}
             disabled={state.busy || state.status !== "ready"}
             onPending={setSettingUp}
             onUsed={() => {}}
+            onClone={() => {}}
           />
         ) : (
           <p>Update the desktop app to set up this imported identity.</p>

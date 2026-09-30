@@ -83,11 +83,13 @@ it("offers Use here for an incomplete import in the dialog", async () => {
     <LocalInventoryAction
       control={control}
       agent={f.agent}
+      action="use"
       destination={destination}
       owner={owner}
       disabled={false}
       onPending={() => {}}
       onUsed={() => {}}
+      onClone={() => {}}
     />,
   );
   expect(screen.getByRole("button", { name: "Use here" })).toBeEnabled();

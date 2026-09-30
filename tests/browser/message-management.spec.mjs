@@ -45,12 +45,23 @@ test("manage a channel message, peer unread state, and its thread", async ({
   );
   for (const width of [1440, 900, 390]) {
     await page.setViewportSize({ width, height: 850 });
-    const bounds = await editor.boundingBox();
-    const chip = await editor.locator(".inline-chip").boundingBox();
-    expect(bounds.x).toBeGreaterThanOrEqual(0);
-    expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
-    expect(chip.x).toBeGreaterThanOrEqual(bounds.x);
-    expect(chip.x + chip.width).toBeLessThanOrEqual(bounds.x + bounds.width);
+    await expect
+      .poll(() =>
+        editor.evaluate((element) => {
+          // Read parent and child in the same layout, after responsive reflow.
+          const bounds = element.getBoundingClientRect();
+          const chip = element
+            .querySelector('.inline-chip[data-kind="person"]')
+            .getBoundingClientRect();
+          return (
+            bounds.x >= 0 &&
+            bounds.right <= window.innerWidth &&
+            chip.x >= bounds.x &&
+            chip.right <= bounds.right
+          );
+        }),
+      )
+      .toBe(true);
   }
   await page.setViewportSize({ width: 1440, height: 950 });
   await editor.press("End");
@@ -140,7 +151,19 @@ test("manage a channel message, peer unread state, and its thread", async ({
     await confirmation.getByRole("button", { name: "Cancel" }).click();
     await expect(row).toBeVisible();
     await expect(trigger).toBeFocused();
+    // Pointer cancellation retains focus, but need not reveal an unhovered
+    // toolbar. Continue from that focus with the keyboard, not a hidden click.
+    await page.mouse.move(0, 0);
+    const actions = row.getByRole("group", { name: "Message actions" });
+    await page.keyboard.press("Enter");
+    await expect(
+      page.getByRole("menuitem", { name: "Delete message", exact: true }),
+    ).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(trigger).toBeFocused();
+    await expect(actions).toHaveCSS("opacity", "1");
   }
+  await row.hover();
   await trigger.click();
   await page
     .getByRole("menuitem", { name: "Delete message", exact: true })

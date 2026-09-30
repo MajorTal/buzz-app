@@ -1745,8 +1745,9 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
     opacity: 0;
   }
   .message:hover .continuationTime,
-  .message:focus-within .continuationTime,
-  .message[data-actions-revealed] .continuationTime {
+  .message:has(:focus-visible) .continuationTime,
+  .message[data-actions-revealed] .continuationTime,
+  html[data-keyboard-navigation] .message:focus-within .continuationTime {
     opacity: 1;
   }
 }

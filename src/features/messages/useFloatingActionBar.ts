@@ -34,8 +34,13 @@ export function useFloatingActionBar(
     if (!floating || !row || !bar) return;
     // Top-layer descendants don't contribute to :hover or :focus-within.
     let hovered = row.matches(":hover") || bar.matches(":hover");
-    let focused = row.contains(document.activeElement);
-    const update = () => {
+    // Read modality with focus on every update: pointer focus must not pin the
+    // bar when hover leaves, including after keyboard-to-pointer transitions.
+    const keyboardFocus = () =>
+      row.matches(":has(:focus-visible)") ||
+      (document.documentElement.hasAttribute("data-keyboard-navigation") &&
+        row.contains(document.activeElement));
+    const update = (focused = keyboardFocus()) => {
       const next =
         hovered ||
         focused ||
@@ -52,15 +57,13 @@ export function useFloatingActionBar(
       hovered = false;
       update();
     };
-    const focusIn = () => {
-      focused = true;
-      update();
-    };
+    const focusIn = () => update();
     const focusOut = (event: FocusEvent) => {
-      focused =
+      update(
         event.relatedTarget instanceof Node &&
-        row.contains(event.relatedTarget);
-      update();
+          row.contains(event.relatedTarget) &&
+          keyboardFocus(),
+      );
     };
     row.addEventListener("pointerenter", enter);
     row.addEventListener("pointerleave", leave);
@@ -68,7 +71,6 @@ export function useFloatingActionBar(
     row.addEventListener("focusout", focusOut);
     const observer = new MutationObserver(() => {
       // Recheck focus if a control is removed without dispatching focusout.
-      focused = row.contains(document.activeElement);
       update();
     });
     observer.observe(bar, {

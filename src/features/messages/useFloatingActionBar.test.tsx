@@ -48,6 +48,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   cleanup();
+  delete document.documentElement.dataset.keyboardNavigation;
+  vi.restoreAllMocks();
   Reflect.deleteProperty(HTMLElement.prototype, "showPopover");
   Reflect.deleteProperty(HTMLElement.prototype, "hidePopover");
   vi.unstubAllGlobals();
@@ -116,6 +118,7 @@ it("retains reveal across row/bar hover, focus, menu and expanded picker transit
   expect(bar).toHaveAttribute("data-shown");
   fireEvent.pointerLeave(row);
   expect(bar).not.toHaveAttribute("data-shown");
+  document.documentElement.dataset.keyboardNavigation = "";
   act(() => screen.getByRole("button", { name: "Avatar" }).focus());
   expect(bar).toHaveAttribute("data-shown");
   act(() =>
@@ -142,6 +145,43 @@ it("retains reveal across row/bar hover, focus, menu and expanded picker transit
   rerender(<Harness hasPicker={false} />);
   await waitFor(() => expect(bar).not.toHaveAttribute("data-shown"));
   expect(screen.getByTestId("bar")).toBe(bar);
+});
+
+it("does not retain pointer focus on leave, popup changes or control removal", async () => {
+  const { rerender } = render(<Harness />);
+  const row = screen.getByTestId("row");
+  const bar = screen.getByTestId("bar");
+  // jsdom treats all focus as visible. Supply only the missing browser modality;
+  // focus, events, React effects and mutation delivery remain real.
+  const matches = row.matches.bind(row);
+  vi.spyOn(row, "matches").mockImplementation((selector) =>
+    selector === ":has(:focus-visible)" ? false : matches(selector),
+  );
+  const avatar = screen.getByRole("button", { name: "Avatar" });
+  fireEvent.pointerEnter(row);
+  act(() => avatar.focus());
+  fireEvent.pointerLeave(row);
+  expect(avatar).toHaveFocus();
+  expect(bar).not.toHaveAttribute("data-shown");
+  rerender(<Harness open />);
+  expect(bar).toHaveAttribute("data-shown");
+  rerender(<Harness />);
+  expect(bar).not.toHaveAttribute("data-shown");
+  rerender(<Harness hasPicker={false} />);
+  await act(() => Promise.resolve());
+  expect(bar).not.toHaveAttribute("data-shown");
+
+  // The fallback reveals keyboard focus even without native focus-visible.
+  act(() => screen.getByRole("button", { name: "Outside" }).focus());
+  document.documentElement.dataset.keyboardNavigation = "";
+  act(() => avatar.focus());
+  expect(bar).toHaveAttribute("data-shown");
+  // Re-read modality on leave even if a pointer press did not move focus.
+  fireEvent.pointerEnter(row);
+  delete document.documentElement.dataset.keyboardNavigation;
+  fireEvent.pointerLeave(row);
+  expect(avatar).toHaveFocus();
+  expect(bar).not.toHaveAttribute("data-shown");
 });
 
 it("leaves coarse-pointer controls static and cleans up floating mode on media changes and unmount", () => {

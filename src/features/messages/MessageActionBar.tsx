@@ -60,6 +60,7 @@ export function MessageActionBar({
   const busy = useRef(false);
   const afterClose = useRef<(() => void) | undefined>(undefined);
   const [handingOffFocus, setHandingOffFocus] = useState(false);
+  const [openedByPointer, setOpenedByPointer] = useState(false);
   const copy = async (text: () => string, label: string) => {
     if (busy.current) return;
     busy.current = true;
@@ -117,8 +118,24 @@ export function MessageActionBar({
           />
           <MenuRoot
             open={open}
-            onOpenChange={(next) => {
-              if (next) setHandingOffFocus(false);
+            onOpenChange={(next, details) => {
+              if (next) {
+                setHandingOffFocus(false);
+                // Base UI opens on mousedown, so a real pointer press carries a
+                // click count; keyboard and assistive presses arrive as a click
+                // with 0.
+                setOpenedByPointer(
+                  details.event instanceof MouseEvent &&
+                    details.event.detail > 0,
+                );
+              } else if (
+                details.event.type.startsWith("key") ||
+                (details.event.type === "click" &&
+                  "detail" in details.event &&
+                  details.event.detail === 0)
+              ) {
+                setOpenedByPointer(false);
+              }
               setOpen(next);
             }}
             onOpenChangeComplete={(opened) => {
@@ -145,7 +162,9 @@ export function MessageActionBar({
               data-message-id={messageId}
               // A boolean preserves Base UI's safeguard when focus already moved.
               // A callback returning true would force focus back over a newer action.
-              finalFocus={!handingOffFocus}
+              // Pointer-only interactions hand nothing back; switching to the
+              // keyboard restores the trigger for continued navigation.
+              finalFocus={!handingOffFocus && !openedByPointer}
             >
               <AfterMenuClose.Provider
                 value={(action) => {

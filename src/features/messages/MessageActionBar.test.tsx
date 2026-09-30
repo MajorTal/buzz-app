@@ -43,10 +43,58 @@ it("opens with keyboard, invokes a sibling action, and returns focus on Escape",
   );
   expect(action).toHaveBeenCalledOnce();
   await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
-  await user.click(trigger);
+  trigger.focus();
+  await user.keyboard("{Enter}");
   const menu = await screen.findByRole("menu");
   await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
   await user.keyboard("{Escape}");
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+});
+it.each(["{Escape}", "{ArrowDown}{Escape}"])(
+  "returns focus after pointer open then keyboard close: %s",
+  async (keys) => {
+    const user = userEvent.setup();
+    render(<MessageActionBar copyText={() => "Hello"} />);
+    const trigger = screen.getByRole("button", {
+      name: "More message actions",
+    });
+    await user.click(trigger);
+    const menu = await screen.findByRole("menu");
+    await waitFor(() =>
+      expect(menu.contains(document.activeElement)).toBe(true),
+    );
+    await user.keyboard(keys);
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    await waitFor(() => expect(document.activeElement).toBe(trigger));
+    await user.keyboard("{Enter}");
+    await screen.findByRole("menu");
+  },
+);
+it("keeps keyboard retry reachable after pointer open and a failed copy", async () => {
+  const user = userEvent.setup();
+  const write = vi
+    .spyOn(navigator.clipboard, "writeText")
+    .mockRejectedValueOnce(new Error("denied"))
+    .mockResolvedValueOnce();
+  render(<MessageActionBar copyText={() => "Hello"} />);
+  const trigger = screen.getByRole("button", { name: "More message actions" });
+  await user.click(trigger);
+  const menu = await screen.findByRole("menu");
+  await waitFor(() => expect(menu.contains(document.activeElement)).toBe(true));
+  await user.keyboard("{ArrowDown}");
+  expect(document.activeElement).toBe(
+    screen.getByRole("menuitem", { name: "Copy message" }),
+  );
+  await user.keyboard("{Enter}");
+  await screen.findByText("Couldn’t copy. Try again from the message menu.");
+  await waitFor(() => expect(document.activeElement).toBe(trigger));
+  await user.keyboard("{Enter}");
+  const retry = await screen.findByRole("menuitem", { name: "Copy message" });
+  await waitFor(() => expect(document.activeElement).toBe(retry));
+  await user.keyboard("{Enter}");
+  await screen.findByText("Message copied");
+  expect(write).toHaveBeenCalledTimes(2);
+  expect(write).toHaveBeenLastCalledWith("Hello");
   await waitFor(() => expect(document.activeElement).toBe(trigger));
 });
 it("copies the message, shows failure, and allows retry", async () => {
@@ -62,6 +110,8 @@ it("copies the message, shows failure, and allows retry", async () => {
     await screen.findByRole("menuitem", { name: "Copy message" }),
   );
   await screen.findByText("Couldn’t copy. Try again from the message menu.");
+  await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+  expect(document.activeElement).not.toBe(trigger);
   await user.click(trigger);
   await user.click(
     await screen.findByRole("menuitem", { name: "Copy message" }),

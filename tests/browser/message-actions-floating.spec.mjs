@@ -353,6 +353,12 @@ test("menus and pickers retain actions, but modal dialogs cover them", async ({
     .toBe(false);
   await dialog.getByRole("button", { name: "Cancel", exact: true }).click();
   await expect(trigger).toBeFocused();
+  // Pointer dismissal restores focus without pinning an unhovered toolbar.
+  await expect(actions).toHaveCSS("opacity", "0");
+  await trigger.press("Enter");
+  await expect(menu).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(trigger).toBeFocused();
   await shown(actions);
   const own = app.append("primary", "alpha", "Delete confirmation check");
   const ownRow = page.locator(

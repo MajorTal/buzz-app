@@ -16,9 +16,7 @@ import { finalizeEvent, getPublicKey } from "nostr-tools";
 import { App } from "./App";
 import { createServices, type AppServices } from "./services";
 import {
-  bindSharedTarget,
-  parseTargetLink,
-  targetLink,
+  parseOpenTarget,
   type OpenTarget,
 } from "../features/navigation/targets";
 import { bindDeepLinks } from "../features/navigation/deep-links";
@@ -413,7 +411,7 @@ it.each(["Inbox", "Bestie"])(
         route: { version: 1, params: name },
         ...(scope !== undefined ? { scope } : {}),
       };
-      const bound = bindSharedTarget(parseTargetLink(targetLink(old)), viewer);
+      const bound = parseOpenTarget(old);
       let visit = "";
       let result!: ReturnType<typeof current.navigation.open>;
       act(() => {

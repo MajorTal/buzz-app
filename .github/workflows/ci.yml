@@ -107,6 +107,13 @@ jobs:
   measurements:
     if: github.event_name != 'workflow_dispatch'
     name: Browser measurements
+    # https://playwright.dev/docs/ci#via-containers
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --init --ipc=host
+    defaults:
+      run:
+        shell: bash
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
@@ -114,8 +121,9 @@ jobs:
         with:
           persist-credentials: false
       - uses: ./.github/actions/setup
-        with:
-          browsers: "true"
+      # Container steps need their own Git trust for the host-owned checkout.
+      - name: Trust checked-out workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       # Preserve Chromium -> WebKit measurement dependencies; never shard or
       # overlap the two measurement projects on this runner.
       - name: Serial Chromium and WebKit measurements
@@ -141,7 +149,59 @@ jobs:
             test-results/browser-classic-scrollbars
           retention-days: 7
 
+  browser_fixture:
+    if: github.event_name != 'workflow_dispatch'
+    name: Native browser fixture
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # Browser fixtures need only the pinned compiler, Cargo and standard library,
+      # not Hermit's full Rust archive (including docs).
+      - name: Install minimal pinned Rust for browser fixtures
+        shell: bash
+        run: |
+          pins=(bin/.rust-*.pkg)
+          test "${#pins[@]}" -eq 1
+          test -L "${pins[0]}"
+          version=${pins[0]#bin/.rust-}
+          version=${version%.pkg}
+          rustup toolchain install "$version" --profile minimal --no-self-update
+          rustc_path=$(rustup which --toolchain "$version" rustc)
+          toolchain_bin=$(dirname "$rustc_path")
+          test -x "$toolchain_bin/rustc"
+          test -x "$toolchain_bin/cargo"
+          echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
+          echo "HERMIT_PREPEND_PATH=$toolchain_bin" >> "$GITHUB_ENV"
+      # This journey uses a real native plugin-manager bridge. Provision it
+      # before Playwright starts: a cold Rust install/build is test setup, not
+      # browser behavior, and must not consume the journey's subprocess budget.
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          key: browser-fixture
+          save-if: ${{ github.event_name == 'push' }}
+      - name: Build native browser fixture
+        run: cargo build --locked -p buzzodz-plugins --example fixture-bridge
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-browser-fixture
+          path: target/debug/examples/fixture-bridge
+          if-no-files-found: error
+          retention-days: 1
+
   browser:
+    needs: [browser_fixture]
+    # https://playwright.dev/docs/ci#via-containers
+    container:
+      image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
+      options: --init --ipc=host
+    defaults:
+      run:
+        shell: bash
+    env:
+      BUZZ_BROWSER_FIXTURE: ${{ github.workspace }}/.browser-fixture/fixture-bridge
     if: github.event_name != 'workflow_dispatch'
     name: Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/6)
     # Measurements stay isolated on their own runner, not on our critical path.
@@ -159,37 +219,16 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      # Browser fixtures need only the pinned compiler, Cargo and standard library,
-      # not Hermit's full Rust archive (including docs). Keep this path first even
-      # when pnpm/Node re-enter Hermit, so cold shards do not install Rust twice.
-      - name: Install minimal pinned Rust for browser fixtures
-        shell: bash
-        run: |
-          pins=(bin/.rust-*.pkg)
-          test "${#pins[@]}" -eq 1
-          test -L "${pins[0]}"
-          version=${pins[0]#bin/.rust-}
-          version=${version%.pkg}
-          rustup toolchain install "$version" --profile minimal --no-self-update
-          rustc_path=$(rustup which --toolchain "$version" rustc)
-          toolchain_bin=$(dirname "$rustc_path")
-          test -x "$toolchain_bin/rustc"
-          test -x "$toolchain_bin/cargo"
-          echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
-          echo "HERMIT_PREPEND_PATH=$toolchain_bin" >> "$GITHUB_ENV"
       - uses: ./.github/actions/setup
+      # Container steps need their own Git trust for the host-owned checkout.
+      - name: Trust checked-out workspace
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
-          browsers: "true"
-      # This journey uses a real native plugin-manager bridge. Provision it
-      # before Playwright starts: a cold Rust install/build is test setup, not
-      # browser behavior, and must not consume the journey's subprocess budget.
-      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
-        with:
-          key: browser-fixture
-          save-if: ${{ github.event_name == 'push' }}
-      - name: Build native browser fixture
-        timeout-minutes: 8
-        run: cargo build --locked -p buzzodz-plugins --example fixture-bridge
+          name: native-browser-fixture
+          path: .browser-fixture
+      - name: Restore fixture executable permission
+        run: chmod +x .browser-fixture/fixture-bridge
       # CI required enforces measurement success. --no-deps avoids repeating
       # measurements here; the matrix covers both engines on separate runners.
       - name: Functional journeys

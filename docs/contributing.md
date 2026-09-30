@@ -337,23 +337,22 @@ the complete suite still runs with `pnpm test` / `just scan`:
 - **Browser measurements:** Chromium then WebKit, serially on an isolated runner.
 - **Browser journeys:** twelve runners (Chromium and WebKit, six file-level shards
   per engine), each with two workers. They start alongside measurements on separate
-  runners; `CI required` still requires both lanes. Each runner builds the native
-  plugin-manager fixture in a separately logged setup step before starting
-  Playwright. Browser jobs install the existing `bin/.rust-*.pkg` pin through
-  the runner's rustup with the minimal compiler/Cargo/standard-library profile,
-  avoiding Hermit's full Rust archive on cold runners. `HERMIT_PREPEND_PATH`
-  keeps that toolchain selected inside Hermit-launched pnpm/Node subprocesses;
-  native jobs retain Hermit's Rust, rustfmt and Clippy. The fixture's Rust cache
-  is optional: a cache miss still builds it,
-  outside the browser subprocess timeout. No measurement is repeated on shards,
-  and no retry hides a failure. Functional jobs also run when measurements fail:
-  this spends more runner minutes for faster, independent feedback.
+  runners; `CI required` still requires both lanes. A separate Ubuntu job builds
+  the native plugin-manager fixture using the repository Rust pin and uploads it
+  for all twelve shards. Shards wait for that job, restore executable permission,
+  and pass its path through `BUZZ_BROWSER_FIXTURE`; local journeys still build
+  with Cargo. No measurements are repeated on shards and no retries hide failures.
+- Both browser lanes use the version-matched, digest-pinned
+  [Playwright Docker image](https://playwright.dev/docs/docker), which supplies
+  browsers and Linux libraries without per-job apt provisioning. Follow the
+  [CI container guidance](https://playwright.dev/docs/ci#via-containers).
+  Update both image references and digests when upgrading `@playwright/test`.
 - **CI required:** fails unless every automatic Linux lane and every browser shard succeeds,
   including cancellation or an unexpectedly skipped lane. Configure this status
   as a required repository check; the workflow does not change branch protection.
 
 Actions and tool versions are pinned, installs use the frozen lockfile, and
-Hermit/pnpm/Cargo/browser caches avoid repeat downloads and cold compilation.
+Hermit/pnpm/Cargo caches avoid repeat downloads and cold compilation.
 Superseded PR runs are cancelled. Automatic CI uses disposable Ubuntu runners and no live
 Buzz identity or signing credentials. It is not native GUI acceptance, a signed
 package, or a cross-platform release gate. `just scan` remains available locally;

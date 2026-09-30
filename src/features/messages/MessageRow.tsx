@@ -13,6 +13,7 @@ import {
   useEffect,
   useCallback,
   useSyncExternalStore,
+  type FocusEvent,
   type ReactNode,
 } from "react";
 import type { RelaySession } from "../relay/session";
@@ -87,6 +88,48 @@ export type MessageRowProps = {
     hasComments?: boolean,
   ) => void;
 };
+
+// Engines skip horizontal focus scrolling for a target that is already partly
+// visible: Blink sets the partial-visibility behaviour to no-scroll in
+// Element::UpdateSelectionOnFocus, and WebKit keeps its 32px legacy horizontal
+// visibility threshold for focus reveals. Only scrollIntoView() opts out of
+// both, so a thumbnail whose far edge is clipped keeps focus without ever
+// coming fully into view. Reveal it within the strip's scroll-padding.
+//
+// Keyboard focus only. React's onFocus is the bubbling focusin, so it also
+// fires for pointer focus, and Chromium focuses a link on mousedown (WebKit
+// does not): revealing there would slide the strip under a held pointer before
+// mouseup, so the press lands on a neighbour or on padding, and the strip
+// visibly jumps on every click of a clipped tile. DESIGN.md wants pointer
+// focus quiet, so gate on html[data-keyboard-navigation] like the composer and
+// the floating action bar. useKeyboardFocusVisibility sets that attribute in
+// a capturing keydown listener, which runs before Tab's default action moves
+// focus, and clears it on the capturing pointerdown that precedes mousedown,
+// so a Tab reveal still runs and a press never does.
+function revealFocusedThumbnail(event: FocusEvent<HTMLDivElement>) {
+  const strip = event.currentTarget;
+  const target = event.target;
+  if (
+    !(target instanceof HTMLElement) ||
+    target === strip ||
+    !document.documentElement.hasAttribute("data-keyboard-navigation")
+  )
+    return;
+  const style = getComputedStyle(strip);
+  const bounds = strip.getBoundingClientRect();
+  const rect = target.getBoundingClientRect();
+  const start =
+    bounds.left +
+    strip.clientLeft +
+    (Number.parseFloat(style.scrollPaddingInlineStart) || 0);
+  const end =
+    bounds.left +
+    strip.clientLeft +
+    strip.clientWidth -
+    (Number.parseFloat(style.scrollPaddingInlineEnd) || 0);
+  if (rect.right > end) strip.scrollLeft += rect.right - end;
+  else if (rect.left < start) strip.scrollLeft -= start - rect.left;
+}
 
 export const MessageRow = memo(function MessageRow({
   row,
@@ -550,6 +593,7 @@ export const MessageRow = memo(function MessageRow({
                   className={styles.imageStrip}
                   role="group"
                   aria-label={`${group.length} ${group.length === 1 ? "image" : "images"}`}
+                  onFocus={revealFocusedThumbnail}
                 >
                   {items}
                 </div>

@@ -2,6 +2,32 @@ import { test, expect } from "@playwright/test";
 import react from "@vitejs/plugin-react";
 import { createServer } from "./vite-server.mjs";
 
+// Neither engine scrolls horizontally on focus for a tile that is already
+// partly visible, so a focused tile must sit inside the strip's scroll-padding
+// box, not merely its border box: a reveal that stops short of the strip's
+// edge lands the tile's far edge in the padding where the focus ring is
+// clipped. A strip too narrow to hold a tile plus both paddings (390px once a
+// scrollbar gutter is reserved) can only honour the edge focus travelled
+// towards, which then has to sit exactly on that scroll-padding edge.
+function insideScrollPadding(el, edge) {
+  const strip = el.parentElement;
+  const style = getComputedStyle(strip);
+  const a = el.getBoundingClientRect(),
+    b = strip.getBoundingClientRect();
+  const start =
+    b.left +
+    strip.clientLeft +
+    (Number.parseFloat(style.scrollPaddingInlineStart) || 0);
+  const end =
+    b.left +
+    strip.clientLeft +
+    strip.clientWidth -
+    (Number.parseFloat(style.scrollPaddingInlineEnd) || 0);
+  return edge === "end"
+    ? a.right <= end && a.left >= Math.min(start, end - a.width)
+    : a.left >= start && a.right <= Math.max(end, start + a.width);
+}
+
 // Browser-only: posted layout, overflow, focus scrolling and real viewer wiring.
 test("posted image strips keep counts visible and every image reachable beside documents", async ({
   page,
@@ -59,6 +85,15 @@ test("posted image strips keep counts visible and every image reachable beside d
     const links = strip.getByRole("link");
     await expect(links).toHaveCount(8);
     await expect(history.getByText("8 images", { exact: true })).toBeVisible();
+    const viewer = page.getByRole("dialog", {
+      name: "Image viewer",
+      exact: true,
+    });
+    // macOS WebKit only tabs to links with Option held.
+    const optionTab = browserName === "webkit" && process.platform === "darwin";
+    const forward = optionTab ? "Alt+Tab" : "Tab";
+    const backward = optionTab ? "Shift+Alt+Tab" : "Shift+Tab";
+    let pressedClippedTile = false;
     for (const width of [390, 768, 1280]) {
       await page.setViewportSize({ width, height: 950 });
       await expect(strip).toBeVisible();
@@ -95,21 +130,10 @@ test("posted image strips keep counts visible and every image reachable beside d
         true,
       );
       await links.first().focus();
-      for (let i = 1; i < 8; i++)
-        await page.keyboard.press(
-          browserName === "webkit" && process.platform === "darwin"
-            ? "Alt+Tab"
-            : "Tab",
-        );
+      for (let i = 1; i < 8; i++) await page.keyboard.press(forward);
       await expect(links.last()).toBeFocused();
       await expect
-        .poll(() =>
-          links.last().evaluate((el) => {
-            const a = el.getBoundingClientRect(),
-              b = el.parentElement.getBoundingClientRect();
-            return a.left >= b.left && a.right <= b.right;
-          }),
-        )
+        .poll(() => links.last().evaluate(insideScrollPadding, "end"))
         .toBe(true);
       await expect(links.last()).toHaveCSS("outline-style", "solid");
       // A declared outline can still be clipped away. Compare actual pixels
@@ -130,6 +154,54 @@ test("posted image strips keep counts visible and every image reachable beside d
       await expect(
         history.getByText("8 images", { exact: true }),
       ).toBeVisible();
+      // Shift+Tab back from the right end exercises the reveal's other branch:
+      // the tile whose leading edge the start clips is partly visible too, so
+      // the same native no-scroll rule would leave it focused and cut off.
+      for (let i = 6; i >= 0; i--) {
+        await page.keyboard.press(backward);
+        await expect(links.nth(i)).toBeFocused();
+        await expect
+          .poll(() => links.nth(i).evaluate(insideScrollPadding, "start"))
+          .toBe(true);
+      }
+      // Pointer focus stays quiet. Chromium focuses a link on mousedown, and a
+      // reveal there would slide the strip under the held pointer before
+      // mouseup; WebKit never focuses a link from a press. Press a tile the end
+      // clips and check the strip has not moved while the button is held.
+      const clipped = await links.evaluateAll((items) => {
+        const strip = items[0].parentElement;
+        const end =
+          strip.getBoundingClientRect().left +
+          strip.clientLeft +
+          strip.clientWidth;
+        for (const el of items) {
+          const r = el.getBoundingClientRect();
+          if (r.left < end && r.right > end)
+            return { x: (r.left + end) / 2, y: r.top + r.height / 2 };
+        }
+        return null;
+      });
+      if (clipped) {
+        pressedClippedTile = true;
+        const before = await strip.evaluate((el) => el.scrollLeft);
+        await page.mouse.move(clipped.x, clipped.y);
+        await page.mouse.down();
+        await page.evaluate(
+          () =>
+            new Promise((resolve) =>
+              requestAnimationFrame(() => requestAnimationFrame(resolve)),
+            ),
+        );
+        expect(await strip.evaluate((el) => el.scrollLeft)).toBe(before);
+        await page.mouse.up();
+        // The press completed a click on the tile, which opens the viewer.
+        await expect(viewer).toBeVisible();
+        await expect(viewer).not.toHaveAttribute("data-review-opening");
+        await viewer
+          .getByRole("button", { name: "Close fullscreen viewer" })
+          .click();
+        await expect(viewer).toHaveCount(0);
+      }
       await links.first().focus();
       await expect
         .poll(() =>
@@ -167,13 +239,10 @@ test("posted image strips keep counts visible and every image reachable beside d
         ),
       )
       .toBe(true);
+    expect(pressedClippedTile).toBe(true);
     await links.last().focus();
     const lastSource = await links.last().locator("img").getAttribute("src");
     await page.keyboard.press("Enter");
-    const viewer = page.getByRole("dialog", {
-      name: "Image viewer",
-      exact: true,
-    });
     await expect(
       viewer.getByRole("img", { name: "Attachment preview" }),
     ).toHaveAttribute("src", lastSource);

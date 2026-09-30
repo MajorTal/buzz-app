@@ -10,9 +10,10 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import test from "node:test";
 import { parse } from "yaml";
+import ciConfig from "../browser/playwright.ci.config.mjs";
 import config from "../browser/playwright.config.mjs";
 import { run } from "../browser/run-command.mjs";
 
@@ -215,6 +216,103 @@ test("workflow shards discover every functional test/project exactly once", (t) 
     expected.sort(),
     "matrix must cover unsharded discovery",
   );
+});
+
+test("classic-scrollbar cases run exactly once, after the measurements, without clearing their evidence", () => {
+  const { steps } = parse(workflow).jobs.measurements;
+  const serial = steps.findIndex(
+    (step) => step.name === "Serial Chromium and WebKit measurements",
+  );
+  const classic = steps.find(
+    (step) => step.name === "Chromium classic-scrollbar layout",
+  );
+  assert.ok(serial >= 0 && classic, "both Playwright steps must exist");
+  assert.ok(steps.indexOf(classic) > serial, "classic cases run afterwards");
+  assert.equal(classic.if, undefined);
+  assert.equal(classic["continue-on-error"], undefined);
+  const command = classic.run.match(
+    /^node scripts\/ci-test-report\.mjs kind=playwright report=(\S+) evidence=(\S+) title="[^"]+" -- (pnpm test:browser:ci --project chromium-classic-scrollbars --no-deps --reporter=list,json)$/,
+  );
+  assert.ok(command, "classic step must report through ci-test-report");
+  const [, report, evidence, invocation] = command;
+  assert.equal(classic.env.PLAYWRIGHT_JSON_OUTPUT_FILE, report);
+  // A Playwright run clears the outputDir of every project it selects. The
+  // second run must therefore own a directory the measurement report and the
+  // per-test evidence never live in, and the artifact must upload both. The
+  // step runs the CI config, so resolve the project there and require the
+  // local config to agree: a CI-only override of the launch arguments or the
+  // output directory would otherwise pass this gate unnoticed.
+  const classicProject = (candidate) =>
+    candidate.name === "chromium-classic-scrollbars";
+  const project = ciConfig.projects.find(classicProject);
+  assert.ok(project, "chromium-classic-scrollbars project must exist in CI");
+  assert.deepEqual(
+    project,
+    config.projects.find(classicProject),
+    "CI must run the classic project exactly as the local gate defines it",
+  );
+  assert.equal(ciConfig.outputDir, config.outputDir);
+  assert.equal(project.use.browserName, "chromium");
+  assert.deepEqual(project.use.launchOptions.ignoreDefaultArgs, [
+    "--hide-scrollbars",
+  ]);
+  const outputDir = (dir) => posix.normalize(posix.join("tests/browser", dir));
+  const measurementDir = outputDir(ciConfig.outputDir);
+  const classicDir = outputDir(project.outputDir);
+  assert.notEqual(classicDir, measurementDir);
+  assert.ok(!classicDir.startsWith(`${measurementDir}/`));
+  assert.ok(!measurementDir.startsWith(`${classicDir}/`));
+  assert.ok(
+    steps[serial].env.PLAYWRIGHT_JSON_OUTPUT_FILE.startsWith(
+      `${measurementDir}/`,
+    ),
+  );
+  for (const path of [report, evidence])
+    assert.ok(
+      path.startsWith(`${classicDir}/`),
+      `${path} stays in its own dir`,
+    );
+  const upload = steps.find((step) => step.name === "Measurement evidence");
+  assert.deepEqual(
+    upload.with.path
+      .trim()
+      .split("\n")
+      .map((line) => line.trim())
+      .sort(),
+    [measurementDir, classicDir].sort(),
+  );
+  // The tagged cases belong to this project alone: the engine shards above
+  // exclude the tag, and this project selects nothing else.
+  const list = (args) => {
+    const listed = JSON.parse(
+      run("pnpm", ["--silent", ...args, "--list", "--reporter=json"]),
+    );
+    assert.deepEqual(listed.errors, []);
+    const collect = (suites) =>
+      suites.flatMap((suite) => [
+        ...(suite.specs ?? []),
+        ...collect(suite.suites ?? []),
+      ]);
+    return collect(listed.suites);
+  };
+  const selected = list(invocation.split(/\s+/).slice(1));
+  assert.ok(selected.length > 0, "the classic project must select tests");
+  for (const spec of selected) {
+    assert.ok(spec.tags.includes("classic-scrollbars"), spec.title);
+    for (const entry of spec.tests)
+      assert.equal(entry.projectName, "chromium-classic-scrollbars");
+  }
+  const functional = list([
+    "test:browser:ci",
+    "--project",
+    "chromium",
+    "--project",
+    "webkit",
+    "--no-deps",
+  ]);
+  assert.ok(functional.length > 0);
+  for (const spec of functional)
+    assert.ok(!spec.tags.includes("classic-scrollbars"), spec.title);
 });
 
 test("automatic CI stays on Linux and manual dispatch runs only Windows", () => {

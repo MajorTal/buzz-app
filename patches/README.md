@@ -54,6 +54,14 @@ gesture must continue to work; sustained real-history/media acceptance must asse
 whether repeated braking is acceptable. No wheel ownership, permanent scrolling
 CSS, forced layout, alternate store sizing, or new scroll scheduler is introduced.
 
+The `overflow-y: hidden` frame also removes a classic, space-taking scrollbar.
+Every scroller driven by the patched Virtualizer on Mac WebKit must therefore
+keep a constant inline size across the toggle (`scrollbar-gutter: stable`, as
+`.feed` in `src/features/messages/Messages.module.css` does). Otherwise the wider
+content box re-wraps rows above the viewport, their new heights become the next
+nonzero correction, and the interrupt feeds itself until the scroller oscillates
+between two wrap widths.
+
 The momentum-interruption predicate requires MacIntel and Apple vendor, excluding
 Virtua's iOS detector (including desktop-mode iPad). Chrome/Firefox, non-Mac WebKit
 and iOS keep existing momentum policy. Store/layout/observer timing and imperative

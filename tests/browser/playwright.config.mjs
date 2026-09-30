@@ -1,6 +1,10 @@
 import { defineConfig } from "@playwright/test";
 
 const measurementFiles = ["channel-opening.spec.mjs", "scroll.spec.mjs"];
+// Cases that need a scrollbar that takes space. Headless Chromium passes
+// --hide-scrollbars by default and only Linux guarantees classic scrollbars,
+// so they run in their own Chromium project and never in the engine projects.
+const classicScrollbars = /@classic-scrollbars/;
 
 export default defineConfig({
   testDir: ".",
@@ -42,7 +46,23 @@ export default defineConfig({
       name: browserName,
       use: { browserName },
       testIgnore: measurementFiles,
+      grepInvert: classicScrollbars,
       dependencies: ["webkit-measurements"],
     })),
+    {
+      name: "chromium-classic-scrollbars",
+      use: {
+        browserName: "chromium",
+        launchOptions: { ignoreDefaultArgs: ["--hide-scrollbars"] },
+      },
+      testIgnore: measurementFiles,
+      grep: classicScrollbars,
+      // CI runs this project as a second Playwright invocation in the
+      // measurements job, and every run clears the outputDir of the projects
+      // it selects. A separate directory keeps the measurement evidence intact.
+      outputDir: "../../test-results/browser-classic-scrollbars",
+      // Locally the full gate still runs measurements first and alone.
+      dependencies: ["webkit-measurements"],
+    },
   ],
 });

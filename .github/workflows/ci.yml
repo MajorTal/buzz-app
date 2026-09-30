@@ -122,12 +122,23 @@ jobs:
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/browser/ci-report.json
         run: node scripts/ci-test-report.mjs kind=playwright report=test-results/browser/ci-report.json evidence=test-results/browser/ci-timing.json title="Browser measurements" -- pnpm test:browser:ci --project '*-measurements' --workers=1 --reporter=list,json
+      # Cases tagged @classic-scrollbars need Chromium's platform scrollbars,
+      # which Linux always draws as classic ones. One file cannot join the
+      # six-way engine matrix (empty shards are errors), so it runs here, and
+      # CI required already blocks on this job. The project writes to its own
+      # outputDir so this run does not clear the measurement evidence above.
+      - name: Chromium classic-scrollbar layout
+        env:
+          PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/browser-classic-scrollbars/ci-report.json
+        run: node scripts/ci-test-report.mjs kind=playwright report=test-results/browser-classic-scrollbars/ci-report.json evidence=test-results/browser-classic-scrollbars/ci-timing.json title="Browser classic scrollbars" -- pnpm test:browser:ci --project chromium-classic-scrollbars --no-deps --reporter=list,json
       - name: Measurement evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: browser-measurements
-          path: test-results/browser
+          path: |
+            test-results/browser
+            test-results/browser-classic-scrollbars
           retention-days: 7
 
   browser:

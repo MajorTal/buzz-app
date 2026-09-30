@@ -94,6 +94,40 @@ it.each([
   },
 );
 
+it("reads discovery and join policy together, reporting a discovery failure first", async () => {
+  const release: Array<() => void> = [];
+  const paths: string[] = [];
+  vi.mocked(invoke).mockImplementation(async (_command, args) => {
+    const { path } = args as { path: string };
+    paths.push(path);
+    await new Promise<void>((resolve) => release.push(resolve));
+    return {
+      status: 200,
+      headers: {},
+      body: JSON.stringify(
+        path === "/" ? { name: "Native community" } : { policy: null },
+      ),
+    };
+  });
+  const info = communityRequest<CommunityInfo>(community, "info");
+  // Both reads are in flight before either has answered.
+  await vi.waitFor(() => expect(paths).toEqual(["/", "/api/join-policy"]));
+  for (const resolve of release) resolve();
+  await expect(info).resolves.toMatchObject({
+    name: "Native community",
+    policy: null,
+  });
+
+  vi.mocked(invoke).mockImplementation(async (_command, args) => {
+    if ((args as { path: string }).path !== "/")
+      throw new Error("Join policy transport failed");
+    return { status: 503, headers: {}, body: "{}" };
+  });
+  await expect(communityRequest(community, "info")).rejects.toThrow(
+    "Community discovery failed",
+  );
+});
+
 it("mints only bounded invites on the captured community", async () => {
   respond = () => ({
     body: { code: "invite", url: `${community}/invite/invite` },

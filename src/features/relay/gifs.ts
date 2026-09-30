@@ -153,14 +153,35 @@ async function brokerRequest<T>(
   return result;
 }
 
+/** Packaged builds have no broker to remember GIF discovery, so every search
+ * would first re-read NIP-11. Keep the broker's per-relay cache here: only the
+ * supported route is retained, because a relay can enable GIFs while the app
+ * is running. Failed discovery or search is forgotten so capability changes
+ * can be rediscovered on the next request. */
+const nativeSearchPaths = new Map<string, Promise<string | null>>();
+async function nativeSearchPath(community: string, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  let discovery = nativeSearchPaths.get(community);
+  if (!discovery) {
+    // Shared by every caller, so no single caller's signal may cancel it.
+    discovery = nativeRelayInfo(community).then(relayKlipySearchPath);
+    nativeSearchPaths.set(community, discovery);
+    const forget = () => nativeSearchPaths.delete(community);
+    discovery.then((path) => {
+      if (path !== "/gifs/search") forget();
+    }, forget);
+  }
+  const path = await discovery;
+  signal?.throwIfAborted();
+  return path;
+}
+
 export async function relaySupportsKlipy(
   community: string,
   signal?: AbortSignal,
 ) {
-  if (nativeIdentityEnabled()) {
-    const info = await nativeRelayInfo(community, signal);
-    return relayKlipySearchPath(info) === "/gifs/search";
-  }
+  if (nativeIdentityEnabled())
+    return (await nativeSearchPath(community, signal)) === "/gifs/search";
   const info = await brokerRequest<RelayGifSearchInfo>(
     community,
     "gif-info",
@@ -177,23 +198,31 @@ export async function fetchKlipyGifs(
   signal?: AbortSignal,
 ): Promise<KlipyGif[]> {
   const route = nativeIdentityEnabled()
-    ? relayKlipySearchPath(await nativeRelayInfo(community, signal))
+    ? await nativeSearchPath(community, signal)
     : "gifs";
   if (!route) throw new Error("GIF search is unavailable");
   if (nativeIdentityEnabled() && route !== "/gifs/search")
     throw new Error("GIF search is unavailable");
-  const response = await brokerRequest<KlipyResponse>(
-    community,
-    route,
-    {
-      customer_id: customerId(),
-      locale: navigator.language || "en-US",
-      query: query.trim(),
-    },
-    signal,
-  );
-  if (response.result === false) throw new Error("GIF search failed");
-  return normalizeKlipyGifs(response.data?.data ?? []);
+  try {
+    const response = await brokerRequest<KlipyResponse>(
+      community,
+      route,
+      {
+        customer_id: customerId(),
+        locale: navigator.language || "en-US",
+        query: query.trim(),
+      },
+      signal,
+    );
+    if (response.result === false) throw new Error("GIF search failed");
+    return normalizeKlipyGifs(response.data?.data ?? []);
+  } catch (error) {
+    // A failed search may mean the relay disabled GIFs since discovery.
+    // Caller cancellation says nothing about the shared capability.
+    if (nativeIdentityEnabled() && !signal?.aborted)
+      nativeSearchPaths.delete(community);
+    throw error;
+  }
 }
 
 /** URL-only media keeps provider bytes and credentials out of Buzz storage. */

@@ -258,6 +258,7 @@ fn isolated_agent_ipc_probe() {
     use tauri::Manager;
     let app = mock_builder()
         .manage(IdentityHost::fixture())
+        .manage(Uploads::default())
         .invoke_handler(crate::commands())
         .build(crate::app_context())
         .unwrap();
@@ -279,6 +280,38 @@ fn isolated_agent_ipc_probe() {
         )
         .map(|body| body.deserialize::<serde_json::Value>().unwrap())
     };
+    // Empty uploads must fail before copying or networking, preserving the
+    // prepared response shape and releasing upload admission for the same ID.
+    for prepared in [false, true] {
+        let mut headers = tauri::http::HeaderMap::new();
+        headers.insert("x-buzz-community", "https://relay.test".parse().unwrap());
+        headers.insert("x-buzz-upload-id", "empty".parse().unwrap());
+        if prepared {
+            headers.insert("x-buzz-preparation", "video:mov".parse().unwrap());
+        }
+        let result = get_ipc_response(
+            &view,
+            tauri::webview::InvokeRequest {
+                cmd: "relay_upload".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: view.url().unwrap(),
+                body: tauri::ipc::InvokeBody::Raw(Vec::new()),
+                headers,
+                invoke_key: INVOKE_KEY.into(),
+            },
+        );
+        if prepared {
+            let response = result.unwrap().deserialize::<serde_json::Value>().unwrap();
+            assert_eq!(response["status"], 413);
+            assert_eq!(response["body"], r#"{"code":"size"}"#);
+        } else {
+            assert_eq!(
+                result.unwrap_err(),
+                serde_json::json!("File exceeds the supported upload limit")
+            );
+        }
+    }
     let public = invoke("identity_restore", serde_json::json!({})).unwrap();
     let event = invoke(
         "relay_sign",
@@ -1542,4 +1575,98 @@ fn general_signing_never_accepts_read_state_kind() {
         content: String::new(),
     };
     assert!(validate_event("https://relay.test", &event).is_err());
+}
+
+#[tokio::test]
+#[ignore = "local performance measurement; run with --ignored --nocapture"]
+async fn measure_preference_batch_decode() {
+    let host = IdentityHost::fixture();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let blob = serde_json::json!({"v":1,"client_id":"fixture","contexts":{"channel":now}});
+    let event = host
+        .sign_read_state("a".repeat(32), now, blob)
+        .await
+        .unwrap();
+    let events = vec![event; 16];
+    host.decode_read_state(events.clone()).await.unwrap();
+    let started = Instant::now();
+    for _ in 0..100 {
+        std::hint::black_box(host.decode_read_state(events.clone()).await.unwrap());
+    }
+    eprintln!(
+        "read-state batch: 16 slots, 100 iterations: {:?}",
+        started.elapsed()
+    );
+}
+
+#[tokio::test]
+async fn upload_hash_moves_the_buffer_and_keeps_exact_bytes() {
+    let bytes = vec![0xa5; 1024 * 1024];
+    let pointer = bytes.as_ptr() as usize;
+    let expected = format!("{:x}", Sha256::digest(&bytes));
+    let (body, hash) = hash_upload(bytes).await.unwrap();
+    assert_eq!(body.as_ptr() as usize, pointer);
+    assert_eq!(hash, expected);
+    assert!(body.iter().all(|byte| *byte == 0xa5));
+    assert!(hash_upload(Vec::new()).await.is_err());
+    assert!(validate_upload_size(0).is_err());
+    assert!(validate_upload_size(MAX_UPLOAD + 1).is_err());
+    assert!(validate_upload_size(MAX_UPLOAD).is_ok());
+}
+
+#[tokio::test]
+async fn preference_batches_reject_invalid_ciphertext_after_signature_verification() {
+    let host = IdentityHost::fixture();
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs();
+    let sidebar = host
+        .sign_sidebar(
+            "channel-stars".into(),
+            serde_json::json!({"version":1,"channels":{}}),
+            now,
+        )
+        .await
+        .unwrap();
+    let read = host
+        .sign_read_state(
+            "a".repeat(32),
+            now,
+            serde_json::json!({"v":1,"client_id":"fixture","contexts":{"channel":now}}),
+        )
+        .await
+        .unwrap();
+    for (event, sidebar_record) in [(sidebar, true), (read, false)] {
+        let payload = STANDARD.decode(event["content"].as_str().unwrap()).unwrap();
+        let mut version = payload.clone();
+        version[0] = 3;
+        let mut mac = payload;
+        *mac.last_mut().unwrap() ^= 1;
+        for content in [
+            STANDARD.encode(version),
+            STANDARD.encode(mac),
+            "invalid base64".into(),
+        ] {
+            let invalid = host
+                .sign(EventTemplate {
+                    created_at: now,
+                    kind: 30078,
+                    tags: serde_json::from_value(event["tags"].clone()).unwrap(),
+                    content,
+                })
+                .await
+                .unwrap();
+            verify(&invalid);
+            let result = if sidebar_record {
+                host.decode_sidebar(vec![invalid]).await
+            } else {
+                host.decode_read_state(vec![invalid]).await
+            };
+            assert!(result.is_err());
+        }
+    }
 }

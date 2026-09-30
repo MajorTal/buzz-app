@@ -760,7 +760,19 @@ pub(crate) async fn relay_upload(
     };
     // Dropping the request future closes the connection, so a cancelled upload
     // stops sending and releases its buffer.
-    let result = if let Some(mode) = preparation.as_deref() {
+    let result = if let Err(error) = validate_upload_size(body.len()) {
+        // Preserve preparation's structured size error, but reject before copying
+        // the IPC buffer. Cancellation/admission still takes precedence.
+        if preparation.is_some() {
+            Ok(RelayResponse {
+                status: media_preparation::PreparationError::Size.status(),
+                headers: BTreeMap::new(),
+                body: serde_json::json!({"code": "size"}).to_string(),
+            })
+        } else {
+            Err(error)
+        }
+    } else if let Some(mode) = preparation.as_deref() {
         upload_prepared(host.inner(), url, body.clone(), mode, &mut cancelled).await
     } else {
         tokio::select! {
@@ -804,19 +816,35 @@ async fn upload_prepared(
     }
 }
 
+fn validate_upload_size(size: usize) -> Result<()> {
+    if size == 0 || size > MAX_UPLOAD {
+        return Err("File exceeds the supported upload limit".into());
+    }
+    Ok(())
+}
+
+async fn hash_upload(body: Vec<u8>) -> Result<(Vec<u8>, String)> {
+    validate_upload_size(body.len())?;
+    // A supported video can be 500 MiB. Hash it off the async executor, moving
+    // the same allocation back to the HTTP body rather than making another copy.
+    tokio::task::spawn_blocking(move || {
+        let hash = format!("{:x}", Sha256::digest(&body));
+        (body, hash)
+    })
+    .await
+    .map_err(|_| "Upload hashing could not complete".into())
+}
+
 async fn upload(
     host: &IdentityHost,
     url: Url,
     kind: Option<&str>,
     body: Vec<u8>,
 ) -> Result<RelayResponse> {
-    if body.is_empty() || body.len() > MAX_UPLOAD {
-        return Err("File exceeds the supported upload limit".into());
-    }
     let kind = kind
         .filter(|kind| valid_type(kind))
         .unwrap_or("application/octet-stream");
-    let hash = format!("{:x}", Sha256::digest(&body));
+    let (body, hash) = hash_upload(body).await?;
     let auth = blossom_auth(
         host,
         &url,

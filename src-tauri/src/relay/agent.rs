@@ -134,14 +134,14 @@ fn verified(event: &AgentEvent) -> Result<()> {
     {
         return Err("Invalid agent envelope".into());
     }
-    let bytes = serde_json::to_vec(&json!([
+    let bytes = serde_json::to_vec(&(
         0,
-        event.pubkey,
+        &event.pubkey,
         event.created_at,
         event.kind,
-        event.tags,
-        event.content
-    ]))
+        &event.tags,
+        &event.content,
+    ))
     .map_err(|_| "Invalid agent envelope")?;
     let digest: [u8; 32] = Sha256::digest(bytes).into();
     if hex_digest(&digest) != event.id {
@@ -382,9 +382,8 @@ fn decode_memories_with_key(
     let mut partial = events.len() == 256;
     for raw in events {
         let candidate = (|| -> Result<(String, u64, String, Value)> {
-            let event: AgentEvent =
-                serde_json::from_value(raw.clone().ok_or("Invalid memory envelope")?)
-                    .map_err(|_| "Invalid memory envelope")?;
+            let event = AgentEvent::deserialize(raw.as_ref().ok_or("Invalid memory envelope")?)
+                .map_err(|_| "Invalid memory envelope")?;
             verified(&event)?;
             let d = event
                 .tags
@@ -400,13 +399,19 @@ fn decode_memories_with_key(
             {
                 return Err("Invalid memory envelope".into());
             }
-            let text = decrypt(secret, agent, &event.content)?;
             let payload = STANDARD
                 .decode(&event.content)
                 .map_err(|_| "Invalid memory envelope")?;
-            if payload.len() < 33 {
+            // Reuse the batch's ECDH result and decode base64 only once.
+            // v2::decrypt_to_bytes authenticates but does not check the version byte.
+            if payload.first() != Some(&2) {
                 return Err("Invalid memory envelope".into());
             }
+            let text = String::from_utf8(
+                nip44::v2::decrypt_to_bytes(&conversation, &payload)
+                    .map_err(|_| "Invalid memory envelope")?,
+            )
+            .map_err(|_| "Invalid memory envelope")?;
             if STANDARD.encode(&payload) != event.content
                 || nip44::v2::encrypt_to_bytes_with_nonce(
                     &conversation,
@@ -729,6 +734,34 @@ mod tests {
         .unwrap();
         assert_eq!(result["entries"][0]["body"], "remember this");
         assert_eq!(result["partial"], false);
+        // The low-level decoder must not admit unsupported versions, bad MACs,
+        // or non-UTF-8 plaintext after switching to a batch-local key.
+        let payload = STANDARD.decode(&memory.content).unwrap();
+        let mut wrong_version = payload.clone();
+        wrong_version[0] = 3;
+        let mut bad_mac = payload;
+        *bad_mac.last_mut().unwrap() ^= 1;
+        let invalid_utf8 =
+            nip44::v2::encrypt_to_bytes_with_nonce(&conversation, &[0xff], [7; 32]).unwrap();
+        for content in [
+            STANDARD.encode(wrong_version),
+            STANDARD.encode(bad_mac),
+            STANDARD.encode(invalid_utf8),
+            "invalid base64".into(),
+        ] {
+            let invalid = signed_event(&agent_secret, 30174, memory.tags.clone(), content);
+            let decoded = decode_memories_with_key(
+                &viewer_secret,
+                &viewer,
+                &viewer,
+                &agent,
+                &[Some(json!(memory)), Some(json!(invalid))],
+            )
+            .unwrap();
+            assert_eq!(decoded["entries"].as_array().unwrap().len(), 1);
+            assert_eq!(decoded["entries"][0]["body"], "remember this");
+            assert_eq!(decoded["partial"], true);
+        }
         assert!(library_field(&json!({"name": "é".repeat(256)}), "name", 256).is_ok());
         assert!(library_field(&json!({"name": "é".repeat(257)}), "name", 256).is_err());
         let listing_wire = format!("[{},{{\"unknown\":\"\\ud800\"}}]", json!(memory));
@@ -834,6 +867,24 @@ mod tests {
         )
         .unwrap();
         assert_eq!(partial["partial"], true);
+        let mut tampered = memory.clone();
+        let swapped = if &tampered.content[100..101] == "A" {
+            "B"
+        } else {
+            "A"
+        };
+        tampered.content.replace_range(100..101, swapped);
+        resign(&mut tampered, &agent_secret);
+        let rejected = decode_memories_with_key(
+            &viewer_secret,
+            &viewer,
+            &viewer,
+            &agent,
+            &[Some(json!(tampered))],
+        )
+        .unwrap();
+        assert_eq!(rejected["entries"].as_array().unwrap().len(), 0);
+        assert_eq!(rejected["partial"], true);
         assert!(decode_memories_with_key(&viewer_secret, &agent, &viewer, &agent, &[]).is_err());
 
         let observer = signed_event(
@@ -860,6 +911,60 @@ mod tests {
         observer.tags.push(vec!["p".into(), viewer.clone()]);
         resign(&mut observer, &agent_secret);
         assert!(decode_observer_with_key(&viewer_secret, &viewer, &observer).is_err());
+    }
+
+    #[test]
+    #[ignore = "local performance measurement; run with --ignored --nocapture"]
+    fn measure_memory_batch_decode() {
+        let (secret, viewer) = fixture();
+        let agent_secret = [2; 32];
+        let agent = signed_event(&agent_secret, 1, vec![], String::new()).pubkey;
+        let conversation = ConversationKey::derive(
+            &NostrSecretKey::from_slice(&agent_secret).unwrap(),
+            &NostrPublicKey::from_hex(&viewer).unwrap(),
+        )
+        .unwrap();
+        let events: Vec<_> = (0..256)
+            .map(|index| {
+                let name = format!("mem/note-{index}");
+                let mut mac = Hmac::<Sha256>::new_from_slice(conversation.as_bytes()).unwrap();
+                mac.update(b"agent-memory/v1/d-tag\0");
+                mac.update(name.as_bytes());
+                let content = json!({"slug": name, "value": "x".repeat(1024)}).to_string();
+                let encrypted = STANDARD.encode(
+                    nip44::v2::encrypt_to_bytes_with_nonce(
+                        &conversation,
+                        content.as_bytes(),
+                        [7; 32],
+                    )
+                    .unwrap(),
+                );
+                Some(json!(signed_event(
+                    &agent_secret,
+                    30174,
+                    vec![
+                        vec!["d".into(), hex_digest(&mac.finalize().into_bytes())],
+                        vec!["p".into(), viewer.clone()],
+                    ],
+                    encrypted
+                )))
+            })
+            .collect();
+        for _ in 0..2 {
+            decode_memories_with_key(&secret, &viewer, &viewer, &agent, &events).unwrap();
+        }
+        let started = std::time::Instant::now();
+        for _ in 0..20 {
+            let result =
+                decode_memories_with_key(&secret, &viewer, &viewer, &agent, &events).unwrap();
+            assert_eq!(result["entries"].as_array().unwrap().len(), 256);
+            assert_eq!(result["partial"], true);
+            std::hint::black_box(result);
+        }
+        eprintln!(
+            "memory batch: 256 x 1 KiB, 20 iterations: {:?}",
+            started.elapsed()
+        );
     }
 
     fn resign(event: &mut AgentEvent, secret: &[u8; 32]) {

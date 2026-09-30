@@ -17,13 +17,18 @@ export async function nativeCommunityRequest(
 ): Promise<unknown> {
   const signal = AbortSignal.timeout(25_000);
   if (route === "info") {
-    const info = await nativeRelayInfo(community, signal);
-    const response = await nativeRelayRequest(
+    // Independent reads: issue both at once rather than paying two round trips.
+    const discovery = nativeRelayInfo(community, signal);
+    const joinPolicy = nativeRelayRequest(
       community,
       "/api/join-policy",
       undefined,
       signal,
     );
+    // A discovery failure is reported first; the policy outcome is then unused.
+    joinPolicy.catch(() => {});
+    const info = await discovery;
+    const response = await joinPolicy;
     const raw =
       response.status === 404 ? null : (await readResponse(response)).policy;
     if (

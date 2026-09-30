@@ -1,4 +1,5 @@
 //! One create-only human identity. Never consult legacy, agent, file or environment keys.
+use base64::{engine::general_purpose::STANDARD, Engine as _};
 use bech32::{primitives::decode::CheckedHrpstring, Bech32, Hrp};
 use nostr::{
     event::Event,
@@ -21,6 +22,24 @@ const SERVICE: &str = if cfg!(debug_assertions) {
 } else {
     "dev.local.buzz.foundation.identity"
 };
+
+// Batch-local conversation keys avoid repeating ECDH for every self-encrypted slot.
+// Callers enforce their encoded-payload budget before reaching this helper.
+fn decrypt_with_conversation(
+    conversation: &nip44::v2::ConversationKey,
+    content: &str,
+) -> Result<String> {
+    let payload = STANDARD
+        .decode(content)
+        .map_err(|_| "Invalid encrypted record")?;
+    // The low-level v2 decoder does not validate the version byte itself.
+    if payload.first() != Some(&2) {
+        return Err("Invalid encrypted record".into());
+    }
+    let bytes = nip44::v2::decrypt_to_bytes(conversation, &payload)
+        .map_err(|_| "Invalid encrypted record")?;
+    String::from_utf8(bytes).map_err(|_| "Invalid encrypted record".into())
+}
 
 // No Debug/Serialize: only deliberate export may return the secret to the main UI.
 struct Key(Zeroizing<[u8; 32]>);
@@ -439,6 +458,8 @@ impl IdentityHost {
             let secret = NostrSecretKey::from_slice(key.0.as_ref())
                 .map_err(|_| "Invalid sidebar records")?;
             let public = Keys::new(secret.clone()).public_key();
+            let conversation = nip44::v2::ConversationKey::derive(&secret, &public)
+                .map_err(|_| "Invalid sidebar record")?;
             let mut decoded = serde_json::Map::new();
             for raw in events {
                 let tags = raw["tags"].as_array().ok_or("Invalid sidebar record")?;
@@ -460,7 +481,7 @@ impl IdentityHost {
                 {
                     return Err("Invalid sidebar record".into());
                 }
-                let plaintext = nip44::decrypt(&secret, &public, &event.content)
+                let plaintext = decrypt_with_conversation(&conversation, &event.content)
                     .map_err(|_| "Invalid sidebar record")?;
                 if plaintext.len() > 128 * 1024 {
                     return Err("Sidebar plaintext budget exceeded".into());
@@ -554,6 +575,8 @@ impl IdentityHost {
             let secret = NostrSecretKey::from_slice(key.0.as_ref())
                 .map_err(|_| "Invalid read-state event")?;
             let public = Keys::new(secret.clone()).public_key();
+            let conversation = nip44::v2::ConversationKey::derive(&secret, &public)
+                .map_err(|_| "Invalid read-state event")?;
             let mut result = Vec::new();
             for raw in events {
                 if serde_json::to_vec(&raw)
@@ -582,7 +605,7 @@ impl IdentityHost {
                 if event.kind.as_u16() != 30078 || event.pubkey != public {
                     return Err("Invalid read-state event".into());
                 }
-                let plaintext = nostr::nips::nip44::decrypt(&secret, &public, &event.content)
+                let plaintext = decrypt_with_conversation(&conversation, &event.content)
                     .map_err(|_| "Invalid read-state event")?;
                 if plaintext.len() > 128 * 1024 {
                     return Err("Read-state plaintext capacity exceeded".into());

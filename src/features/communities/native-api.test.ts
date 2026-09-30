@@ -5,6 +5,7 @@ import {
   communityRequest,
   inspectProfile,
   publishProfile,
+  requestLeave,
   type CommunityInfo,
 } from "./api";
 import { keypair, signed } from "../relay/testing";
@@ -200,6 +201,79 @@ it("authorizes a new agent only through the native pending-create command", asyn
     communityRequest(community, "authorize-agent", { owner: key.pubkey }),
   ).rejects.toThrow("Invalid agent owner authorization");
   expect(invoke).toHaveBeenCalledOnce();
+});
+
+it("signs the NIP-43 leave request for the community and classifies the relay's answer", async () => {
+  respond = (path, body) =>
+    path === "/events"
+      ? {
+          body: {
+            accepted: true,
+            event_id: (body as { id: string }).id,
+            message: "",
+          },
+        }
+      : { body: {} };
+  await expect(requestLeave(community)).resolves.toBe("left");
+  expect(requests.map((r) => r.path)).toEqual(["/events"]);
+  const sent = requests[0]?.body as {
+    kind: number;
+    content: string;
+    tags: string[][];
+    pubkey: string;
+    created_at: number;
+  };
+  expect(sent).toMatchObject({
+    kind: 28936,
+    content: "",
+    tags: [["-"]],
+    pubkey: key.pubkey,
+  });
+  expect(Math.abs(sent.created_at - Date.now() / 1000)).toBeLessThan(5);
+  expect(fetch).not.toHaveBeenCalled();
+  // A relay that no longer counts the viewer as a member is an absence, not a failure.
+  for (const error of [
+    "invalid: you are not a relay member",
+    "invalid: relay membership is not enabled",
+  ]) {
+    respond = () => ({ status: 400, body: { error } });
+    await expect(requestLeave(community)).resolves.toBe("already-absent");
+  }
+  // A ban is refused at authentication, so no retry could ever succeed.
+  respond = () => ({
+    status: 400,
+    body: { error: "blocked: you are banned from this community" },
+  });
+  await expect(requestLeave(community)).resolves.toBe("access-revoked");
+  respond = () => ({
+    status: 400,
+    body: { error: "invalid: relay owner cannot leave" },
+  });
+  await expect(requestLeave(community)).rejects.toThrow(
+    "invalid: relay owner cannot leave",
+  );
+  // Unlisted relay text never reaches the viewer verbatim.
+  respond = () => ({
+    status: 400,
+    body: { error: "invalid: database error: secret" },
+  });
+  const unlisted = await requestLeave(community).then(
+    () => "resolved",
+    (error: Error) => error.message,
+  );
+  expect(unlisted).not.toBe("resolved");
+  expect(unlisted).not.toContain("secret");
+  // Receipts must name the signed request and accept it.
+  respond = () => ({ body: { accepted: true, event_id: "unrelated" } });
+  await expect(requestLeave(community)).rejects.toThrow("not confirmed");
+  respond = (_path, body) => ({
+    body: {
+      accepted: false,
+      event_id: (body as { id: string }).id,
+      message: "duplicate",
+    },
+  });
+  await expect(requestLeave(community)).rejects.toThrow("not confirmed");
 });
 
 it("keeps development requests on the existing broker even inside Tauri", async () => {

@@ -4,6 +4,8 @@ import { createCommunities } from "./service";
 import { communityDestination } from "./destination";
 import * as destinations from "./destination";
 import { flush } from "../relay/testing";
+import type { ReadTransport } from "../relay/transport";
+import { recordReaction } from "../messages/quick-reactions";
 import { readView, writeView } from "../../shared/view-state";
 
 const viewer = "a".repeat(64);
@@ -20,6 +22,11 @@ function setup(saved?: unknown, savedViewer = viewer, openRelay = "") {
   vi.stubGlobal("localStorage", {
     getItem: (key: string) => storage.get(key) ?? null,
     setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    key: (index: number) => [...storage.keys()][index] ?? null,
+    get length() {
+      return storage.size;
+    },
   });
   vi.stubGlobal(
     "fetch",
@@ -501,6 +508,274 @@ it("keeps a saved record, including Personal space, instead of the configured re
   expect(localStorage.getItem(`buzz-client.v1:${viewer}`)).toBe(
     JSON.stringify(saved),
   );
+});
+
+it("leave forgets the selected community: Personal space, a disposed session and purged device state", async () => {
+  const client = setup();
+  await flush();
+  client.joined(
+    { id: "primary", name: "Primary" },
+    { name: "Local", picture: "" },
+  );
+  await flush();
+  client.joined(
+    { id: "secondary", name: "Secondary" },
+    { name: "Local", picture: "" },
+  );
+  await flush();
+  client.select("primary");
+  const primaryScope = `${communityDestination("primary").url}:${viewer}`;
+  const secondaryScope = `${communityDestination("secondary").url}:${viewer}`;
+  writeView(primaryScope, "draft:general", "unsent");
+  writeView(primaryScope, "channel", "general");
+  writeView(secondaryScope, "draft:general", "kept");
+  const sessions = () => requests.filter((url) => url.endsWith("/session"));
+  const before = sessions().length;
+  // Every store cleared, so there is nothing to report.
+  expect(await client.leave("primary")).toEqual([]);
+  expect(client.snapshot()).toMatchObject({
+    selected: null,
+    memberships: [{ id: "secondary", name: "Secondary" }],
+  });
+  expect(client.relay.snapshot().status).toBe("disconnected");
+  expect(
+    JSON.parse(localStorage.getItem(`buzz-client.v1:${viewer}`) ?? "null"),
+  ).toMatchObject({
+    memberships: [{ id: "secondary", name: "Secondary" }],
+    selected: null,
+  });
+  // Only the left community's partition is gone.
+  expect(readView(primaryScope, "draft:general", "")).toBe("");
+  expect(readView(primaryScope, "channel", "")).toBe("");
+  expect(readView(secondaryScope, "draft:general", "")).toBe("kept");
+  // The retained session was disposed: rejoining connects afresh.
+  client.joined(
+    { id: "primary", name: "Primary" },
+    { name: "Local", picture: "" },
+  );
+  await flush();
+  await flush();
+  expect(sessions()).toHaveLength(before + 1);
+  expect(sessions().at(-1)).toBe("/api/relay/primary/session");
+  expect(client.relay.snapshot().status).toBe("ready");
+});
+
+it("leave of an inactive community keeps the selection and its session; unknown ids are a no-op", async () => {
+  const client = setup();
+  await flush();
+  client.joined(
+    { id: "primary", name: "Primary" },
+    { name: "Local", picture: "" },
+  );
+  await flush();
+  client.joined(
+    { id: "secondary", name: "Secondary" },
+    { name: "Local", picture: "" },
+  );
+  await flush();
+  const active = client.relay.snapshot();
+  await client.leave("primary");
+  expect(client.snapshot()).toMatchObject({
+    selected: "secondary",
+    memberships: [{ id: "secondary" }],
+  });
+  expect(client.relay.snapshot()).toBe(active);
+  const state = client.snapshot();
+  const persisted = localStorage.getItem(`buzz-client.v1:${viewer}`);
+  expect(await client.leave("https://unknown.example")).toEqual([]);
+  expect(client.snapshot()).toBe(state);
+  expect(localStorage.getItem(`buzz-client.v1:${viewer}`)).toBe(persisted);
+});
+
+it("leave still forgets the community when a store will not clear, and logs and returns what remained", async () => {
+  const client = setup();
+  await flush();
+  client.joined(
+    { id: "primary", name: "Primary" },
+    { name: "Local", picture: "" },
+  );
+  await flush();
+  const origin = communityDestination("primary").url;
+  recordReaction(`${origin}:${viewer}`, "🎉");
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  // Key enumeration is what the view and channel-setup sweeps rely on.
+  const denied = new Error("denied");
+  vi.spyOn(localStorage, "key").mockImplementation(() => {
+    throw denied;
+  });
+  const failures = await client.leave("primary");
+  expect(client.snapshot()).toMatchObject({ selected: null, memberships: [] });
+  expect(client.relay.snapshot().status).toBe("disconnected");
+  // The stores that could be cleared were; the rest are named for the caller.
+  expect(
+    localStorage.getItem(`buzz.quick-reactions.v1:${origin}:${viewer}`),
+  ).toBeNull();
+  expect(failures).toEqual([
+    { store: "view state", error: denied },
+    { store: "channel setups", error: denied },
+  ]);
+  expect(warn).toHaveBeenCalledWith(
+    `Couldn't clear view state for ${origin} on this device`,
+    denied,
+  );
+  expect(warn).toHaveBeenCalledWith(
+    `Couldn't clear channel setups for ${origin} on this device`,
+    denied,
+  );
+});
+
+it("leave without a purge forgets the community and disposes its session but keeps its device state", async () => {
+  const client = setup();
+  await flush();
+  client.joined(
+    { id: "primary", name: "Primary" },
+    { name: "Local", picture: "" },
+  );
+  await flush();
+  const scope = `${communityDestination("primary").url}:${viewer}`;
+  writeView(scope, "draft:general", "unsent");
+  writeView(scope, "channel", "general");
+  recordReaction(scope, "🎉");
+  const sessions = () => requests.filter((url) => url.endsWith("/session"));
+  const before = sessions().length;
+  // The banned answer: the relay still holds the membership, so nothing keyed
+  // to this origin and viewer is cleared, and there is nothing to report.
+  expect(await client.leave("primary", { purge: false })).toEqual([]);
+  expect(client.snapshot()).toMatchObject({ selected: null, memberships: [] });
+  expect(client.relay.snapshot().status).toBe("disconnected");
+  expect(
+    JSON.parse(localStorage.getItem(`buzz-client.v1:${viewer}`) ?? "null"),
+  ).toMatchObject({ memberships: [], selected: null });
+  expect(readView(scope, "draft:general", "")).toBe("unsent");
+  expect(readView(scope, "channel", "")).toBe("general");
+  expect(localStorage.getItem(`buzz.quick-reactions.v1:${scope}`)).not.toBe(
+    null,
+  );
+  // The session was disposed all the same: adding the community again by its
+  // URL connects afresh and finds the kept draft.
+  client.joined(
+    { id: "primary", name: "Primary" },
+    { name: "Local", picture: "" },
+  );
+  await flush();
+  await flush();
+  expect(sessions()).toHaveLength(before + 1);
+  expect(client.relay.snapshot().status).toBe("ready");
+  expect(readView(scope, "draft:general", "")).toBe("unsent");
+});
+
+it("a native leave whose device record will not save throws before anything changes", async () => {
+  const nativeViewer = "c".repeat(64);
+  const community = "https://native.example";
+  const saved = {
+    profile: { name: "Native", picture: "", about: "" },
+    memberships: [
+      { id: community, name: "Native community" },
+      { id: "https://other.example", name: "Other" },
+    ],
+    selected: community,
+  };
+  const storage = new Map([
+    [`buzz-client.v1:${nativeViewer}`, JSON.stringify(saved)],
+  ]);
+  vi.stubGlobal("localStorage", {
+    getItem: (key: string) => storage.get(key) ?? null,
+    setItem: (key: string, value: string) => storage.set(key, value),
+    removeItem: (key: string) => storage.delete(key),
+    key: (index: number) => [...storage.keys()][index] ?? null,
+    get length() {
+      return storage.size;
+    },
+  });
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(() => {
+      throw new Error("Broker must not be contacted");
+    }),
+  );
+  // A native transport still connecting; it settles only when its scope is
+  // disposed, which is exactly what this leave must not do.
+  const connect = vi.fn(
+    (_id: string, signal: AbortSignal) =>
+      new Promise<ReadTransport>((_resolve, reject) => {
+        signal.addEventListener("abort", () => reject(signal.reason), {
+          once: true,
+        });
+      }),
+  );
+  const ctx = new Context();
+  roots.push(ctx);
+  const client = createCommunities(
+    ctx,
+    false,
+    undefined,
+    "",
+    undefined,
+    Promise.resolve(nativeViewer),
+    connect,
+  );
+  await flush();
+  expect(client.snapshot().status).toBe("ready");
+  expect(connect).toHaveBeenCalledTimes(1);
+  const scope = `${community}:${nativeViewer}`;
+  writeView(scope, "draft:general", "unsent");
+  const snapshot = client.snapshot();
+  const session = client.relay.snapshot();
+  expect(session.status).toBe("connecting");
+  const persisted = localStorage.getItem(`buzz-client.v1:${nativeViewer}`);
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const full = new Error("Full disk");
+  vi.spyOn(localStorage, "setItem").mockImplementation(() => {
+    throw full;
+  });
+  // The device record is the only copy in a native build, so its save is
+  // required, and it is the only step that throws. The storage error rides
+  // along as the cause so the rail can name it.
+  await expect(client.leave(community)).rejects.toMatchObject({
+    message: "Could not save this community on this device. Try again.",
+    cause: full,
+  });
+  // Nothing changed: the snapshot, the persisted record, the retained session
+  // (still the selected community's, not the disconnected fallback), the
+  // device state, and nothing was disposed or purged to warn about.
+  expect(client.snapshot()).toBe(snapshot);
+  expect(localStorage.getItem(`buzz-client.v1:${nativeViewer}`)).toBe(
+    persisted,
+  );
+  expect(client.relay.snapshot()).toBe(session);
+  expect(readView(scope, "draft:general", "")).toBe("unsent");
+  expect(warn).not.toHaveBeenCalled();
+  // The rail's promise holds: once the store saves, leaving again finishes.
+  vi.mocked(localStorage.setItem).mockRestore();
+  expect(await client.leave(community)).toEqual([]);
+  expect(client.snapshot()).toMatchObject({
+    selected: null,
+    memberships: [{ id: "https://other.example" }],
+  });
+  expect(client.relay.snapshot().status).toBe("disconnected");
+  expect(readView(scope, "draft:general", "")).toBe("");
+});
+
+it("leaving the last community lands on Personal space with an empty saved record", async () => {
+  const client = setup({
+    profile: { name: "Local", picture: "" },
+    memberships: [{ id: "primary", name: "Primary" }],
+    selected: "primary",
+  });
+  await flush();
+  await flush();
+  expect(client.relay.snapshot().status).toBe("ready");
+  // Alternate spellings resolve to the saved canonical id.
+  await client.leave("wss://PRIMARY.example:443/");
+  expect(client.snapshot()).toMatchObject({ memberships: [], selected: null });
+  expect(client.relay.snapshot().status).toBe("disconnected");
+  expect(
+    JSON.parse(localStorage.getItem(`buzz-client.v1:${viewer}`) ?? "null"),
+  ).toEqual({
+    profile: { name: "Local", picture: "", about: "" },
+    memberships: [],
+    selected: null,
+  });
 });
 
 it("hydrates presence intent before acquiring a retained session and keeps it across communities", async () => {

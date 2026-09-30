@@ -33,6 +33,7 @@ import { SearchField } from "../../shared/design-system/ui/SearchField";
 import {
   allowedActions,
   changeMember,
+  inviteMintingAvailable,
   mintInvite,
   type Action,
   type Member,
@@ -58,6 +59,8 @@ const USES = [
 const message = (reason: unknown) =>
   reason instanceof Error ? reason.message : String(reason);
 const STALE = "The member list is out of date. Retry before making changes.";
+const READ_ONLY =
+  "This build can’t create invites or change members, so the member list is read-only here.";
 
 export function CommunityAdmin({
   relay,
@@ -149,6 +152,10 @@ function Members({
   const stale = !!readError;
   // No new command may start from a roster that is stale or being re-read.
   const locked = stale || refreshing;
+  // Invite minting and member changes are broker routes the packaged adapter
+  // does not carry, so a native build shows the roster read-only. This is the
+  // gate the rail applies to its Invite to community item.
+  const canChange = inviteMintingAvailable();
   const baseName = (pubkey: string) =>
     profiles.get(pubkey)?.name || formatPublicKey(pubkey) || pubkey;
   // Every target gets a key qualifier: self-declared names can look identical
@@ -259,12 +266,13 @@ function Members({
       <div className="mt-4 flex justify-end gap-2">
         {refreshButton}
         {/* A stale roster cannot prove the viewer still manages this community. */}
-        {!stale && (
+        {canChange && !stale && (
           <Button variant="primary" onClick={() => setInviting(true)}>
             Invite members
           </Button>
         )}
       </div>
+      {!canChange && <p className="text-body-sm text-muted">{READ_ONLY}</p>}
       {status}
       {error && (
         <p role="alert" className="text-body-sm">
@@ -283,10 +291,12 @@ function Members({
         />
         <ul className="m-0 mt-3 list-none p-0" aria-label="Members">
           {shown.map((member) => {
-            // A stale list must not offer another destructive command.
-            const actions = stale
-              ? []
-              : allowedActions(role, member, member.pubkey === viewer);
+            // A stale list must not offer another destructive command, and a
+            // native build has no route to carry one.
+            const actions =
+              stale || !canChange
+                ? []
+                : allowedActions(role, member, member.pubkey === viewer);
             const label = name(member.pubkey);
             return (
               <li key={member.pubkey} className="flex items-center gap-3 py-2">
@@ -389,18 +399,20 @@ function Members({
           }
         />
       )}
-      <InviteDialog
-        open={inviting}
-        close={() => setInviting(false)}
-        community={community}
-        members={members}
-        owner={role === "owner"}
-        stale={stale}
-        refreshing={refreshing}
-        active={active}
-        retry={() => void refresh()}
-        add={(pubkey, next) => apply({ action: "add", pubkey, role: next })}
-      />
+      {canChange && (
+        <InviteDialog
+          open={inviting}
+          close={() => setInviting(false)}
+          community={community}
+          members={members}
+          owner={role === "owner"}
+          stale={stale}
+          refreshing={refreshing}
+          active={active}
+          retry={() => void refresh()}
+          add={(pubkey, next) => apply({ action: "add", pubkey, role: next })}
+        />
+      )}
     </>
   );
 }

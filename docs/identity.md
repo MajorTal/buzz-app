@@ -86,7 +86,8 @@ and opening direct messages use purpose-bound native commands. Creation kind 900
 advertised only when NIP-11 reports NIP-29 support. NIP-44 stays in the native
 identity owner; recipe plaintext is never returned by a generic decrypt command.
 
-Community admission, kind-0 profile reads/publication and the adapter's advertised
+Community admission, kind-0 profile reads/publication, the NIP-43 leave request
+(kind 28936, signed only in its empty protected shape) and the adapter's advertised
 message/event writes use this identity. [Join recovery](communities.md#packaged-admission-and-recovery)
 records public progress before remote changes. The existing durable outbox retains
 uncertain delivery across restart; retry uses the same signed event with fresh HTTP
@@ -107,8 +108,8 @@ hashes, signs (`upload` + `x`) and sends the exact bytes JavaScript passes it;
 shared TypeScript (`hostUpload`) owns limits, error mapping and descriptor
 validation. JavaScript never signs kind 24242. HEIC and non-MP4 video conversion
 remain dev-broker-only (ffmpeg), so those files upload unconverted and the relay
-may reject them. Repository HTTP and other
-broker-only helpers are not claimed by this adapter. NIP-FI assertion
+may reject them. Owner/admin invite minting and member changes, repository HTTP
+and other broker-only helpers are not claimed by this adapter. NIP-FI assertion
 acquisition is not implemented, so deployments enforcing it are outside acceptance.
 Windows/Linux custody, credential migration and release-signing acceptance remain
 separate limitations.

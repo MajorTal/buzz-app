@@ -210,6 +210,12 @@ fn validate_event(community: &str, event: &EventTemplate) -> Result<()> {
         if !channel_writes::creation(event) {
             return Err("Agent enrollment or channel operation unavailable or invalid".into());
         }
+    } else if event.kind == 28936 {
+        // A NIP-43 leave request revokes the signer's own membership: empty
+        // content and exactly the NIP-70 protected tag, nothing else.
+        if !event.content.is_empty() || event.tags != vec![vec!["-".to_string()]] {
+            return Err("A leave request carries no content or other tags".into());
+        }
     } else if !matches!(
         event.kind,
         0 | 7 | 9 | 1984 | 9000 | 9001 | 20001 | 30030 | 30315 | 40003 | 40100 | 42000

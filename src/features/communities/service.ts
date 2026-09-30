@@ -6,6 +6,7 @@ import { Context } from "@deepseek-ai/cordis";
 import { provideRelay, type RelayData } from "../relay/service";
 import { connectBrokerTransport, type ReadTransport } from "../relay/transport";
 import { communityDestination, isCommunityAlias } from "./destination";
+import { purgeCommunityDeviceState, type PurgeFailure } from "./device-state";
 
 export const PROFILE_ABOUT_MAX_LENGTH = 500;
 export type PersonalProfile = { name: string; picture: string; about?: string };
@@ -56,6 +57,8 @@ export function createCommunities(
   const listeners = new Set<() => void>();
   const relayListeners = new Set<() => void>();
   const sessions = new Map<string, RelayData>();
+  // Each session owns a scope so leaving can dispose exactly that one.
+  const sessionScopes = new Map<string, Context>();
   const scopes: Context[] = [];
   const disconnected = provideRelay(
     newScope(),
@@ -94,10 +97,13 @@ export function createCommunities(
             selected: next.selected ?? selection,
           }),
         );
-    } catch {
+    } catch (error) {
+      // The storage error rides along as the cause so a caller can name it: a
+      // store that never saves should not read as the same retry every time.
       if (required)
         throw new Error(
           "Could not save this community on this device. Try again.",
+          { cause: error },
         );
       // Preferences are best effort; storage failure must not strand a remote join.
     }
@@ -110,8 +116,9 @@ export function createCommunities(
     if (!connect) return disconnected;
     let session = sessions.get(id);
     if (!session) {
+      const scope = newScope();
       session = provideRelay(
-        newScope(),
+        scope,
         (signal) => connect(id, signal),
         presenceActivity,
         identityNames,
@@ -119,6 +126,7 @@ export function createCommunities(
         viewer ? { viewer, scope: communityDestination(id).url } : undefined,
       );
       sessions.set(id, session);
+      sessionScopes.set(id, scope);
       session.subscribe(() => {
         if (state.selected === id) emitRelay();
       });
@@ -296,6 +304,65 @@ export function createCommunities(
       if (sessions.has(membership.id)) sessions.get(membership.id)?.retry();
       else acquire(membership.id);
       emitRelay();
+    },
+    /** Forgets a saved community on this device once its relay has released
+     * the membership (or never held one). Drops the membership, falls back to
+     * Personal space when it was selected, disposes its retained session, then
+     * purges the device state keyed by that origin and viewer. Persistence
+     * follows `joined`: required where the device record is the only copy, and
+     * that save is the only step that throws, before anything has changed.
+     * Everything after it is best effort: a session that would not dispose or
+     * a store that would not clear is logged and returned, never thrown, since
+     * the membership is already gone and only a report can reach the viewer.
+     *
+     * `purge: false` keeps the device state. It is for a relay that refused
+     * the leave because the viewer is banned: the relay still holds the
+     * membership (bans can be timed or lifted), so the drafts and reading
+     * positions keyed by this origin and viewer are kept for the day the
+     * community is added again by its URL. */
+    async leave(
+      id: string,
+      { purge = true }: { purge?: boolean } = {},
+    ): Promise<PurgeFailure[]> {
+      id = communityDestination(id).id;
+      if (!state.memberships.some((m) => m.id === id)) return [];
+      const { viewer } = state;
+      const origin = communityDestination(id).url;
+      update(
+        {
+          memberships: state.memberships.filter((m) => m.id !== id),
+          ...(state.selected === id ? { selected: null } : {}),
+        },
+        true,
+        !!nativeConnect && !live,
+      );
+      const failures: PurgeFailure[] = [];
+      const scope = sessionScopes.get(id);
+      sessions.delete(id);
+      sessionScopes.delete(id);
+      if (scope) {
+        // Every session scope comes from `newScope()`, so this always finds
+        // it; guarding keeps a miss from splicing another community's scope.
+        const index = scopes.indexOf(scope);
+        if (index !== -1) scopes.splice(index, 1);
+        try {
+          await scope.fiber.dispose();
+        } catch (error) {
+          // Reported alongside the purge failures, since only a report can
+          // reach the viewer now, but named for what it is: a session that
+          // would not shut down, not a store that would not clear.
+          console.warn(
+            `Couldn't dispose the session for ${origin} after leaving it`,
+            error,
+          );
+          failures.push({ store: "session", error });
+        }
+      }
+      // The session is gone (or at least detached), so nothing below can
+      // refill the purged stores.
+      if (purge && viewer)
+        failures.push(...(await purgeCommunityDeviceState(origin, viewer)));
+      return failures;
     },
   };
 }

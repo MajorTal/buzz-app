@@ -14,6 +14,7 @@ const childEnv = (extra = {}) => {
 };
 const head = git("rev-parse", "HEAD");
 const design = process.argv.includes("--design");
+const clippy = process.argv.includes("--clippy");
 const refs = readFileSync(0, "utf8")
   .trim()
   .split("\n")
@@ -56,6 +57,16 @@ if (base.status === 0) {
   const source = /^(?:src|dev)\/.*\.(?:[cm]?[jt]sx?)$/s;
   const shared =
     /^(?:package\.json|pnpm-lock\.yaml|(?:vitest|vite)\.config\.[cm]?[jt]s|tsconfig[^/]*\.json|tests\/relay-config\.ts|bin\/)/;
+  const rust =
+    /^(?:crates\/|src-tauri\/|bin\/|rust-toolchain[^/]*|Cargo\.(?:toml|lock)|clippy\.toml)/;
+  if (clippy) {
+    if (!files.some((file) => rust.test(file))) {
+      console.log(
+        "No Rust inputs changed; Clippy runs in CI; remaining checks run in CI.",
+      );
+      process.exit(0);
+    }
+  }
   if (design) {
     const input =
       /^(?:src\/.*\.(?:css|tsx?|jsx?)$|tests\/fixtures\/design-system(?:\/|\.html$)|scripts\/design-system\/|(?:vite|vitest)\.design\.config\.|scripts\/check-push\.mjs$|lefthook\.yml$|\.githooks\/pre-push$)/s;
@@ -77,7 +88,7 @@ if (base.status === 0) {
     related.add("src/shared/theme/service.test.ts");
   if (files.some((file) => file.startsWith("src/")))
     related.add("src/app/pages.integration.test.mjs");
-  if (!design && !full && !related.size) {
+  if (!design && !clippy && !full && !related.size) {
     console.log("No JS unit-test inputs changed; remaining checks run in CI.");
     process.exit(0);
   }
@@ -88,6 +99,26 @@ if (base.status === 0) {
       "--passWithNoTests",
       ...Array.from(related, (file) => resolve(file)),
     ];
+}
+if (clippy) {
+  console.log("Pre-push: Clippy; no installs, tests or browsers.");
+  const result = spawnSync(
+    resolve("bin/cargo"),
+    [
+      // Same invocation as the `native` CI lane and `just scan`; the excluded
+      // vendored patch is still compiled through its workspace dependents.
+      "clippy",
+      "--workspace",
+      "--locked",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings",
+    ],
+    { stdio: "inherit", env: childEnv() },
+  );
+  if (result.error) console.error(result.error.message);
+  process.exit(result.status ?? 1);
 }
 if (design) {
   console.log("Pre-push: design types and guards; no installs or builds.");

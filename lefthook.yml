@@ -17,3 +17,6 @@ check-push:
     - name: design-system
       use_stdin: true
       run: bin/node scripts/check-push.mjs --design
+    - name: rust-clippy
+      use_stdin: true
+      run: bin/node scripts/check-push.mjs --clippy

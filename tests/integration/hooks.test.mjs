@@ -96,7 +96,8 @@ test("both pre-push jobs receive the complete Git input without sharing a read c
   f.write(
     "scripts/check-push.mjs",
     `import { readFileSync, writeFileSync } from "node:fs";
-writeFileSync(process.argv.includes("--design") ? "design-stdin" : "unit-stdin", readFileSync(0));
+const lane = process.argv.includes("--design") ? "design" : process.argv.includes("--clippy") ? "clippy" : "unit";
+writeFileSync(lane + "-stdin", readFileSync(0));
 `,
   );
   const refs =
@@ -110,7 +111,7 @@ writeFileSync(process.argv.includes("--design") ? "design-stdin" : "unit-stdin",
     encoding: "utf8",
   });
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  for (const lane of ["design", "unit"])
+  for (const lane of ["design", "clippy", "unit"])
     assert.equal(
       f.read(`${lane}-stdin`),
       refs,
@@ -376,6 +377,29 @@ function pushFixture(t, changes) {
   // It lives only in this disposable repository, never the source node_modules.
   rmSync(path.join(f.dir, "node_modules"));
   mkdirSync(path.join(f.dir, "node_modules"));
+  // Replace the borrowed bin/ with a fake cargo plus the real pinned hook
+  // tools: push fixtures exercise the Clippy lane's contract without paying
+  // a real cargo build, exactly like the fake Vitest below.
+  rmSync(path.join(f.dir, "bin"));
+  mkdirSync(path.join(f.dir, "bin"));
+  for (const tool of ["node", "lefthook", "pnpm"]) {
+    symlinkSync(
+      path.join(root, `bin/${tool}`),
+      path.join(f.dir, `bin/${tool}`),
+      "file",
+    );
+  }
+  writeFileSync(
+    path.join(f.dir, "bin/cargo"),
+    `#!/bin/sh
+if [ "$1" = "clippy" ]; then
+  printf '%s\\n' "$@" > cargo-args
+  exit "\${BUZZ_FAKE_CARGO_STATUS:-0}"
+fi
+exit 2
+`,
+    { mode: 0o755 },
+  );
   symlinkSync(
     path.join(root, "node_modules/typescript"),
     path.join(f.dir, "node_modules/typescript"),
@@ -434,9 +458,9 @@ test("installed pre-push forwards stdin and runs related tests with literal path
 
 for (const [file, content] of [
   ["notes.md", "# notes\n"],
-  ["crates/probe.rs", "fn main() {}\n"],
+  ["docs/probe.md", "# docs\n"],
 ]) {
-  test(`${file}-only push skips both validation jobs`, (t) => {
+  test(`${file}-only push skips all validation jobs`, (t) => {
     const f = pushFixture(t, { [file]: content });
     f.write("src/bad.css", ".root { gap: 8px; }\n");
     const result = f.push();
@@ -449,9 +473,52 @@ for (const [file, content] of [
       result.stdout + result.stderr,
       /No design-system inputs changed/,
     );
+    assert.match(result.stdout + result.stderr, /No Rust inputs changed/);
     assert.throws(() => f.args(), /ENOENT/);
   });
 }
+
+test("a Rust-only push runs Clippy and blocks the push on a lint failure", (t) => {
+  const f = pushFixture(t, {
+    "crates/probe/src/lib.rs": "pub fn value() -> usize {\n    2\n}\n",
+  });
+  const result = f.push();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /Pre-push: Clippy/);
+  assert.match(result.stdout + result.stderr, /No JS unit-test inputs changed/);
+  assert.deepEqual(f.read("cargo-args").trim().split("\n"), [
+    "clippy",
+    "--workspace",
+    "--locked",
+    "--all-targets",
+    "--",
+    "-D",
+    "warnings",
+  ]);
+  const failed = f.run(
+    "git",
+    ["push", "./remote.git", "HEAD:refs/heads/fail"],
+    {
+      BUZZ_FAKE_CARGO_STATUS: "1",
+    },
+  );
+  assert.notEqual(failed.status, 0, failed.stdout + failed.stderr);
+  assert.match(failed.stdout + failed.stderr, /Pre-push: Clippy/);
+  assert.notEqual(
+    f.run("git", ["--git-dir=remote.git", "rev-parse", "refs/heads/fail"])
+      .status,
+    0,
+    "push reached the remote despite the Clippy failure",
+  );
+});
+
+test("JS-only pushes skip Clippy; the lane stays independent of unit-test skip", (t) => {
+  const f = pushFixture(t, { "src/value.ts": "export const value = 1;\n" });
+  const result = f.push();
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout + result.stderr, /No Rust inputs changed/);
+  assert.throws(() => f.read("cargo-args"), /ENOENT/);
+});
 
 test("shared config and unknown base conservatively run all JS unit tests", (t) => {
   const f = pushFixture(t, { "vitest.config.ts": "export default {};\n" });

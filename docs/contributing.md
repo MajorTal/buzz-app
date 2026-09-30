@@ -280,33 +280,42 @@ relevant integration evidence, not an automatic local full scan.
 
 Pre-push runs the project TypeScript check (`tsc --noEmit`), then Vitest tests
 related to the branch's changed JS/TS inputs, using the locally available merge
-base with `origin/main`. Documentation-only
-and native-only pushes skip this runner. Shared JS configuration/dependency
+base with `origin/main`. Documentation-only, native-only and Rust-only pushes
+skip this runner. Shared JS configuration/dependency
 changes, source deletions, or a missing base run the full Vitest suite instead.
 The selector explicitly includes theme tests for their directly read CSS/bootstrap
 inputs, and the app composition test for source edits that its Vite loader hides
 from the import graph.
 A separate **design-system** job runs `design:typecheck` and `design:check` after
-types/unit tests. The jobs are serialized because pinned Lefthook 2.1.12 shares
+types/unit tests. A separate **rust-clippy** job runs the pinned Clippy over the
+whole Cargo workspace with the same invocation as the `native` CI lane
+(`cargo clippy --workspace --locked --all-targets -- -D warnings`); Rust-only
+changes do not run the JS/test lane, and its first cold build can take minutes.
+The jobs are serialized because pinned Lefthook 2.1.12 shares
 a mutable stdin reader: parallel consumers can lose Git refs and silently skip
 checks. Source CSS/JS/TS, design viewer/guard files, shared
 configuration/dependencies and hook-runner changes select this job; a missing base
 runs it conservatively. Its selection is independent of the unit-test skip, so
-CSS-only and viewer-only errors still block a push. Documentation-only and
-native-only pushes skip both jobs. Both selected jobs must pass.
+CSS-only and viewer-only errors still block a push. The Clippy lane is likewise
+selected independently: Rust source (`crates/`, `src-tauri/`), the workspace
+manifests/lockfile, Clippy or Rust toolchain configuration, and changes under
+`bin/` (the pinned toolchain) select it. Documentation-only pushes skip all
+three jobs. Every selected job must pass.
 On a busy machine, set `BUZZ_TEST_WORKERS=2 git push` to limit Vitest worker
 concurrency in the hook. The optional value must be a positive integer; leaving
 it unset preserves Vitest's default. This also applies to direct Vitest runs and
 does not change test selection, timeouts, assertions, or retries.
 
-Neither job fetches, installs dependencies, formats, builds Rust, or starts browsers.
-The design job disables pnpm dependency auto-repair. Install dependencies when
-switching branches, not during a push.
+Neither the JS nor design job fetches, installs dependencies, formats, or starts
+browsers; the design job disables pnpm dependency auto-repair. The Clippy job
+runs no builds beyond Clippy's own check pipeline, no tests and no browsers;
+its first cold run downloads dependencies and can take minutes. Install
+dependencies when switching branches, not during a push.
 
 This is advisory coverage of the current working tree, not a replacement for CI:
 uncommitted edits can affect results, dynamic dependencies may not be selected,
-and non-HEAD refs are explicitly left to CI. Type errors, design violations and test
-failures block the push. The type checks use `tsconfig.json` and
+and non-HEAD refs are explicitly left to CI. Type errors, design violations, test
+failures and Clippy warnings block the push. The type checks use `tsconfig.json` and
 `tsconfig.design.json`; they do not typecheck plain JavaScript browser tests or
 prove runtime service provisioning.
 Do not edit files concurrently with hooks. First-use Hermit tool downloads can

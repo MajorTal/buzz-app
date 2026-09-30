@@ -16,7 +16,7 @@ import type { RelayReader, ReadOptions, Priority } from "./reader";
 import type { ProfileDirectory } from "./profile-directory";
 import { parseWindow, windowFilter, type WindowCursor } from "./window";
 import { readSessionWindow } from "./session-window";
-import { ByteLru, byteSize } from "./budget";
+import { ByteLru, byteSize, listByteSize } from "./budget";
 import type { HeadPersistence, SavedHead } from "./persistence";
 import { createMediaPreparation, saveData } from "./media";
 import { relayDebug } from "./debug";
@@ -161,6 +161,9 @@ export function createChannelStore(
     events: readonly RelayEvent[];
     preview?: string | undefined;
   }>(64, 4 * 1024 * 1024);
+  /** `byteSize` of a tail, without serializing its retained events again. */
+  const tailBytes = (tail: NonNullable<ReturnType<typeof tails.peek>>) =>
+    byteSize({ ...tail, events: [] }) - 2 + listByteSize(tail.events);
   let media = createMediaPreparation();
   const controllers = new Set<AbortController>();
   const accessVersions = new Map<string, number>();
@@ -1730,7 +1733,8 @@ export function createChannelStore(
               ).values(),
             ]),
           );
-      tails.set(channelId, { events: retained, preview });
+      const tail = { events: retained, preview };
+      tails.set(channelId, tail, tailBytes(tail));
     }
     for (const state of windows.values()) {
       if (disposed || generation !== epoch) return;
@@ -1769,7 +1773,7 @@ export function createChannelStore(
       let retained = [...state.events, ...incoming];
       let limited = false;
       if (
-        byteSize(retained) > maxHistoryBytes ||
+        listByteSize(retained) > maxHistoryBytes ||
         retained.filter(
           (event) => channelRowKind(event.kind) && !localIds.has(event.id),
         ).length > maxHistoryRows
@@ -1792,7 +1796,7 @@ export function createChannelStore(
                 (tag) => tag[0] === "e" && keep.has(tag[1] ?? ""),
               )),
         );
-        while (retained.length && byteSize(retained) > maxHistoryBytes)
+        while (retained.length && listByteSize(retained) > maxHistoryBytes)
           retained.splice(0, Math.max(1, Math.ceil(retained.length / 4)));
         const retainedIds = new Set(retained.map((event) => event.id));
         for (const id of state.traffic.keys())
@@ -1809,11 +1813,10 @@ export function createChannelStore(
     for (const channelId of changedChannels) {
       const tail = tails.peek(channelId);
       const state = windows.get(channelId);
-      if (tail && state)
-        tails.set(channelId, {
-          ...tail,
-          preview: messagePreview(state.snapshot.rows),
-        });
+      if (tail && state) {
+        const next = { ...tail, preview: messagePreview(state.snapshot.rows) };
+        tails.set(channelId, next, tailBytes(next));
+      }
     }
     setList(list);
   }

@@ -16,6 +16,7 @@ import {
   type FocusEvent,
   type ReactNode,
 } from "react";
+import { useListedChannel } from "../relay/listed-channel";
 import type { RelaySession } from "../relay/session";
 import type { UnreadCapability } from "../relay/unread";
 import { MediaAttachment, type MediaPlayback } from "./MediaAttachment";
@@ -44,13 +45,6 @@ import { MenuIcon, MenuItem } from "../../shared/design-system/ui/Menu";
 import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import { ReportMessageDialog } from "./ReportMessageDialog";
 import { messageCopyLink, messageCopyText } from "./message-copy";
-
-const emptySubscribe = () => () => {};
-const EMPTY_CHANNEL_LIST = Object.freeze({
-  status: "unavailable" as const,
-  channels: Object.freeze([]),
-});
-const emptyChannelList = () => EMPTY_CHANNEL_LIST;
 
 export type MessageRowProps = {
   row: ChannelMessage;
@@ -166,13 +160,26 @@ export const MessageRow = memo(function MessageRow({
     row.channelId,
     row.threadRootId ?? row.id,
   );
-  const channelList = useSyncExternalStore(
-    session?.channels.subscribeList ?? emptySubscribe,
-    session?.channels.list ?? emptyChannelList,
-    session?.channels.list ?? emptyChannelList,
+  const channels = session?.channels;
+  const listed = useListedChannel(
+    channels,
+    row.channelId,
+    (channel) => !!channel,
   );
-  const cached = channelList.channels.some(
-    (channel) => channel.id === row.channelId && channel.cached,
+  const cached = useListedChannel(
+    channels,
+    row.channelId,
+    (channel) => !!channel?.cached,
+  );
+  const archived = useListedChannel(
+    channels,
+    row.channelId,
+    (channel) => !!channel?.archived,
+  );
+  const readOnly = useListedChannel(
+    channels,
+    row.channelId,
+    (channel) => !!channel?.readOnly,
   );
   const unreadLabel =
     threadUnread?.manual === "local-only"
@@ -212,12 +219,9 @@ export const MessageRow = memo(function MessageRow({
     scope &&
     session.outbox?.supports(7) &&
     session.outbox.supports(5) &&
-    (!session.channels.get ||
-      channelList.channels.some((channel) => channel.id === row.channelId)) &&
-    !channelList.channels.find((channel) => channel.id === row.channelId)
-      ?.archived &&
-    !channelList.channels.find((channel) => channel.id === row.channelId)
-      ?.readOnly
+    (!session.channels.get || listed) &&
+    !archived &&
+    !readOnly
   );
   const rowRef = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
@@ -415,14 +419,8 @@ export const MessageRow = memo(function MessageRow({
                   !!(
                     row.delivery && !["accepted", "seen"].includes(row.delivery)
                   ) ||
-                  !!channelList.channels.find(
-                    (channel) => channel.id === row.channelId,
-                  )?.archived ||
-                  (!!session?.channels.get &&
-                    !channelList.channels.some(
-                      (channel) =>
-                        channel.id === row.channelId && !channel.readOnly,
-                    ))
+                  archived ||
+                  (!!session?.channels.get && (!listed || readOnly))
                 }
                 link={messageCopyLink(row, scope)}
                 copyText={() =>

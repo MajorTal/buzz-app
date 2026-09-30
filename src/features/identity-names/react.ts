@@ -1,5 +1,6 @@
 import type { NamingIdentity } from "./policy";
 import { useSyncExternalStore, useCallback } from "react";
+import { useListedChannel } from "../relay/listed-channel";
 import type { RelaySession } from "../relay/session";
 import type { IdentityNameView } from "./service";
 const noop = () => () => {};
@@ -28,21 +29,17 @@ export function useIdentityNames(names: IdentityNameView | undefined) {
   );
 }
 
-const noChannels = () => undefined;
 const noMembers: readonly string[] = [];
 /** Channel membership defines ambiguity, not the community-wide profile cache. */
 export function useChannelIdentityNames(
   session: RelaySession | undefined,
   channelId: string | undefined,
 ) {
-  const list = useSyncExternalStore(
-    session?.channels?.subscribeList ?? noop,
-    session?.channels?.list ?? noChannels,
-    noChannels,
+  const members = useListedChannel(
+    session?.channels,
+    channelId,
+    (channel) => channel?.members ?? noMembers,
   );
-  const members =
-    list?.channels.find((channel) => channel.id === channelId)?.members ??
-    noMembers;
   const resolve = useIdentityNames(session?.names);
   return useCallback(
     (pubkey: string, fallback: string) => resolve(pubkey, fallback, members),

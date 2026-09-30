@@ -107,9 +107,14 @@ export interface UnreadCapability {
 }
 const contentKind = (event: RelayEvent) =>
   event.kind === 9 || event.kind === 40002 || event.kind === 40008;
+const channelIds = new WeakMap<RelayEvent, string | undefined>();
+/** Verified events are frozen, and every evidence index asks for each one. */
 const channelOf = (event: RelayEvent) => {
+  if (channelIds.has(event)) return channelIds.get(event);
   const tags = event.tags.filter(([name]) => name === "h");
-  return tags.length === 1 ? tags[0]?.[1] : undefined;
+  const channelId = tags.length === 1 ? tags[0]?.[1] : undefined;
+  channelIds.set(event, channelId);
+  return channelId;
 };
 const auxiliaryKind = (event: RelayEvent) =>
   event.kind === 40003 || event.kind === 5 || event.kind === 9005;
@@ -235,6 +240,7 @@ export function createUnread({
   }
   type Evidence = {
     event: RelayEvent;
+    channelId: string;
     rootId: string | undefined;
     mentioned: boolean;
   };
@@ -263,6 +269,7 @@ export function createUnread({
       const rows = byChannel.get(channel) ?? [];
       rows.push({
         event,
+        channelId: channel,
         rootId: threadReference(event) ? rootId : undefined,
         mentioned: event.tags.some(
           ([name, value]) => name === "p" && value === viewer,
@@ -275,19 +282,17 @@ export function createUnread({
     indexEvidence();
     return tombstones.has(event.id);
   }
-  function inTarget(event: RelayEvent, target: ReadTarget) {
+  /** Evidence of the target's channel: the index already resolved its channel
+   * and reply root, which every selector would otherwise derive per event. */
+  function inTarget({ event, rootId }: Evidence, target: ReadTarget) {
     return (
-      channelOf(event) === target.channelId &&
-      (target.kind === "channel" ||
-        (target.kind === "message" && target.messageId === event.id) ||
-        (target.kind === "thread" &&
-          !!threadReference(event) &&
-          root(event) === target.rootId))
+      target.kind === "channel" ||
+      (target.kind === "message" && target.messageId === event.id) ||
+      (target.kind === "thread" && rootId === target.rootId)
     );
   }
-  function isUnread({ event, rootId }: Evidence, state: ReadState) {
-    const channelId = channelOf(event);
-    if (!channelId || event.pubkey === viewer) return false;
+  function isUnread({ event, channelId, rootId }: Evidence, state: ReadState) {
+    if (event.pubkey === viewer) return false;
     const frontier = effectiveFrontier(
       state,
       `msg:${event.id}`,
@@ -422,7 +427,7 @@ export function createUnread({
           (event.created_at === latest.created_at && event.id < latest.id))
       )
         latest = event;
-      if (!inTarget(entry.event, target) || !isUnread(entry, state)) continue;
+      if (!inTarget(entry, target) || !isUnread(entry, state)) continue;
       count++;
       if (priority(entry, dm)) attention++;
     }
@@ -472,11 +477,8 @@ export function createUnread({
     indexEvidence();
     const state = reads.state();
     const grouped = new Map<string, ThreadActivityItem>();
-    const presented = new Map(
-      foldMessages(channelId, "", [...events.values()], {
-        includeReplies: true,
-      }).map((message) => [message.id, message.content]),
-    );
+    // Only unread thread activity is presented; most publishes have none.
+    let presented: Map<string, string> | undefined;
     for (const evidence of byChannel.get(channelId) ?? []) {
       const { event, rootId, mentioned } = evidence;
       const broadcast = event.tags.some(
@@ -489,6 +491,11 @@ export function createUnread({
       )
         continue;
       const current = grouped.get(rootId);
+      presented ??= new Map(
+        foldMessages(channelId, "", [...events.values()], {
+          includeReplies: true,
+        }).map((message) => [message.id, message.content]),
+      );
       const preview = presented.get(event.id) ?? event.content;
       if (!current) {
         grouped.set(

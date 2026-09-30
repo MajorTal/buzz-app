@@ -2,7 +2,7 @@ import { useChannelIdentityNames } from "../identity-names/react";
 import { useSyncExternalStore, type ReactNode } from "react";
 import { AtIcon, RobotIcon } from "../../shared/design-system/icons/index";
 import type { RelaySession } from "../relay/session";
-import type { Profile, ChannelSummary } from "../relay/contracts";
+import type { ChannelList, ChannelSummary, Profile } from "../relay/contracts";
 import { messageReferences } from "./message-references";
 import { MessageLink } from "../conversation/MessageLink";
 import type { ConversationExtensions } from "../conversation/contracts";
@@ -11,7 +11,12 @@ import type { AgentLibrary } from "../agents/library";
 import styles from "../../shared/InlineReference.module.css";
 
 const emptyProfiles: ReadonlyMap<string, Profile> = new Map();
-const emptyChannels: readonly ChannelSummary[] = [];
+/** The only channel fields a reference may read; the rest can be out of date. */
+export type ReferenceChannel = Pick<
+  ChannelSummary,
+  "id" | "name" | "channelType" | "private" | "archived"
+>;
+const emptyChannels: readonly ReferenceChannel[] = [];
 const emptyAgents: AgentLibrary["identities"] = [];
 export const emptyReferenceDirectory = {
   profiles: emptyProfiles,
@@ -20,8 +25,37 @@ export const emptyReferenceDirectory = {
 };
 const noop = () => () => {};
 const profilesSnapshot = () => emptyProfiles;
-const channelsSnapshot = () => undefined;
+const channelsSnapshot = () => emptyChannels;
 const agentsSnapshot = () => undefined;
+type ChannelLists = Pick<RelaySession["channels"], "list">;
+const referenced = new WeakMap<
+  ChannelLists,
+  { list: ChannelList; channels: readonly ReferenceChannel[] }
+>();
+/** Previews and activity replace the list and its summaries on every message.
+ * Retain the prior channels while every field a reference reads is unchanged,
+ * so mounted rows render only when a label could change. */
+function referenceChannels(queries: ChannelLists) {
+  const list = queries.list();
+  const prior = referenced.get(queries);
+  if (prior?.list === list) return prior.channels;
+  const channels =
+    prior?.channels.length === list.channels.length &&
+    list.channels.every((channel, index) => {
+      const old = prior.channels[index];
+      return (
+        old?.id === channel.id &&
+        old.name === channel.name &&
+        old.channelType === channel.channelType &&
+        old.private === channel.private &&
+        old.archived === channel.archived
+      );
+    })
+      ? prior.channels
+      : list.channels;
+  referenced.set(queries, { list, channels });
+  return channels;
+}
 
 export function useReferenceDirectory(
   session: RelaySession | undefined,
@@ -34,9 +68,10 @@ export function useReferenceDirectory(
       : (session?.profiles?.snapshot ?? profilesSnapshot),
     profilesSnapshot,
   );
+  const queries = session?.channels;
   const channels = useSyncExternalStore(
-    session?.channels?.subscribeList ?? noop,
-    session?.channels?.list ?? channelsSnapshot,
+    queries?.subscribeList ?? noop,
+    queries?.list ? () => referenceChannels(queries) : channelsSnapshot,
     channelsSnapshot,
   );
   const agents = useSyncExternalStore(
@@ -46,7 +81,7 @@ export function useReferenceDirectory(
   );
   return {
     profiles,
-    channels: channels?.channels ?? emptyChannels,
+    channels,
     agents: agents?.identities ?? emptyAgents,
   };
 }
@@ -54,7 +89,7 @@ export function useReferenceDirectory(
 /** Buzz links carry no community, so they always name a channel in the receiving one. */
 export function channelForLink(
   url: string,
-  channels: readonly ChannelSummary[],
+  channels: readonly ReferenceChannel[],
 ) {
   const parsed = parseBuzzLink(url);
   const target = parsed?.format === "legacy" ? parsed : undefined;
@@ -63,7 +98,7 @@ export function channelForLink(
 
 export function channelLinkLabel(
   url: string,
-  channels: readonly ChannelSummary[],
+  channels: readonly ReferenceChannel[],
 ) {
   const channel = channelForLink(url, channels);
   const parsed = parseBuzzLink(url);

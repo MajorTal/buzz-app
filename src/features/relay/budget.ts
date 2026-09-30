@@ -4,6 +4,23 @@ export const OUTBOX_INPUT_MAX_BYTES = 32 * 1024;
 export const byteSize = (value: unknown) =>
   new TextEncoder().encode(JSON.stringify(value)).byteLength;
 
+const sizes = new WeakMap<object, number>();
+/** `byteSize` of a list whose members never change, such as verified events.
+ * A live window checks its budget on every message; each member is serialized
+ * once instead of the whole window each time. */
+export function listByteSize(values: readonly object[]) {
+  let bytes = 2 + Math.max(0, values.length - 1);
+  for (const value of values) {
+    let size = sizes.get(value);
+    if (size === undefined) {
+      size = byteSize(value);
+      sizes.set(value, size);
+    }
+    bytes += size;
+  }
+  return bytes;
+}
+
 export class ByteLru<T> {
   private items = new Map<string, { value: T; bytes: number }>();
   private bytes = 0;

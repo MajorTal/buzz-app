@@ -5,6 +5,7 @@ import { mentionCandidates } from "./mention-candidates";
 import { useAgentChoices } from "../agents/use-choices";
 import { useLayoutEffect, useMemo, useRef } from "react";
 import { useIdentityNames } from "../identity-names/react";
+import { useListedChannel } from "../relay/listed-channel";
 import { InlineChip } from "../../shared/design-system/ui/InlineChip";
 import type { ConversationExtensions } from "../conversation/contracts";
 import type { CustomEmoji } from "../relay/emoji";
@@ -42,6 +43,8 @@ export function RichComposerInput({
   inviteAgents?: boolean;
 }) {
   const directory = useReferenceDirectory(session);
+  // Candidates read this channel's roster and state during render.
+  useListedChannel(session.channels, channelId, (channel) => channel);
   useMentionArchives(session);
   const roster = useContext(DraftMentionRoster);
   const profiles = new Map(directory.profiles);

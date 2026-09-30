@@ -84,9 +84,13 @@ export function AppShell({
     }
     setNavigationOpen(false);
   }, [navigationAttempt]);
-  const pageNavigation = (
+  // Only primary pages get a row; search below still lists every active page.
+  // Every primary page comes from an optional plugin, so an empty list is
+  // reachable; skip the landmark rather than announce an empty region.
+  const primaryPages = orderPages(pages.filter((page) => page.primary));
+  const pageNavigation = primaryPages.length ? (
     <nav aria-label="Pages" className="shell-pages">
-      {orderPages(pages).map((page) => {
+      {primaryPages.map((page) => {
         const { label, icon: Icon } = pagePresentation(page);
         return (
           <NavigationItem
@@ -100,12 +104,16 @@ export function AppShell({
             }}
             selected={selected === page.key}
             label={label}
-            icon={<Icon aria-hidden="true" size={20} />}
+            icon={
+              <span className="shell-page-icon">
+                <Icon aria-hidden="true" weight="bold" size={15} />
+              </span>
+            }
           />
         );
       })}
     </nav>
-  );
+  ) : null;
   return (
     <div
       data-shell-tone={tone}

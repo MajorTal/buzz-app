@@ -43,6 +43,7 @@ async function observeWork(page) {
       longTasks: [],
       maxRows: 0,
       maxDomNodes: 0,
+      maxTimelineNodes: 0,
       active: true,
       frame: 0,
     };
@@ -60,6 +61,13 @@ async function observeWork(page) {
         sample.maxDomNodes,
         document.getElementsByTagName("*").length,
       );
+      for (const timeline of document.querySelectorAll(
+        "[data-message-scroller]",
+      ))
+        sample.maxTimelineNodes = Math.max(
+          sample.maxTimelineNodes,
+          timeline.getElementsByTagName("*").length,
+        );
       sample.frame = requestAnimationFrame(tick);
     };
     sample.frame = requestAnimationFrame(tick);
@@ -90,6 +98,7 @@ async function workSample(page) {
       longTasks: sample.longTasks,
       maxMountedRows: sample.maxRows,
       maxDomNodes: sample.maxDomNodes,
+      maxTimelineNodes: sample.maxTimelineNodes,
     };
   });
 }
@@ -405,7 +414,10 @@ test("cursor paging preserves visible anchors and keeps a large history virtuali
   expect(sample.maxMountedRows).toBeLessThanOrEqual(100);
   // Structural growth guard, not a heap-leak claim. 640 unvirtualized rows
   // would exceed both limits; bounded rows must hold during movement too.
-  expect(sample.maxDomNodes).toBeLessThan(1800);
+  // Count only the timeline, so sidebar growth cannot mask or trip it.
+  // Main counted 1792 document and 1573 timeline nodes under its original
+  // 1800 document ceiling; 1581 keeps that same timeline budget.
+  expect(sample.maxTimelineNodes).toBeLessThan(1581);
   app.report.measurements.push({
     scenario: "640-row-paging-and-switches",
     retainedRows: loaded,

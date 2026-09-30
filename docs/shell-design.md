@@ -2,9 +2,12 @@
 
 The shell is owned by `src/app/shell`, independently of relay operations and page
 content. `App.tsx` composes startup/recovery, built-in Settings, and the
-existing contributed-page lifecycle. Messages is the landing page; legacy Home
-targets resolve to Messages in the same visit. Channels is required, including
-when older preferences saved it disabled. Navigation removes disabled optional plugins
+existing contributed-page lifecycle. Messages is the default destination at
+startup; legacy Home targets resolve to Messages in the same visit. Old version-1
+Channels Inbox/Bestie routes resolve to their standalone pages in that same visit,
+preserving community scope and normal plugin availability checks. Channels is
+required, including when older preferences saved it disabled. Navigation removes
+disabled optional plugins
 from page choices; a retained destination whose provider is unavailable displays
 an explicit failure with retry instead of silently selecting another page.
 Browser controls, host shortcuts and toolbar arrows traverse the same visit history.
@@ -23,9 +26,15 @@ semantic tokens, UI authoring rules and the local component reference.
   styles live in Tailwind's base layer, so utilities can override them normally.
   Existing feature CSS variables remain available for incremental adoption.
 - `src/app/shell/presentation.ts` owns page labels, icons and navigation ordering.
-  Messages comes first, then Projects; other contributed pages follow by
-  displayed label with a full contribution-key tie-breaker. Sidebar navigation and
-  page search share this policy, independent of plugin activation/re-enable order.
+  Messages comes first, then Inbox, Bestie and Projects; other contributed pages
+  follow by displayed label with a full contribution-key tie-breaker. Sidebar
+  navigation and page search share this ordering, independent of plugin
+  activation/re-enable order. Sidebar navigation lists only pages registered with
+  `primary: true` (Inbox, Bestie, Projects, Agents and Workflows among the bundled
+  plugins); page search lists every active page. Inbox and Bestie are placeholder
+  pages of their own plugins, so disabling Bestie removes its row along with its
+  launcher. Channels and Sessions are vended without rows: Messages opens by default,
+  from any channel row and from search; Sessions opens from Messages and search.
   Channels is presented as Messages. Legacy tone props are retained for
   compatibility; all pages share the supplied gradient and repeating CSS dots.
   Add recognized page presentation here without changing plugin contracts.
@@ -39,7 +48,7 @@ semantic tokens, UI authoring rules and the local component reference.
   Sidebar session state resets on scope/connection generation without remounting
   unrelated pages. Its own error boundary keeps page navigation and Settings usable.
   Page buttons use shared navigation rows and focus the main region on selection.
-  A scrollable page list leaves room for channels at short heights.
+  At short heights page rows scroll with the channel list rather than in their own list.
   At widths up to 650px, every page collapses navigation behind the header’s
   Show navigation button to preserve readable content at 200% text size. The
   220px disclosure overlays content, supports Escape, and keeps sidebar state

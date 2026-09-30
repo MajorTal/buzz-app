@@ -29,12 +29,20 @@ async function expectNonPaging(page, app) {
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 const companionLauncher = (page, name) =>
   button(page, name).and(page.locator("button[aria-expanded]"));
-// Approved primary sidebar destinations; other pages open through header search.
-const destinationTitles = ["Inbox", "Bestie", "Agents"];
+// The fixture's active plugin pages, in shell order, lead the channel sidebar.
+// Sidebar rows are the primary pages; Messages and Sessions stay in search only.
+const destinationTitles = [
+  "Inbox",
+  "Bestie",
+  "Projects",
+  "Agents",
+  "Workflows",
+];
 const sidebarDestinations = (page, options = {}) =>
   page
     .getByRole("complementary", { name: "Channel sidebar", ...options })
-    .getByRole("button", { name: /^(Inbox|Bestie|Agents)$/, ...options });
+    .getByRole("navigation", { name: "Pages", ...options })
+    .getByRole("button", options);
 const box = async (locator) => {
   const bounds = await locator.boundingBox();
   expect(bounds).not.toBeNull();
@@ -128,11 +136,15 @@ async function shellFits(page, width) {
     await channels.evaluate((element) => {
       element.scrollTop = 0;
     });
-  // The header keeps its launchers; sidebar destinations are not duplicated there.
+  // The header keeps its launchers; sidebar destinations are not duplicated
+  // there. Bestie's header button is its companion launcher, not a page row.
   await expect(
-    page
-      .locator(".shell-header")
-      .getByRole("button", { name: /^(Inbox|Agents)$/, includeHidden: true }),
+    page.locator(".shell-header").getByRole("button", {
+      name: new RegExp(
+        `^(${destinationTitles.filter((title) => title !== "Bestie").join("|")})$`,
+      ),
+      includeHidden: true,
+    }),
   ).toHaveCount(0);
   const actions = await box(page.locator(".shell-actions"));
   const communities = await box(
@@ -316,7 +328,7 @@ test("bento surfaces, sidebar pages, real link panel and compact community navig
   await button(page, "Close channel panel").click();
   await expect(composer).toBeInViewport();
   await openPage(page, "Projects");
-  // Search selection owns the page change; no sidebar destination remains current.
+  // Search selection and the sidebar share page state, so Projects is current.
   // Projects moves focus to its heading once the directory opens.
   await expect(
     page.getByRole("heading", { name: "Projects", exact: true }),
@@ -325,7 +337,7 @@ test("bento surfaces, sidebar pages, real link panel and compact community navig
   await expect(hiddenDestinations).toHaveText(destinationTitles);
   await expect(
     hiddenDestinations.and(page.locator("[aria-current]")),
-  ).toHaveCount(0);
+  ).toHaveText(["Projects"]);
   await button(page, "Your profile").click();
   await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   await expect(
@@ -901,7 +913,15 @@ test("Projects directory fits the workspace and page navigation survives plugin 
   // Header search owns page navigation, including while narrow Settings
   // collapses the sidebar; its Pages group must preserve plugin ordering.
   const search = page.getByRole("dialog", { name: "Search Buzz", exact: true });
-  const titles = ["Messages", "Projects", "Agents", "Sessions", "Workflows"];
+  const titles = [
+    "Messages",
+    "Inbox",
+    "Bestie",
+    "Projects",
+    "Agents",
+    "Sessions",
+    "Workflows",
+  ];
   const expectPageOrder = async (expected) => {
     const choices = await pageChoices(page);
     await expect(choices.getByRole("option")).toHaveText([
@@ -974,7 +994,14 @@ test("Projects directory fits the workspace and page navigation survives plugin 
   });
   await projects.click();
   await expect(projects).toHaveAttribute("aria-checked", "false");
-  await expectPageOrder(["Messages", "Agents", "Sessions", "Workflows"]);
+  await expectPageOrder([
+    "Messages",
+    "Inbox",
+    "Bestie",
+    "Agents",
+    "Sessions",
+    "Workflows",
+  ]);
   await closeSearch();
   await projects.click();
   await expect(projects).toHaveAttribute("aria-checked", "true");
@@ -982,6 +1009,11 @@ test("Projects directory fits the workspace and page navigation survives plugin 
   await expectPageOrder(titles);
   await selectPage(page, "Projects");
   await expect(title).toBeVisible();
+  // The narrow drawer is closed here, but the sidebar keeps the same order
+  // for its primary rows.
+  await expect(sidebarDestinations(page, { includeHidden: true })).toHaveText(
+    destinationTitles,
+  );
 });
 
 // Real App navigation must retire page-local targets, without closing the

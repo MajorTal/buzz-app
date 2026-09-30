@@ -17,8 +17,10 @@ import type { SidebarPreferences } from "../relay/sidebar-preferences";
 import type { RelayData, RelaySnapshot } from "../relay/service";
 import type { ChannelList } from "../relay/contracts";
 import type { Navigation } from "../navigation/controller";
+import type { ReactNode } from "react";
 import { ChannelSidebar } from "./ChannelSidebar";
 import { ChannelNavigationProvider } from "./ChannelNavigationState";
+import styles from "../../bundled/channels/Channels.module.css";
 
 const { rowRender, menuRender } = vi.hoisted(() => ({
   rowRender: vi.fn(),
@@ -123,7 +125,15 @@ function fixture(
     async clearCache() {},
   } satisfies RelayData;
   const navigator = { open: vi.fn() } as unknown as Navigation;
-  const view = (id: string, sessionsEnabled = true) => (
+  const view = (
+    id: string,
+    sessionsEnabled = true,
+    pages: ReactNode = (
+      <nav aria-label="Pages">
+        <button type="button">Projects</button>
+      </nav>
+    ),
+  ) => (
     <ChannelNavigationProvider relay={relay}>
       <ChannelSidebar
         relay={relay}
@@ -136,8 +146,9 @@ function fixture(
           scope: { viewer: "viewer", communityOrigin: "https://relay.test" },
         }}
         sessionsEnabled={sessionsEnabled}
-        agentsEnabled={true}
-      />
+      >
+        {pages}
+      </ChannelSidebar>
     </ChannelNavigationProvider>
   );
   return { view, navigator, snapshot, list, session };
@@ -269,37 +280,29 @@ it("explains and disables unavailable move retries, then enables them after pref
   }
 });
 
-it.each(["connecting", "disconnected", "error"] as const)(
-  "explicitly disables Inbox and Bestie while the relay is %s",
+it.each(["ready", "connecting", "error"] as const)(
+  "keeps the supplied page navigation while the relay is %s",
   (status) => {
     const h = fixture(undefined, status);
     render(h.view("alpha"));
-    for (const name of ["Inbox", "Bestie"]) {
-      const button = screen.getByRole("button", { name });
-      expect(button).toBeDisabled();
-      fireEvent.click(button);
-    }
-    expect(h.navigator.open).not.toHaveBeenCalled();
+    const pages = screen.getByRole("navigation", { name: "Pages" });
+    expect(
+      within(pages).getByRole("button", { name: "Projects" }),
+    ).toBeVisible();
+    expect(pages.closest(`.${styles.destinations}`)).not.toBeNull();
   },
 );
 
-it("opens Inbox and Bestie in the ready community", () => {
-  const h = fixture();
-  render(h.view("alpha"));
-  for (const name of ["Inbox", "Bestie"]) {
-    const button = screen.getByRole("button", { name });
-    expect(button).toBeEnabled();
-    fireEvent.click(button);
-    expect(h.navigator.open).toHaveBeenLastCalledWith({
-      version: 1,
-      kind: "page",
-      pluginId: "buzz.channels",
-      pageId: "channels",
-      scope: { viewer: "viewer", communityOrigin: "https://relay.test" },
-      route: { version: 1, params: name },
-    });
-  }
-});
+it.each(["ready", "connecting", "error"] as const)(
+  "omits the page destinations wrapper when the shell passes none while %s",
+  (status) => {
+    const h = fixture(undefined, status);
+    const { container } = render(h.view("alpha", true, null));
+    expect(screen.queryByRole("navigation", { name: "Pages" })).toBeNull();
+    expect(container.querySelector(`.${styles.destinations}`)).toBeNull();
+    expect(screen.getByRole("img", { name: "Buzz" })).toBeInTheDocument();
+  },
+);
 
 it("opens creation from a legacy subgroup + with that destination selected and retained in the create input", async () => {
   const preferences = createSidebarPreferencesStore(

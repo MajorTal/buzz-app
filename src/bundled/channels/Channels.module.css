@@ -45,6 +45,17 @@
   --sidenav-emoji-size: 13px;
   padding-inline: var(--sidebar-padding) var(--sidebar-padding-end);
 }
+.sidebarScroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  /* Keep row focus outlines inside the scrollport without shifting content.
+     The end padding exceeds the 4px ring because scroll offsets snap to
+     whole pixels while content height can be fractional. */
+  margin-inline: calc(-1 * var(--sidebar-padding))
+    calc(-1 * var(--sidebar-padding-end));
+  padding: 0 var(--sidebar-padding-end) var(--space-1h) var(--sidebar-padding);
+}
 .sidebarBrand {
   height: var(--space-6);
   display: flex;
@@ -113,15 +124,6 @@
   height: 18px;
   flex: 0 0 18px;
   place-items: center;
-}
-.placeholder {
-  display: grid;
-  flex: 1;
-  place-items: center;
-  color: var(--text-subtle);
-  font-size: var(--text-body-sm);
-  line-height: var(--text-body-sm--line-height);
-  letter-spacing: var(--text-body-sm--letter-spacing);
 }
 .channelListFrame {
   position: relative;

@@ -81,6 +81,11 @@ NIP-11 `self` establishes relay authority; the operator-contact `pubkey` is not
 a substitute. The existing live owner handles WSS/NIP-42 authentication and
 signature verification. IPC permissions remain limited to the main WebView.
 
+Channel lifecycle/details and identity archive commands, channel recipe preparation/decoding,
+and opening direct messages use purpose-bound native commands. Creation kind 9007 is
+advertised only when NIP-11 reports NIP-29 support. NIP-44 stays in the native
+identity owner; recipe plaintext is never returned by a generic decrypt command.
+
 Community admission, kind-0 profile reads/publication and the adapter's advertised
 message/event writes use this identity. [Join recovery](communities.md#packaged-admission-and-recovery)
 records public progress before remote changes. The existing durable outbox retains
@@ -90,7 +95,7 @@ being republished or silently re-dated. Missing/failed readback retains uncertai
 the user must inspect the conversation before explicitly sending a new message.
 
 Optional capabilities are absent until implemented: protected media/upload,
-repository HTTP, lifecycle and other broker-only
+repository HTTP and other broker-only
 helpers are not claimed by this adapter. Public HTTPS avatars/icons can display;
 protected media does not gain access from the image CSP allowance. NIP-FI assertion
 acquisition is not implemented, so deployments enforcing it are outside acceptance.

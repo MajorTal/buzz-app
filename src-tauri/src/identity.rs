@@ -264,6 +264,15 @@ impl IdentityHost {
         })))
     }
 
+    pub(crate) async fn viewer(&self) -> Result<String> {
+        with_identity(self.clone(), |identity| {
+            identity
+                .restore()?
+                .ok_or_else(|| "Set up your identity first".into())
+        })
+        .await
+    }
+
     pub(crate) async fn sign(&self, event: EventTemplate) -> Result<serde_json::Value> {
         with_identity(self.clone(), move |identity| {
             identity.restore()?;
@@ -338,3 +347,30 @@ pub async fn identity_export(host: tauri::State<'_, IdentityHost>) -> Result<Str
 
 #[cfg(test)]
 mod tests;
+
+impl IdentityHost {
+    /// Only recipe plaintext may cross this boundary. Never export arbitrary decrypt.
+    pub(crate) async fn kit_cipher(&self, ciphertext: String, encrypt: bool) -> Result<String> {
+        with_identity(self.clone(), move |identity| {
+            identity.restore()?;
+            let State::Ready(key) = &identity.state else {
+                return Err("Set up your identity first".into());
+            };
+            let secret = nostr::SecretKey::from_slice(key.0.as_ref()).map_err(|_| INVALID)?;
+            let public = nostr::Keys::new(secret.clone()).public_key();
+            if encrypt {
+                nostr::nips::nip44::encrypt(
+                    &secret,
+                    &public,
+                    &ciphertext,
+                    nostr::nips::nip44::Version::V2,
+                )
+                .map_err(|_| "Invalid channel recipe".into())
+            } else {
+                nostr::nips::nip44::decrypt(&secret, &public, &ciphertext)
+                    .map_err(|_| "Invalid channel recipe".into())
+            }
+        })
+        .await
+    }
+}

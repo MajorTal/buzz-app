@@ -1204,7 +1204,7 @@ async function signedPost(
   });
 }
 /** A transport failure is an unknown outcome; only a definitive rejection is a failed write. */
-async function acceptPublish(response: Response, id: string) {
+export async function acceptPublish(response: Response, id: string) {
   if (!response.ok) {
     if ([400, 401, 403, 404, 413, 422].includes(response.status))
       throw new PublishRejected(

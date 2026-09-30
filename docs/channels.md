@@ -363,8 +363,7 @@ profile eligibility before signing and again before publication, validates
 the returned command, and confirms relay-owned state before removing a row. Archive retains membership;
 confirmed Delete/Leave use the existing access-loss purge. Commands use narrow
 development-broker routes, never the message outbox or automatic replay. Hosts
-without this capability display an unavailable notice; native/direct-signer parity
-is deferred.
+without this capability display an unavailable notice; packaged native transport supports these dedicated commands.
 
 Main’s DM × remains local removal, including restoration on new message evidence.
 The separate, confirmed Hide conversation action publishes `41012`, not Leave or Delete. The separate relay-authored `30622`
@@ -458,7 +457,7 @@ admission are unchanged. Publishing reuses the same community's authenticated li
 socket; no HTTP fallback or new connection is added. Restart an already-running
 dev broker to load these routes. `just web` supports this complete browser flow;
 `just desktop` is not required. Hosts without the dedicated capability stay
-read-only; packaged/native adapter parity is not implemented here.
+read-only; packaged/native uses dedicated purpose-bound commands for these edits.
 
 Behavior matrices live in `channel-details.test.ts`,
 `ChannelDetailsEditor.test.tsx`, `store.test.ts` and `relay-broker-api.test.mjs`.

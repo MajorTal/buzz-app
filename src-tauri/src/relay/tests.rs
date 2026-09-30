@@ -381,3 +381,207 @@ fn shared_kind_five_signer_accepts_message_and_reaction_deletion_only_in_broker_
     event.tags.push(vec!["a".into(), "30620:other:id".into()]);
     assert!(validate_event("https://relay.test", &event).is_err());
 }
+
+#[test]
+fn native_write_commands_reach_handlers_through_production_ipc() {
+    use tauri::test::{get_ipc_response, mock_builder, INVOKE_KEY};
+    let app = mock_builder()
+        .manage(IdentityHost::fixture())
+        .invoke_handler(crate::commands())
+        .build(crate::app_context())
+        .unwrap();
+    let view = tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::default())
+        .build()
+        .unwrap();
+    let requests = [
+        (
+            "relay_channel_sign",
+            serde_json::json!({"community":"https://relay.test","route":"channel-lifecycle","event":{"kind":9002,"created_at":1700000010,"content":"","tags":[["h","11111111-1111-4111-8111-111111111111"],["archived","true"]]}}),
+        ),
+        (
+            "relay_kit_prepare",
+            serde_json::json!({"community":"https://relay.test","record":{"version":1,"community":"https://relay.test","deleted":false,"value":{"type":"team","id":"mine","name":"Mine","agents":[]}}}),
+        ),
+        (
+            "relay_kit_decode",
+            serde_json::json!({"community":"https://relay.test","events":[]}),
+        ),
+        (
+            "relay_kit_sign",
+            serde_json::json!({"community":"invalid","event":{"kind":30078,"created_at":1,"content":"","tags":[]}}),
+        ),
+        (
+            "relay_channel_publish",
+            serde_json::json!({"community":"invalid","route":"channel-lifecycle","event":{}}),
+        ),
+        (
+            "relay_direct_message",
+            serde_json::json!({"community":"invalid","pubkeys":[]}),
+        ),
+    ];
+    for (command, body) in requests {
+        let result = get_ipc_response(
+            &view,
+            tauri::webview::InvokeRequest {
+                cmd: command.into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: view.url().unwrap(),
+                body: tauri::ipc::InvokeBody::Json(body),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.into(),
+            },
+        );
+        if let Err(error) = result {
+            assert!(
+                !error.to_string().contains("not allowed"),
+                "{command} blocked by ACL: {error}"
+            );
+        }
+    }
+}
+
+#[test]
+fn channel_commands_reject_malformed_tags_through_ipc() {
+    use tauri::test::{get_ipc_response, mock_builder, INVOKE_KEY};
+    let app = mock_builder()
+        .manage(IdentityHost::fixture())
+        .invoke_handler(crate::commands())
+        .build(crate::app_context())
+        .unwrap();
+    let view = tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::default())
+        .build()
+        .unwrap();
+    let invoke = |tags: Vec<Vec<String>>| {
+        get_ipc_response(
+            &view,
+            tauri::webview::InvokeRequest {
+                cmd: "relay_channel_sign".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: view.url().unwrap(),
+                body: tauri::ipc::InvokeBody::Json(serde_json::json!({
+                    "community": "https://relay.test", "route": "channel-lifecycle",
+                    "event": { "kind": 9002, "created_at": 123, "content": "", "tags": tags }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.into(),
+            },
+        )
+    };
+    let h = vec!["h".into(), uuid::Uuid::nil().to_string()];
+    let archived = vec!["archived".into(), "true".into()];
+    assert!(invoke(vec![h.clone(), archived.clone()]).is_ok());
+    for tags in [
+        vec![vec![], archived.clone()],
+        vec![vec!["h".into()], archived.clone()],
+        vec![h.clone(), vec!["archived".into()]],
+        vec![h.clone(), h.clone()],
+        vec![archived.clone(), h.clone()],
+    ] {
+        let error = match invoke(tags) {
+            Ok(_) => panic!("invalid tag must reject"),
+            Err(error) => error,
+        };
+        assert!(
+            !error.to_string().contains("not allowed"),
+            "ACL blocked command: {error}"
+        );
+    }
+}
+
+#[test]
+fn creation_rejects_truncated_tags_through_existing_ipc() {
+    use tauri::test::{get_ipc_response, mock_builder, INVOKE_KEY};
+    let app = mock_builder()
+        .manage(IdentityHost::fixture())
+        .invoke_handler(crate::commands())
+        .build(crate::app_context())
+        .unwrap();
+    let view = tauri::WebviewWindowBuilder::new(&app, "main", tauri::WebviewUrl::default())
+        .build()
+        .unwrap();
+    for tag in [vec![], vec!["h"]] {
+        let response = get_ipc_response(
+            &view,
+            tauri::webview::InvokeRequest {
+                cmd: "relay_sign".into(),
+                callback: tauri::ipc::CallbackFn(0),
+                error: tauri::ipc::CallbackFn(1),
+                url: view.url().unwrap(),
+                body: tauri::ipc::InvokeBody::Json(serde_json::json!({
+                    "community": "https://relay.test",
+                    "event": { "kind": 9007, "created_at": 123, "content": "", "tags": [
+                        tag, ["name", "Team"], ["visibility", "private"], ["channel_type", "stream"]
+                    ] }
+                })),
+                headers: Default::default(),
+                invoke_key: INVOKE_KEY.into(),
+            },
+        );
+        let error = match response {
+            Ok(_) => panic!("malformed creation must reject before discovery"),
+            Err(error) => error,
+        };
+        assert!(
+            !error.to_string().contains("not allowed"),
+            "ACL blocked command: {error}"
+        );
+    }
+}
+
+#[tokio::test]
+async fn discovery_body_is_bounded_for_length_and_chunked_transfer() {
+    for chunked in [false, true] {
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let url = Url::parse(&format!("http://{}/", listener.local_addr().unwrap())).unwrap();
+        let task = std::thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            socket
+                .set_read_timeout(Some(Duration::from_secs(5)))
+                .unwrap();
+            let mut bytes = Vec::new();
+            let mut buffer = [0; 2048];
+            loop {
+                let count = socket.read(&mut buffer).unwrap();
+                assert!(count > 0, "request ended before headers completed");
+                bytes.extend_from_slice(&buffer[..count]);
+                assert!(
+                    bytes.len() <= 16 * 1024,
+                    "request headers exceeded fixture limit"
+                );
+                if bytes.windows(4).any(|window| window == b"\r\n\r\n") {
+                    break;
+                }
+            }
+            if chunked {
+                socket.write_all(b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n").unwrap();
+                // Valid chunked response, over the budget on the first chunk.
+                socket
+                    .write_all(format!("{:X}\r\n", MAX_BODY + 1).as_bytes())
+                    .unwrap();
+                socket.write_all(&vec![b'x'; MAX_BODY + 1]).unwrap();
+                let _ = socket.write_all(b"\r\n0\r\n\r\n");
+            } else {
+                socket
+                    .write_all(
+                        format!(
+                            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n",
+                            MAX_BODY + 1
+                        )
+                        .as_bytes(),
+                    )
+                    .unwrap();
+                // Headers alone must suffice: do not wait for the advertised body.
+            }
+        });
+        let mut response = client().unwrap().get(url).send().await.unwrap();
+        assert_eq!(
+            read_bounded(&mut response, MAX_BODY, "interrupted", "oversized")
+                .await
+                .unwrap_err(),
+            "oversized"
+        );
+        task.join().unwrap();
+    }
+}

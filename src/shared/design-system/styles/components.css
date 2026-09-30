@@ -291,6 +291,18 @@
     transform: scale(0.98);
   }
 
+  /* A closing preview still follows its trigger; it must not take the pointer
+     from what it passes over. A keyboard-focused trigger keeps its preview
+     through scrolling, hidden while the trigger is scrolled out of view unless
+     that would hide the focused action. */
+  .buzz-preview-card[data-ending-style] {
+    pointer-events: none;
+  }
+
+  .buzz-preview-card-positioner[data-anchor-hidden]:not(:focus-within) {
+    visibility: hidden;
+  }
+
   .buzz-preview-card-name {
     overflow: hidden;
     text-overflow: ellipsis;

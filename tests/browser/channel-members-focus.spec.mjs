@@ -303,6 +303,152 @@ test("identity previews leave multiword candidate Add actions clickable", async 
   expect(errors).toEqual([]);
 });
 
+// Browser-only: scrolling moves real rows under a still pointer, and the wheel
+// is hit tested through the top layer.
+test("scrolling dismisses a hovered identity preview and keeps the wheel", async ({
+  page,
+}) => {
+  const { errors } = watchPageErrors(page);
+  const { card, name, offset } = await scrollableTeam(page);
+  const pitch =
+    (await name(2).boundingBox()).y - (await name(1).boundingBox()).y;
+
+  await name(3).hover();
+  await opened(card(3));
+  // The document capture listener must ignore scrolling outside the trigger's
+  // ancestry. Wait for the real scroll event and its rendering update first.
+  await page.evaluate(async () => {
+    const unrelated = document.createElement("div");
+    unrelated.style.cssText =
+      "position:fixed;top:0;left:0;width:1px;height:1px;overflow:auto;scrollbar-width:none;pointer-events:none";
+    const content = document.createElement("div");
+    content.style.height = "2px";
+    unrelated.append(content);
+    document.body.append(unrelated);
+    try {
+      await new Promise((resolve) => {
+        unrelated.addEventListener(
+          "scroll",
+          () => requestAnimationFrame(resolve),
+          {
+            once: true,
+          },
+        );
+        unrelated.scrollTop = 1;
+      });
+    } finally {
+      unrelated.remove();
+    }
+  });
+  await expect(card(3)).toHaveAttribute("data-open", "");
+  // The pointer stays on the same row, so only the scroll can dismiss. While
+  // it exits, the preview still follows its row and must not be hit tested.
+  const nudge = 4;
+  const dismissed = await card(3).evaluateHandle((popup) => ({
+    pointerEvents: new Promise((resolve) =>
+      new MutationObserver(
+        () =>
+          popup.hasAttribute("data-open") ||
+          resolve(getComputedStyle(popup).pointerEvents),
+      ).observe(popup, { attributes: true }),
+    ),
+  }));
+  await page.mouse.wheel(0, nudge);
+  expect(await dismissed.evaluate(({ pointerEvents }) => pointerEvents)).toBe(
+    "none",
+  );
+  await page.mouse.wheel(0, pitch - nudge);
+  await expect.poll(offset).toBe(pitch);
+  await expect(card(3)).toHaveCount(0);
+  // Rows now travel toward where each preview sat above its row. A preview
+  // that stayed would slide under the pointer and take the wheel.
+  await page.mouse.wheel(0, pitch);
+  await expect.poll(offset).toBe(2 * pitch);
+  for (const step of [1, 0]) {
+    await page.mouse.wheel(0, -pitch);
+    await expect.poll(offset).toBe(step * pitch);
+  }
+  await page.mouse.move(0, 0);
+  await expect(page.locator(".buzz-preview-card")).toHaveCount(0);
+  expect(errors).toEqual([]);
+});
+
+// Browser-only: focusing a clipped row really scrolls it into view.
+test("a keyboard-focused identity preview survives the scroll that reveals its row", async ({
+  page,
+}) => {
+  const { errors } = watchPageErrors(page);
+  const { team, card, list, offset } = await scrollableTeam(page);
+  const row = (index) =>
+    team.getByRole("checkbox", { name: new RegExp(`^Agent ${index} `) });
+  await team.getByRole("textbox").focus();
+  let revealed = 0;
+  for (let index = 1; index <= 7; index++) {
+    const before = await offset();
+    const scrolled = await list.evaluateHandle((element) => ({
+      event: new Promise((resolve) =>
+        element.addEventListener("scroll", () => resolve(), { once: true }),
+      ),
+    }));
+    await page.keyboard.press("Tab");
+    await expect(row(index)).toBeFocused();
+    if ((await offset()) !== before) {
+      // The preview has seen this scroll before Tab asks it for its action.
+      await scrolled.evaluate(({ event }) => event);
+      revealed++;
+    }
+    await page.keyboard.press("Tab");
+    await expect(
+      card(index).getByRole("button", { name: "Copy npub", exact: true }),
+    ).toBeFocused();
+  }
+  expect(revealed).toBeGreaterThan(0);
+
+  // Scrolled away from its focused row, the preview stays open but hidden,
+  // and Tab continues down the list instead of entering it.
+  await page.keyboard.press("Shift+Tab");
+  await expect(row(7)).toBeFocused();
+  await list.evaluate((element) => {
+    element.scrollTop = 0;
+  });
+  const preview = page.locator('[data-open][aria-label="Agent 7 identity"]');
+  await expect(preview).toBeHidden();
+  await expect(preview).toHaveCount(1);
+  await page.keyboard.press("Tab");
+  await expect(row(8)).toBeFocused();
+  expect(errors).toEqual([]);
+});
+
+async function scrollableTeam(page) {
+  await page.goto(`${url}?team`);
+  await page.getByRole("button", { name: "Edit team", exact: true }).click();
+  const team = page.getByRole("dialog", { name: "Team", exact: true });
+  await expect(team.getByRole("checkbox")).toHaveCount(12);
+  await team.evaluate(async (element) => {
+    await Promise.all(
+      element.getAnimations({ subtree: true }).map((a) => a.finished),
+    );
+  });
+  const name = (index) => team.getByText(`Agent ${index}`, { exact: true });
+  const list = await name(1).evaluateHandle((element) => {
+    let scroller = element.parentElement;
+    while (getComputedStyle(scroller).overflowY !== "auto")
+      scroller = scroller.parentElement;
+    return scroller;
+  });
+  return {
+    team,
+    name,
+    list,
+    card: (index) =>
+      page.getByRole("dialog", {
+        name: `Agent ${index} identity`,
+        exact: true,
+      }),
+    offset: () => list.evaluate((element) => element.scrollTop),
+  };
+}
+
 async function opened(popup) {
   await expect(popup).toHaveAttribute("data-open", "");
   await expect(popup).not.toHaveAttribute("data-starting-style");

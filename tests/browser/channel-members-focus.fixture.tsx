@@ -27,6 +27,13 @@ const candidates = new URLSearchParams(location.search).has("multiple")
 const candidateProfiles = candidates.map(({ key, name }) =>
   profile(key, { name }),
 );
+// A team long enough to scroll inside its dialog.
+const team = new URLSearchParams(location.search).has("team")
+  ? Array.from({ length: 12 }, (_, index) => ({
+      pubkey: keypair().pubkey,
+      name: `Agent ${index + 1}`,
+    }))
+  : [{ pubkey: person.pubkey, name: "Morgan" }];
 const additions: string[] = [];
 const channelId = "11111111-1111-4111-8111-111111111111";
 const members = [viewer.pubkey];
@@ -97,7 +104,7 @@ function Fixture() {
           session={session}
           selected={selected}
           onChange={setSelected}
-          agents={[{ pubkey: person.pubkey, name: "Morgan" }]}
+          agents={team}
         />
       </Dialog>
     </ToastProvider>

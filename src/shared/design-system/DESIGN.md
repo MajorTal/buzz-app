@@ -432,7 +432,11 @@ navigation reaches the action. They remain non-modal and never take focus on hov
 from the trigger reaches the action; Shift+Tab returns to the trigger; forward Tab
 continues after the trigger. Escape dismisses the preview before restoring focus,
 but never pulls focus back if the user moved it during exit. Closing previews
-are no longer Tab destinations.
+are no longer Tab destinations or pointer targets.
+Scrolling anything that contains the trigger dismisses a hover-opened preview: a
+still pointer cannot report that its trigger moved away. A keyboard-focused
+trigger keeps its preview, hidden while the trigger is scrolled out of view
+unless focus is inside it.
 The positioned portal owns its layer above dialogs. An optional content anchor
 keeps previews near compact identity content inside wider actionable rows. Identity
 previews prefer above that content (with Base UI collision handling), leaving

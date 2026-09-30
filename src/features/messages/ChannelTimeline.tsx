@@ -337,8 +337,22 @@ function Timeline({
     };
     // Initial signature only; mutations invalidate the saved cache on remount.
   }, [channelId, geometry, scope]);
+  // A reveal completes when its scroll runs. Until then it stays pending under
+  // the intent that scheduled it: a row update that cancels its frame (an echo,
+  // an edit, an older-history prepend) reschedules it, while any newer intent
+  // (reader input, jump to latest, a message target) retires it for good.
   const revealed = useRef<string | undefined>(undefined);
+  const pendingReveal = useRef<{ id: string; intent: number } | undefined>(
+    undefined,
+  );
   useLayoutEffect(() => {
+    if (
+      pendingReveal.current &&
+      pendingReveal.current.intent !== intent.current
+    ) {
+      revealed.current = pendingReveal.current.id;
+      pendingReveal.current = undefined;
+    }
     // Row updates include edits/reactions/replies, not only new message IDs.
     // Above-bottom reading and prepend anchoring remain Virtua's responsibility.
     const revealIndex =
@@ -378,9 +392,9 @@ function Timeline({
       return;
     // A send supersedes saved reading intent before the first scroll event.
     // This effect also retains its height observer through late measurements.
-    if (revealIndex >= 0) {
-      revealed.current = revealMessageId;
+    if (revealIndex >= 0 && revealMessageId) {
       intent.current++;
+      pendingReveal.current = { id: revealMessageId, intent: intent.current };
       follow.current = true;
       restoredAnchor.current = undefined;
       savedPosition.current = { offset: 0, bottom: true };
@@ -420,6 +434,10 @@ function Timeline({
           revealIndex >= 0 ? revealIndex : rows.length - 1,
           { align: "end" },
         );
+        if (revealIndex >= 0) {
+          revealed.current = revealMessageId;
+          pendingReveal.current = undefined;
+        }
       }
     };
     let frame = requestAnimationFrame(() => {

@@ -17,6 +17,14 @@ import { WORKFLOW_KINDS } from "../workflows/protocol";
 
 import { PublishRejected } from "./outbox";
 
+import { readCoordinate, parseReadBlob } from "./read-state-model";
+import type { ReadStateSigning } from "./read-state-host";
+import {
+  readSnapshotCommunity,
+  readSnapshotFilter,
+  parseReadSnapshot,
+  readSnapshotText,
+} from "./read-state-snapshot";
 import {
   memoryAgent,
   memoryListing,
@@ -26,12 +34,26 @@ import type { AgentLibrary } from "../agents/library";
 import { observerFrame } from "../agents/observer";
 import {
   acceptPublish,
+  admitSignedRequest,
   connectSignedTransport,
   admittedSignedWorkflowRead,
   type ReadTransport,
   type Signer,
 } from "./transport";
 import { nativeSidebar } from "./native-sidebar";
+import { readApiFailure } from "./http-admission";
+
+async function nativeReadInvoke<T>(
+  command: string,
+  args: Record<string, unknown>,
+) {
+  try {
+    return await invoke<T>(command, args);
+  } catch (error) {
+    // Tauri commands reject with a string; domain health expects an Error.
+    throw typeof error === "string" ? new Error(error) : error;
+  }
+}
 
 export const nativeWriteKinds = [
   30078,
@@ -193,6 +215,7 @@ export async function connectNativeTransport(
   );
   signal?.throwIfAborted();
   const writer = transport.writer;
+  const readCommunity = readSnapshotCommunity(info.read_state_snapshot);
   if (!writer) throw new Error("Native relay writer is unavailable");
   const commandWriter = (
     route: "channel-details" | "channel-lifecycle" | "identity-archive",
@@ -431,6 +454,102 @@ export async function connectNativeTransport(
       return signature;
     },
     ...nativeSidebar(transport),
+    readState: {
+      ...(readCommunity ? { communityId: readCommunity } : {}),
+      async decode(events: readonly RelayEvent[], signal: AbortSignal) {
+        signal.throwIfAborted();
+        const decoded = await nativeReadInvoke<
+          { eventId: string; blob: unknown }[]
+        >("relay_decode_read_state", {
+          community: origin,
+          events,
+        });
+        signal.throwIfAborted();
+        for (const item of decoded) parseReadBlob(item.blob);
+        return decoded;
+      },
+      async sign(intent: ReadStateSigning, signal: AbortSignal) {
+        signal.throwIfAborted();
+        parseReadBlob(intent.blob);
+        const event = eventDto(
+          await nativeReadInvoke("relay_sign_read_state", {
+            community: origin,
+            intent,
+          }),
+        );
+        signal.throwIfAborted();
+        if (event.pubkey !== transport.viewer || !readCoordinate(event))
+          throw new Error("Invalid read-state event");
+        return event;
+      },
+      async publish(event: RelayEvent, signal: AbortSignal) {
+        signal.throwIfAborted();
+        if (event.pubkey !== transport.viewer || !readCoordinate(event))
+          throw new Error("Invalid read-state event");
+        const response = await admitSignedRequest(
+          origin,
+          transport.viewer,
+          async () => {
+            // Tauri IPC cannot abort the underlying request. Keep admission until
+            // it settles even if the caller no longer needs the receipt.
+            const result = await nativeReadInvoke<{
+              status: number;
+              headers: Record<string, string>;
+              body: string;
+            }>("relay_publish_read_state", { community: origin, event });
+            return nativeResponse(result);
+          },
+          signal,
+        );
+        signal.throwIfAborted();
+        await acceptPublish(response, event.id);
+      },
+    },
+    ...(readCommunity
+      ? {
+          async readStateSnapshot(signal: AbortSignal, _requestId, priority) {
+            const response = await admitSignedRequest(
+              origin,
+              transport.viewer,
+              () =>
+                nativeRelayRequest(
+                  origin,
+                  "/query",
+                  readSnapshotFilter(transport.viewer),
+                ),
+              signal,
+              priority,
+            );
+            signal.throwIfAborted();
+            if (!response.ok)
+              throw new Error((await readApiFailure(response)).error);
+            return parseReadSnapshot(
+              JSON.parse(await readSnapshotText(response)),
+              transport.viewer,
+              readCommunity,
+              signal,
+            );
+          },
+        }
+      : {}),
+    async channelActivity(channelIds, signal) {
+      if (
+        channelIds.length < 1 ||
+        channelIds.length > 128 ||
+        channelIds.some((id) => !/^[a-zA-Z0-9_-]{1,128}$/.test(id))
+      )
+        throw new Error("Activity filter rejected");
+      return transport.query(
+        channelIds.map((channelId) => ({
+          kinds: [9, 40002, 40008, 45001, 45003],
+          "#h": [channelId],
+          limit: 1,
+        })),
+        signal,
+        "channel-activity",
+        "background",
+      );
+    },
     writer: {
       ...writer,
       kinds: creation ? [...nativeWriteKinds, 9007] : nativeWriteKinds,

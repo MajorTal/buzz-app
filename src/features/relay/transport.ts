@@ -988,9 +988,24 @@ export function admittedSignedWorkflowRead(
   signal: AbortSignal,
 ): Promise<Response> {
   const lane = signedAdmissions(relayOrigin(origin), viewer).api;
-  return lane.prepare(() => admittedApiRequest(lane, request, signal));
+  return lane.prepare(() =>
+    admitSignedRequest(origin, viewer, request, signal),
+  );
 }
 
+export const admitSignedRequest = (
+  origin: string,
+  viewer: string,
+  request: () => Promise<Response>,
+  signal?: AbortSignal,
+  priority: "foreground" | "background" = "foreground",
+) =>
+  admittedApiRequest(
+    signedAdmissions(relayOrigin(origin), viewer).api,
+    request,
+    signal,
+    priority,
+  );
 /** NIP-98 signed reads for a host that owns a signer (Tauri, NIP-07). Reads and writes use the same identity and relay scope. */
 export async function connectSignedTransport(
   signer: Signer,

@@ -43,6 +43,23 @@ test("production WS → broker → mounted UI delivers messages and retries a pa
   page,
   app,
 }) => {
+  // The first roster renews the activity observer and retires presence, which
+  // re-subscribes after its read gate. Either control may wait behind one in
+  // flight until that fetch's own continuation sends it, so count controls in
+  // the page: settlement and any resend fall in one microtask checkpoint.
+  await page.addInitScript(() => {
+    const native = window.fetch;
+    window.liveControls = 0;
+    window.fetch = (input, init) => {
+      const result = native(input, init);
+      if (/\/stream-(observer|presence-authors)$/.test(String(input))) {
+        const settled = () => window.liveControls--;
+        window.liveControls++;
+        result.then(settled, settled);
+      }
+      return result;
+    };
+  });
   await ready(page, app);
   const live = app.append("primary", "alpha", "Policy-realistic live delivery");
   await expect(
@@ -52,6 +69,30 @@ test("production WS → broker → mounted UI delivers messages and retries a pa
   await page
     .getByRole("textbox", { name: "Message #Alpha", exact: true })
     .fill("Keep my draft");
+  const established = (kind) =>
+    app.relay.sockets.some(
+      ({ community, readyState, routes }) =>
+        community === "primary" &&
+        readyState === 1 &&
+        [...routes].some(
+          ([id, filters]) =>
+            filters.some((filter) => filter.kinds.includes(kind)) &&
+            app.report.wireFrames.some(
+              (frame) => frame[0] === "EOSE" && frame[1] === id,
+            ),
+        ),
+    );
+  // The broker applies each control before it responds. Once the page has
+  // handled every response, live observer and presence routes that reached
+  // EOSE belong to the latest generations.
+  await expect
+    .poll(
+      async () =>
+        !(await page.evaluate(() => window.liveControls)) &&
+        established(24200) &&
+        established(20001),
+    )
+    .toBe(true);
   const socketCount = app.relay.sockets.length;
   const globalRequests = app.relay.requests.filter(({ filters }) =>
     filters.every((filter) => !filter["#h"]),

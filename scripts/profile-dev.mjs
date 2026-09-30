@@ -593,7 +593,9 @@ export async function profileWeb({
     if (!browser)
       throw new DOMException("Profiling startup cancelled.", "AbortError");
     control.abort.signal.throwIfAborted();
-    const page = await duringStartup(() => browser.newPage());
+    // Playwright otherwise pins the page to a fixed 1280x720 viewport that
+    // ignores window resizing.
+    const page = await duringStartup(() => browser.newPage({ viewport: null }));
     session = await duringStartup(() => page.context().newCDPSession(page));
     if (network) {
       networkCapture = networkRecorder(session, directory);

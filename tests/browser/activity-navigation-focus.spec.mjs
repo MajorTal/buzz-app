@@ -122,8 +122,41 @@ for (const destination of ["reply", "off-window root"]) {
       exact: true,
     });
     await expect(panel).toBeVisible();
-    const close = panel.getByRole("button", {
-      name: "Close thread",
+    // A repeat activity intent must reveal its retained thread, including when
+    // another tab is selected or the entire pane is collapsed.
+    const main = page.getByRole("article", {
+      name: "Conversation",
+      exact: true,
+    });
+    for (const hiddenBy of ["settings", "collapsed"]) {
+      await main
+        .getByRole("button", { name: "Channel settings", exact: true })
+        .click();
+      await expect(panel).toBeHidden();
+      if (hiddenBy === "collapsed")
+        await main
+          .getByRole("button", { name: "Toggle tab pane", exact: true })
+          .click();
+      await row.focus();
+      await row.press("Enter");
+      await expect(popup).toBeVisible();
+      await popup.getByRole("button", { name: /Open thread for/ }).click();
+      await expect(panel).toBeVisible();
+      await expect(
+        page.getByRole("tab", { name: "Thread", exact: true }),
+      ).toHaveAttribute("aria-selected", "true");
+      await expect(
+        page.getByRole("tab", { name: "Channel settings", exact: true }),
+      ).toHaveCount(1);
+    }
+    await page
+      .getByRole("button", { name: "Close Channel settings tab", exact: true })
+      .click();
+    await expect(
+      page.getByRole("tab", { name: "Channel settings", exact: true }),
+    ).toHaveCount(0);
+    const close = page.getByRole("button", {
+      name: "Close Thread tab",
       exact: true,
     });
     await close.focus();

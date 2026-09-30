@@ -73,6 +73,7 @@ function ConnectedApp({ services }: { services: AppServices }) {
   const selectedPanel = launcher.selected;
   const companion = selectedPanel && (
     <PanelCard
+      key={launcher.openingId}
       ref={launcher.panelRef}
       panel={selectedPanel}
       target={launcher.target ?? ""}

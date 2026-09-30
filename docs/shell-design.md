@@ -41,7 +41,7 @@ semantic tokens, UI authoring rules and the local component reference.
 - `AppShell.tsx` owns the 48px header, vertical page navigation, contributed panel
   launchers, Settings access, community rail, and page frames. Page navigation sits
   above the channel list outside Settings, using its saved sidebar width
-  and resize behavior. Settings replaces that card with `SettingsSidebar.tsx`,
+  and resize behavior. Settings replaces that region with `SettingsSidebar.tsx`,
   preserving the same width (220px minimum) and returning to the previous view
   with Back. `App.tsx` composes `features/channel-navigation/ChannelSidebar`
   through an ordinary render prop; there is no portal or plugin contract expansion.
@@ -58,9 +58,11 @@ semantic tokens, UI authoring rules and the local component reference.
   the sidebar preserves its mounted state and saved width. Reduced motion disables
   the transition. Other desktop pages retain the visible sidebar.
   The header keeps history and account/search actions, with no second navigation row.
-  Full-height pages get a 16px outer gutter (8px on narrow screens) and own their
-  card surfaces. The shell adds no white backing behind them. Document pages
-  scroll inside the remaining viewport.
+  The shell owns one joined Panel around navigation and page content, with a
+  16px outer gutter (8px on narrow screens). Nested Panels keep their opaque
+  fill and clipping but drop individual borders, radii, and shadows. Layout
+  owners add one-pixel semantic dividers. Document pages scroll inside the
+  remaining viewport.
 - `SettingsSidebar.tsx` presents community and app sections in the shell's
   replacement sidebar. `Settings.tsx` renders the selected detail pane and retains
   drafts across section changes. The detail pane scrolls independently and keeps
@@ -208,13 +210,65 @@ access in a built app.
 
 ## Messages
 
-The host owns the persistent rounded sidebar card; Messages owns conversation
-and contributed panel cards, with 16px gutters. A single right panel fills the conversation height;
+The host owns the single rounded outer surface and sidebar divider. Messages
+owns flush conversation and contributed-panel regions separated by one-pixel
+dividers. A single right panel fills the conversation height;
 the right-column grid splits available height evenly between a local link card
 and the launched companion card. Below 1000px
 the right column overlays the conversation; it also overlays when the content
 pane is too narrow for two columns. Below 650px it fills the page area.
-Each card contains its own overflow, keeping the composer and close control visible.
+Each region contains its own overflow, keeping the composer and close control visible.
+Ordinary thread opens show a loading status until bounded history and initial
+bottom positioning finish; the first painted replies are already in place.
+Exact-message links reveal their requested row independently. A reader’s scroll
+gesture takes over immediately, and loading failures keep recovery visible.
+Opening a linked detail from inside a thread adds a closable tab to the same
+secondary pane. Profile activity, managed-instance, and owner-profile links use
+`PanelContext.push` to select an existing target or add a tab; `open` retains its
+replacement semantics. A shared 2.5rem header uses 12rem tabs composed from the sidebar's NavigationItem,
+with profile avatars or detail icons and a trailing close button.
+Switching retains mounted content, scroll position, and drafts. Each tab has a
+close control; Delete on a tab and Escape in its content close that tab. Closing
+the selected tab selects a neighbor, and closing the last tab dismisses the pane.
+Feature-local details such as harness logs remain tied to their owning profile;
+closing that profile or losing authorization also removes its log tab.
+The main-header split control toggles the tab pane without closing its tabs or
+resetting their contents. Opening an empty pane creates one new tab.
+The plus control appears on header hover or keyboard focus (always on touch) and
+opens a picker with Channels, Direct messages, and Channel tools categories,
+each with searchable choices. Enabled Todos and native-desktop Terminal reuse
+their registered components and channel context. Opening a tool in a tab replaces
+its drawer; its launcher then toggles that tab's pane without a second mount.
+Terminal sessions remain plugin-owned when their tabs close, and Escape in the
+terminal input remains a shell key.
+Conversation tabs reuse the timeline, composer, draft and message-management owners;
+selecting an already-open conversation selects its existing tab. Each main channel
+keeps its own tab descriptors, selected tab, and pane visibility in memory for the
+community session, including while visiting other pages such as Settings.
+Changing the main channel unmounts its contents; returning restores those tabs and
+saved conversation drafts without moving focus away from the main conversation.
+A restored thread does not replay a previous Reply focus request. Feature-local
+details such as logs close on that switch.
+Changing session or losing a contribution retires the affected tabs and callbacks.
+Tab sets are not persisted across application restarts. Opening a
+detail from the main timeline still replaces the thread and transient details,
+not retained channel-tool tabs. Content switches
+immediately; the shared navigation selection background identifies the active tab.
+Joined header separators meet the vertical dividers. The sidebar resize grip stays
+visible throughout a drag while its tooltip stays hidden. Desktop main/secondary
+dividers share that grip and support dragging, arrow keys (Shift for larger
+steps), Home/End, and double-click to reset. Each page retains its chosen split
+while the panel closes and reopens; widths clamp to the available space. Narrow
+overlay layouts hide this divider and keep their normal responsive sizing.
+
+Pointer-opened secondary panels fade and slide in over 180ms and out over 120ms
+with the shared strong ease-out curve. Desktop panels travel 12px; overlays travel
+their full width. The desktop split stays in place until the exit finishes, so
+closing content never collapses mid-transition. Keyboard actions stay immediate;
+reduced motion uses only a fade. Resizing remains immediate.
+`features/panels/PanelDock` retains inert, accessibility-hidden closing content until
+its CSS transitions finish, cancels stale cleanup on reopening, and leaves selection
+and focus restoration with the existing owners. It adds no timer or resize observer.
 Channels opts into the reusable companion prop and owns both cards, including a
 companion-only view without a selected channel or relay. Settings and legacy
 pages use the host fallback frame; opening from those pages does not navigate away.
@@ -238,3 +292,9 @@ The shared conversation layer now supplies bounded thread reading/replies and
 [session-owned unread indicators](unread.md). These are separate from this styling
 pass: counts remain observed rather than exact, manual unread is local-only, and
 reading intent belongs to reusable conversation UI rather than shell navigation.
+
+Harness logs remain owned and authorized by the profile. `PanelSubview` presents
+the log as a sibling tab in the channel pane, with standalone Back navigation
+elsewhere. Closing the log or losing authorization unmounts it and stops its
+polling; switching tabs retains it and the profile state.
+Todos uses the standard 2.5rem header to align with other side panels.

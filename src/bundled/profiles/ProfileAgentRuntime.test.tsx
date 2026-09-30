@@ -409,7 +409,9 @@ it("opens the exact local log, polls while focused, and drops it on a community 
     within(log).getByTestId("managed-agent-log-content"),
   ).toHaveTextContent("first line");
   expect(screen.queryByRole("tab", { name: "Runtime" })).toBeNull();
-  await userEvent.click(within(log).getByRole("button", { name: "Back" }));
+  await userEvent.click(
+    within(log).getByRole("button", { name: "Back to profile" }),
+  );
   expect(screen.getByRole("tab", { name: "Runtime" })).toBeVisible();
   await openRuntimeLog();
   expect(readLog).toHaveBeenCalledWith({
@@ -449,7 +451,9 @@ it("shows loading, empty, and failure without echoing host errors or stale outpu
   expect(screen.getByTestId("managed-agent-log-content")).toHaveTextContent(
     "No log output yet.",
   );
-  await userEvent.click(screen.getByRole("button", { name: "Back" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Back to profile" }),
+  );
   await openRuntimeLog();
   await vi.waitFor(() => expect(readLog.mock.calls.length).toBeGreaterThan(2));
   await act(async () => reject("secret host path"));

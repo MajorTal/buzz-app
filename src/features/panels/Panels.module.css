@@ -1,4 +1,4 @@
-/* Shared card chrome; pages choose the surrounding layout. */
+/* Shared panel content; pages choose the surrounding layout and dividers. */
 .cardLayout {
   min-width: 0;
   min-height: 0;
@@ -30,26 +30,35 @@
   min-height: 0;
   position: relative;
   overflow: hidden;
-  gap: var(--space-4);
 }
-.withCompanion {
-  grid-template-columns: minmax(0, 1fr) minmax(300px, 420px);
+.frame:has(> [data-panel-dock]:not([hidden])) {
+  grid-template-columns: minmax(0, 1fr) minmax(
+      300px,
+      var(--secondary-panel-width, 420px)
+    );
 }
 .page {
   min-width: 0;
   min-height: 0;
 }
 .dock {
+  position: relative;
+  border-inline-start: 1px solid var(--border-standard);
   display: grid;
   grid-auto-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
 }
 @media (max-width: 1000px) {
-  .withCompanion {
+  .frame:has(> [data-panel-dock]:not([hidden])) {
     grid-template-columns: minmax(0, 1fr);
   }
+  .dock > [data-panel-resize] {
+    display: none;
+  }
   .dock {
+    --panel-motion-duration: var(--duration-panel-enter);
+    --panel-motion-distance: 100%;
     position: absolute;
     inset: 0 0 0 auto;
     width: min(420px, 100%);
@@ -60,5 +69,179 @@
 @media (max-width: 650px) {
   .dock {
     width: 100%;
+    border-inline-start: 0;
+  }
+}
+
+/* Short desktop travel; overlay layouts use the full panel width. */
+.motion {
+  opacity: 1;
+  transform: none;
+  transition:
+    transform var(--panel-motion-duration, var(--duration-panel-enter))
+    var(--easing-enter),
+    opacity var(--panel-motion-duration, var(--duration-panel-enter))
+    var(--easing-enter);
+}
+.motion[data-closing] {
+  opacity: 0;
+  transform: translateX(var(--panel-motion-distance, var(--space-3)));
+  transition-duration: min(
+    var(--panel-motion-duration, var(--duration-panel-enter)),
+    var(--duration-fast)
+  );
+  pointer-events: none;
+}
+@starting-style {
+  .motion {
+    opacity: 0;
+    transform: translateX(var(--panel-motion-distance, var(--space-3)));
+  }
+}
+html[data-keyboard-input] .motion {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .motion {
+    transform: none;
+    transition-property: opacity;
+  }
+  .motion[data-closing] {
+    transform: none;
+  }
+  @starting-style {
+    .motion {
+      transform: none;
+    }
+  }
+}
+
+.resize[data-panel-resize] {
+  position: absolute;
+  inset: 0 auto 0 -1px;
+  /* The border starts one pixel before the dock's content box. */
+  translate: 0.5px 0;
+}
+
+.resize[data-panel-resize]::after {
+  left: 50%;
+}
+
+/* Inline feature details reuse the same panel header and motion as target drill-ins. */
+.subviewStage {
+  --space-panel-inset: var(--space-5);
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+.subviewBase {
+  height: 100%;
+  min-height: 0;
+}
+.subview,
+.inlineSubview {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-panel);
+}
+.subview {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+}
+.subviewBase,
+.subview {
+  opacity: 1;
+  transform: none;
+  transition:
+    transform var(--duration-panel-enter) var(--easing-enter),
+    opacity var(--duration-panel-enter) var(--easing-enter);
+}
+.subviewBase[data-covered] {
+  visibility: hidden;
+  opacity: 0;
+  transform: translateX(calc(-1 * var(--space-3)));
+}
+@starting-style {
+  .subview {
+    opacity: 0;
+    transform: translateX(var(--space-3));
+  }
+}
+html[data-keyboard-input] :is(.subviewBase, .subview) {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .subviewBase,
+  .subview,
+  .subviewBase[data-covered] {
+    transform: none;
+    transition-property: opacity;
+  }
+  @starting-style {
+    .subview {
+      transform: none;
+    }
+  }
+}
+
+.workspace {
+  background: var(--surface-panel);
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+}
+.workspace > header {
+  flex-wrap: nowrap;
+  flex-shrink: 0;
+}
+.workspace > header [class="panel-header-title"] {
+  overflow: hidden;
+}
+.workspaceBody {
+  display: grid;
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+}
+.workspacePane {
+  display: grid;
+  grid-area: 1 / 1;
+  min-height: 0;
+  min-width: 0;
+}
+.workspacePane[data-covered] {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+}
+.tabDetail {
+  --space-panel-inset: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: auto;
+}
+
+.addTab {
+  display: flex;
+  opacity: 0;
+  transition: opacity var(--duration-fast) var(--easing-state);
+}
+.workspace > header:is(:hover, :focus-within) .addTab {
+  opacity: 1;
+}
+@media (hover: none) {
+  .addTab {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .addTab {
+    transition: none;
   }
 }

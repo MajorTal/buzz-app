@@ -319,16 +319,21 @@ test.describe("owner-profile retry focus", () => {
       name: "Retry Delete check",
       exact: true,
     });
-    const close = panel.getByRole("button", {
-      name: "Close channel settings",
+    const close = page.getByRole("button", {
+      name: "Close Channel settings tab",
       exact: true,
     });
     const open = async () => {
       outcome = "failure";
       gate = undefined;
-      await page
-        .getByRole("button", { name: "Channel settings", exact: true })
-        .click();
+      // Keyboard activation can reopen during exit without racing the
+      // header's position as the main conversation expands.
+      const trigger = page.getByRole("button", {
+        name: "Channel settings",
+        exact: true,
+      });
+      await trigger.focus();
+      await trigger.press("Enter");
       await expect(retry).toBeVisible();
     };
     const attempt = async (result, moveFocus = false) => {

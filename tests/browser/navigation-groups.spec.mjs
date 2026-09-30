@@ -894,7 +894,9 @@ test.describe("new personal schema", () => {
       }),
     ).toBeEnabled();
     await expect(failure).toHaveCount(0);
-    await page.getByRole("button", { name: "Close channel settings" }).click();
+    await page
+      .getByRole("button", { name: "Close Channel settings tab" })
+      .click();
     const menu = await openMove(page, personal);
     await menu
       .getByRole("menuitem", { name: "Remove from Personal work", exact: true })

@@ -377,8 +377,10 @@
   --time-immediate: 0ms;
   --time-fast: 120ms;
   --time-state: 150ms;
+  --time-panel-enter: 180ms;
   --time-settle: 220ms;
   --ease-state: ease;
+  --ease-enter: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-settle: cubic-bezier(0.645, 0.045, 0.355, 1);
 }
 
@@ -533,6 +535,7 @@
   --affordance-navigation-quiet: var(--neutral-navigation-quiet);
   --affordance-panel-hover: var(--neutral-2);
   --affordance-floating-hover: var(--neutral-3);
+  --affordance-popover-selected: var(--neutral-2);
   --affordance-floating-control: var(--affordance-subtle);
   --affordance-floating-control-hover: var(--affordance-subtle-hover);
   --affordance-floating-control-pressed: var(--affordance-subtle-pressed);
@@ -592,6 +595,7 @@
   --affordance-subtle-pressed: var(--neutral-7);
   --affordance-panel-hover: var(--neutral-4);
   --affordance-floating-hover: var(--neutral-7);
+  --affordance-popover-selected: var(--neutral-6);
   --affordance-floating-control: var(--neutral-6);
   --affordance-floating-control-hover: var(--neutral-7);
   --affordance-floating-control-pressed: var(--neutral-8);
@@ -687,7 +691,7 @@
   --layer-popover: 1100;
   --layer-tooltip: 1200;
   --size-topbar: 3.5rem;
-  --size-panel-header: 3.5rem;
+  --size-panel-header: 2.5rem;
   --size-control-sm: 2rem;
   --size-control: 2.5rem;
   --size-control-lg: 3.25rem;
@@ -709,9 +713,11 @@
   --radius-chip: 0.375rem;
   --duration-fast: var(--time-fast);
   --duration-state: var(--time-state);
+  --duration-panel-enter: var(--time-panel-enter);
   --duration-settle: var(--time-settle);
   --duration-field-focus: var(--time-state);
   --easing-state: var(--ease-state);
+  --easing-enter: var(--ease-enter);
   --easing-settle: var(--ease-settle);
 
   --text-on-accent: #ffffff;
@@ -817,6 +823,7 @@
   --color-affordance-navigation-quiet: var(--affordance-navigation-quiet);
   --color-affordance-panel-hover: var(--affordance-panel-hover);
   --color-affordance-floating-hover: var(--affordance-floating-hover);
+  --color-affordance-popover-selected: var(--affordance-popover-selected);
   --color-affordance-floating-control: var(--affordance-floating-control);
   --color-affordance-floating-control-hover: var(
     --affordance-floating-control-hover

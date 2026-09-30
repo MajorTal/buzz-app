@@ -1,6 +1,6 @@
 @reference "../../shared/styles/globals.css";
 
-/* Separate bento surfaces; the shell owns the gradient and outer gutter. */
+/* Flush content regions; the shell owns the single outer surface. */
 .root {
   height: 100%;
   min-height: 0;
@@ -20,8 +20,11 @@
   position: relative;
   overflow: hidden;
 }
-.withPanel {
-  grid-template-columns: minmax(320px, 1.1fr) minmax(316px, 1fr);
+.board:has(> [data-panel-dock]:not([hidden])) {
+  grid-template-columns: minmax(320px, 1.1fr) minmax(
+      316px,
+      var(--secondary-panel-width, 1fr)
+    );
 }
 .sidebar,
 .conversation {
@@ -44,6 +47,10 @@
   --channel-row-radius: var(--radius-control);
   --sidenav-emoji-size: 13px;
   padding-inline: var(--sidebar-padding) var(--sidebar-padding-end);
+}
+.conversation [data-tab-pane-toggle][aria-expanded="true"] {
+  /* An open pane shares the selected tab fill, rather than a held press. */
+  --interaction-pressed: var(--affordance-subtle);
 }
 .sidebarScroll {
   min-height: 0;
@@ -127,45 +134,15 @@
 }
 .channelListFrame {
   position: relative;
-  width: calc(100% + 4px);
+  /* Bring the scrollbar near the divider without clipping its native thumb. */
+  width: calc(100% + 6px);
   min-width: 0;
   min-height: calc(var(--space-6) + var(--space-5) + var(--space-1) + 1px);
   flex: 1;
   overflow: hidden;
-  border-radius: var(--radius-row);
-}
-/* WebKit ignores margins on scrollbar track pseudo-elements. Cover the top
-   track, then restore the thumb's rounded cap at the inset without moving
-   scroll content. */
-.channelListFrame::before,
-.channelListFrame::after {
-  position: absolute;
-  right: 0;
-  width: 5px;
-  background: var(--surface-panel);
-  content: "";
-  pointer-events: none;
-}
-.channelListFrame::before {
-  z-index: 3;
-  top: calc(var(--space-6) - 2px);
-  width: 3px;
-  height: 4px;
-  border-radius: var(--radius-pill);
-  background: color-mix(in srgb, var(--border-standard) 90%, transparent);
-  opacity: 0;
-  transition: opacity 90ms cubic-bezier(0.23, 1, 0.32, 1);
-}
-.channelListFrame:has(.channelList:is(:hover, :focus-within))::before {
-  opacity: 1;
-}
-.channelListFrame::after {
-  z-index: 2;
-  top: 0;
-  height: var(--space-6);
 }
 .channelList {
-  width: calc(100% + 2px);
+  width: 100%;
   height: 100%;
   min-width: 0;
   box-sizing: border-box;
@@ -175,9 +152,6 @@
   isolation: isolate;
   padding-block: var(--sidebar-padding);
   --channel-row-fill-start: var(--space-1);
-  /* The scroll frame/list extend 6px beyond the panel content box so the native
-     scrollbar can sit at the edge. Preserve the existing left fill inset and
-     compensate only the right edge back to the same panel-relative gutter. */
   --channel-row-fill-end: calc(var(--space-1) + 6px);
   scrollbar-gutter: stable;
   scrollbar-width: thin;
@@ -418,72 +392,6 @@
   letter-spacing: var(--text-caption--letter-spacing);
   border-top: 1px solid var(--border-standard);
 }
-.sidebarResizeHandle {
-  position: relative;
-  z-index: 4;
-  align-self: stretch;
-  width: var(--space-4);
-  flex-shrink: 0;
-  justify-self: center;
-  height: 100%;
-  padding: 0;
-  border: 0;
-  margin: 0 calc((var(--space-panel-gap) - var(--space-4)) / 2);
-  background: transparent;
-  cursor: col-resize;
-  touch-action: none;
-}
-.sidebarResizeHandle::after {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 3px;
-  height: 7.5%;
-  border-radius: var(--radius-pill);
-  background: var(--border-focus);
-  content: "";
-  opacity: 0;
-  transform: translate(-50%, -50%);
-  transition: opacity 160ms ease-out;
-}
-.sidebarResizeHandle::before {
-  position: absolute;
-  top: 50%;
-  left: calc(100% + 2px);
-  width: max-content;
-  padding: var(--space-1h) var(--space-2);
-  border: 1px solid var(--border-standard);
-  border-radius: var(--radius-control);
-  background: var(--surface-popover);
-  box-shadow: var(--shadow-sm);
-  color: var(--text-standard);
-  content: attr(data-tooltip);
-  font-size: var(--text-caption);
-  line-height: var(--text-caption--line-height);
-  opacity: 0;
-  pointer-events: none;
-  transform: translate(4px, -50%);
-  transition:
-    opacity 120ms ease-out,
-    transform 120ms ease-out,
-    visibility 0s linear 120ms;
-  visibility: hidden;
-  white-space: nowrap;
-}
-.sidebarResizeHandle:hover::after,
-.sidebarResizeHandle:focus-visible::after {
-  opacity: 1;
-}
-.sidebarResizeHandle:hover::before,
-.sidebarResizeHandle:focus-visible::before {
-  opacity: 1;
-  transform: translate(0, -50%);
-  transition-delay: 600ms;
-  visibility: visible;
-}
-.sidebarResizeHandle:focus-visible {
-  outline: none;
-}
 .empty {
   padding: var(--space-8) var(--space-4);
   color: var(--text-subtle);
@@ -492,29 +400,28 @@
   letter-spacing: var(--text-body-sm--letter-spacing);
 }
 .panelStack {
-  border-radius: var(--radius-panel);
+  position: relative;
+  border-inline-start: 1px solid var(--border-standard);
   grid-column: 2;
   min-width: 0;
   min-height: 0;
   display: grid;
   grid-auto-rows: minmax(0, 1fr);
-  gap: var(--space-1);
-  margin-left: var(--space-panel-gap);
 }
-/* Settings replaces the primary surface without collapsing its retained layout. */
-.panelStack > :is(:has(> .settingsPanel), .retainedPanel[inert]) {
-  grid-area: 1 / 1;
+.panelStack
+  > :not([inert], [hidden], [data-panel-resize])
+  ~ :not([inert], [hidden], [data-panel-resize]) {
+  border-block-start: 1px solid var(--border-standard);
+}
+.retainedPanel[hidden] {
+  display: none;
 }
 .retainedPanel {
   display: grid;
   min-height: 0;
   min-width: 0;
 }
-.retainedPanel[inert] {
-  visibility: hidden;
-  /* Revealed spoilers override visibility; opacity suppresses the whole subtree. */
-  opacity: 0;
-}
+
 .companion {
   display: grid;
   grid-template-rows: minmax(0, 1fr);
@@ -523,8 +430,7 @@
 }
 .connect {
   height: 100%;
-  @apply glass-secondary;
-  border-radius: var(--radius-card);
+  background: var(--surface-panel);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -558,48 +464,57 @@
 }
 @media (max-width: 1000px) {
   .board,
-  .withPanel {
+  .board:has(> [data-panel-dock]:not([hidden])) {
     grid-template-columns: minmax(0, 1fr);
   }
-  .withPanel .panelStack {
+  .panelStack > [data-panel-resize] {
+    display: none;
+  }
+  .panelStack {
+    --panel-motion-duration: var(--duration-panel-enter);
+    --panel-motion-distance: 100%;
     position: absolute;
     grid-column: 1;
     inset: 0 0 0 auto;
     width: min(420px, 100%);
     z-index: 2;
     box-shadow: var(--elevation-dock);
-    margin-left: 0;
   }
 }
 /* A widened persistent sidebar can leave less room than viewport width implies. */
 @container (max-width: 651px) {
-  .withPanel {
+  .board:has(> [data-panel-dock]:not([hidden])) {
     grid-template-columns: minmax(0, 1fr);
   }
-  .withPanel .panelStack {
+  .panelStack > [data-panel-resize] {
+    display: none;
+  }
+  .panelStack {
+    --panel-motion-duration: var(--duration-panel-enter);
+    --panel-motion-distance: 100%;
     position: absolute;
     grid-column: 1;
     inset: 0 0 0 auto;
     width: min(420px, 100%);
     z-index: 2;
     box-shadow: var(--elevation-dock);
-    margin-left: 0;
   }
 }
 @media (max-width: 650px) {
   .board,
-  .withPanel {
+  .board:has(> [data-panel-dock]:not([hidden])) {
     grid-template-columns: minmax(0, 1fr);
   }
-  .sidebarResizeHandle {
+  .sidebarResizeHandle[aria-orientation="vertical"] {
     width: 4px;
     margin: 0;
     visibility: hidden;
     pointer-events: none;
   }
-  .withPanel .panelStack {
+  .panelStack {
     grid-column: 1 / -1;
     width: 100%;
+    border-inline-start: 0;
   }
   .roster {
     font-size: var(--text-caption);
@@ -869,16 +784,8 @@
   letter-spacing: var(--text-body-sm--letter-spacing);
 }
 @media (prefers-reduced-motion: reduce) {
-  .sectionChevron,
-  .sidebarResizeHandle::after {
+  .sectionChevron {
     transition: none;
-  }
-  .sidebarResizeHandle::before {
-    transition: visibility 0s linear 120ms;
-  }
-  .sidebarResizeHandle:hover::before,
-  .sidebarResizeHandle:focus-visible::before {
-    transition: visibility 0s linear 600ms;
   }
   .activityPopover {
     transition: opacity 120ms ease-out;

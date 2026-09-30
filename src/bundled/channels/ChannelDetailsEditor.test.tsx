@@ -320,6 +320,11 @@ it("orders metadata, Canvas, and actions and dismisses each edit layer with Esca
     screen.getByText(channel.description).compareDocumentPosition(canvas) &
       Node.DOCUMENT_POSITION_FOLLOWING,
   ).toBeTruthy();
+  expect(screen.getByRole("tab", { name: "Channel settings" })).toHaveFocus();
+  await user.tab();
+  expect(
+    screen.getByRole("button", { name: "Close Channel settings tab" }),
+  ).toHaveFocus();
   await user.tab();
   expect(canvas).toHaveFocus();
   await user.tab();

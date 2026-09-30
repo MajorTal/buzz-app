@@ -48,7 +48,7 @@ export function SessionHeading({
   const Icon = channelIcon(channel);
   return (
     <PanelHeader
-      icon={<Icon size={20} />}
+      icon={<Icon size="1rem" />}
       title={
         <h2 ref={headingRef} tabIndex={-1} className="m-0 truncate text-label">
           {channel.name}

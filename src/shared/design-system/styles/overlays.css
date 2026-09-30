@@ -249,6 +249,8 @@
 
 /* Shared paint for anchored popups. Features retain layout and interaction. */
 @utility popover-surface {
+  /* Selection must remain visible on the raised dark surface. */
+  --affordance-selected: var(--affordance-popover-selected);
   @apply interaction-floating;
   border: 1px solid var(--border-standard);
   border-radius: var(--radius-control);

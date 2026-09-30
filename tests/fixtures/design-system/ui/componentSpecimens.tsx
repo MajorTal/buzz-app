@@ -42,6 +42,7 @@ import { FlexWorkspace } from "../../../../src/shared/design-system/ui/FlexWorks
 import { BentoSpecimen } from "./BentoSpecimen";
 import {
   DotsThreeIcon,
+  ArrowLeftIcon,
   HashIcon,
   ChatCircleIcon,
   PlusIcon,
@@ -441,6 +442,12 @@ const TABS_PANEL_PARTS = [
 ] as const;
 
 function TabsSpecimen() {
+  const [closable, setClosable] = useState([
+    "Thread",
+    "Profile",
+    "Harness log",
+  ]);
+  const [selectedClosable, setSelectedClosable] = useState("Thread");
   const [destination, setDestination] = useState<Destination>("messages");
   const [panelDestination, setPanelDestination] =
     useState<Destination>("messages");
@@ -451,6 +458,44 @@ function TabsSpecimen() {
   }));
   return (
     <div className="component-specimen-stack">
+      <SpecimenGroup label="Closable navigation tabs — shared sidebar control">
+        {closable.length ? (
+          <Tabs
+            value={selectedClosable}
+            label="Open details"
+            variant="navigation"
+            onValueChange={setSelectedClosable}
+            items={closable.map((label) => ({
+              value: label,
+              label,
+              icon:
+                label === "Profile" ? (
+                  <Avatar alt="" fallback="Ada" size="fill" />
+                ) : (
+                  <ChatCircleIcon size={18} />
+                ),
+              onClose: () => {
+                const next = closable.filter((item) => item !== label);
+                setClosable(next);
+                if (selectedClosable === label)
+                  setSelectedClosable(next[0] ?? "");
+              },
+            }))}
+            renderPanel={(value) => (
+              <p className="text-body-sm">{value} content</p>
+            )}
+          />
+        ) : (
+          <Button
+            onClick={() => {
+              setClosable(["Thread", "Profile", "Harness log"]);
+              setSelectedClosable("Thread");
+            }}
+          >
+            Reset tabs
+          </Button>
+        )}
+      </SpecimenGroup>
       <SpecimenGroup label="Workspace — quiet title tabs for a combined pane">
         <Tabs
           value={iconDestination}
@@ -552,6 +597,19 @@ function PanelHeaderSpecimen() {
         <PanelHeader
           title="Conversation"
           icon={<ChatCircleIcon size={16} aria-hidden="true" />}
+          actions={actions}
+        />
+      </SpecimenGroup>
+      <SpecimenGroup label="Detail — back navigation before the title">
+        <PanelHeader
+          title="Profile"
+          navigation={
+            <IconButton
+              size="toolbar"
+              aria-label="Back to thread"
+              icon={<ArrowLeftIcon size={18} aria-hidden="true" />}
+            />
+          }
           actions={actions}
         />
       </SpecimenGroup>

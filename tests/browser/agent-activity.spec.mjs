@@ -167,7 +167,7 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
     )
     .toBe(true);
   await expect(firstEntry).toHaveAccessibleName(/, Presence: online$/);
-  await page.getByRole("button", { name: "Close channel panel" }).click();
+  await page.getByRole("button", { name: /^Close (?!Thread).* tab$/ }).click();
   // A busy skip followed by a successful retry must not masquerade as recovery.
   expect(
     app.report.brokerRequests.filter(({ url }) =>
@@ -254,7 +254,7 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
   await expect(panel.locator("pre code")).toContainText('"channelId": "alpha"');
   await expect(panel.locator("pre code")).not.toContainText("other channel");
 
-  await page.getByRole("button", { name: "Close channel panel" }).click();
+  await page.getByRole("button", { name: /^Close (?!Thread).* tab$/ }).click();
   await expect(firstEntry).toBeFocused();
   await secondEntry.click();
   await expect(panel.locator("code").first()).toHaveText(second);
@@ -262,7 +262,7 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
     panel.getByRole("button", { name: /turn_liveness/ }),
   ).toBeVisible();
   await expect(panel.getByRole("button", { name: /acp_read/ })).toHaveCount(0);
-  await page.getByRole("button", { name: "Close channel panel" }).click();
+  await page.getByRole("button", { name: /^Close (?!Thread).* tab$/ }).click();
   await expect(secondEntry).toBeFocused();
   await secondEntry.click();
   await expect(panel.locator("code").first()).toHaveText(second);
@@ -308,7 +308,7 @@ test("channel activity consumes telemetry, isolates mixed batches, selects agent
 
   // Stale evidence is unknown, not completed; one terminal turn must not hide
   // another active turn for the same agent. Capture survives closing the panel.
-  await page.getByRole("button", { name: "Close channel panel" }).click();
+  await page.getByRole("button", { name: /^Close (?!Thread).* tab$/ }).click();
   app.observer(activity("turn_completed", "alpha", "after-reset"), firstKey);
   await expect(agentEntry(page, first)).toHaveCount(0);
   app.observer(
@@ -603,6 +603,13 @@ it("profile activity opens the exact agent and originating channel before its fi
   ).toBeVisible();
   await expect(panel.getByRole("button", { name: /acp_read/ })).toHaveCount(0);
   await panel.press("Escape");
+  await expect(profile).toBeVisible();
+  const profileTab = page
+    .getByRole("tablist", { name: "Panel tabs" })
+    .getByRole("tab", { selected: true });
+  await expect(profileTab).toBeFocused();
+  await profileTab.press("Escape");
+  await expect(profile).toBeHidden();
   await expect(avatar).toBeFocused();
   await avatar.click();
   await expect(
@@ -717,6 +724,12 @@ it("profile activity opens the exact agent and originating channel before its fi
     .getByRole("button", { name: "Back", exact: true })
     .click();
   await page.locator(`[data-channel-id="${profileChannelId}"]`).click();
+  // Channel navigation restores the existing profile tab. Close it explicitly
+  // so this exercises a fresh opening and its focus handoff after disable.
+  await page
+    .getByRole("button", { name: "Close Fixture agent tab", exact: true })
+    .click();
+  await expect(profile).toBeHidden();
   await avatar.click();
   await expect(profile).toBeVisible();
   await expect(
@@ -724,9 +737,7 @@ it("profile activity opens the exact agent and originating channel before its fi
   ).toHaveCount(0);
   // Finish the reopened profile's focus handoff and timeline layout before
   // starting read dwell; visible profile content alone proves neither.
-  await expect(
-    profile.getByRole("region", { name: "Profile details" }),
-  ).toBeFocused();
+  await expect(profileTab).toBeFocused();
   await settle(page);
   const history = page.getByRole("region", {
     name: "Channel message history",
@@ -877,7 +888,7 @@ test.describe("thread activity", () => {
       }),
     ).toHaveText(/Alpha.*alpha/);
     await page
-      .getByRole("button", { name: "Close channel panel", exact: true })
+      .getByRole("button", { name: /^Close (?!Thread).* tab$/, exact: true })
       .click();
     sendTyping();
     await expect(marker).toBeVisible();

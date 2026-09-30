@@ -476,6 +476,22 @@ it("autofocuses each selected conversation once without stealing focus on update
   }
 });
 
+it("does not take focus from a modal when the conversation mounts behind it", () => {
+  const dialog = document.createElement("div");
+  dialog.setAttribute("role", "dialog");
+  dialog.setAttribute("aria-modal", "true");
+  const search = document.createElement("input");
+  dialog.append(search);
+  document.body.append(dialog);
+  try {
+    search.focus();
+    mount({ autoFocus: true });
+    expect(search).toHaveFocus();
+  } finally {
+    dialog.remove();
+  }
+});
+
 it("restores the draft end through StrictMode replay without resetting a deliberate selection on updates", () => {
   writeView("scope", "draft:channel", "Saved draft");
   const h = mount({ autoFocus: true });

@@ -48,7 +48,7 @@ test("nested replies send, stay open, and reveal through links at readable panel
   ).toHaveCount(0);
   // Ordinary replies are direct siblings, not children of a collapsible panel.
   await expect(
-    history.locator(":scope > ol > li").filter({
+    history.locator(":scope > [data-thread-rows] > ol > li").filter({
       has: page
         .locator("[data-message-id]")
         .filter({ hasText: "Unread reply 0" }),
@@ -277,8 +277,8 @@ test("nested replies send, stay open, and reveal through links at readable panel
     }
   }
   await page.setViewportSize({ width: 1440, height: 950 });
-  await panel
-    .getByRole("button", { name: "Close thread", exact: true })
+  await page
+    .getByRole("button", { name: "Close Thread tab", exact: true })
     .click();
   const linked = app.append(
     "primary",
@@ -531,7 +531,7 @@ for (const width of [1492, 1280, 1024, 700, 390])
     ).toBeVisible();
     const clock = continuationRow.locator("time");
     await panel.getByRole("textbox", { name: "Reply to thread" }).focus();
-    await panel.getByRole("heading", { name: "Thread", exact: true }).hover();
+    await page.getByRole("tab", { name: "Thread", exact: true }).hover();
     await expect(clock).toHaveCSS("opacity", "0");
     await continuationRow.hover();
     await expect(clock).toHaveCSS("opacity", "1");
@@ -540,13 +540,13 @@ for (const width of [1492, 1280, 1024, 700, 390])
     await continuationRow
       .getByRole("button", { name: "More message actions", exact: true })
       .focus();
-    await panel.getByRole("heading", { name: "Thread", exact: true }).hover();
+    await page.getByRole("tab", { name: "Thread", exact: true }).hover();
     await expect(clock).toHaveCSS("opacity", "1");
     for (const id of [...ids.slice(0, -1), continuation.id]) {
       const branch = branchFor(id);
       const row = panel.locator(`[data-message-id="${id}"]`);
       await panel.getByRole("textbox", { name: "Reply to thread" }).focus();
-      await panel.getByRole("heading", { name: "Thread", exact: true }).hover();
+      await page.getByRole("tab", { name: "Thread", exact: true }).hover();
       await row.scrollIntoViewIfNeeded();
       // Exercise the lifted bar away from the top edge. Morgan accepted
       // clipping at that boundary; scrolling the row down restores access.
@@ -697,7 +697,7 @@ for (const width of [1492, 1280, 1024, 700, 390])
       ).toHaveCount(0);
     }
     await panel.getByRole("textbox", { name: "Reply to thread" }).focus();
-    await panel.getByRole("heading", { name: "Thread", exact: true }).hover();
+    await page.getByRole("tab", { name: "Thread", exact: true }).hover();
     // Resting state must match the contract for every rendered reply, not just
     // the first: hidden on desktop hover-capable widths, always usable below 640.
     for (const id of [...ids.slice(0, -1), continuation.id]) {

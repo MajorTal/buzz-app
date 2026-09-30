@@ -23,6 +23,16 @@ import { ArrowLeftIcon as PhosphorArrowLeftIcon } from "@phosphor-icons/react/di
 export const ArrowLeftIcon = defineIcon("phosphor", PhosphorArrowLeftIcon);
 import { ArrowRightIcon as PhosphorArrowRightIcon } from "@phosphor-icons/react/dist/csr/ArrowRight";
 export const ArrowRightIcon = defineIcon("phosphor", PhosphorArrowRightIcon);
+import { ArrowSquareLeftIcon as PhosphorArrowSquareLeftIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareLeft";
+export const ArrowSquareLeftIcon = defineIcon(
+  "phosphor",
+  PhosphorArrowSquareLeftIcon,
+);
+import { ArrowSquareRightIcon as PhosphorArrowSquareRightIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareRight";
+export const ArrowSquareRightIcon = defineIcon(
+  "phosphor",
+  PhosphorArrowSquareRightIcon,
+);
 import { ArrowSquareOutIcon as PhosphorArrowSquareOutIcon } from "@phosphor-icons/react/dist/csr/ArrowSquareOut";
 export const ArrowSquareOutIcon = defineIcon(
   "phosphor",
@@ -193,6 +203,11 @@ export const SmileyStickerIcon = defineIcon(
   "phosphor",
   PhosphorSmileyStickerIcon,
 );
+import { SlidersHorizontalIcon as PhosphorSlidersHorizontalIcon } from "@phosphor-icons/react/dist/csr/SlidersHorizontal";
+export const SlidersHorizontalIcon = defineIcon(
+  "phosphor",
+  PhosphorSlidersHorizontalIcon,
+);
 import { SquaresFourIcon as PhosphorSquaresFourIcon } from "@phosphor-icons/react/dist/csr/SquaresFour";
 export const SquaresFourIcon = defineIcon("phosphor", PhosphorSquaresFourIcon);
 import { StopIcon as PhosphorStopIcon } from "@phosphor-icons/react/dist/csr/Stop";
@@ -347,3 +362,6 @@ export const SpeakerSlashIcon = defineIcon(
   "phosphor",
   PhosphorSpeakerSlashIcon,
 );
+
+import { ColumnsIcon as PhosphorColumnsIcon } from "@phosphor-icons/react/dist/csr/Columns";
+export const ColumnsIcon = defineIcon("phosphor", PhosphorColumnsIcon);

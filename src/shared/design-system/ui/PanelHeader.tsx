@@ -5,16 +5,19 @@ import type { ReactNode } from "react";
 export function PanelHeader({
   title,
   icon,
+  navigation,
   actions,
   variant = "default",
 }: {
   title: ReactNode;
   icon?: ReactNode;
+  navigation?: ReactNode;
   actions?: ReactNode;
   variant?: "default" | "compact";
 }) {
   return (
     <header data-buzz-ui="" className="panel-header" data-variant={variant}>
+      {navigation}
       <div className="panel-header-title">
         {icon}
         {typeof title === "string" ? (

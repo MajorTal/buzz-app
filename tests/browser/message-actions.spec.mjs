@@ -183,7 +183,9 @@ test("message actions reveal, copy, restore focus and reply across responsive la
   await expect(
     panel.getByRole("textbox", { name: "Reply to thread", exact: true }),
   ).toBeFocused();
-  await page.getByRole("button", { name: "Close thread", exact: true }).click();
+  await page
+    .getByRole("button", { name: /^Close (?:thread|Thread tab)$/, exact: true })
+    .click();
   await expect(
     row.getByRole("button", { name: "Reply", exact: true }),
   ).toBeFocused();
@@ -197,17 +199,24 @@ test("message actions reveal, copy, restore focus and reply across responsive la
   const broadcastRow = page.locator(
     `[data-channel-timeline] [data-message-id="${broadcast.id}"]`,
   );
+  // Closing retains the split until its transition finishes. Establish the
+  // final row geometry before placing the pointer over the next message.
+  await expect(page.locator("[data-panel-dock][data-closing]")).toHaveCount(0);
   await broadcastRow.hover();
   await broadcastRow
     .getByRole("button", { name: "Reply", exact: true })
     .click();
   await expect(replyBox).toBeFocused();
-  await page.getByRole("button", { name: "Close thread", exact: true }).click();
+  await page
+    .getByRole("button", { name: /^Close (?:thread|Thread tab)$/, exact: true })
+    .click();
   await broadcastRow.getByRole("button", { name: /^View thread:/ }).click();
   await expect(
     panel.locator(`[data-message-id="${broadcast.id}"]`),
   ).toBeFocused();
-  await page.getByRole("button", { name: "Close thread", exact: true }).click();
+  await page
+    .getByRole("button", { name: /^Close (?:thread|Thread tab)$/, exact: true })
+    .click();
   for (const width of [900, 603, 390]) {
     await page.setViewportSize({ width, height: 850 });
     await row.scrollIntoViewIfNeeded();

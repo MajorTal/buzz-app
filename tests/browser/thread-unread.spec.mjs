@@ -148,7 +148,9 @@ test("thread buttons show observed unread independently, clear only after readin
   await expect(
     page.getByRole("complementary", { name: "Thread", exact: true }),
   ).toBeVisible();
-  await page.getByRole("button", { name: "Close thread", exact: true }).click();
+  await page
+    .getByRole("button", { name: /^Close (?:thread|Thread tab)$/, exact: true })
+    .click();
   await expect(alpha).toBeFocused();
   const beforeRect = await first.boundingBox();
   await first.hover();
@@ -245,8 +247,8 @@ test("thread buttons show observed unread independently, clear only after readin
   await expect(dot(first)).toHaveCount(0);
   await expect(dot(other)).toBeVisible();
   await expect(other).toHaveAccessibleName(/Observed unread replies/); // No channel-wide shortcut.
-  await panel
-    .getByRole("button", { name: "Close thread", exact: true })
+  await page
+    .getByRole("button", { name: "Close Thread tab", exact: true })
     .click();
   const own = app.reply(roots[0].id, true);
   // Barrier: the session has indexed the reply, so its unread effect is final.
@@ -363,7 +365,10 @@ test("same-thread sidebar activity replaces timeline focus return", async ({
       )
       .toBe("opened");
     await page
-      .getByRole("button", { name: "Close thread", exact: true })
+      .getByRole("button", {
+        name: /^Close (?:thread|Thread tab)$/,
+        exact: true,
+      })
       .click();
     await expect(alpha).toBeFocused();
   } finally {

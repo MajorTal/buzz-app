@@ -10,9 +10,6 @@
   display: flex;
   flex-direction: column;
   background: var(--surface-panel);
-  border: 1px solid var(--border-standard);
-  border-radius: var(--radius-card);
-  box-shadow: var(--elevation-card);
 }
 .embeddedThread {
   flex: 1;
@@ -576,12 +573,24 @@ html[data-keyboard-navigation] .attachmentImage:focus-visible {
   padding-right: var(--space-1h);
 }
 .threadHistory {
+  position: relative;
   flex: 1;
   min-height: 0;
   overflow: auto;
   padding: 0 var(--space-panel-inset);
+  padding-bottom: var(--space-panel-inset);
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text) 20%, transparent) transparent;
+}
+/* Measure loaded rows without painting a scroll position we will replace. */
+.threadHistory[data-positioning] > [data-thread-rows] {
+  opacity: 0;
+}
+.threadHistory[data-positioning] > [role="status"] {
+  position: absolute;
+  inset-block-start: var(--space-4);
+  inset-inline: var(--space-panel-inset);
+  color: var(--text-subtle);
 }
 .threadHistoryPageStatus {
   padding: var(--space-2);

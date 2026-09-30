@@ -227,7 +227,7 @@
     min-width: 0;
     flex: none;
     width: max-content;
-    max-width: max(calc(220px + var(--space-panel-gap)), calc(100% - 336px));
+    max-width: max(220px, calc(100% - 336px));
     overflow: visible;
     clip-path: none;
     /* Release resize help only after expansion; contain content while moving. */
@@ -248,15 +248,16 @@
   .shell-body {
     @apply relative flex min-h-0 min-w-0 flex-1 pl-0 pr-2 pb-2 sm:pl-0 sm:pr-4 sm:pb-4;
   }
+  .shell-content {
+    @apply relative flex h-full min-h-0 min-w-0;
+  }
   .shell-sidebar,
   .shell-sidebar-default {
     @apply flex min-h-0 shrink-0;
+    border-inline-end: 1px solid var(--border-standard);
     width: 260px;
     min-width: 220px;
     max-width: max(220px, calc(100% - 336px));
-  }
-  .shell-sidebar-default {
-    margin-right: var(--space-panel-gap);
   }
   .shell-sidebar > *,
   .shell-sidebar-default > * {
@@ -265,7 +266,7 @@
   .shell-navigation[data-sidebar-collapsible] > .shell-sidebar,
   .shell-navigation[data-sidebar-collapsible] > .shell-sidebar-default {
     flex: none;
-    max-width: calc(100% - var(--space-panel-gap));
+    max-width: 100%;
   }
   .shell-actions {
     @apply flex items-center justify-end;
@@ -309,14 +310,13 @@
       width: 220px;
       max-width: 220px;
     }
-    .shell-sidebar-default {
-      margin-right: var(--space-1);
-    }
     .shell-navigation {
       display: none;
     }
     .shell-navigation[data-expanded="true"] {
-      @apply absolute inset-y-0 left-2 z-20 flex pb-2;
+      @apply absolute inset-y-0 left-0 z-20 flex;
+      background: var(--surface-panel);
+      box-shadow: var(--elevation-dock);
       max-width: calc(100% - 16px);
     }
     .shell-navigation .shell-sidebar,

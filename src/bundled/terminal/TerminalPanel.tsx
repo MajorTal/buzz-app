@@ -54,7 +54,7 @@ function Content({
     if (attempted.current) return;
     attempted.current = true;
     try {
-      sessions.ensure(context);
+      sessions.ensure(context, true);
     } catch (error) {
       setError(String(error));
     }
@@ -186,7 +186,15 @@ function Content({
               context.
             </p>
           )}
-          <div className={styles.screen} ref={host} />
+          {/* Escape belongs to the shell while its input has focus. */}
+          {/* biome-ignore lint/a11y/noStaticElementInteractions: contains the terminal's native keyboard input. */}
+          <div
+            className={styles.screen}
+            ref={host}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") event.stopPropagation();
+            }}
+          />
         </>
       )}
     </div>

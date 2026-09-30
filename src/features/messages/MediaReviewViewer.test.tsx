@@ -10,7 +10,9 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
-import { StrictMode } from "react";
+import { StrictMode, useState } from "react";
+import userEvent from "@testing-library/user-event";
+import { PanelWorkspace } from "../panels/PanelWorkspace";
 import { afterEach, expect, it, vi } from "vitest";
 import { createRelaySession } from "../relay/session";
 import { keypair, message, profile, signed } from "../relay/testing";
@@ -223,4 +225,84 @@ it("excludes generic files from the image review grid", async () => {
   expect(
     screen.queryByRole("button", { name: "Next image" }),
   ).not.toBeInTheDocument();
+});
+
+it("Escape closes media opened from a tab without closing the tab", async () => {
+  const user = userEvent.setup();
+  const viewer = keypair();
+  const attachment = {
+    url: "https://fixture.test/image.png",
+    kind: "image" as const,
+  };
+  const root = message(viewer, "one", "Image", 1, [
+    ["imeta", `url ${attachment.url}`, "m image/png"],
+  ]);
+  const owner = createRelaySession({
+    viewer: viewer.pubkey,
+    relayAuthor: keypair().pubkey,
+    media: (url) => url,
+    async query(filters) {
+      return filters.some((filter) => filter.ids?.includes(root.id))
+        ? [root]
+        : [];
+    },
+  });
+  owners.push(owner);
+  const closeTab = vi.fn();
+  function Fixture() {
+    const [open, setOpen] = useState(false);
+    return (
+      <PanelWorkspace
+        value="one"
+        select={() => {}}
+        items={[
+          {
+            id: "one",
+            label: "One",
+            close: closeTab,
+            content: (
+              <>
+                <button type="button" onClick={() => setOpen(true)}>
+                  View image
+                </button>
+                {open && (
+                  <MediaReviewViewer
+                    attachment={attachment}
+                    session={owner.session}
+                    scope="tab-media"
+                    channelId="one"
+                    channelName="One"
+                    messageId={root.id}
+                    initialTime={0}
+                    onOpenLink={() => false}
+                    close={() => setOpen(false)}
+                  />
+                )}
+              </>
+            ),
+          },
+        ]}
+      />
+    );
+  }
+  render(
+    <StrictMode>
+      <Fixture />
+    </StrictMode>,
+  );
+  await user.click(screen.getByRole("button", { name: "View image" }));
+  expect(
+    await screen.findByRole("link", { name: "Open image in browser" }),
+  ).toBeVisible();
+  fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+  expect(closeTab).not.toHaveBeenCalled();
+  expect(
+    screen.queryByRole("link", { name: "Open image in browser" }),
+  ).toBeNull();
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "View image" })).toHaveFocus(),
+  );
+  expect(screen.getByRole("tab", { name: "One" })).toBeVisible();
+  await user.keyboard("{Escape}");
+  expect(closeTab).toHaveBeenCalledTimes(1);
 });

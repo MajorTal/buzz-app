@@ -481,9 +481,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "tabs",
     name: "Tabs",
     purpose:
-      "A single-select switch between sibling views. `chrome` is the glass pill for the app gradient; `panel` is an underline for a plain surface; `workspace` is quiet title tabs for a combined pane. One component because only the surface differs — the behaviour, keyboard model, and props are identical.",
+      "A single-select switch between sibling views. `chrome` is the glass pill for the app gradient; `panel` is an underline for a plain surface; `workspace` is quiet title tabs for a combined pane; `navigation` composes NavigationItem with icons or avatars, a 12rem width, and a trailing close action. Closable items add a sibling close button and support Delete on the tab. Selection, retained content, and fallback after closing belong to the caller.",
     behavior: "Base UI Tabs",
-    variants: ["chrome", "panel", "workspace"],
+    variants: ["chrome", "panel", "workspace", "navigation"],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Messages",
@@ -508,7 +508,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "panel-header",
     name: "PanelHeader",
     purpose:
-      "A panel's header row: optional icon, title, and actions. It composes controls supplied through actions but owns neither the panel container nor the content below it.",
+      "A panel's shared 2.5rem minimum-height header row: optional leading navigation, icon, title, and trailing actions. It composes controls supplied through actions but owns neither the panel container nor the content below it.",
     behavior: "Semantic native header",
     variants: ["default", "compact"],
     status: "proposed",

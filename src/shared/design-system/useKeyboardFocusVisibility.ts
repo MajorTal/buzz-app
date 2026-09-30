@@ -22,6 +22,8 @@ export function useKeyboardFocusVisibility() {
   useEffect(() => {
     const root = document.documentElement;
     const useKeyboardNavigation = (event: KeyboardEvent) => {
+      // Motion follows every keyboard action; focus styling keeps its narrower policy.
+      root.dataset.keyboardInput = "";
       if (
         KEYBOARD_NAVIGATION_KEYS.has(event.key) &&
         !event.metaKey &&
@@ -33,6 +35,7 @@ export function useKeyboardFocusVisibility() {
     };
     const usePointerNavigation = () => {
       delete root.dataset.keyboardNavigation;
+      delete root.dataset.keyboardInput;
     };
 
     window.addEventListener("keydown", useKeyboardNavigation, true);
@@ -43,6 +46,7 @@ export function useKeyboardFocusVisibility() {
       window.removeEventListener("pointerdown", usePointerNavigation, true);
       window.removeEventListener("touchstart", usePointerNavigation, true);
       delete root.dataset.keyboardNavigation;
+      delete root.dataset.keyboardInput;
     };
   }, []);
 }

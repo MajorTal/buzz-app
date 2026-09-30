@@ -3,12 +3,15 @@ import type { ComponentProps, ElementType, ReactNode } from "react";
 type PanelProps<T extends ElementType> = {
   as?: T;
   children?: ReactNode;
+  joined?: boolean;
 } & Omit<ComponentProps<T>, "as" | "children" | "className">;
 
 /**
  * An independently legible workspace surface.
  *
  * Panel owns only the rounded surface: its fill, border, shadow, and clipping.
+ * `joined` makes nested panels flush regions of this single outer surface;
+ * layout owners supply the dividers between those regions.
  * Its marker does not suppress host defaults for native product/plugin content.
  * It owns neither a header nor content — those are composed into it by the
  * product surface that knows what belongs there. An empty Panel is therefore a
@@ -23,11 +26,17 @@ type PanelProps<T extends ElementType> = {
 export function Panel<T extends ElementType = "section">({
   as,
   children,
+  joined,
   ...props
 }: PanelProps<T>) {
   const Component = as ?? "section";
   return (
-    <Component {...props} data-buzz-surface="" className="panel">
+    <Component
+      {...props}
+      data-buzz-surface=""
+      data-joined={joined || undefined}
+      className="panel"
+    >
       {children}
     </Component>
   );

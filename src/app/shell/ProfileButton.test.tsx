@@ -323,14 +323,16 @@ it("opens the viewer's profile from the menu avatar and hands focus to the page"
   // button it renders must activate once between them, not on the opening key.
   await waitFor(() => expect(item).toHaveFocus());
   await user.keyboard("{ArrowDown}");
-  expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveFocus();
+  await waitFor(() =>
+    expect(screen.getByRole("menuitem", { name: "Settings" })).toHaveFocus(),
+  );
   await user.keyboard("{ArrowUp}");
-  expect(item).toHaveFocus();
+  await waitFor(() => expect(item).toHaveFocus());
   await user.keyboard("{Enter}");
   // The header trigger, not the closing menu item, owns focus restoration.
   expect(onProfile).toHaveBeenCalledExactlyOnceWith(trigger);
   await waitFor(() => expect(menu).not.toBeInTheDocument());
-  expect(screen.getByRole("main")).toHaveFocus();
+  await waitFor(() => expect(screen.getByRole("main")).toHaveFocus());
 });
 
 it("shows the selected community name and authenticated avatar without saving a local default", async () => {

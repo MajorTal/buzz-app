@@ -19,6 +19,7 @@ export function useChannelPanels(
   panels: Panels,
   context?: ChannelPanelContext,
   onOpen?: () => void,
+  activateTab?: (panel: RegisteredPanel) => boolean,
 ) {
   const available = useSyncExternalStore(
     panels.subscribe,
@@ -80,6 +81,7 @@ export function useChannelPanels(
                     !panels.snapshot().includes(panel)
                   )
                     return;
+                  if (activateTab?.(panel)) return;
                   if (selected?.panel === panel) hide(selected);
                   else {
                     onOpen?.();

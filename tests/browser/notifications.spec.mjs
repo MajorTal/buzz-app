@@ -378,8 +378,10 @@ for (const kind of ["mention", "thread reply"]) {
       await row.evaluate((element) => {
         element.style.paddingBottom = "0.125px";
       });
+      // Keep the same small history overflowing with the condensed headers,
+      // including when the sidebar disappears at the narrow breakpoint.
       for (const width of [1440, 640]) {
-        await page.setViewportSize({ width, height: 950 });
+        await page.setViewportSize({ width, height: 650 });
         await expect
           .poll(() =>
             surface.evaluate(

@@ -206,6 +206,14 @@ test("keyboard selection follows its action while recent conversations arrive ab
     holding = false;
     for (const resolve of held.splice(0)) resolve();
     await expect(recent.first()).toBeVisible();
+    await expect(
+      page.getByRole("textbox", {
+        name: "Message #Alpha",
+        exact: true,
+        includeHidden: true,
+      }),
+    ).toBeAttached();
+    await expect(input).toBeFocused();
     // The arrivals moved the action; the selection stays with it.
     expect((await projects.boundingBox()).y).toBeGreaterThan(before.y);
     await expect(input).toHaveAttribute("aria-activedescendant", id);

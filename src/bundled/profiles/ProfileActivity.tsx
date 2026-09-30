@@ -80,7 +80,10 @@ export function ProfileActivity({
         )}
       </p>
       <div>
-        <Button size="compact" onClick={() => context.open(target)}>
+        <Button
+          size="compact"
+          onClick={() => (context.push ?? context.open)(target)}
+        >
           View activity
         </Button>
       </div>

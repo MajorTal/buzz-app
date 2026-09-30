@@ -24,6 +24,7 @@ export function createSessions(
 ) {
   const sessions = new Map<string, TerminalSession>();
   const listeners = new Set<() => void>();
+  const initialized = new Set<string>();
   const retired = new WeakSet<TerminalSession>();
   let version = 0;
   let disposed = false;
@@ -184,10 +185,12 @@ export function createSessions(
       };
     },
     get: (context: ChannelPanelContext) => sessions.get(sessionKey(context)),
-    ensure(context: ChannelPanelContext) {
+    ensure(context: ChannelPanelContext, initial = false) {
       const key = sessionKey(context);
       const existing = sessions.get(key);
       if (existing) return existing;
+      // Restoring a panel is not intent to restart an explicitly ended shell.
+      if (initial && initialized.has(key)) return;
       if (!bridge.available || !allowed(context)) return;
       if (sessions.size >= 20)
         throw new Error(
@@ -197,6 +200,7 @@ export function createSessions(
         context: Object.freeze({ ...context }),
         status: "starting",
       };
+      initialized.add(key);
       sessions.set(key, entry);
       notify();
       void track(start(entry));
@@ -230,6 +234,7 @@ export function createSessions(
       if (owner) await bridge.closeOwner(await owner);
       await Promise.allSettled([...tasks]);
       sessions.clear();
+      initialized.clear();
     },
   };
 }

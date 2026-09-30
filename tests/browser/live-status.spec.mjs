@@ -49,7 +49,7 @@ test("clean pending setup stays in diagnostics and never flashes a warning durin
   await page
     .getByRole("button", { name: "Channel settings", exact: true })
     .click();
-  await page.getByText("Diagnostics", { exact: true }).click();
+  await openDiagnostics(page);
   await expect(
     page.getByText("Live updates: connecting", { exact: true }),
   ).toBeVisible();
@@ -107,7 +107,7 @@ for (const target of ["alpha", "profiles"]) {
     await page
       .getByRole("button", { name: "Channel settings", exact: true })
       .click();
-    await page.getByText("Diagnostics", { exact: true }).click();
+    await openDiagnostics(page);
     const recovery = page.getByText(
       "Live updates: recovering automatically after rate limiting; awaiting confirmation",
       { exact: true },
@@ -142,7 +142,10 @@ for (const target of ["alpha", "profiles"]) {
     for (const width of [390, 800, 1440]) {
       await page.setViewportSize({ width, height: 950 });
       await page
-        .getByRole("button", { name: "Close channel settings", exact: true })
+        .getByRole("button", {
+          name: "Close Channel settings tab",
+          exact: true,
+        })
         .click();
       await page
         .getByRole("textbox", { name: "Message #Alpha", exact: true })
@@ -155,12 +158,12 @@ for (const target of ["alpha", "profiles"]) {
       await page
         .getByRole("button", { name: "Channel settings", exact: true })
         .click();
-      await page.getByText("Diagnostics", { exact: true }).click();
+      await openDiagnostics(page);
       await expect(warning).toHaveCount(1);
     }
     const beforeManual = requests().length;
     await page
-      .getByRole("button", { name: "Close channel settings", exact: true })
+      .getByRole("button", { name: "Close Channel settings tab", exact: true })
       .click();
     await page
       .getByRole("button", { name: "Retry live updates", exact: true })
@@ -168,7 +171,7 @@ for (const target of ["alpha", "profiles"]) {
     await page
       .getByRole("button", { name: "Channel settings", exact: true })
       .click();
-    await page.getByText("Diagnostics", { exact: true }).click();
+    await openDiagnostics(page);
     await expect(recovery).toBeVisible();
     await expect(warning).toHaveCount(0);
     await expect.poll(() => requests().length).toBeGreaterThan(beforeManual);
@@ -182,4 +185,12 @@ for (const target of ["alpha", "profiles"]) {
     expect(streams()).toBe(streamCount);
     expect(app.relay.sockets).toHaveLength(sockets);
   });
+}
+
+async function openDiagnostics(page) {
+  // A quick reopen can retain the outgoing settings DOM during its exit.
+  const summary = page.getByText("Diagnostics", { exact: true });
+  if ((await summary.locator("..").getAttribute("open")) === null)
+    await summary.click();
+  await expect(summary.locator("..")).toHaveAttribute("open", "");
 }

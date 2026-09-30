@@ -248,3 +248,19 @@ it.each(["end", "dispose"] as const)(
     if (operation === "end") await h.sessions.dispose();
   },
 );
+
+it("restoring an ended panel waits for explicit start instead of spawning another shell", async () => {
+  const h = harness();
+  h.sessions.ensure(context, true);
+  await vi.waitFor(() =>
+    expect(h.sessions.get(context)?.status).toBe("running"),
+  );
+  await h.sessions.end(context);
+  expect(h.sessions.ensure(context, true)).toBeUndefined();
+  expect(h.sessions.get(context)).toBeUndefined();
+  expect(h.bridge.spawn).toHaveBeenCalledTimes(1);
+  h.sessions.ensure(context);
+  await vi.waitFor(() => expect(h.bridge.spawn).toHaveBeenCalledTimes(2));
+  h.read.resolve({ data: [], exited: true });
+  await h.sessions.dispose();
+});

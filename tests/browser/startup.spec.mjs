@@ -202,7 +202,7 @@ test("reload restores the selected conversation/groups before handshake and upda
       .getByRole("button", { name: "Refresh messages", exact: true })
       .click();
     await page
-      .getByRole("button", { name: "Close channel settings", exact: true })
+      .getByRole("button", { name: "Close Channel settings tab", exact: true })
       .click();
     await settle(page);
     await edge(page, 1);

@@ -195,62 +195,66 @@ export function AppShell({
         <div
           className={`shell-body ${selected === "settings" ? "shell-body-settings" : ""}`}
         >
-          <div
-            id="shell-navigation"
-            className="shell-navigation"
-            data-sidebar-collapsible={
-              (collapsibleSidebar && !narrow) || undefined
-            }
-            data-sidebar-open={visibleSidebar || undefined}
-            aria-hidden={(collapsibleSidebar || narrow) && !visibleSidebar}
-            inert={(collapsibleSidebar || narrow) && !visibleSidebar}
-            data-expanded={navigationOpen}
-            onKeyDown={(event) => {
-              if (
-                event.key === "Escape" &&
-                navigationOpen &&
-                !event.defaultPrevented
-              ) {
-                setNavigationOpen(false);
-                navigationToggle.current?.focus();
-              }
-            }}
-          >
-            {sidebar ? (
-              sidebar(pageNavigation)
-            ) : (
-              <div className="shell-sidebar-default">
-                <Panel as="aside" aria-label="Page sidebar">
-                  <div className="p-2">{pageNavigation}</div>
-                </Panel>
-              </div>
-            )}
-          </div>
-          <main
-            id="main-content"
-            tabIndex={-1}
-            className="min-h-0 min-w-0 flex-1 overflow-hidden"
-          >
-            <PanelFrame companion={companion}>
+          <Panel as="div" joined>
+            <div className="shell-content">
               <div
-                className={
-                  fillsWorkspace
-                    ? "h-full min-h-0"
-                    : "h-full min-h-0 overflow-y-auto px-2 pt-10 pb-8 sm:px-4 sm:pt-14 sm:pb-10"
+                id="shell-navigation"
+                className="shell-navigation"
+                data-sidebar-collapsible={
+                  (collapsibleSidebar && !narrow) || undefined
                 }
-              >
-                <div
-                  className={
-                    fillsWorkspace
-                      ? "h-full min-h-0"
-                      : "mx-auto w-full max-w-4xl"
+                data-sidebar-open={visibleSidebar || undefined}
+                aria-hidden={(collapsibleSidebar || narrow) && !visibleSidebar}
+                inert={(collapsibleSidebar || narrow) && !visibleSidebar}
+                data-expanded={navigationOpen}
+                onKeyDown={(event) => {
+                  if (
+                    event.key === "Escape" &&
+                    navigationOpen &&
+                    !event.defaultPrevented
+                  ) {
+                    setNavigationOpen(false);
+                    navigationToggle.current?.focus();
                   }
-                >
-                  {children}
-                </div>
+                }}
+              >
+                {sidebar ? (
+                  sidebar(pageNavigation)
+                ) : (
+                  <div className="shell-sidebar-default">
+                    <Panel as="aside" aria-label="Page sidebar">
+                      <div className="p-2">{pageNavigation}</div>
+                    </Panel>
+                  </div>
+                )}
               </div>
-            </PanelFrame>
-          </main>
+              <main
+                id="main-content"
+                tabIndex={-1}
+                className="min-h-0 min-w-0 flex-1 overflow-hidden"
+              >
+                <PanelFrame companion={companion}>
+                  <div
+                    className={
+                      fillsWorkspace
+                        ? "h-full min-h-0"
+                        : "h-full min-h-0 overflow-y-auto px-2 pt-10 pb-8 sm:px-4 sm:pt-14 sm:pb-10"
+                    }
+                  >
+                    <div
+                      className={
+                        fillsWorkspace
+                          ? "h-full min-h-0"
+                          : "mx-auto w-full max-w-4xl"
+                      }
+                    >
+                      {children}
+                    </div>
+                  </div>
+                </PanelFrame>
+              </main>
+            </div>
+          </Panel>
         </div>
       </div>
     </div>

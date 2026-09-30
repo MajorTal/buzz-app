@@ -297,7 +297,6 @@ export function TodosPanel({
   return (
     <div data-buzz-ui="" className={styles.panel} aria-busy={!!busy}>
       <PanelHeader
-        variant="compact"
         icon={<ListChecksIcon size={18} aria-hidden="true" />}
         title={
           <div className={styles.heading}>

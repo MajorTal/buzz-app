@@ -115,7 +115,7 @@ export function ProfileInstances({
                       aria-current={
                         selectedId === agent.id ? "true" : undefined
                       }
-                      onClick={() => context.open(target)}
+                      onClick={() => (context.push ?? context.open)(target)}
                     >
                       {agent.name}
                     </Button>

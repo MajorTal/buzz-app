@@ -1,0 +1,104 @@
+.handle {
+  position: relative;
+  z-index: 4;
+  align-self: stretch;
+  width: var(--space-4);
+  flex-shrink: 0;
+  justify-self: center;
+  height: 100%;
+  padding: 0;
+  border: 0;
+  /* Keep the hit target centered on the divider without adding a gutter. */
+  margin: 0 calc(-1 * var(--space-4) / 2);
+  background: transparent;
+  cursor: col-resize;
+  touch-action: none;
+}
+.handle::after {
+  position: absolute;
+  top: 50%;
+  /* The divider occupies the last pixel of the sidebar. */
+  left: calc(50% - 0.5px);
+  width: 3px;
+  height: 56px;
+  border-radius: var(--radius-pill);
+  background: var(--border-focus);
+  content: "";
+  opacity: 0;
+  transform: translate(-50%, -50%) scaleY(calc(40 / 56));
+  transition:
+    opacity var(--duration-fast) var(--easing-state),
+    transform var(--duration-fast) var(--easing-enter);
+}
+.handle::before {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 2px);
+  width: max-content;
+  padding: var(--space-1h) var(--space-2);
+  border: 1px solid var(--border-standard);
+  border-radius: var(--radius-control);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-standard);
+  content: attr(data-tooltip);
+  font-size: var(--text-caption);
+  line-height: var(--text-caption--line-height);
+  opacity: 0;
+  pointer-events: none;
+  transform: translate(4px, -50%);
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out,
+    visibility 0s linear 120ms;
+  visibility: hidden;
+  white-space: nowrap;
+}
+@media (hover: hover) and (pointer: fine) {
+  .handle:hover::after {
+    opacity: 1;
+    transform: translate(-50%, -50%) scaleY(1);
+  }
+  .handle:hover::before {
+    opacity: 1;
+    transform: translate(0, -50%);
+    transition-delay: 600ms;
+    visibility: visible;
+  }
+}
+.handle:focus-visible::after,
+.handle[data-resizing]::after {
+  opacity: 1;
+  transform: translate(-50%, -50%) scaleY(1);
+}
+html[data-keyboard-navigation] .handle::after,
+.handle[data-resizing]::after {
+  transition: none;
+}
+.handle:focus-visible::before {
+  opacity: 1;
+  transform: translate(0, -50%);
+  visibility: visible;
+}
+.handle[data-resizing]::before {
+  opacity: 0;
+  visibility: hidden;
+  transition: none;
+}
+.handle:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .handle::after {
+    transition: none;
+    transform: translate(-50%, -50%) scaleY(1);
+  }
+  .handle::before {
+    transition: visibility 0s linear 120ms;
+  }
+  .handle:hover::before,
+  .handle:focus-visible::before {
+    transition: visibility 0s linear 600ms;
+  }
+}

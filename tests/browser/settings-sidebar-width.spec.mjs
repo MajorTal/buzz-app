@@ -1,6 +1,15 @@
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
+// The shell owns the divider; the inner aside excludes its 1px border.
+const sidebarWidth = (sidebar) =>
+  sidebar.evaluate(
+    (element) =>
+      element
+        .closest(".shell-sidebar, .shell-sidebar-default")
+        .getBoundingClientRect().width,
+  );
+
 // Real shell layout and route remounts must preserve the user's resized width.
 test("Settings keeps the channel sidebar width across navigation and reload", async ({
   page,
@@ -24,24 +33,16 @@ test("Settings keeps the channel sidebar width across navigation and reload", as
     ["End", 520],
   ]) {
     await handle.press(key);
-    await expect
-      .poll(async () => (await channels.boundingBox())?.width)
-      .toBe(width);
+    await expect.poll(() => sidebarWidth(channels)).toBe(width);
     await page
       .getByRole("button", { name: "Your profile", exact: true })
       .click();
     await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
-    await expect
-      .poll(async () => (await settings.boundingBox())?.width)
-      .toBe(width);
+    await expect.poll(() => sidebarWidth(settings)).toBe(width);
     await page.reload();
-    await expect
-      .poll(async () => (await settings.boundingBox())?.width)
-      .toBe(width);
+    await expect.poll(() => sidebarWidth(settings)).toBe(width);
     await settings.getByRole("button", { name: "Back", exact: true }).click();
-    await expect
-      .poll(async () => (await channels.boundingBox())?.width)
-      .toBe(width);
+    await expect.poll(() => sidebarWidth(channels)).toBe(width);
   }
 });
 
@@ -70,9 +71,7 @@ test("narrow Settings drawer matches the clamped channel sidebar", async ({
     name: "Channel sidebar",
     exact: true,
   });
-  await expect
-    .poll(async () => (await channels.boundingBox())?.width)
-    .toBe(220);
+  await expect.poll(() => sidebarWidth(channels)).toBe(220);
   await channels
     .getByRole("button", { name: "Beta", exact: true })
     .press("Enter");
@@ -94,9 +93,7 @@ test("narrow Settings drawer matches the clamped channel sidebar", async ({
     name: "Settings sidebar",
     exact: true,
   });
-  await expect
-    .poll(async () => (await settings.boundingBox())?.width)
-    .toBe(220);
+  await expect.poll(() => sidebarWidth(settings)).toBe(220);
   await settings
     .getByRole("button", { name: "Notifications", exact: true })
     .press("Enter");
@@ -121,13 +118,9 @@ test("narrow Settings drawer matches the clamped channel sidebar", async ({
   await page
     .getByRole("button", { name: "Show navigation", exact: true })
     .click();
-  await expect
-    .poll(async () => (await channels.boundingBox())?.width)
-    .toBe(220);
+  await expect.poll(() => sidebarWidth(channels)).toBe(220);
   await page.setViewportSize({ width: 1440, height: 950 });
-  await expect
-    .poll(async () => (await channels.boundingBox())?.width)
-    .toBe(520);
+  await expect.poll(() => sidebarWidth(channels)).toBe(520);
 });
 
 test("sidebar width survives route remounts when saving it fails", async ({
@@ -154,20 +147,14 @@ test("sidebar width survives route remounts when saving it fails", async ({
     name: "Channel sidebar",
     exact: true,
   });
-  await expect
-    .poll(async () => (await channels.boundingBox())?.width)
-    .toBe(520);
+  await expect.poll(() => sidebarWidth(channels)).toBe(520);
   await page.getByRole("button", { name: "Your profile", exact: true }).click();
   await page.getByRole("menuitem", { name: "Settings", exact: true }).click();
   const settings = page.getByRole("complementary", {
     name: "Settings sidebar",
     exact: true,
   });
-  await expect
-    .poll(async () => (await settings.boundingBox())?.width)
-    .toBe(520);
+  await expect.poll(() => sidebarWidth(settings)).toBe(520);
   await settings.getByRole("button", { name: "Back", exact: true }).click();
-  await expect
-    .poll(async () => (await channels.boundingBox())?.width)
-    .toBe(520);
+  await expect.poll(() => sidebarWidth(channels)).toBe(520);
 });

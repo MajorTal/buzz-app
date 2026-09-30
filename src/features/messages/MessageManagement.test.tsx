@@ -740,3 +740,45 @@ it("scopes channel-entry failures to their visit and clears displayed failures o
     await act(async () => result.resolve());
   }
 });
+
+it("keeps one unread visit until the last channel or thread view closes", async () => {
+  const h = await fixture();
+  cleanup();
+  const enterChannel = vi.fn(h.owner.session.unread.enterChannel);
+  const leaveChannel = vi.fn(h.owner.session.unread.leaveChannel);
+  const session = {
+    ...h.owner.session,
+    unread: { ...h.owner.session.unread, enterChannel, leaveChannel },
+  };
+  const channel = render(
+    <MessageManagement session={session} channelId="room">
+      Channel
+    </MessageManagement>,
+  );
+  const thread = render(
+    <MessageManagement session={session} channelId="room">
+      Thread
+    </MessageManagement>,
+  );
+  await act(async () => {});
+  expect(enterChannel).toHaveBeenCalledExactlyOnceWith("room");
+  channel.rerender(
+    <MessageManagement session={session} channelId="room" active={false}>
+      Channel
+    </MessageManagement>,
+  );
+  expect(leaveChannel).not.toHaveBeenCalled();
+  channel.unmount();
+  expect(leaveChannel).not.toHaveBeenCalled();
+  thread.unmount();
+  expect(leaveChannel).toHaveBeenCalledExactlyOnceWith("room");
+  const revisit = render(
+    <MessageManagement session={session} channelId="room">
+      Revisit
+    </MessageManagement>,
+  );
+  await act(async () => {});
+  expect(enterChannel).toHaveBeenCalledTimes(2);
+  revisit.unmount();
+  expect(leaveChannel).toHaveBeenCalledTimes(2);
+});

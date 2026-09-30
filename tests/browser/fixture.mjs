@@ -1374,6 +1374,14 @@ export const test = base.extend({
           )
         ) {
           const owner = streamOwners.get(body.streamId);
+          // Reload may retire the SSE owner after a control was dispatched.
+          // Match the broker for that exact known stream; unknown IDs still fail.
+          if (!owner && retiredStreams.has(body.streamId))
+            return send(
+              response,
+              { error: "Live stream no longer available" },
+              404,
+            );
           expect(owner?.community).toBe(community);
           if (route === "stream-interests") {
             expect(body.interestRevision).toBeGreaterThan(
@@ -1425,6 +1433,7 @@ export const test = base.extend({
             clearInterval(heartbeat);
             clients.delete(owner);
             streamOwners.delete(streamId);
+            retiredStreams.add(streamId);
           });
           return;
         }

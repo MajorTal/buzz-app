@@ -21,6 +21,34 @@ import { useAfterMessageMenuClose } from "./MessageActionBar";
 import { lastEditableMessage } from "./useMessageEdit";
 import styles from "./Messages.module.css";
 
+// A channel tab and its thread can coexist, but unread state owns one visit.
+const visits = new WeakMap<
+  RelaySession,
+  Map<string, { count: number; ready: Promise<void> }>
+>();
+function enterVisit(session: RelaySession, channelId: string) {
+  let channels = visits.get(session);
+  if (!channels) {
+    channels = new Map();
+    visits.set(session, channels);
+  }
+  let visit = channels.get(channelId);
+  if (!visit) {
+    visit = { count: 0, ready: session.unread.enterChannel(channelId) };
+    channels.set(channelId, visit);
+  }
+  visit.count++;
+  return {
+    ready: visit.ready,
+    leave() {
+      if (--visit.count === 0) {
+        channels.delete(channelId);
+        session.unread.leaveChannel(channelId);
+      }
+    },
+  };
+}
+
 const emptyOperations: readonly OutgoingEvent[] = Object.freeze([]);
 const empty = () => emptyOperations;
 const noop = () => () => {};
@@ -56,10 +84,12 @@ export function useMessageDeletion() {
 export function MessageManagement({
   session,
   channelId,
+  active = true,
   children,
 }: {
   session: RelaySession;
   channelId?: string | undefined;
+  active?: boolean | undefined;
   children: ReactNode;
 }) {
   const [selection, setSelection] = useState<Deletion>();
@@ -83,6 +113,7 @@ export function MessageManagement({
   }, [available]);
   const visitChannelId = channels.channels.find(
     (channel) =>
+      active &&
       channel.id === channelId &&
       !channel.cached &&
       !!session.viewer &&
@@ -115,8 +146,11 @@ export function MessageManagement({
   useEffect(() => {
     const { session, visitChannelId } = visit;
     let active = true;
-    if (visitChannelId)
-      void session.unread.enterChannel(visitChannelId).catch((cause) => {
+    const presence = visitChannelId
+      ? enterVisit(session, visitChannelId)
+      : undefined;
+    if (presence)
+      void presence.ready.catch((cause) => {
         if (active)
           setNotice((current) =>
             current.visit === visit
@@ -132,7 +166,7 @@ export function MessageManagement({
       });
     return () => {
       active = false;
-      if (visitChannelId) session.unread.leaveChannel(visitChannelId);
+      presence?.leave();
     };
   }, [visit]);
   return (

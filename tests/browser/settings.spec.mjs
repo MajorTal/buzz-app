@@ -294,7 +294,7 @@ confirmedPresence(
       // Click the lower content area, genuinely outside the popup.
       const main = page.getByRole("main");
       const bounds = await main.boundingBox();
-      await main.click({ position: { x: 5, y: bounds.height - 5 } });
+      await main.click({ position: { x: 24, y: bounds.height - 5 } });
       await expect(account).toBeHidden();
       await avatar.focus();
       await page.keyboard.press("Enter");
@@ -429,7 +429,11 @@ confirmedPresence(
         "background-color",
         "rgb(255, 255, 255)",
       );
-      await expect(settingsRegion).toHaveCSS("border-radius", "24px");
+      await expect(settingsRegion).toHaveCSS("border-radius", "0px");
+      await expect(page.locator(".shell-body > [data-joined]")).toHaveCSS(
+        "border-radius",
+        "24px",
+      );
       const frame = await settingsRegion.boundingBox();
       expect(frame.height).toBeGreaterThan(700);
       if (width === 1280) {
@@ -439,7 +443,7 @@ confirmedPresence(
         expect(navigation).not.toBeNull();
         expect(content).not.toBeNull();
         expect(navigation.x + navigation.width).toBeLessThan(content.x);
-        expect(content.y - frame.y).toBe(25);
+        expect(content.y - frame.y).toBe(24);
       } else {
         await expect(settingsSidebar).toBeHidden();
         expect(

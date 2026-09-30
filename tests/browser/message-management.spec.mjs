@@ -132,7 +132,9 @@ test("manage a channel message, peer unread state, and its thread", async ({
   await thread.getByRole("button", { name: "Save changes" }).click();
   await expect(root).toContainText("Edited from thread");
   await expect(row).toContainText("Edited from thread");
-  await page.getByRole("button", { name: "Close thread", exact: true }).click();
+  await page
+    .getByRole("button", { name: /^Close (?:thread|Thread tab)$/, exact: true })
+    .click();
   for (const width of [900, 390]) {
     await page.setViewportSize({ width, height: 850 });
     await row.scrollIntoViewIfNeeded();

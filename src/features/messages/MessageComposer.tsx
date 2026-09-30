@@ -242,6 +242,12 @@ function Composer({
     ) {
       const editor = input.current;
       if (!editor) return;
+      // A conversation can finish loading behind an already-focused dialog.
+      // Its default focus must not interrupt that modal's explicit owner.
+      const modal = document.activeElement?.closest(
+        'dialog[open], [aria-modal="true"]',
+      );
+      if (modal && !modal.contains(editor)) return;
       const end = editor.value.length;
       editor.focus();
       editor.setSelectionRange(end, end);

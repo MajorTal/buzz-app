@@ -26,6 +26,11 @@ Panel navigation uses `affordance-panel-hover` for its quiet hover and the share
 `affordance-selected` for persistent selection. In dark mode, the unfilled panel
 row needs a quieter hover than a filled subtle control; these are distinct roles.
 
+Anchored popup selection uses `affordance-popover-selected` (neutral 2 light /
+neutral 6 dark). It stays visible on `surface-popover` independently of the quiet
+neutral button and tab hover fill; mention and emoji suggestions use this
+role for their active completion highlight.
+
 ## Foundations
 
 The interface uses shared color, type, spacing and shape roles. Primary actions
@@ -120,7 +125,7 @@ Buzz is a place where people build together and bring their agents into the room
 
 ## Surface and depth
 
-- **Panels sit on the backdrop; the backdrop is a gradient.** Everything else is a panel in a different place. The navigation column is not a special kind of surface.
+- **Panels sit on the backdrop; the backdrop is a gradient.** The app shell uses one `Panel joined` around navigation and content. Nested Panels keep their opaque fill and clipping but lose independent borders, rounding, and shadows; layout owners separate adjacent regions with `border-standard` hairlines. Standalone Panels retain their own outer surface.
 - **A region is separated by a soft fill, not by an outline.** Reach for `bg-inset` before reaching for a border. A bordered box announces its own edges; a filled one lets the content sit in a place. Grouping is the common case, so the quiet treatment is the default one.
 - **Use border-standard for quiet separators, border-prominent for controls and border-focus for keyboard focus.** Error and warning boundaries have their own roles. Measure real surfaces in both themes.
 - **No page-wide gradient behind documentation or dense reading.** The gradient is the product's backdrop for chrome and panels. Behind a column of prose it fights the text and makes contrast position-dependent — such surfaces sit on `bg-panel`.
@@ -353,6 +358,17 @@ show these contracts and their compositions.
 
 ## Compositions
 
+PanelHeader owns one consistent header frame: leading `navigation`, title/icon,
+and trailing `actions`. Use a toolbar IconButton with ArrowLeft for a local back
+action and X for closing the panel. The default 2.5rem (40px at the default root size) minimum height aligns conversation,
+thread, profile, tabbed workspace, and Todos headers. The compact variant shares
+this height. Headers use 0.25rem inline padding (matching the centered 2rem controls’ block inset), 1rem identity icons, and
+0.25rem gaps between action buttons without reducing their hit areas. Navigation
+tabs use 1rem icons or fill avatars and 0.5rem leading padding.
+Header spacing, icons, and controls scale with rem; separators remain
+1px hairlines. Titles and actions may wrap when their content needs more room.
+Navigation state, focus restoration, and content transitions belong to the host.
+
 Composer pickers reuse PopoverPopup and anchor above the whole composer with a
 4px gap, preserving the shared popup behavior and material.
 
@@ -421,7 +437,16 @@ shell header or composer. F6 enters notifications, Tab reaches actions. Modals
 remain above the stack. Content updates do not restart expiry; timeout changes do.
 
 Tabs with content use renderPanel, which lets Base UI connect each tab and panel.
-Route navigation uses NavigationItem with aria-current instead. NavigationItem
+Route navigation uses NavigationItem with aria-current instead. Tabs can also
+compose NavigationItem through the `navigation` variant: these retain tab
+semantics, use 12rem widths with ellipsis and a subtle selected fill, accept avatars/icons, and place a sibling close
+button over reserved trailing space. Navigation tab strips scroll horizontally with a thin native scrollbar. The main
+channel header uses the same control with a single non-closable tab with `showSelection={false}` (no selection or hover fill); channel
+actions remain in the header action slot. The settings launcher uses
+`data-highlight-expanded="false"` to preserve disclosure semantics without a
+sticky pressed treatment; the selected tab owns the open-state indicator.
+
+NavigationItem
 offers an `option` variant for picker rows with even 8px padding and immediate
 hover feedback. It forwards normal button events, refs and data attributes so unread observation,
 preloading and product shortcuts remain with the caller.

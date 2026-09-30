@@ -11,7 +11,7 @@ test("channel members opens from the header, fits each viewport, and returns key
   await openPage(page, "Messages");
   const conversation = page.getByRole("article", { name: "Conversation" });
   await expect(
-    conversation.getByRole("heading", { name: "Alpha", exact: true }),
+    conversation.getByRole("tab", { name: "Alpha", exact: true }),
   ).toBeVisible();
   const trigger = conversation.getByRole("button", {
     name: "Channel members",

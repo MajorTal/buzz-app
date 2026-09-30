@@ -32,6 +32,7 @@ function fixture(available = true) {
     channelId: "channel-a",
     canOpen: vi.fn(() => true),
     open: vi.fn(() => true),
+    push: vi.fn(() => true),
   };
   const release = owner.queries.activate();
   let serial = 0;
@@ -131,7 +132,7 @@ it("projects only this identity and channel, excludes unscoped/foreign data, and
   await userEvent
     .setup()
     .click(screen.getByRole("button", { name: "View activity" }));
-  expect(f.context.open).toHaveBeenCalledWith(
+  expect(f.context.push).toHaveBeenCalledWith(
     activityTarget(agent, "channel-a"),
   );
   mounted.rerender(f.view("c".repeat(64)));

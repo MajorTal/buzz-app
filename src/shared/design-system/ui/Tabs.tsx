@@ -1,10 +1,16 @@
 import { Tabs as BaseTabs } from "@base-ui/react/tabs";
+import { NavigationItem } from "./NavigationItem";
+import { IconButton } from "./IconButton";
+import { XIcon } from "../icons";
 import type { ReactNode } from "react";
 
 export type TabItem<Value extends string> = {
   value: Value;
   label: string;
   icon?: ReactNode;
+  /** Link a retained, externally owned tab panel. */
+  panelId?: string;
+  onClose?: (() => void) | undefined;
 };
 
 /**
@@ -20,7 +26,7 @@ export type TabItem<Value extends string> = {
  *
  * `chrome` is the default because every existing call site is on the gradient.
  */
-export type TabsVariant = "chrome" | "panel" | "workspace";
+export type TabsVariant = "chrome" | "panel" | "workspace" | "navigation";
 
 export function Tabs<Value extends string>({
   value,
@@ -29,6 +35,7 @@ export function Tabs<Value extends string>({
   onValueChange,
   trailingAction,
   variant = "chrome",
+  showSelection = true,
   previewValue,
   arrivalValue,
   renderPanel,
@@ -41,6 +48,8 @@ export function Tabs<Value extends string>({
   onValueChange: (value: Value) => void;
   trailingAction?: ReactNode;
   variant?: TabsVariant;
+  /** Hide the visual selection for a single-view header; tab semantics remain. */
+  showSelection?: boolean;
   /** Incoming tab being previewed before a workspace drop is committed. */
   previewValue?: Value;
   /** Brief visual confirmation of a tab arriving after a completed move. */
@@ -49,29 +58,76 @@ export function Tabs<Value extends string>({
   const strip = (
     <>
       <BaseTabs.List className="buzz-tabs-list" aria-label={label}>
-        <BaseTabs.Indicator className="buzz-tabs-indicator" />
+        {showSelection && variant !== "navigation" && (
+          <BaseTabs.Indicator className="buzz-tabs-indicator" />
+        )}
         {items.map((item) => (
-          <BaseTabs.Tab
+          <span
             key={item.value}
-            value={item.value}
-            className="buzz-tabs-tab"
-            /* Base UI spells the selected tab `data-active`; every other
+            className="buzz-tabs-item"
+            data-closable={!!item.onClose || undefined}
+          >
+            <BaseTabs.Tab
+              value={item.value}
+              title={item.label}
+              render={
+                variant === "navigation" ? (
+                  <NavigationItem
+                    label={item.label}
+                    icon={
+                      item.icon && (
+                        <span className="buzz-tabs-icon" aria-hidden="true">
+                          {item.icon}
+                        </span>
+                      )
+                    }
+                    selected={showSelection && item.value === value}
+                    aria-current={false}
+                  />
+                ) : undefined
+              }
+              {...(item.panelId
+                ? { id: `${item.panelId}-tab`, "aria-controls": item.panelId }
+                : {})}
+              onKeyDown={(event) => {
+                if (item.onClose && event.key === "Delete") {
+                  event.preventDefault();
+                  item.onClose();
+                }
+              }}
+              className="buzz-tabs-tab"
+              /* Base UI spells the selected tab `data-active`; every other
                selectable thing in this codebase is styled on `data-selected`.
                Restating it here keeps one spelling in the stylesheet rather than
                asking a reader to know which components happen to be Base
                UI-backed. Without it the selected label silently kept
                `--text-secondary` — no error, just a tab that never looked
                selected. */
-            data-selected={item.value === value || undefined}
-            data-preview={item.value === previewValue || undefined}
-            data-tab-value={item.value}
-          >
-            {variant === "workspace" && item.value === arrivalValue ? (
-              <span className="buzz-tabs-arrival" aria-hidden="true" />
-            ) : null}
-            {item.icon}
-            <span>{item.label}</span>
-          </BaseTabs.Tab>
+              data-selected={
+                (showSelection && item.value === value) || undefined
+              }
+              data-preview={item.value === previewValue || undefined}
+              data-tab-value={item.value}
+            >
+              {variant === "workspace" && item.value === arrivalValue ? (
+                <span className="buzz-tabs-arrival" aria-hidden="true" />
+              ) : null}
+              {variant !== "navigation" && (
+                <>
+                  {item.icon}
+                  <span>{item.label}</span>
+                </>
+              )}
+            </BaseTabs.Tab>
+            {item.onClose && (
+              <IconButton
+                size="xs"
+                aria-label={`Close ${item.label} tab`}
+                onClick={item.onClose}
+                icon={<XIcon size="0.875rem" aria-hidden="true" />}
+              />
+            )}
+          </span>
         ))}
       </BaseTabs.List>
       {trailingAction}
@@ -82,11 +138,16 @@ export function Tabs<Value extends string>({
       data-buzz-ui=""
       className={renderPanel ? "buzz-tab-panels" : "buzz-tabs"}
       data-variant={variant}
+      data-selection-hidden={!showSelection || undefined}
       value={value}
       onValueChange={(nextValue) => onValueChange(nextValue as Value)}
     >
       {renderPanel ? (
-        <div className="buzz-tabs" data-variant={variant}>
+        <div
+          className="buzz-tabs"
+          data-variant={variant}
+          data-selection-hidden={!showSelection || undefined}
+        >
           {strip}
         </div>
       ) : (

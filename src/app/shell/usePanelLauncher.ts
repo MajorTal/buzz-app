@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Panels, RegisteredPanel } from "../../features/panels/service";
 
 type Opened = {
+  id: string;
   panel: RegisteredPanel;
   target: string;
   trigger: HTMLButtonElement;
@@ -47,13 +48,19 @@ export function usePanelLauncher(panels: Panels, ready: boolean) {
     available: ready ? available : [],
     selected: selected?.panel,
     target: selected?.target,
+    openingId: selected?.id,
     launch(panel: RegisteredPanel, trigger: HTMLButtonElement) {
       const { launcher } = panel;
       if (ready && launcher && panels.snapshot().includes(panel))
         setOpened((current) =>
           current?.panel === panel
             ? undefined
-            : { panel, target: launcher.target, trigger },
+            : {
+                id: crypto.randomUUID(),
+                panel,
+                target: launcher.target,
+                trigger,
+              },
         );
     },
     canOpen(target: string) {
@@ -62,7 +69,16 @@ export function usePanelLauncher(panels: Panels, ready: boolean) {
     /** Show whichever registered panel claims this target; reopening keeps it. */
     open(target: string, trigger: HTMLButtonElement) {
       const panel = ready ? panels.resolve(target) : undefined;
-      if (panel) setOpened({ panel, target, trigger });
+      if (panel)
+        setOpened((current) => ({
+          id:
+            current?.panel === panel && current.target === target
+              ? current.id
+              : crypto.randomUUID(),
+          panel,
+          target,
+          trigger,
+        }));
     },
     close() {
       // Bind to this opening, not merely this panel: reopening gets a new lifetime.

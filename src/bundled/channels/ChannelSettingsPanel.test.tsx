@@ -30,9 +30,7 @@ it("shows known channel details with diagnostics collapsed until requested", asy
   expect(screen.getByRole("heading", { name: "Alpha" })).toBeVisible();
   expect(screen.getByText("alpha")).toBeVisible();
   expect(screen.getByText("2")).toBeVisible();
-  expect(
-    screen.getByRole("button", { name: "Close channel settings" }),
-  ).toHaveFocus();
+  expect(screen.getByRole("tab", { name: "Channel settings" })).toHaveFocus();
   expect(screen.getByText("Refresh messages")).not.toBeVisible();
   await user.click(screen.getByText("Diagnostics"));
   expect(
@@ -53,9 +51,12 @@ it("closes with Escape or its close button without swallowing other keys", async
   await user.keyboard("{Escape}");
   expect(close).toHaveBeenCalledTimes(1);
   await user.click(
-    screen.getByRole("button", { name: "Close channel settings" }),
+    screen.getByRole("button", { name: "Close Channel settings tab" }),
   );
   expect(close).toHaveBeenCalledTimes(2);
+  await user.click(screen.getByRole("tab", { name: "Channel settings" }));
+  await user.keyboard("{Delete}");
+  expect(close).toHaveBeenCalledTimes(3);
 });
 
 it("does not invent unknown metadata and still exposes diagnostics without a channel", async () => {
@@ -97,6 +98,11 @@ it("opens Canvas from its own keyboard-accessible row before setup actions", asy
   expect(canvas).toHaveAttribute("aria-haspopup", "dialog");
   expect(canvas).not.toHaveTextContent("Shared notes and plans");
   expect(openCanvas).not.toHaveBeenCalled();
+  expect(screen.getByRole("tab", { name: "Channel settings" })).toHaveFocus();
+  await user.tab();
+  expect(
+    screen.getByRole("button", { name: "Close Channel settings tab" }),
+  ).toHaveFocus();
   await user.tab();
   expect(canvas).toHaveFocus();
   await user.keyboard("{Enter}");

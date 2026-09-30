@@ -158,13 +158,22 @@ for (const reading of [false, true]) {
           page.evaluate(() => window.fixtureNavigation.snapshot().status),
         )
         .toBe("opened");
+      await expect(region).toHaveAttribute("aria-busy", "false");
+      await expect
+        .poll(() =>
+          region.evaluate(
+            (node) => node.scrollHeight - node.clientHeight - node.scrollTop,
+          ),
+        )
+        .toBeLessThan(4);
       let position = 0;
       if (reading) {
+        const bottom = await region.evaluate((node) => node.scrollTop);
         await region.hover();
-        await page.mouse.wheel(0, 500);
+        await page.mouse.wheel(0, -500);
         await expect
           .poll(() => region.evaluate((node) => node.scrollTop))
-          .toBe(500);
+          .toBe(bottom - 500);
         position = await region.evaluate((node) => node.scrollTop);
       }
       release();
@@ -193,7 +202,7 @@ for (const reading of [false, true]) {
           region.locator(`[data-message-id="${last.id}"]`),
         ).toBeInViewport();
         await expect(
-          page.getByRole("button", { name: "Close thread", exact: true }),
+          page.getByRole("tab", { name: "Thread", exact: true }),
         ).toBeFocused();
       }
       const live = app.reply(root.id);

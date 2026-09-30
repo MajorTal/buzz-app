@@ -599,6 +599,13 @@ export const ROLE_GROUPS: RoleGroup[] = [
         status: "core",
       },
       {
+        token: "bg-affordance-popover-selected",
+        variable: "--affordance-popover-selected",
+        pointsAt: "neutral-2 light / neutral-6 dark",
+        use: "Selection within anchored popups, including mention and emoji suggestions. Remains distinct from the raised dark popup surface independently of neutral button hover.",
+        status: "core",
+      },
+      {
         token: "bg-affordance-floating-control",
         variable: "--affordance-floating-control",
         pointsAt: "affordance-subtle light / neutral-6 dark",
@@ -1289,6 +1296,18 @@ export const RADII = [
 ];
 
 export const MOTION = [
+  {
+    token: "duration-panel-enter",
+    variable: "--duration-panel-enter",
+    value: "180ms",
+    use: "An occasional pointer-opened overlay panel entering from the edge.",
+  },
+  {
+    token: "easing-enter",
+    variable: "--easing-enter",
+    value: "cubic-bezier(.23,1,.32,1)",
+    use: "Responsive entrances and exits with immediate initial movement.",
+  },
   {
     token: "duration-fast",
     variable: "--duration-fast",

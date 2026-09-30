@@ -7,8 +7,46 @@ import type { Navigation } from "../../src/features/navigation/controller";
 import type { PageProps } from "../../src/features/pages/service";
 import type { PageNavigation } from "../../src/features/navigation/service";
 import type { RelayData } from "../../src/features/relay/service";
+import { PanelSubview } from "../../src/features/panels/PanelSubview";
 import type { PanelProps } from "../../src/features/panels/service";
 import type { NotificationInput } from "../../src/features/notifications/service";
+
+function DrillInFixture({ target, context }: PanelProps) {
+  const [log, setLog] = useState(false);
+  return (
+    <>
+      <p>Wrong match</p>
+      <input aria-label="Panel draft" defaultValue="" />
+      <button
+        type="button"
+        onClick={(event) => {
+          event.currentTarget.focus();
+          context?.push?.(`${target}:detail`);
+        }}
+      >
+        Open child detail
+      </button>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.currentTarget.focus();
+          setLog(true);
+        }}
+      >
+        Open local log
+      </button>
+      {log && (
+        <PanelSubview
+          title="Fixture log"
+          backLabel="Back to detail"
+          onBack={() => setLog(false)}
+        >
+          <p>Log contents</p>
+        </PanelSubview>
+      )}
+    </>
+  );
+}
 
 declare global {
   interface Window {
@@ -242,7 +280,7 @@ export const fixturePlugins: readonly BundledPlugin[] = [
           id: "catch-all",
           title: "Wrong panel",
           matches: () => true,
-          component: () => <p>Wrong match</p>,
+          component: DrillInFixture,
         });
         ctx.panels.register({
           id: "notes",

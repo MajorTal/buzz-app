@@ -128,7 +128,7 @@ for (const cold of [false, true]) {
       await expect(
         page
           .getByRole("article", { name: "Conversation" })
-          .getByRole("heading", { level: 2 }),
+          .getByRole("tab", { name: "Alice Fixture", exact: true }),
       ).toHaveText("Alice Fixture");
       expect(labelReads()).toHaveLength(before + 1);
       await expect(dm.locator(".buzz-avatar")).toHaveText("A");

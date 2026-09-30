@@ -12,6 +12,8 @@ export type PanelContext = Readonly<{
   canOpen(target: string): boolean;
   /** Replace this panel through its host. False after this opening is retired. */
   open(target: string): boolean;
+  /** Drill into a child while the channel host retains the previous view. */
+  push?(target: string): boolean;
 }>;
 /** Public presentation context, not authentication or a live selection service. */
 export type ChannelPanelContext = Readonly<{

@@ -168,6 +168,24 @@ test("posted image strips keep counts visible and every image reachable beside d
       // reveal there would slide the strip under the held pointer before
       // mouseup; WebKit never focuses a link from a press. Press a tile the end
       // clips and check the strip has not moved while the button is held.
+      // Establish the clipping precondition instead of relying on a viewport
+      // width accidentally bisecting a tile (scrollbar widths differ by OS).
+      await links.evaluateAll((items) => {
+        const strip = items[0].parentElement;
+        const end =
+          strip.getBoundingClientRect().left +
+          strip.clientLeft +
+          strip.clientWidth;
+        const maximum = strip.scrollWidth - strip.clientWidth;
+        for (const el of items) {
+          const r = el.getBoundingClientRect();
+          const offset = strip.scrollLeft + r.left + r.width / 2 - end;
+          if (offset >= 0 && offset <= maximum) {
+            strip.scrollLeft = offset;
+            return;
+          }
+        }
+      });
       const clipped = await links.evaluateAll((items) => {
         const strip = items[0].parentElement;
         const end =
@@ -181,6 +199,11 @@ test("posted image strips keep counts visible and every image reachable beside d
         }
         return null;
       });
+      if (await strip.evaluate((el) => el.scrollWidth > el.clientWidth))
+        expect(
+          clipped,
+          "an overflowing strip has a clipped tile before the pointer press",
+        ).not.toBeNull();
       if (clipped) {
         pressedClippedTile = true;
         const before = await strip.evaluate((el) => el.scrollLeft);

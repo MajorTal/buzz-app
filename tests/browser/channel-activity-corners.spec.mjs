@@ -62,6 +62,7 @@ for (const multiple of [false, true]) {
       const openPopup = async () => {
         if (await showNavigation.isVisible()) await showNavigation.click();
         await expect(alpha).toBeVisible();
+
         await alpha.hover();
         await expect(rows).toHaveCount(multiple ? 2 : 1);
         await rows.first().hover();

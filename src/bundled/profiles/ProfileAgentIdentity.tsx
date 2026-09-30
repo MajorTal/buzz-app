@@ -69,7 +69,7 @@ function OwnerLink({
           size="compact"
           variant="ghost"
           aria-label={`Open owner profile: ${name}`}
-          onClick={() => context.open(target)}
+          onClick={() => (context.push ?? context.open)(target)}
         >
           {name}
         </Button>

@@ -75,7 +75,7 @@ function InstanceDetails(
     state.status === "idle";
   return (
     <>
-      {props.context?.canOpen(target) && (
+      {!props.context?.push && props.context?.canOpen(target) && (
         <Button
           size="compact"
           variant="ghost"

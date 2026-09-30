@@ -1,0 +1,76 @@
+@reference "../../shared/styles/globals.css";
+
+.picker {
+  width: 100%;
+  padding: var(--space-4) var(--space-panel-inset);
+  container-type: inline-size;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+.pickerLayout {
+  display: grid;
+  width: 100%;
+  grid-template-columns: minmax(14rem, 25%) minmax(0, 1fr);
+  gap: var(--space-4);
+  min-height: 0;
+  overflow: hidden;
+}
+.group {
+  margin-block-start: var(--space-4);
+}
+.categories {
+  @apply interaction-navigation;
+  border-inline-end: 1px solid var(--border-standard);
+  padding-inline-end: var(--space-3);
+  overflow: auto;
+}
+.categories [class~="navigation-item-label"] {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+/* Two readable columns need 14rem each plus the standard group gap. */
+@container (max-width: 29rem) {
+  .pickerLayout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+  .categories {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-1);
+    border-inline-end: 0;
+    padding-inline-end: 0;
+  }
+  .categories > button {
+    width: auto;
+    flex: 1 1 auto;
+  }
+}
+.choices {
+  min-width: 0;
+  overflow: auto;
+}
+.group > p {
+  padding: var(--space-2);
+}
+.conversation {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  min-width: 0;
+}
+.icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  flex: 0 0 1rem;
+}
+
+.conversation > aside {
+  flex: 1;
+}

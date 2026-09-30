@@ -194,7 +194,7 @@ export const MessageRow = memo(function MessageRow({
   });
   const clickable = target && canOpenLink?.(target);
   const avatarShape =
-    row.agentEnvelope || agentPubkeys?.has(row.authorId)
+    row.agentEnvelope || agentPubkeys?.has(row.authorId) || profile?.isAgent
       ? "squircle"
       : "circle";
   const presence = usePresenceStatus(

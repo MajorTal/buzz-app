@@ -262,6 +262,21 @@ it("typing requires observer recognition, retains exact scopes, and expires on i
   expect(before.typing).toHaveLength(3);
   f.activity.dispose();
 });
+it("keeps the first working time through typing refreshes and resets it after stopping", async () => {
+  const f = fixture();
+  f.send(f.item("turn_liveness"));
+  f.activity.channelEvents([typingEvent()]);
+  const startedAt = f.snapshot().typing[0]?.startedAt;
+  expect(startedAt).toBe(Date.now());
+  await vi.advanceTimersByTimeAsync(3000);
+  f.activity.channelEvents([typingEvent()]);
+  expect(f.snapshot().typing[0]?.startedAt).toBe(startedAt);
+  f.activity.channelEvents([{ ...typingEvent(), kind: 9 }]);
+  await vi.advanceTimersByTimeAsync(3000);
+  f.activity.channelEvents([typingEvent()]);
+  expect(f.snapshot().typing[0]?.startedAt).toBe(Date.now());
+  f.activity.dispose();
+});
 it("messages clear only their typing scope and suppress delayed typing, while fresh work can resume", async () => {
   const f = fixture();
   const root = "b".repeat(64),

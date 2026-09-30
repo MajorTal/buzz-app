@@ -39,6 +39,24 @@ function owner(profiles = new Map<string, Profile>()) {
   };
   const session = {
     channels: { prepare: vi.fn() },
+    agentActivity: {
+      subscribe: () => () => {},
+      snapshot: () => ({
+        status: "listening",
+        records: [],
+        turns: [
+          {
+            agent: "a".repeat(64),
+            channelId: "alpha",
+            turnId: "one",
+            timestamp: Date.now(),
+            state: "working",
+          },
+        ],
+        typing: [],
+        trimmed: 0,
+      }),
+    },
     media: (url: string) => `media:${url}`,
     profiles: {
       snapshot: () => profiles,
@@ -145,6 +163,35 @@ it("renders a compact group DM participant count without widening the icon slot"
   ).toBeInTheDocument();
 });
 
+it("keeps the DM identity avatar and shows only a separate thinking badge", () => {
+  const agent = "a".repeat(64);
+  const state = owner(new Map([[agent, { name: "Buzzy", isAgent: true }]]));
+  render(
+    <ChannelSidebarItem
+      {...itemProps(state.session, true, {
+        id: "alpha",
+        name: "Buzzy",
+        channelType: "dm",
+        participants: [agent],
+      })}
+      profile={state.profiles.get(agent)}
+    />,
+  );
+  expect(
+    document.querySelectorAll("[data-dm-identity] .buzz-avatar"),
+  ).toHaveLength(1);
+  expect(
+    document.querySelector("[data-dm-identity] .agent-motion-avatar"),
+  ).toBeNull();
+  expect(
+    document.querySelector("[data-dm-identity] .badge-pill-root"),
+  ).toBeNull();
+  const badge = document.querySelector("[data-channel-working]");
+  expect(badge).toHaveAttribute("aria-label", "Buzzy working in Buzzy");
+  expect(badge?.querySelectorAll("i")).toHaveLength(3);
+  expect(badge?.closest("[data-dm-identity]")).toBeNull();
+});
+
 it.each([
   { name: "unread-only", working: false, unread: true },
   { name: "working-only", working: true, unread: false },
@@ -219,12 +266,12 @@ it("keeps live unread updates and uses replacement session callbacks across row 
       onSelect={replacement}
     />,
   );
-  expect(screen.getByRole("button", { name: /^Alpha/ })).toBe(row);
-  expect(row).toHaveAttribute("aria-current", "page");
-  expect(row.querySelector("svg")).toHaveAttribute("width", "16");
-  expect(row.querySelector("svg")).toHaveAttribute("height", "16");
+  const activeRow = screen.getByRole("button", { name: /^Alpha/ });
+  expect(activeRow).toHaveAttribute("aria-current", "page");
+  expect(activeRow.querySelector("svg")).toHaveAttribute("width", "16");
+  expect(activeRow.querySelector("svg")).toHaveAttribute("height", "16");
   expect(
-    screen.getByRole("img", { name: "Agent working" }),
+    screen.getByRole("img", { name: /working in Alpha/ }),
   ).toBeInTheDocument();
   expect(first.listeners.size).toBe(0);
   expect(
@@ -234,7 +281,7 @@ it("keeps live unread updates and uses replacement session callbacks across row 
   expect(
     screen.getByRole("img", { name: /3 observed unread/ }),
   ).toBeInTheDocument();
-  await user.click(row);
+  await user.click(activeRow);
   expect(replacement).toHaveBeenCalledWith("alpha");
   expect(onSelect).toHaveBeenCalledTimes(1);
 });
@@ -414,5 +461,25 @@ it.each(["ContextMenu", "F10"])(
     expect(onSelect).not.toHaveBeenCalled();
     await user.click(child);
     expect(onSelect).toHaveBeenCalledWith("child");
+  },
+);
+
+it.each(["Collapse sessions in Alpha", "Plan, session in Alpha"])(
+  "retains focused %s across idle and working transitions",
+  (name) => {
+    const props = {
+      ...itemProps(owner().session, false),
+      sessions: [
+        { id: "child", name: "Plan", channelType: "session" as const },
+      ],
+    };
+    const view = render(<ChannelSidebarItem {...props} />);
+    const control = screen.getByRole("button", { name });
+    control.focus();
+    for (const working of [true, false]) {
+      view.rerender(<ChannelSidebarItem {...props} working={working} />);
+      expect(screen.getByRole("button", { name })).toBe(control);
+      expect(control).toHaveFocus();
+    }
   },
 );

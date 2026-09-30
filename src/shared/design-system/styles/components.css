@@ -1058,6 +1058,29 @@
       filter: none;
     }
   }
+  .buzz-popover-popup[data-channel-activity] {
+    filter: none;
+    transition:
+      opacity var(--duration-state) ease-out,
+      transform var(--duration-state) cubic-bezier(0.23, 1, 0.32, 1);
+  }
+  .buzz-popover-popup[data-channel-activity]:where(
+    [data-starting-style],
+    [data-ending-style]
+  ) {
+    filter: none;
+  }
+  .buzz-popover-popup[data-channel-activity][data-ending-style] {
+    transition-duration: calc(var(--duration-fast) / 2);
+  }
+  html[data-keyboard-navigation] .buzz-popover-popup[data-channel-activity] {
+    transition: none;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .buzz-popover-popup[data-channel-activity] {
+      transition: none;
+    }
+  }
 }
 
 @layer components {

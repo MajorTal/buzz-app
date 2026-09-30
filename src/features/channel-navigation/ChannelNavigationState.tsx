@@ -31,11 +31,19 @@ type State = {
 };
 type ActivityThread = {
   channelId: string;
-  rootId: string;
+  messageId: string;
+  entryId: string;
+  signal: AbortSignal;
+  trigger: HTMLElement | null;
+};
+type ActivityAgent = {
+  channelId: string;
+  agent: string;
   trigger: HTMLElement | null;
 };
 type Handoff = State & {
   activityThread: RefObject<ActivityThread | undefined>;
+  activityAgent: RefObject<ActivityAgent | undefined>;
   updateDraftParents(update: (previous: string[]) => string[]): void;
   prepareDm(members: readonly string[]): void;
   clearPreparingDm(): void;
@@ -61,11 +69,13 @@ export function ChannelNavigationProvider({
   const connection = useRelayConnection(relay);
   const scope = connection.scope ?? "disconnected";
   const activityThread = useRef<ActivityThread | undefined>(undefined);
+  const activityAgent = useRef<ActivityAgent | undefined>(undefined);
   const [state, setState] = useState<State>(() =>
     restore(connection.session, scope),
   );
   if (state.session !== connection.session || state.scope !== scope) {
     activityThread.current = undefined;
+    activityAgent.current = undefined;
     setState(restore(connection.session, scope));
   }
   const update = useCallback(
@@ -87,6 +97,7 @@ export function ChannelNavigationProvider({
     () => ({
       ...state,
       activityThread,
+      activityAgent,
       updateDraftParents(change) {
         update((previous) => {
           const draftParents = change(previous.draftParents);

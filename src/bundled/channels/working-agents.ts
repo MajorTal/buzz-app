@@ -1,0 +1,99 @@
+import type { RelaySession } from "../../features/relay/session";
+import { activityRecords } from "../../features/agents/activity-records";
+
+type Snapshot = ReturnType<RelaySession["agentActivity"]["snapshot"]>;
+
+/** Channel-wide evidence only. A thread typing signal stays in its thread. */
+export function workingAgents(snapshot: Snapshot, channelId: string): string[] {
+  if (snapshot.status !== "listening") return [];
+  return [
+    ...new Set([
+      ...snapshot.turns
+        .filter(
+          (turn) => turn.channelId === channelId && turn.state === "working",
+        )
+        .map((turn) => turn.agent),
+      ...snapshot.typing
+        .filter((entry) => entry.channelId === channelId && !entry.threadRootId)
+        .map((entry) => entry.agent),
+    ]),
+  ].sort();
+}
+
+/** A current turn's start gives its age; only one captured trigger gives a destination. */
+export function workingAgentDetails(
+  snapshot: Snapshot,
+  channelId: string,
+  agent: string,
+): { startedAt: number; messageId?: string } | undefined {
+  if (snapshot.status !== "listening") return;
+  const turns = snapshot.turns
+    .filter(
+      (turn) =>
+        turn.agent === agent &&
+        turn.channelId === channelId &&
+        turn.state === "working",
+    )
+    .sort((a, b) => b.timestamp - a.timestamp);
+  const latest = turns[0];
+  if (!latest) {
+    const typing = snapshot.typing.find(
+      (entry) =>
+        entry.agent === agent &&
+        entry.channelId === channelId &&
+        !entry.threadRootId,
+    );
+    return typing ? { startedAt: typing.startedAt } : undefined;
+  }
+  if (turns[1]?.timestamp === latest.timestamp) return;
+  const starts = activityRecords(snapshot.records, agent, channelId).flatMap(
+    (record) => {
+      if (record.kind !== "turn_started") return [];
+      try {
+        const value = JSON.parse(record.plaintext);
+        const ids = value?.payload?.triggeringEventIds;
+        const timestamp = Date.parse(value?.timestamp);
+        if (
+          typeof value?.turnId !== "string" ||
+          !Number.isFinite(timestamp) ||
+          timestamp > record.receivedAt + 5000
+        )
+          return [];
+        const messageId =
+          Array.isArray(ids) &&
+          ids.length === 1 &&
+          typeof ids[0] === "string" &&
+          /^[0-9a-f]{64}$/.test(ids[0])
+            ? (ids[0] as string)
+            : undefined;
+        return [{ turnId: value.turnId, startedAt: timestamp, messageId }];
+      } catch {
+        return [];
+      }
+    },
+  );
+  const matches = starts.filter((start) => start.turnId === latest.turnId);
+  const start = matches.length === 1 ? matches[0] : undefined;
+  const typing = snapshot.typing.find(
+    (entry) =>
+      entry.agent === agent &&
+      entry.channelId === channelId &&
+      !entry.threadRootId,
+  );
+  return start
+    ? {
+        startedAt: start.startedAt,
+        ...(start.messageId ? { messageId: start.messageId } : {}),
+      }
+    : typing
+      ? { startedAt: typing.startedAt }
+      : undefined;
+}
+
+export function workingAgentMessage(
+  snapshot: Snapshot,
+  channelId: string,
+  agent: string,
+): string | undefined {
+  return workingAgentDetails(snapshot, channelId, agent)?.messageId;
+}

@@ -252,7 +252,7 @@ it("shows live remote typing on the matching 1:1 and group DM rows only", () => 
   owner.dispose();
 });
 
-it("labels human typing only; known agents keep the Agent working signal", async () => {
+it("labels human typing only; known agents keep their DM avatar", async () => {
   const { keys, owner, view, pulse, receive, loadProfiles, typing } = fixture();
   const { alice, bot, carol } = keys;
   await loadProfiles([
@@ -260,13 +260,13 @@ it("labels human typing only; known agents keep the Agent working signal", async
     profile(alice, { name: "Alice" }),
   ]);
 
-  // Agent-only typing: no typing badge, working signal preserved.
+  // Agent-only typing never replaces the DM identity with a typing badge.
   receive(pulse(bot, "agent"));
   expect(typing("agent")).toBeNull();
   expect(
-    within(screen.getByTestId("agent")).getByRole("img", {
-      name: "Agent working",
-    }),
+    screen
+      .getByTestId("agent")
+      .querySelector("[data-dm-identity] .buzz-avatar"),
   ).toBeInTheDocument();
 
   // Mixed group: the label names humans only.

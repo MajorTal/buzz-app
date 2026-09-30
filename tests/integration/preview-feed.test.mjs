@@ -9,10 +9,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
 
-const script = new URL("../../scripts/preview-feed.mjs", import.meta.url)
-  .pathname;
+const script = fileURLToPath(
+  new URL("../../scripts/preview-feed.mjs", import.meta.url),
+);
 
 function run(...args) {
   return spawnSync(process.execPath, [script, ...args], { encoding: "utf8" });

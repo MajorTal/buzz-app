@@ -107,13 +107,21 @@ it("resets transient handoffs and rejects retired callbacks on session replaceme
   const retired = view.result.current;
   retired.activityThread.current = {
     channelId: "channel",
-    rootId: "root",
+    messageId: "root",
+    entryId: "visit",
+    signal: new AbortController().signal,
+    trigger: null,
+  };
+  retired.activityAgent.current = {
+    channelId: "channel",
+    agent: "agent",
     trigger: null,
   };
   act(() => h.replace());
   expect(view.result.current.preparingDm).toBeUndefined();
   expect(view.result.current.lifecycleDialog).toBeUndefined();
   expect(view.result.current.activityThread.current).toBeUndefined();
+  expect(view.result.current.activityAgent.current).toBeUndefined();
   expect(view.result.current.draftParents).toEqual(["parent"]);
   act(() => {
     retired.prepareDm(["late"]);

@@ -626,7 +626,7 @@ it("does not bypass the session media resolver to paint an inaccessible attachme
   expect(html).not.toContain("<img");
 });
 
-it("uses the reviewed SVG squircle only for identities classified as agents", () => {
+it("uses the agent squircle for both known agents and agent profiles", () => {
   const agent = "a".repeat(64);
   const media = vi.fn((url: string) => url);
   const html = renderToStaticMarkup(
@@ -642,6 +642,21 @@ it("uses the reviewed SVG squircle only for identities classified as agents", ()
   );
   expect(html).toContain('data-avatar-shape="squircle"');
   expect(media).toHaveBeenCalledWith("https://image.test/agent.png", "small");
+  const profileOnly = renderToStaticMarkup(
+    <MessageRow
+      row={{ ...row, authorId: agent }}
+      profile={{
+        name: "Carl",
+        picture: "https://image.test/agent.png",
+        isAgent: true,
+      }}
+      media={media}
+      onOpenLink={() => false}
+      day={false}
+      retry={undefined}
+    />,
+  );
+  expect(profileOnly).toContain('data-avatar-shape="squircle"');
   expect(render({}, 0).html).toContain('data-avatar-shape="circle"');
 });
 

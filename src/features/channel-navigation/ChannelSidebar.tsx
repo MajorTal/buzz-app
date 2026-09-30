@@ -415,29 +415,100 @@ function ReadySidebar({
       scope,
     ],
   );
-  const openActivityThread = useCallback(
-    (channelId: string, rootId: string) => {
+  const openActivityMessage = useCallback(
+    (
+      channelId: string,
+      messageId: string | undefined,
+      threadRootId?: string,
+    ) => {
       if (!viewer || relay.snapshot().session !== queries) return;
-      if (handoff)
-        handoff.activityThread.current = {
-          channelId,
-          rootId,
-          trigger:
-            sidebar.list.current?.querySelector<HTMLElement>(
-              `[data-channel-id="${CSS.escape(channelId)}"]`,
-            ) ?? null,
-        };
-      void navigator.open({
+      const trigger =
+        sidebar.list.current?.querySelector<HTMLElement>(
+          `[data-channel-id="${CSS.escape(channelId)}"]`,
+        ) ?? null;
+      const result = navigator.open({
         version: 1,
         kind: "conversation",
         channelId,
-        messageId: rootId,
-        threadRootId: rootId,
+        ...(messageId ? { messageId } : {}),
+        ...(threadRootId ? { threadRootId } : {}),
         scope: {
           viewer,
           communityOrigin: scope.slice(0, -(viewer.length + 1)),
         },
       });
+      const { attempt } = navigator.snapshot();
+      const target = attempt.entry.target;
+      if (
+        handoff &&
+        messageId &&
+        target.kind === "conversation" &&
+        target.channelId === channelId &&
+        target.messageId === messageId
+      ) {
+        const intent = {
+          channelId,
+          messageId,
+          trigger,
+          entryId: attempt.entry.id,
+          signal: attempt.signal,
+        };
+        handoff.activityThread.current = intent;
+        void result.then(() => {
+          if (handoff.activityThread.current === intent)
+            handoff.activityThread.current = undefined;
+        });
+      }
+    },
+    [viewer, relay, queries, handoff, sidebar.list, navigator, scope],
+  );
+  const openActivityThread = useCallback(
+    (channelId: string, rootId: string) =>
+      openActivityMessage(channelId, rootId, rootId),
+    [openActivityMessage],
+  );
+  const openWorkingAgent = useCallback(
+    (channelId: string, _agent: string, messageId: string | undefined) => {
+      const root =
+        messageId &&
+        channels.find((channel) => channel.id === channelId)?.channelType !==
+          "session" &&
+        queries.channels
+          .window(channelId)
+          .rows.some((row) => row.id === messageId && !row.threadRootId);
+      openActivityMessage(channelId, messageId, root ? messageId : undefined);
+    },
+    [queries, channels, openActivityMessage],
+  );
+  const openAgentActivity = useCallback(
+    (channelId: string, agent: string) => {
+      if (!viewer || relay.snapshot().session !== queries) return;
+      const intent = {
+        channelId,
+        agent,
+        trigger:
+          sidebar.list.current?.querySelector<HTMLElement>(
+            `[data-channel-id="${CSS.escape(channelId)}"]`,
+          ) ?? null,
+      };
+      if (handoff) handoff.activityAgent.current = intent;
+      void navigator
+        .open({
+          version: 1,
+          kind: "conversation",
+          channelId,
+          scope: {
+            viewer,
+            communityOrigin: scope.slice(0, -(viewer.length + 1)),
+          },
+        })
+        .then((result) => {
+          if (
+            result.status !== "opened" &&
+            handoff?.activityAgent.current === intent
+          )
+            handoff.activityAgent.current = undefined;
+        });
     },
     [viewer, relay, queries, handoff, sidebar.list, navigator, scope],
   );
@@ -991,6 +1062,8 @@ function ReadySidebar({
                         onSelect={select}
                         onNewSession={startSession}
                         onOpenThread={openActivityThread}
+                        onOpenWorkingAgent={openWorkingAgent}
+                        onOpenAgentActivity={openAgentActivity}
                         menuEnabled={menuEnabled}
                         sectionKey={section.key}
                         onOpenMenu={openRowMenu}

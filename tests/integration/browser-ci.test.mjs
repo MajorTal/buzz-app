@@ -5,6 +5,7 @@ import {
   mkdtempSync,
   readFileSync,
   readdirSync,
+  realpathSync,
   rmSync,
   symlinkSync,
   writeFileSync,
@@ -106,7 +107,7 @@ test("browser Rust setup uses the repository pin before Hermit and fails closed"
   );
   assert.equal(pins.length, 1);
   const version = pins[0].slice(6, -4);
-  const cwd = mkdtempSync(join(tmpdir(), "buzz-browser-rust-"));
+  const cwd = realpathSync(mkdtempSync(join(tmpdir(), "buzz-browser-rust-")));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
   mkdirSync(join(cwd, "bin"));
   mkdirSync(join(cwd, "toolchain"));

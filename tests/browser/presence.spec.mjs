@@ -21,8 +21,11 @@ test("profile snapshot and same-socket renewal coexist with real chat while opti
       .click();
     const profile = page.getByRole("region", { name: "Profile details" });
     await expect(profile).toBeVisible();
-    await expect(profile.getByRole("img", { name: /^Presence:/ })).toHaveCount(
-      0,
+    await expect(
+      profile.getByRole("img", { name: "Alice Fixture avatar", exact: true }),
+    ).toBeVisible();
+    await expect(profile.locator(".buzz-avatar-status")).not.toHaveAttribute(
+      "data-status",
     );
     // Narrowing the timeline for the profile can demand an older page. This
     // fixture deliberately holds those pages; retire that foreground work first.
@@ -64,17 +67,19 @@ test("profile snapshot and same-socket renewal coexist with real chat while opti
     expect(
       app.report.presenceSnapshots.some((snapshot) => snapshot.pending),
     ).toBe(true);
+    await expect(profile.getByText(/^(Active|Away|Offline)$/)).toHaveCount(0);
     app.relay.releasePresence();
+    await expect(profile.getByText("Active", { exact: true })).toBeVisible();
     await expect(
-      profile.getByRole("img", { name: "Presence: Active" }),
+      profile.getByRole("img", { name: "Alice Fixture avatar, online" }),
     ).toBeVisible();
     await expect(profile.locator(".buzz-avatar-status")).toHaveAttribute(
       "data-status",
       "online",
     );
-    await expect(
-      profile.getByRole("img", { name: "Alice Fixture avatar, online" }),
-    ).toHaveCount(0);
+    await expect(profile.getByRole("img", { name: /^Presence:/ })).toHaveCount(
+      0,
+    );
     // Startup may skip busy setup. Keep real time: advancing only browser time
     // would expire its SSE heartbeat without advancing the broker's keepalive.
     await expect
@@ -259,11 +264,13 @@ test.describe("human message bylines omit presence", () => {
     const profile = page.getByRole("region", { name: "Profile details" });
     // Human bylines do not demand presence; opening the profile starts that read.
     await expect(
-      profile.getByRole("img", { name: "Presence: Active" }),
+      profile.getByRole("img", { name: "Alice Fixture avatar, online" }),
     ).toBeVisible();
+    await expect(profile.getByText("Active", { exact: true })).toBeVisible();
     app.presence("away");
+    await expect(profile.getByText("Away", { exact: true })).toBeVisible();
     await expect(
-      profile.getByRole("img", { name: "Presence: Away" }),
+      profile.getByRole("img", { name: "Alice Fixture avatar, away" }),
     ).toBeVisible();
     expect(
       app.report.presenceSnapshots.some((snapshot) =>
@@ -274,9 +281,9 @@ test.describe("human message bylines omit presence", () => {
       "data-status",
       "away",
     );
-    await expect(
-      profile.getByRole("img", { name: "Alice Fixture avatar, online" }),
-    ).toHaveCount(0);
+    await expect(profile.getByRole("img", { name: /^Presence:/ })).toHaveCount(
+      0,
+    );
     expect(
       app.relay.requests.some(({ filters }) =>
         filters.some(
@@ -397,7 +404,7 @@ test("presence becomes usable during held HTTP work and unfinished subscription 
     await expect(
       page
         .getByRole("region", { name: "Profile details" })
-        .getByRole("img", { name: "Presence: Active" })
+        .getByRole("img", { name: "Alice Fixture avatar, online" })
         .first(),
     ).toBeVisible();
     expect(app.report.unreadHolds.some((hold) => hold.pending)).toBe(true);

@@ -1,8 +1,10 @@
 # Shared observed community presence
 
-Profiles show Active, Away, or Offline with text, while avatar badges use
-solid status fills. Pending, failed, stale, or unavailable evidence renders no
-status; it is not relabeled Offline. People's message and thread bylines omit presence badges and custom status symbols.
+Profiles show presence through the avatar badge plus compact Active, Away, or
+Offline text beside the name, without a separate status row in Info. Both cues
+remain across profile tabs and use the same observed value. Pending, failed,
+stale, or unavailable evidence renders no status; it is not relabeled Offline.
+People's message and thread bylines omit presence badges and custom status symbols.
 One-to-one DM avatars and profiles retain them. Agent message avatars retain presence
 badges and demand presence when mounted. Their online badge morphs into a centered
 three-dot pill while the existing agent activity feed reports working or typing;

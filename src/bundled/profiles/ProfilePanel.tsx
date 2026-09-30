@@ -21,14 +21,10 @@ import { ProfileRuntime, useRuntimeAgents } from "./ProfileRuntime";
 import type { Navigation } from "../../features/navigation/controller";
 import { ProfileChannels } from "./ProfileChannels";
 import { useChannelIdentityNames } from "../../features/identity-names/react";
-import {
-  PresenceIndicator,
-  usePresenceStatus,
-} from "../../features/presence/react";
+import { usePresenceStatus } from "../../features/presence/react";
 import {
   type ReactNode,
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -197,9 +193,6 @@ function ProfileDetails({
   const knownAgent = agentPubkeys.has(pubkey);
   // Navigation carries appearance, not the evidence used by private controls.
   const displayAgent = knownAgent || agentHint;
-  const thinkingId = useId();
-  const describeThinking =
-    knownAgent && tab === "info" && presence !== "unknown";
   const ownership = useAgentOwnerEvidence(
     session,
     knownAgent ? pubkey : undefined,
@@ -335,7 +328,6 @@ function ProfileDetails({
       ref={region}
       data-buzz-ui=""
       aria-label="Profile details"
-      aria-describedby={describeThinking ? thinkingId : undefined}
       tabIndex={-1}
       className={styles.root}
     >
@@ -358,22 +350,26 @@ function ProfileDetails({
                 session={session}
                 agentPubkey={pubkey}
                 channelId={context?.channelId}
-                thinkingDescriptionId={
-                  describeThinking ? thinkingId : undefined
-                }
                 src={picture}
-                alt={
-                  tab === "info" && presence !== "unknown"
-                    ? ""
-                    : `${name} avatar`
-                }
+                alt={`${name} avatar`}
                 fallback={name}
                 size="fill"
                 shape={displayAgent ? "squircle" : "circle"}
                 statusBadge={presence === "unknown" ? undefined : presence}
               />
             </div>
-            <h2 className="text-heading">{name}</h2>
+            <div className="min-w-0">
+              <h2 className="text-heading">{name}</h2>
+              {presence !== "unknown" && (
+                <p className="text-body-sm text-secondary">
+                  {
+                    { online: "Active", away: "Away", offline: "Offline" }[
+                      presence
+                    ]
+                  }
+                </p>
+              )}
+            </div>
           </div>
           <Tabs
             value={selectedTab}
@@ -394,11 +390,6 @@ function ProfileDetails({
               <div className={styles.tabContent}>
                 {selected === "info" ? (
                   <>
-                    <PresenceIndicator
-                      presence={session.presence}
-                      pubkey={pubkey}
-                      profile
-                    />
                     <UserStatusDisplay session={session} userId={pubkey} />
                     {canMessage && (
                       <div>

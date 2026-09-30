@@ -47,6 +47,10 @@ test("video speed options escape the thread and restore focus after selection an
   page,
 }) => {
   await page.goto("/tests/fixtures/media-review.html?thread");
+  await page.evaluate(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.dataset.colorMode = "light";
+  });
   const trigger = page
     .getByRole("button", { name: "Playback speed: 1x" })
     .first();
@@ -64,6 +68,10 @@ test("video speed options escape the thread and restore focus after selection an
   await trigger.click();
   const menu = page.getByRole("menu", { name: /^Playback speed:/ });
   await expect(menu).toBeVisible();
+  // The scoped dark owner must keep the explicit floating recipe, not the
+  // ordinary dark control fill (#333333), even though the host stays light.
+  await expect(menu).toHaveCSS("--interaction-fill", "#404040");
+  await expect(menu).toHaveCSS("background-color", "rgb(51, 51, 51)");
   const fast = menu.getByRole("menuitemradio", { name: "2x", exact: true });
   await expect
     .poll(() =>
@@ -115,6 +123,10 @@ test("video speed options escape the thread and restore focus after selection an
   await reviewSpeed.focus();
   await reviewSpeed.press("Enter");
   await expect(menu).toBeVisible();
+  await expect(menu).toHaveCSS("--interaction-fill", "#404040");
+  await expect(
+    menu.getByRole("menuitemradio", { name: "2x", exact: true }),
+  ).toHaveCSS("background-color", "rgb(64, 64, 64)");
   await expect(
     menu.getByRole("menuitemradio", { name: "2x", exact: true }),
   ).toBeFocused();
@@ -138,6 +150,26 @@ test("video speed options escape the thread and restore focus after selection an
   await expect(menu).toBeHidden();
   await expect(review).toBeVisible();
   await expect(selected).toBeFocused();
+});
+
+// Retry is a Button under the viewer's unavailable-media branch, not its header.
+test("unavailable dark media review keeps Retry readable in a light host", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/media-review.html?photo&missing-root");
+  await page.evaluate(() => {
+    document.documentElement.classList.remove("dark");
+    document.documentElement.dataset.colorMode = "light";
+  });
+  const dialog = page.getByRole("dialog", { name: "Image viewer" });
+  const retry = dialog.getByRole("button", { name: "Retry", exact: true });
+  await expect(dialog.getByRole("alert").first()).toContainText(
+    "Original message unavailable.",
+  );
+  await expect(retry).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(retry).toHaveCSS("background-color", "rgb(51, 51, 51)");
+  await retry.hover();
+  await expect(retry).toHaveCSS("background-color", "rgb(64, 64, 64)");
 });
 
 // Shared preview callers must retain viewport placement and non-stealing focus.

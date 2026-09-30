@@ -2,7 +2,8 @@
 
 .popup {
   @apply popover-surface;
-  --completion-highlight: var(--affordance-selected);
+  /* Active completion follows the pointer/keyboard, not a saved selection. */
+  --completion-highlight: var(--affordance-subtle-hover);
   position: fixed;
   display: flex;
   flex-direction: column;

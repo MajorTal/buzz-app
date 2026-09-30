@@ -119,6 +119,57 @@ test("media review stage contains portrait video and image media", async ({
   });
 });
 
+// Browser-only: scoped tokens and inherited aliases resolve at different owners.
+// Exercise the production viewer opened from a light host, not a styled stand-in.
+test("dark media review controls keep local colors when opened from light mode", async ({
+  page,
+}) => {
+  await withMessagesFixture(page, async () => {
+    await page.evaluate(() => {
+      document.documentElement.classList.remove("dark");
+      document.documentElement.dataset.colorMode = "light";
+    });
+    await page
+      .getByRole("button", { name: "Review image", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Image viewer" });
+    const close = dialog.getByRole("button", {
+      name: "Close fullscreen viewer",
+    });
+    const comments = dialog.getByRole("button", {
+      name: /^(Show|Hide) comments$/,
+    });
+    await expect(dialog).toHaveAttribute("data-color-mode", "dark");
+    await page.mouse.move(0, 0);
+    for (const button of [close, comments]) {
+      await expect(button).toHaveCSS("color", "rgb(255, 255, 255)");
+      await expect(button).toHaveCSS("background-color", "rgb(51, 51, 51)");
+    }
+    await comments.hover();
+    await expect(comments).toHaveCSS("background-color", "rgb(64, 64, 64)");
+    await page.mouse.down();
+    try {
+      await expect(comments).toHaveCSS("background-color", "rgb(89, 89, 89)");
+    } finally {
+      // Inspect :active without also starting the separate sidebar animation.
+      await page.mouse.move(0, 0);
+      await page.mouse.up();
+    }
+    // A live host-theme change must not retint the still-open dark viewer.
+    for (const mode of ["dark", "light"]) {
+      await page.evaluate((mode) => {
+        document.documentElement.dataset.colorMode = mode;
+      }, mode);
+      await expect(close).toHaveCSS("background-color", "rgb(51, 51, 51)");
+    }
+    await close.click();
+    await expect(dialog).toBeHidden();
+    await expect(
+      page.getByRole("button", { name: "Review image", exact: true }),
+    ).toBeFocused();
+  });
+});
+
 test("inline video controls hide only while playing off-hover on fine pointers", async ({
   page,
 }) => {

@@ -157,7 +157,9 @@ const owner = createRelaySession(
             metadata(relay, "video-preview", "Video preview"),
           ];
         if (filter.ids)
-          return events.filter((event) => filter.ids?.includes(event.id));
+          return new URLSearchParams(location.search).has("missing-root")
+            ? []
+            : events.filter((event) => filter.ids?.includes(event.id));
         if (filter.kinds?.includes(0))
           return events.filter((event) => event.kind === 0);
         if (filter.kinds?.includes(7))

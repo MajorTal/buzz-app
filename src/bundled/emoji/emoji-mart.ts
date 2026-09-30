@@ -158,8 +158,8 @@ export function mountEmojiMart({
       --color-b: var(--text-subtle);
       --color-c: var(--text-metadata);
       --em-color-border: var(--border-standard);
-      --em-color-border-over: var(--affordance-selected);
-      --buzz-category-fill: var(--affordance-selected);
+      --em-color-border-over: var(--affordance-subtle-hover);
+      --buzz-category-fill: var(--affordance-subtle-hover);
       --buzz-category-icon: var(--text-subtle);
       --buzz-category-icon-selected: var(--text-standard);
       --buzz-category-label: var(--text-subtle);
@@ -309,7 +309,7 @@ export function mountEmojiMart({
       padding: var(--space-1) var(--space-1h);
     }
     .menu .option:hover {
-      background: var(--affordance-selected);
+      background: var(--affordance-subtle-hover);
       color: var(--text-standard);
     }
     .menu input[type="radio"]:checked + .option {

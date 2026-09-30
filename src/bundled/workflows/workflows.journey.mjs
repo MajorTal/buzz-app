@@ -212,11 +212,15 @@ test("workflow editor preserves YAML, resolves exact saves, retains conflicts an
     document.documentElement.dataset.colorMode = "dark";
   });
   await expect(page.locator("html")).toHaveAttribute("data-color-mode", "dark");
+  // Dialog actions use the floating control recipe, distinct from their surface.
+  await expect(
+    page.getByRole("dialog", { name: "Create workflow", exact: true }),
+  ).toHaveCSS("background-color", "rgb(51, 51, 51)");
   // Wait for the shared control transition before checking its final paint.
   await expect(button("Cancel")).toHaveCSS("color", "rgb(255, 255, 255)");
   await expect(button("Cancel")).toHaveCSS(
     "background-color",
-    "rgb(51, 51, 51)",
+    "rgb(64, 64, 64)",
   );
   await yaml.focus();
   await page.keyboard.press("ArrowLeft");

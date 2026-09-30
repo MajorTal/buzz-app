@@ -199,7 +199,8 @@ These are static guardrails, not a substitute for browser checks.
 Anchored emoji, mention, completion, account and diagnostics surfaces use
 `popover-surface` for their border, fill, elevation and layer. Their placement,
 scrolling and specialized keyboard/editor interactions remain feature-owned.
-Popup selection uses the shared hover affordance so it stays visible on the
+Transient picker/typeahead highlights use `affordance-subtle-hover` directly,
+not a popover-wide override of persistent selection, so they stay visible on the
 raised dark surface. Compact completion/emoji layouts may select shared radius
 tokens to fit their inner geometry. Shared Button/IconButton `title` props render
 a shared Tooltip; content titles (full names, timestamps and media descriptions) remain native.

@@ -159,6 +159,58 @@ text-metadata, one step quieter than supporting text, in both themes. This super
 and no-container-ring recipes for these fields. Existing component
 recipes remain so this temporary visual decision can be reversed in one place.
 
+## Surface-aware interactions (proposed)
+
+Opaque surface owners provide a CSS interaction recipe: `interaction-panel`
+(default and Panel) or `interaction-floating` (Dialog, floating-surface and
+popover-surface). The recipe follows the painted DOM root, including portals;
+there is no React provider or runtime color detection. Native modal adapters
+using the floating fill opt into the same utility. Transparent groups inherit;
+a nested opaque Panel resets. Feature-only surfaces must opt into the recipe
+matching their paint; an arbitrary background utility alone is not a context.
+
+Inherited custom-property aliases resolve on the owner, not again on each child.
+The ordinary recipe binds at every theme owner (`:root` and scoped `.dark`),
+including always-dark media inside a light app. This default belongs in the base
+layer: explicit floating, nested Panel and semantic recipes must win on the same
+node. Adding a scoped theme requires rebinding its dependent aliases too.
+Do not override upstream `--affordance-*` values on a wrapper to retint controls.
+The existing semantic exceptions have named shared recipes: `interaction-availability`
+on the status owner uses `data-status="online" | "away" | "offline"` (unknown stays
+neutral) for the documented status capsule fills, while `interaction-navigation`
+on the sidebar keeps channel rows and session selection equally quiet. Apply these
+only to their semantic owners, not as general styling escape hatches. Button and
+NavigationItem still do not accept caller-supplied `className`; popup portals keep
+their own floating recipe. Availability's existing contrast exceptions remain
+recorded in `docs/presence.md`.
+
+Actions consume contextual fill/hover/pressed/selected/boundary roles rather than
+redefining global semantic tokens that also color avatars or chips. Floating
+rows remain transparent at rest, then use the existing floating highlight with
+standard supporting text. Persistent selection is separate from hover. Compact
+menus retain their quieter highlight and use a distinct selected fill.
+
+Fields retain surface-inset and their existing invalid/disabled/focus behavior;
+only active boundaries adapt to the surrounding surface. Actions inside an
+InputGroup reset to the ordinary recipe because their backdrop is the inset
+field. Unchecked checkbox/radio and outline boundaries use the contextual
+boundary too. Prominent/destructive actions and switch geometry/state colors
+are unchanged. No extra hover affordance is added to static content.
+
+The floating control mappings are proposed, not an accessibility certification.
+Dark subtle action fills are neutral-6/7/8 at rest/hover/press, on the unchanged
+neutral-5 floating surface; those fill edges are below 3:1. The contextual control
+stroke uses neutral-9 and clears 3:1 against that outer surface. This proof does
+not change focus appearance: the viewer's temporary outline suppression remains,
+while the host's separate stylesheet still renders keyboard rings. That existing
+host/viewer mismatch needs a separate decision. Glass/inverse/media surfaces
+retain their existing explicit treatments, outside this opaque-surface proof.
+
+The Floating surfaces viewer shows actions, rows, fields and choices in actual
+shared Panel/Dialog/Popover components, including a nested Panel reset. Verify
+both themes, portals, supported states and actual product flows before adoption
+is called complete; token math alone cannot validate the CSS cascade.
+
 ## Controls
 
 Button and IconButton share prominent, subtle, ghost, inverted, destructive,

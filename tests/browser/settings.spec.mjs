@@ -396,8 +396,8 @@ confirmedPresence(
     await profile.click();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 844 });
-      if (await button(page, "Show navigation").isVisible())
-        await button(page, "Show navigation").click();
+      // The narrow toggle appears only after the resize's media-query change renders.
+      if (width === 390) await button(page, "Show navigation").click();
       await expect(settingsSidebar).toBeVisible();
       await profile.focus();
       await tab();

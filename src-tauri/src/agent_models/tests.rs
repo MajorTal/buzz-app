@@ -485,6 +485,28 @@ fn native_discovery_preserves_absolute_harness_and_saved_or_draft_provider_overr
 }
 
 #[test]
+#[cfg(windows)]
+fn databricks_oauth_is_unsupported_on_windows() {
+    struct NoBrowser;
+    impl BrowserOpener for NoBrowser {
+        fn open(&self, _: &str) -> Result<(), String> {
+            panic!("Unsupported sign-in opened a browser");
+        }
+    }
+    let dir = tempfile::tempdir().unwrap();
+    let connection = RuntimeFactory.open(
+        "https://workspace.example.invalid",
+        dir.path(),
+        Arc::new(NoBrowser),
+    );
+    assert_eq!(
+        connection.err().as_deref(),
+        Some(buzz_agent_controller::connection::DATABRICKS_WINDOWS)
+    );
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 0);
+}
+#[test]
+#[cfg(unix)]
 fn runtime_factory_no_ambient_auth_on_construction_or_empty_headless_refresh() {
     struct NoBrowser;
     impl BrowserOpener for NoBrowser {

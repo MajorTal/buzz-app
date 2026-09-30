@@ -38,8 +38,9 @@ Stop. Late completion never closes a subsequently opened dialog. If an operation
 cannot be confirmed, refresh status before repeating it.
 Create is blocked with an explanation if this app’s runtime is unavailable;
 existing agents and profile retry remain intact.
-The dev broker and native host must both support this flow. Packaged human
-signing remains unavailable.
+Without the dev broker, the native identity signs the owner authorization only
+for the key this host prepared for the pending Create; other broker-only helpers
+remain unavailable.
 
 **Not imported from old Buzz** is a separate collapsible section. Expanding it
 loads installed identities for the connected community; already-managed exact
@@ -352,14 +353,30 @@ spawn, and exposes verification failure on the agent. Native Start projects one
 final snapshot after recording its outcome. This adds no incoming wake service
 for fully stopped listeners and no durable interrupted-turn recovery.
 
-On Unix, an execed supervisor in the same app binary owns each agent's shared
+An execed supervisor in the same app binary owns each agent's shared
 identity lock, isolated listener session, and temporary runtime directory. App
 Stop/Quit and kernel EOF on forced app death both trigger the existing whole-session
 teardown; ownership is released only after listener and workers have exited.
 Unconfirmed teardown keeps the lock and private directory, and normal Quit remains
 fail-closed. This does not clean up listeners orphaned before this fix, does not
-contain a worker that deliberately escapes its session, and does not add process
-containment on non-Unix platforms.
+contain a worker that deliberately escapes its session, and force-killing the
+supervisor itself releases ownership without confirmed teardown.
+
+On Windows the session is a kill-on-close job object. The listener starts
+suspended and runs only after joining it; a failed assignment aborts Start. A
+watcher opens each process as it joins. Stop terminates the job immediately,
+without Unix's two-second cooperative cancel, and succeeds only once every process
+the job ever admitted was opened and has exited. A lost job notification, or a
+process gone before the watcher opened it, fails Stop closed and keeps ownership.
+The windowless supervisor can still
+be ended by an enclosing kill-on-close launcher job. Profile, config and temporary
+directories inherit Windows ACLs; they are not verified to match Unix 0700/0600 modes.
+
+Non-Pi harnesses get the bundled tools first on PATH, then Windows' native PATH;
+on Linux `~/.local/bin` and `/usr/local/bin` precede the system directories, which
+are macOS's only entries. On Windows the shell tool needs Git Bash from Git for
+Windows, or a `BUZZ_SHELL`/`GIT_BASH` override under Advanced → Environment.
+Settings says **Shell setup not verified**; Buzz does not check it before Start.
 
 ## Ownership and handoff
 
@@ -425,7 +442,11 @@ containment on non-Unix platforms.
   host must validate launch configuration and unsupported imported semantics
   before execution.
 - Harness and Provider choices come from native `harnessOptions` through the
-  injected Core snapshot. Buzz Agent offers Databricks v2. Goose appears with an
+  injected Core snapshot. Buzz Agent offers Databricks v2 and OpenAI; Windows
+  offers only OpenAI, which a new agent without a default uses, and explains an
+  inherited or saved Databricks provider as unsupported. OpenAI
+  uses the masked key field below as `OPENAI_COMPAT_API_KEY`, per agent or from
+  Agent defaults. Goose appears with an
   absolute executable path when the local CLI is installed, and offers common
   Goose providers plus a custom ID. A missing CLI leaves Goose disabled; the
   **Check again** action re-detects it after installation without an app
@@ -513,7 +534,9 @@ containment on non-Unix platforms.
   native catalog, worker catalog and inference share this exact engine layout.
   Unix directories are owner-only; helper token files are owner-only. They are
   **not Keychain-encrypted**; other code running as your OS user can access them.
-  Non-Unix helper persistence remains memory-only. No old Buzz cache/Keychain or
+  Non-Unix helper persistence remains memory-only, so Windows refuses Databricks
+  Connect, catalog, credential open and Start with an explicit unsupported error
+  (OpenAI is unaffected). No old Buzz cache/Keychain or
   ambient `DATABRICKS_HOST`/`DATABRICKS_TOKEN` is read.
 - Disconnect requires Stop for all owned workers using the displayed workspace,
   retires pending starts for it, and removes only its app cache (retaining the lock

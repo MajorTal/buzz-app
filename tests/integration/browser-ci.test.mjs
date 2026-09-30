@@ -230,7 +230,7 @@ test("automatic CI stays on Linux and manual dispatch runs only Windows", () => 
     "-p buzz-foundation -p buzz-agent-controller -p buzz-credential-store";
   assert.ok(
     windows.steps.some(
-      (step) => step.run === `cargo test ${packages} --locked`,
+      (step) => step.run === `cargo test ${packages} --locked --no-fail-fast`,
     ),
     "on-demand Windows validation retains complete tests for all native identity packages",
   );

@@ -499,6 +499,9 @@ impl RuntimeConnection {
         cache: &std::path::Path,
         opener: Arc<dyn BrowserOpener>,
     ) -> Result<Self, String> {
+        if cfg!(windows) {
+            return Err(buzz_agent_controller::connection::DATABRICKS_WINDOWS.into());
+        }
         // Match the pinned runtime's discovery/client/scopes/namespace exactly.
         // Do not call the convenience wrapper: its default opener logs the URL.
         let auth = PkceOAuthTokenSource::new_with(
@@ -609,5 +612,6 @@ async fn execute(
 #[cfg(test)]
 mod tests;
 
-#[cfg(test)]
+// Windows refuses this OAuth engine: see databricks_oauth_is_unsupported_on_windows.
+#[cfg(all(test, unix))]
 mod bundled_tests;

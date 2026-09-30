@@ -45,22 +45,39 @@ impl Key {
             return Err("Relay event is too large".into());
         }
         let hash = Sha256::digest(serialized);
+        let signature = self.schnorr(&hash).ok_or("Could not sign relay event")?;
+        Ok(serde_json::json!({
+            "id": format!("{hash:x}"), "pubkey": pubkey,
+            "created_at": event.created_at, "kind": event.kind,
+            "tags": event.tags, "content": event.content, "sig": signature
+        }))
+    }
+    /// Unconditional NIP-OA owner attestation for exactly this agent key.
+    fn authorize(&self, agent: &str) -> Result<Vec<String>> {
+        let digest = Sha256::digest(format!("nostr:agent-auth:{agent}:"));
+        let signature = self
+            .schnorr(&digest)
+            .ok_or("Could not authorize the agent")?;
+        Ok(vec![
+            "auth".into(),
+            self.viewer()?,
+            String::new(),
+            signature,
+        ])
+    }
+    fn schnorr(&self, digest: &[u8]) -> Option<String> {
         let secp = Secp256k1::signing_only();
-        let mut secret = SecretKey::from_byte_array(*self.0).map_err(|_| INVALID)?;
+        let mut secret = SecretKey::from_byte_array(*self.0).ok()?;
         let mut pair = Keypair::from_secret_key(&secp, &secret);
         secret.non_secure_erase();
         let mut random = Zeroizing::new([0; 32]);
         if getrandom::fill(random.as_mut()).is_err() {
             pair.non_secure_erase();
-            return Err("Could not sign relay event".into());
+            return None;
         }
-        let signature = secp.sign_schnorr_with_aux_rand(&hash, &pair, &random);
+        let signature = secp.sign_schnorr_with_aux_rand(digest, &pair, &random);
         pair.non_secure_erase();
-        Ok(serde_json::json!({
-            "id": format!("{hash:x}"), "pubkey": pubkey,
-            "created_at": event.created_at, "kind": event.kind,
-            "tags": event.tags, "content": event.content, "sig": signature.to_string()
-        }))
+        Some(signature.to_string())
     }
     fn parse(text: &str) -> Result<Self> {
         let text = text.trim();
@@ -252,6 +269,24 @@ impl IdentityHost {
             identity.restore()?;
             match &identity.state {
                 State::Ready(key) => key.sign(event),
+                _ => Err("Set up your identity first".into()),
+            }
+        })
+        .await
+    }
+
+    /// Callers bind `agent` to a key the app generated; the owner must be this identity.
+    pub(crate) async fn authorize_agent(
+        &self,
+        owner: String,
+        agent: String,
+    ) -> Result<Vec<String>> {
+        with_identity(self.clone(), move |identity| {
+            if identity.restore()?.as_deref() != Some(owner.as_str()) {
+                return Err("The agent owner is not your signed-in identity".into());
+            }
+            match &identity.state {
+                State::Ready(key) => key.authorize(&agent),
                 _ => Err("Set up your identity first".into()),
             }
         })

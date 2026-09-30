@@ -23,6 +23,7 @@
     "allow-plugin-host-run-command",
     "allow-plugin-host-request",
     "allow-agent-control-create-prepare",
+    "allow-agent-control-create-authorize",
     "allow-agent-control-create-commit",
     "allow-agent-control-creation-profile",
     "allow-agent-control-snapshot",

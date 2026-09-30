@@ -32,10 +32,9 @@ isolation from other programs running as the same OS user.
 There is no file/environment fallback, automatic legacy migration, human key
 replacement or human delete command. The existing **explicit agent import** may
 read only the selected old Buzz service/account and copy the selected agent key
-into this app's separate agent namespace; it never writes the old blob. The
-Windows/Linux agent adapters are backend groundwork: normal agent import/create
-UI remains macOS-only (see [local agent controls](agent-control.md)). This storage
-change does not enable those actions or Windows agent execution.
+into this app's separate agent namespace; it never writes the old blob. Agent
+import remains macOS-only; Create also saves new agent keys through the
+Windows/Linux adapters (see [local agent controls](agent-control.md)).
 No user key belongs in release configuration.
 
 A shared credential blob can reduce repeated OS prompts by caching many credentials

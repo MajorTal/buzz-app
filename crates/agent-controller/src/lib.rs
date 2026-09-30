@@ -19,9 +19,7 @@ mod restart;
 mod runtime;
 mod secret;
 mod store;
-#[cfg(unix)]
 mod supervisor;
-#[cfg(unix)]
 pub use supervisor::dispatch as dispatch_agent_supervisor;
 
 pub use agent_defaults::{AgentDefaultsEdit, AgentDefaultsView};

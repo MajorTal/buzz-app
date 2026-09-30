@@ -40,7 +40,7 @@ function newAgentDraft(state: AgentControlState): AgentDraft {
       inherits ||
       state.data?.agentDefaults?.provider
         ? ""
-        : "databricks_v2",
+        : (chosen?.providers[0]?.value ?? "databricks_v2"),
     environment: {},
   };
 }

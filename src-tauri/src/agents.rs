@@ -41,7 +41,12 @@ impl Snapshot {
             data,
             inventory_warnings: Vec::new(),
             import_available,
-            create_available: import_available,
+            // Platforms with a native credential store for the new identity.
+            create_available: cfg!(any(
+                target_os = "macos",
+                target_os = "windows",
+                target_os = "linux"
+            )),
             avatar_editing_available: true,
             local_inventory_actions: true,
             default_workspace: workspace.to_string_lossy().into_owned(),
@@ -192,10 +197,17 @@ fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
             status: "ready",
             install_supported: None,
             default_args: &[],
-            providers: &[ProviderOption {
-                value: "databricks_v2",
-                label: "Databricks v2",
-            }],
+            // Windows refuses Databricks sign-in (DATABRICKS_WINDOWS): omit it.
+            providers: &[
+                ProviderOption {
+                    value: "databricks_v2",
+                    label: "Databricks v2",
+                },
+                ProviderOption {
+                    value: "openai",
+                    label: "OpenAI",
+                },
+            ][usize::from(cfg!(windows))..],
         },
         HarnessOption {
             command: goose.as_ref().map_or_else(
@@ -1172,6 +1184,29 @@ pub(crate) async fn agent_control_create_prepare(
         Ok(serde_json::json!({"id": agent.id, "pubkey": agent.key.pubkey()}))
     })
     .await
+}
+/// Owner attestation for the pending create's generated key only. The
+/// identity may read OS credentials, so the agent host stays unlocked.
+#[tauri::command]
+pub(crate) async fn agent_control_create_authorize(
+    state: tauri::State<'_, AgentHost>,
+    identity: tauri::State<'_, crate::identity::IdentityHost>,
+    destination: String,
+    owner: String,
+    pubkey: String,
+) -> Result<Vec<String>, String> {
+    let (owner, pubkey) = run(state.inner().clone(), move |host| {
+        let (_, prepared) = host
+            .creating
+            .as_ref()
+            .ok_or("Create request expired; reopen Add agent")?;
+        if prepared.key.pubkey() != pubkey || !prepared.matches(&destination, &owner)? {
+            return Err("Authorization does not match the pending create request".into());
+        }
+        Ok((owner, pubkey))
+    })
+    .await?;
+    identity.inner().authorize_agent(owner, pubkey).await
 }
 #[tauri::command]
 pub(crate) async fn agent_control_create_commit(

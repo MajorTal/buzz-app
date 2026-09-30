@@ -705,3 +705,95 @@ it("hides the key for an unknown saved provider until its override is removed", 
     control.dispose();
   }
 });
+
+it("gives Buzz Agent OpenAI a write-only key unless a hidden override decides the provider", async () => {
+  const fixture = controlFixture();
+  fixture.data.harnessOptions = [
+    {
+      command: "buzz-agent",
+      label: "Buzz Agent",
+      providers: [
+        { value: "databricks_v2", label: "Databricks v2" },
+        { value: "openai", label: "OpenAI" },
+      ],
+    },
+  ];
+  const control = createAgentControl(fixture.host);
+  const user = userEvent.setup();
+  let draft!: AgentDraft;
+  function Editor({ savedKeys = [] }: { savedKeys?: string[] }) {
+    const [value, setValue] = useState(() => ({
+      ...agentDraft(fixture.agent),
+      command: "buzz-agent",
+      provider: "openai",
+      model: "gpt-5",
+      environment: {},
+    }));
+    draft = value;
+    return (
+      <AgentSettingsFields
+        draft={value}
+        control={control}
+        state={{
+          status: "ready",
+          data: fixture.data,
+          busy: false,
+          error: null,
+        }}
+        disabled={false}
+        environmentKeys={savedKeys}
+        onChange={(patch) => setValue((current) => ({ ...current, ...patch }))}
+      />
+    );
+  }
+  const view = render(<Editor />);
+  try {
+    const key = screen.getByLabelText("OpenAI API key");
+    expect(key).toHaveAttribute("type", "password");
+    await user.type(key, "sk-test");
+    expect(agentEdit(draft).environment).toEqual({
+      OPENAI_COMPAT_API_KEY: "sk-test",
+    });
+    await user.click(screen.getByRole("combobox", { name: "Provider" }));
+    await user.click(
+      await screen.findByRole("option", { name: "Databricks v2" }),
+    );
+    expect(screen.queryByLabelText("OpenAI API key")).toBeNull();
+    expect(draft.environment).toEqual({});
+    view.unmount();
+    render(<Editor savedKeys={["OPENAI_COMPAT_API_KEY"]} />);
+    expect(screen.getByLabelText("OpenAI API key")).toHaveAttribute(
+      "placeholder",
+      "Saved key unchanged",
+    );
+    expect(agentEdit(draft).environment).toEqual({});
+    cleanup();
+    render(<Editor savedKeys={["BUZZ_AGENT_PROVIDER"]} />);
+    expect(screen.queryByLabelText("OpenAI API key")).toBeNull();
+  } finally {
+    cleanup();
+    control.dispose();
+  }
+});
+
+it("labels Windows Buzz Agent shell setup as unverified", () => {
+  const platform = vi.spyOn(navigator, "platform", "get");
+  platform.mockReturnValue("Win32");
+  const f = controlFixture();
+  const control = createAgentControl(f.host);
+  try {
+    render(
+      <AgentSettingsFields
+        draft={{ ...agentDraft(f.agent), command: "buzz-agent" }}
+        control={control}
+        state={{ status: "ready", data: f.data, busy: false, error: null }}
+        disabled={false}
+        onChange={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/Shell setup not verified/)).toBeVisible();
+  } finally {
+    platform.mockRestore();
+    control.dispose();
+  }
+});

@@ -80,6 +80,7 @@ fn native_command_permissions_allow_only_main_webview() {
         "plugin_host_run_command",
         "plugin_host_request",
         "agent_control_create_prepare",
+        "agent_control_create_authorize",
         "agent_control_create_commit",
         "agent_control_creation_profile",
         "agent_control_snapshot",

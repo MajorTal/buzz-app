@@ -1,8 +1,5 @@
 use crate::bundle::RuntimeBundle;
 use crate::config::Agent;
-#[cfg(not(unix))]
-use crate::process::Process;
-#[cfg(unix)]
 use crate::supervisor::Supervised;
 use crate::{AgentEdit, ControlSnapshot, Credentials, ProcessStatus, Result, Store};
 use serde::Deserialize;
@@ -69,6 +66,36 @@ impl RuntimeBundle {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
+        // Windows system, profile and tool-discovery locations; none are secrets.
+        #[cfg(windows)]
+        let platform = [
+            "SystemRoot",
+            "windir",
+            "SystemDrive",
+            "ComSpec",
+            "PATHEXT",
+            "USERPROFILE",
+            "HOMEDRIVE",
+            "HOMEPATH",
+            "USERNAME",
+            "APPDATA",
+            "LOCALAPPDATA",
+            "ProgramData",
+            "ProgramFiles",
+            "ProgramFiles(x86)",
+            "ProgramW6432",
+            "CommonProgramFiles",
+            "CommonProgramFiles(x86)",
+            "CommonProgramW6432",
+            "PROCESSOR_ARCHITECTURE",
+            "NUMBER_OF_PROCESSORS",
+            "OS",
+            // Runtime shell overrides; Git Bash is otherwise discovered from PATH.
+            "BUZZ_SHELL",
+            "GIT_BASH",
+        ];
+        #[cfg(not(windows))]
+        let platform: [&str; 0] = [];
         for name in [
             "HOME",
             "TMPDIR",
@@ -78,7 +105,10 @@ impl RuntimeBundle {
             "SSH_AUTH_SOCK",
             "SSL_CERT_FILE",
             "SSL_CERT_DIR",
-        ] {
+        ]
+        .into_iter()
+        .chain(platform)
+        {
             if let Some(value) = std::env::var_os(name) {
                 command.env(name, value);
             }
@@ -98,7 +128,7 @@ impl RuntimeBundle {
             (
                 agent.harness.args.clone(),
                 &agent.environment,
-                "/usr/bin:/bin:/usr/sbin:/sbin".into(),
+                tools_path()?,
             )
         };
         let path = std::env::join_paths(
@@ -220,6 +250,10 @@ fn databricks_with_defaults(
     ) {
         return Ok(None);
     }
+    // Before any OAuth-setting check: Windows never asks for a workspace.
+    if cfg!(windows) {
+        return Err(crate::connection::DATABRICKS_WINDOWS.into());
+    }
     if agent.environment.contains_key("DATABRICKS_TOKEN") {
         return Err("Remove DATABRICKS_TOKEN to use this app's persistent OAuth connection".into());
     }
@@ -233,6 +267,25 @@ fn databricks_with_defaults(
     settings.host = crate::connection::origin(&settings.host)?;
     settings.validate()?;
     Ok(Some(settings))
+}
+/// PATH after the runtime bundle for non-Pi harnesses. Windows keeps its native
+/// PATH, where Git Bash and user tools are installed; Unix uses a fixed floor
+/// plus, on Linux, common user-level install locations.
+fn tools_path() -> Result<std::ffi::OsString> {
+    if cfg!(windows) {
+        return Ok(std::env::var_os("PATH").unwrap_or_default());
+    }
+    let mut dirs = Vec::new();
+    if cfg!(target_os = "linux") {
+        let home = std::env::var_os("HOME").map(PathBuf::from);
+        dirs.extend(
+            home.filter(|h| h.is_absolute())
+                .map(|h| h.join(".local/bin")),
+        );
+        dirs.push(PathBuf::from("/usr/local/bin"));
+    }
+    dirs.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
+    std::env::join_paths(dirs).map_err(|_| "Invalid runtime tools path".into())
 }
 /// App-owned npm shims and the pinned Node binary are separate from user-global tools.
 /// `app_data` is Tauri's resolved app-data directory, never browser input.
@@ -296,20 +349,13 @@ pub enum Action {
     Restart,
 }
 struct Running {
-    #[cfg(unix)]
     process: Supervised,
-    #[cfg(not(unix))]
-    process: Process,
     revision: u64,
     /// Native-only: holds environment values and is never serialized.
     spawned: serde_json::Value,
     databricks_host: Option<String>,
     #[cfg(all(test, unix))]
     temporary: Option<PathBuf>,
-    #[cfg(not(unix))]
-    _temporary: Option<tempfile::TempDir>,
-    #[cfg(not(unix))]
-    _ownership: crate::ownership::Ownership,
 }
 impl Drop for Running {
     fn drop(&mut self) {
@@ -394,7 +440,6 @@ impl Controller {
                         );
                     }
                     Err(error) => {
-                        #[cfg(unix)]
                         if run.process.stopped() {
                             self.running.remove(&agent.id);
                         }
@@ -774,8 +819,6 @@ impl Controller {
         // Blank fields inherit agent defaults at each start; never saved back.
         let agent = crate::agent_defaults::effective(&agent, &self.store.defaults()?);
         let bundle = self.bundle.as_ref().map_err(Clone::clone)?;
-        #[cfg(not(unix))]
-        let ownership = crate::ownership::Ownership::acquire(&self.ownership_root, &agent.id)?;
         let stored;
         let key = match supplied {
             Some(key) => key,
@@ -816,11 +859,8 @@ impl Controller {
         }
         // Disarm app-side deletion before a child can use this directory. The
         // supervisor deletes it only after confirmed whole-session teardown.
-        #[cfg(unix)]
         let log_path = crate::logs::path(config, &agent.id)?;
-        #[cfg(unix)]
         let temporary = temporary.keep();
-        #[cfg(unix)]
         let process = Supervised::spawn(
             &command,
             &self.ownership_root,
@@ -828,8 +868,6 @@ impl Controller {
             &temporary,
             &log_path,
         )?;
-        #[cfg(not(unix))]
-        let process = Process::spawn(&mut command)?;
         self.running.insert(
             id.into(),
             Running {
@@ -839,10 +877,6 @@ impl Controller {
                 databricks_host: settings.map(|s| s.host),
                 #[cfg(all(test, unix))]
                 temporary: Some(temporary),
-                #[cfg(not(unix))]
-                _temporary: Some(temporary),
-                #[cfg(not(unix))]
-                _ownership: ownership,
             },
         );
         Ok(())
@@ -850,7 +884,6 @@ impl Controller {
     fn stop(&mut self, id: &str) -> Result<()> {
         if let Some(run) = self.running.get_mut(id) {
             let result = run.process.stop();
-            #[cfg(unix)]
             if run.process.stopped() {
                 // E confirms worker exit even when private-dir removal failed.
                 self.running.remove(id);

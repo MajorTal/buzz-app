@@ -586,6 +586,7 @@ dependencies = [
  "strip-ansi-escapes",
  "tempfile",
  "url",
+ "windows-sys 0.61.2",
  "zeroize",
 ]
 

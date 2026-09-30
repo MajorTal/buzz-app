@@ -68,6 +68,7 @@ pub(crate) fn fixture_with_models(
         .manage(host.clone())
         .manage(crate::harness_setup::HarnessSetup::default())
         .manage(model_host)
+        .manage(crate::identity::IdentityHost::fixture())
         .invoke_handler(crate::commands())
         .build(crate::app_context())
         .unwrap();
@@ -419,12 +420,20 @@ fn real_ipc_snapshot_save_cas_stop_and_launch_gate() {
     let before = invoke(&view, "agent_control_snapshot", json!({})).unwrap();
     assert_eq!(before["runtimeAvailable"], false);
     assert_eq!(before["importAvailable"], cfg!(target_os = "macos"));
+    assert_eq!(before["createAvailable"], true);
+    // Windows omits Databricks, whose sign-in it refuses; Unix lists it first.
+    let openai = json!({"value":"openai", "label":"OpenAI"});
+    let providers = if cfg!(windows) {
+        json!([openai])
+    } else {
+        json!([{"value":"databricks_v2", "label":"Databricks v2"}, openai])
+    };
     assert_eq!(
         before["harnessOptions"][0],
         json!({
             "command":"buzz-agent", "label":"Buzz Agent",
             "available":true, "status":"ready", "defaultArgs":[],
-            "providers":[{"value":"databricks_v2", "label":"Databricks v2"}]
+            "providers": providers
         })
     );
     assert_eq!(before["harnessOptions"].as_array().unwrap().len(), 3);
@@ -559,10 +568,11 @@ fn real_ipc_preview_source_no_import_and_shutdown_fence() {
         json!({"source":"development","destination":"wss://chosen.example"}),
     )
     .unwrap();
-    assert!(preview["sourcePath"]
-        .as_str()
-        .unwrap()
-        .ends_with("xyz.block.buzz.app.dev/agents/managed-agents.json"));
+    // Compare path components: Windows joins with `\`, Unix with `/`.
+    assert!(
+        std::path::Path::new(preview["sourcePath"].as_str().unwrap())
+            .ends_with("xyz.block.buzz.app.dev/agents/managed-agents.json")
+    );
     assert!(invoke(
         &view,
         "agent_control_import_preview",
@@ -2173,6 +2183,66 @@ async fn native_create_waits_for_a_snapshot_and_keeps_its_prepared_identity() {
     .await
     .unwrap();
     assert_eq!(prepared, retried);
+}
+
+#[test]
+fn native_create_authorization_binds_the_prepared_key_owner_and_identity() {
+    let (dir, _host, _app, view) = fixture();
+    let identity = invoke(&view, "identity_restore", json!({})).unwrap();
+    let identity = identity.as_str().unwrap();
+    let other = "cd".repeat(32);
+    let prepare = |owner: &str| {
+        let request = uuid::Uuid::new_v4().to_string();
+        let prepared = invoke(
+            &view,
+            "agent_control_create_prepare",
+            json!({"requestId": request, "destination": "https://relay.example", "owner": owner}),
+        )
+        .unwrap();
+        (request, prepared["pubkey"].as_str().unwrap().to_owned())
+    };
+    let authorize = |owner: &str, pubkey: &str| {
+        invoke(
+            &view,
+            "agent_control_create_authorize",
+            json!({"destination": "https://relay.example", "owner": owner, "pubkey": pubkey}),
+        )
+    };
+    let mismatch = json!("Authorization does not match the pending create request");
+    assert_eq!(
+        authorize(identity, &"ab".repeat(32)).unwrap_err(),
+        json!("Create request expired; reopen Add agent")
+    );
+    // The request matches its prepared owner, but that owner is not this identity.
+    let (_, pubkey) = prepare(&other);
+    assert_eq!(
+        authorize(&other, &pubkey).unwrap_err(),
+        json!("The agent owner is not your signed-in identity")
+    );
+    let (request, pubkey) = prepare(identity);
+    // A requested owner or key other than the prepared one is never signed.
+    assert_eq!(authorize(&other, &pubkey).unwrap_err(), mismatch);
+    assert_eq!(authorize(identity, &"ab".repeat(32)).unwrap_err(), mismatch);
+    let auth = authorize(identity, &pubkey).unwrap();
+    assert_eq!(auth[1], identity);
+    let commit = |auth: &Value| {
+        let edit = json!({"name":"Created","systemPrompt":"","workspace":dir.path().to_str().unwrap(),
+            "harness":{"command":"buzz-agent","args":[],"model":"chosen","provider":"databricks_v2"},"environment":{}});
+        invoke(
+            &view,
+            "agent_control_create_commit",
+            json!({"requestId": request, "edit": edit, "auth": auth.to_string()}),
+        )
+        .unwrap_err()
+    };
+    let mut forged = auth.clone();
+    forged[3] = json!("00".repeat(64));
+    assert_eq!(
+        commit(&forged),
+        json!("Owner attestation does not authorize this agent key")
+    );
+    // The unchanged verifier accepts the real attestation; only synthetic custody refuses.
+    assert_eq!(commit(&auth), json!(IMPORT_GATE));
 }
 
 #[tokio::test]

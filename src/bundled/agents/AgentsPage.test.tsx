@@ -1846,6 +1846,86 @@ it("create copies only the default harness and shows inherited defaults", async 
     sessionPolicy: "channel",
   });
 });
+for (const platform of ["MacIntel", "Win32"] as const) {
+  it(`new Buzz Agent on ${platform} starts with the first listed provider and explains inherited Databricks`, async () => {
+    const windows = platform === "Win32";
+    vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
+    const user = userEvent.setup();
+    const create = vi.fn();
+    vi.spyOn(communityApi, "communityRequest").mockResolvedValue({ auth: [] });
+    const { f, control } = setup("connected", (fixture) => {
+      // Native omits Databricks on Windows, whose sign-in it refuses.
+      fixture.data.harnessOptions = [
+        {
+          command: "buzz-agent",
+          label: "Buzz Agent",
+          providers: [
+            { value: "databricks_v2", label: "Databricks v2" },
+            { value: "openai", label: "OpenAI" },
+          ].slice(windows ? 1 : 0),
+        },
+      ];
+      fixture.data.createAvailable = true;
+      fixture.data.defaultWorkspace = "/fixture/workspace";
+      fixture.host.prepareCreate = async () => ({
+        id: "created",
+        pubkey: "cd".repeat(32),
+      });
+      fixture.host.commitCreate = create.mockImplementation(async () => {
+        fixture.data.agents.push({
+          ...structuredClone(fixture.agent),
+          id: "created",
+        });
+        return structuredClone(fixture.data);
+      });
+    });
+    const unsupported =
+      "Databricks sign-in is not supported on Windows yet. Choose OpenAI for this agent.";
+    const add = async () => {
+      await user.click(
+        await screen.findByRole("button", { name: "Add agent" }),
+      );
+      const dialog = screen.getByRole("dialog");
+      fireEvent.change(within(dialog).getByLabelText("Name"), {
+        target: { value: "Provider agent" },
+      });
+      return dialog;
+    };
+    const created = async (dialog: HTMLElement, calls: number) => {
+      await user.click(
+        within(dialog).getByRole("button", { name: "Create agent" }),
+      );
+      await waitFor(() => expect(create).toHaveBeenCalledTimes(calls));
+      await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+      return create.mock.calls[calls - 1]?.[1].harness.provider;
+    };
+    // Without a default, the first listed provider is chosen explicitly.
+    let dialog = await add();
+    expect(within(dialog).queryByText(unsupported)).toBeNull();
+    expect(await created(dialog, 1)).toBe(windows ? "openai" : "databricks_v2");
+    // An inherited Databricks default stays inherited, explained before Create
+    // on Windows, with OpenAI still selectable.
+    f.data.agentDefaults = {
+      provider: "databricks_v2",
+      model: "",
+      ownerOnly: true,
+    };
+    await act(async () => control.refresh());
+    dialog = await add();
+    if (!windows) {
+      expect(within(dialog).queryByText(unsupported)).toBeNull();
+      expect(await created(dialog, 2)).toBe("");
+      return;
+    }
+    expect(within(dialog).getByText(unsupported)).toBeVisible();
+    await user.click(
+      within(dialog).getByRole("combobox", { name: "Provider" }),
+    );
+    await user.click(await screen.findByRole("option", { name: "OpenAI" }));
+    expect(within(dialog).queryByText(unsupported)).toBeNull();
+    expect(await created(dialog, 2)).toBe("openai");
+  });
+}
 it("qualifies management identities while keeping configured names and edit targets exact", async () => {
   const { f } = setup("ready", (fixture) => {
     fixture.data.agents.push({

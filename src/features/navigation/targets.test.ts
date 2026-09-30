@@ -1,13 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  bindSharedTarget,
-  parseOpenTarget,
-  parseSharedTarget,
-  parseTargetLink,
-  targetKey,
-  targetLink,
-  type OpenTarget,
-} from "./targets";
+import { parseOpenTarget, targetKey, type OpenTarget } from "./targets";
 const viewer = "a".repeat(64);
 const conversation = {
   version: 1,
@@ -36,33 +28,13 @@ describe("open target boundary", () => {
     expect(Object.isFrozen(target)).toBe(true);
     expect(Object.isFrozen("scope" in target && target.scope)).toBe(true);
   });
-  it("separates copied locators from pinned activation targets", () => {
-    const link = targetLink(conversation);
-    expect(decodeURIComponent(link)).not.toContain(viewer);
-    const shared = parseTargetLink(link);
-    expect(shared).toEqual({
-      ...parseOpenTarget(conversation),
-      scope: { communityOrigin: "https://relay.example" },
-    });
-    expect(bindSharedTarget(shared, "c".repeat(64))).toEqual({
-      ...parseOpenTarget(conversation),
-      scope: {
-        communityOrigin: "https://relay.example",
-        viewer: "c".repeat(64),
-      },
-    });
-    expect(() => parseOpenTarget(shared)).toThrow();
-    expect(() => parseSharedTarget(conversation)).toThrow();
-  });
   it("supports local targets without account or relay and gives routes stable identity", () => {
     for (const target of [
       { version: 1, kind: "home" },
       { version: 1, kind: "settings", section: "appearance" },
       { version: 1, kind: "settings", section: "org.example/card" },
     ] as const)
-      expect(bindSharedTarget(parseTargetLink(targetLink(target)), "")).toEqual(
-        target,
-      );
+      expect(parseOpenTarget(target)).toEqual(target);
     const a: OpenTarget = {
       version: 1,
       kind: "page",
@@ -75,7 +47,7 @@ describe("open target boundary", () => {
       route: { version: 2, params: { a: [true, null], b: 1 } },
     };
     expect(targetKey(a)).toBe(targetKey(b));
-    expect(parseTargetLink(targetLink(a))).toEqual(a);
+    expect(parseOpenTarget(a)).toEqual(a);
   });
   it.each([
     null,
@@ -87,6 +59,8 @@ describe("open target boundary", () => {
       ...conversation,
       scope: { viewer, communityOrigin: "https://secret@relay.example" },
     },
+    // A scope is always bound to a viewer; there is no viewer-less locator form.
+    { ...conversation, scope: { communityOrigin: "https://relay.example" } },
     {
       ...conversation,
       scope: { viewer, communityOrigin: "https://relay.example/path" },
@@ -153,20 +127,6 @@ describe("open target boundary", () => {
       ),
     ).toThrow("Invalid or unsupported navigation target");
   });
-  it.each([
-    "https://open?target=%7B%7D",
-    "javascript:alert(1)",
-    "buzz://other",
-    "buzz://open/path",
-    "buzz://secret@open",
-    "buzz://open?target={}&target={}",
-    "buzz://open?target={}&x=1",
-    "buzz://open?target={}",
-    "buzz://open?target=%ZZ",
-    `buzz://open?target=${"x".repeat(32769)}`,
-  ])("rejects ambiguous/unsafe links", (link) =>
-    expect(() => parseTargetLink(link)).toThrow(),
-  );
 });
 it("copies dense arrays without calling caller map/iterator and rejects sparse/getter data", () => {
   const page = (params: unknown) => ({
@@ -224,7 +184,7 @@ it("copies dense arrays without calling caller map/iterator and rejects sparse/g
   expect(getterCalls).toBe(0);
 });
 
-it("keeps explicit Personal space distinct from an unspecified page scope in targets and links", () => {
+it("keeps explicit Personal space distinct from an unspecified page scope", () => {
   const page = {
     version: 1,
     kind: "page",
@@ -234,9 +194,5 @@ it("keeps explicit Personal space distinct from an unspecified page scope in tar
   const personal = { ...page, scope: null };
   expect(parseOpenTarget(personal)).toEqual(personal);
   expect(targetKey(personal)).not.toBe(targetKey(page));
-  expect(parseTargetLink(targetLink(personal))).toEqual(personal);
-  expect(
-    bindSharedTarget(parseTargetLink(targetLink(personal)), viewer),
-  ).toEqual(personal);
   expect(() => parseOpenTarget({ ...conversation, scope: null })).toThrow();
 });

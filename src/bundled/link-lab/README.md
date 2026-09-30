@@ -32,7 +32,9 @@ it does not mark messages read. Other-community previews do not connect or switc
 communities on hover. Mentions with signed recipient IDs and unambiguous loaded
 names share the hover styling; known local agent identities use a robot icon.
 Known channel names in `#channel` text open through the same host link path.
-Both legacy channel/message links and versioned `buzz://open` links are supported.
+The Buzz link forms `buzz://channel/<id>`, `buzz://channel/<id>/<event>` and
+`buzz://message?channel=<id>&id=<event>[&thread=<root>]` are supported; any other
+`buzz://` host stays plain text.
 The host opens them through scoped navigation; message links reveal the selected
 message in its verified thread after bounded history loading. Missing targets
 report navigation failure. The lab only previews their appearance.

@@ -11,16 +11,13 @@ export type NavigationScope = Readonly<{
   viewer: string;
   communityOrigin: string;
 }>;
-export type LocatorScope = Readonly<{ communityOrigin: string }>;
-export type OpenTarget = Target<NavigationScope>;
-export type SharedTarget = Target<LocatorScope>;
-type Target<Scope> =
+export type OpenTarget =
   | Readonly<{ version: 1; kind: "home" }>
   | Readonly<{
       version: 1;
       kind: "settings";
       section?: string;
-      scope?: Scope | null;
+      scope?: NavigationScope | null;
     }>
   | Readonly<{
       version: 1;
@@ -28,13 +25,13 @@ type Target<Scope> =
       pluginId: string;
       pageId: string;
       /** null explicitly restores Personal space; omission leaves community selection alone. */
-      scope?: Scope | null;
+      scope?: NavigationScope | null;
       route?: Readonly<{ version: number; params: JsonValue }>;
     }>
   | Readonly<{
       version: 1;
       kind: "conversation";
-      scope: Scope;
+      scope: NavigationScope;
       channelId: string;
       messageId?: string;
       /** Hint only. Resolve the actual root from verified message evidence. */
@@ -114,14 +111,12 @@ function json(input: unknown, depth = 0, budget = { nodes: 1024 }): JsonValue {
   return Object.freeze(result);
 }
 
-function parseTarget<S>(
-  input: unknown,
-  parseScope: (input: unknown) => S,
-): Target<S> {
+/** All bound ingresses use this parser. A valid address is not authorization. */
+export function parseOpenTarget(input: unknown): OpenTarget {
   try {
     const value = record(input);
     if (value.version !== 1) throw invalid();
-    let target: Target<S>;
+    let target: OpenTarget;
     switch (value.kind) {
       case "home":
         fields(value, ["version", "kind"]);
@@ -136,7 +131,7 @@ function parseTarget<S>(
             ? { section: text(value.section, section) }
             : {}),
           ...(value.scope !== undefined
-            ? { scope: value.scope === null ? null : parseScope(value.scope) }
+            ? { scope: value.scope === null ? null : boundScope(value.scope) }
             : {}),
         };
         break;
@@ -166,7 +161,7 @@ function parseTarget<S>(
           pluginId: text(value.pluginId),
           pageId: text(value.pageId),
           ...(value.scope !== undefined
-            ? { scope: value.scope === null ? null : parseScope(value.scope) }
+            ? { scope: value.scope === null ? null : boundScope(value.scope) }
             : {}),
           ...(route ? { route } : {}),
         };
@@ -186,7 +181,7 @@ function parseTarget<S>(
         target = {
           version: 1,
           kind: "conversation",
-          scope: parseScope(value.scope),
+          scope: boundScope(value.scope),
           channelId: text(
             value.channelId,
             /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$/,
@@ -211,69 +206,6 @@ function parseTarget<S>(
   }
 }
 
-/** All bound ingresses use this parser. A valid address is not authorization. */
-export function parseOpenTarget(input: unknown): OpenTarget {
-  return parseTarget(input, boundScope);
-}
-export function parseSharedTarget(input: unknown): SharedTarget {
-  return parseTarget(input, (input) => {
-    const value = record(input);
-    fields(value, ["communityOrigin"]);
-    if (typeof value.communityOrigin !== "string") throw invalid();
-    return Object.freeze({
-      communityOrigin: relayOrigin(value.communityOrigin),
-    });
-  });
-}
-/** Bind a copied locator once, when the host admits it for its actual recipient. */
-export function bindSharedTarget(
-  input: SharedTarget,
-  viewer: string,
-): OpenTarget {
-  const target = parseSharedTarget(input);
-  return parseOpenTarget({
-    ...target,
-    ...("scope" in target && target.scope
-      ? { scope: { ...target.scope, viewer } }
-      : {}),
-  });
-}
 export function targetKey(target: OpenTarget): string {
   return JSON.stringify(parseOpenTarget(target));
-}
-
-/** Copyable links omit the sender's viewer. Receipt payloads use OpenTarget instead. */
-export function targetLink(input: OpenTarget): string {
-  const target = parseOpenTarget(input);
-  const locator = parseSharedTarget({
-    ...target,
-    ...("scope" in target && target.scope
-      ? { scope: { communityOrigin: target.scope.communityOrigin } }
-      : {}),
-  });
-  return `buzz://open?target=${encodeURIComponent(JSON.stringify(locator))}`;
-}
-export function parseTargetLink(input: string): SharedTarget {
-  try {
-    if (input.length > MAX_BYTES * 4) throw invalid();
-    const url = new URL(input);
-    if (
-      url.protocol !== "buzz:" ||
-      url.hostname !== "open" ||
-      url.username ||
-      url.password ||
-      url.port ||
-      url.pathname ||
-      url.hash ||
-      [...url.searchParams.keys()].length !== 1 ||
-      !url.searchParams.has("target")
-    )
-      throw invalid();
-    const raw = url.searchParams.get("target");
-    if (raw === null) throw invalid();
-    if (new TextEncoder().encode(raw).length > MAX_BYTES) throw invalid();
-    return parseSharedTarget(JSON.parse(raw));
-  } catch {
-    throw invalid();
-  }
 }

@@ -40,17 +40,16 @@ export function parseEntityLink(url: URL): EntityRoute | null {
     !["repo", "project", "pr", "issue"].includes(type)
   )
     return null;
+  // Query parameters outside the type's grammar are ignored, values and repeats
+  // included, matching `parseBuzzLink`. A duplicated known key is ambiguous and
+  // still rejects.
   const allowed =
     type === "repo"
       ? ["owner", "d", "tab", "commit"]
       : type === "project"
         ? ["owner", "d", "tab"]
         : ["owner", "d", "id"];
-  const keys = [...url.searchParams.keys()];
-  if (
-    new Set(keys).size !== keys.length ||
-    keys.some((key) => !allowed.includes(key))
-  )
+  if (allowed.some((key) => url.searchParams.getAll(key).length > 1))
     return null;
   const owner = url.searchParams.get("owner") ?? "";
   const dtag = url.searchParams.get("d") ?? "";
@@ -63,12 +62,10 @@ export function parseEntityLink(url: URL): EntityRoute | null {
       : null;
   }
   const tab = url.searchParams.get("tab");
-  const commit = url.searchParams.get("commit");
+  // `commit` belongs to the repo grammar only; on a project it is an unknown key.
+  const commit = type === "repo" ? url.searchParams.get("commit") : null;
   if (tab !== null && !entityTabs.some((value) => value === tab)) return null;
-  if (
-    commit !== null &&
-    (type !== "repo" || tab !== "commits" || !gitHash.test(commit))
-  )
+  if (commit !== null && (tab !== "commits" || !gitHash.test(commit)))
     return null;
   return {
     type: type as "repo" | "project",

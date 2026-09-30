@@ -25,20 +25,23 @@ The OS ingress accepts the Buzz link forms and nothing else:
 Entity sections are `files`, `commits`, `issues`, `prs`, `contributors`, and
 `channels`; omitting the section opens the overview. Repository commit links add
 `&tab=commits&commit=<40- or 64-hex hash>`. Identifiers use 1-64 ASCII letters,
-digits, `_`, `-`, or `.`, without a leading dot or `..`. Unknown or duplicate
-parameters are rejected. The same forms work in message content.
+digits, `_`, `-`, or `.`, without a leading dot or `..`. Query parameters outside
+a form's grammar are ignored, with their values and any repeats, so a link that
+another client decorated still opens; a duplicated known parameter is rejected as
+ambiguous. The `channel` forms carry everything in the path and ignore any query.
+The same forms work in message content.
 
 None carries a community, so each binds to the currently selected community and
 viewer, and fail `unavailable` when no community is selected or no identity is
-known. Every other link, including `buzz://open?target=…`, `buzz://join`,
-incomplete entity links, unknown hosts and oversize links, fails as
-`invalid-target` and shows "This destination couldn't open" with
-**Open Settings**. Unsupported links have no Retry action. Nothing is
-auto-joined. A valid address is never authorization: bound targets pass the same
-viewer, membership and channel checks as in-app navigation, so a link into a channel
-you cannot read still fails `denied`. The frontend expects the canonical lowercase
-`buzz:` scheme; the native URL parser can normalize scheme case before delivery,
-so uppercase OS input is not guaranteed to be rejected.
+known. Every other link, including `buzz://join`, incomplete entity links,
+unknown hosts and oversize links, fails as `invalid-target` and shows "This
+destination couldn't open" with **Open Settings**. Unsupported links have no
+Retry action. Nothing is auto-joined. A valid address is never authorization:
+bound targets pass the same viewer, membership and channel checks as in-app
+navigation, so a link into a channel you cannot read still fails `denied`. The
+frontend expects the canonical lowercase `buzz:` scheme; the native URL parser
+can normalize scheme case before delivery, so uppercase OS input is not
+guaranteed to be rejected.
 
 The latest arriving link wins. Before readiness, one pending intent is retained;
 if identity or community is missing, select a community and use **Retry navigation**.
@@ -61,8 +64,9 @@ explicit Git sections report navigation failure, not an empty successful page.
 This deliberately omits the sender's community and identity: recipients must select
 the correct community before opening it. Original mobile Buzz requires a UUID
 channel identifier; named development channels are supported here but do not imply
-mobile compatibility. Existing `buzz://open` locators still preserve community
-context for in-app use and remain unsupported at the OS boundary.
+mobile compatibility. The app has no link form of its own beyond the Buzz ones:
+unknown `buzz://` hosts are rejected everywhere, staying plain text in message
+content and failing `invalid-target` at the OS boundary.
 
 ## Testing locally
 

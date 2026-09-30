@@ -51,36 +51,23 @@ export function useReferenceDirectory(
   };
 }
 
+/** Buzz links carry no community, so they always name a channel in the receiving one. */
 export function channelForLink(
   url: string,
-  scope: string | undefined,
   channels: readonly ChannelSummary[],
 ) {
   const parsed = parseBuzzLink(url);
-  const target =
-    parsed?.format === "legacy"
-      ? parsed
-      : parsed?.format === "shared" &&
-          parsed.target.kind === "conversation" &&
-          parsed.target.scope.communityOrigin === scope?.slice(0, -65)
-        ? parsed.target
-        : undefined;
+  const target = parsed?.format === "legacy" ? parsed : undefined;
   return target && channels.find((item) => item.id === target.channelId);
 }
 
 export function channelLinkLabel(
   url: string,
-  scope: string | undefined,
   channels: readonly ChannelSummary[],
 ) {
-  const channel = channelForLink(url, scope, channels);
+  const channel = channelForLink(url, channels);
   const parsed = parseBuzzLink(url);
-  const target =
-    parsed?.format === "legacy"
-      ? parsed
-      : parsed?.format === "shared" && parsed.target.kind === "conversation"
-        ? parsed.target
-        : undefined;
+  const target = parsed?.format === "legacy" ? parsed : undefined;
   return channel
     ? `${channel.channelType === "dm" || target?.messageId ? "" : "#"}${channel.name}`
     : undefined;

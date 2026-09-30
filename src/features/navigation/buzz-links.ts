@@ -3,17 +3,10 @@ import {
   parseEntityLink,
   type EntityRoute,
 } from "../projects/routes";
-import {
-  bindSharedTarget,
-  parseOpenTarget,
-  parseTargetLink,
-  type NavigationScope,
-  type SharedTarget,
-} from "./targets";
+import { parseOpenTarget, type NavigationScope } from "./targets";
 
 type BuzzLink =
   | { format: "entity"; route: EntityRoute }
-  | { format: "shared"; target: SharedTarget }
   | {
       format: "legacy";
       channelId: string;
@@ -45,13 +38,14 @@ export function parseBuzzLink(href: string): BuzzLink | null {
       url.hash
     )
       return null;
-    if (url.hostname === "open")
-      return { format: "shared", target: parseTargetLink(href) };
     const entity = parseEntityLink(url);
     if (entity) return { format: "entity", route: entity };
     const channelPattern = /^[a-zA-Z0-9][a-zA-Z0-9._-]{0,255}$/;
     const eventPattern = /^[a-f0-9]{64}$/i;
-    if (url.hostname === "channel" && !url.search) {
+    // Query parameters outside a form's grammar are ignored, values and repeats
+    // included, as the original Buzz desktop client does. The channel forms carry
+    // everything in the path, so any query is ignored there.
+    if (url.hostname === "channel") {
       const parts = url.pathname.slice(1).split("/").map(decodeURIComponent);
       const [channelId = "", messageId] = parts;
       if (
@@ -67,10 +61,11 @@ export function parseBuzzLink(href: string): BuzzLink | null {
       };
     }
     if (url.hostname !== "message" || url.pathname) return null;
-    const keys = [...url.searchParams.keys()];
+    // A duplicated known key is ambiguous and still rejects.
     if (
-      new Set(keys).size !== keys.length ||
-      keys.some((key) => !["channel", "id", "thread"].includes(key))
+      ["channel", "id", "thread"].some(
+        (key) => url.searchParams.getAll(key).length > 1,
+      )
     )
       return null;
     const channelId = url.searchParams.get("channel") ?? "";
@@ -97,23 +92,12 @@ export function buzzLinkKind(href: string) {
   const link = parseBuzzLink(href);
   if (!link) return null;
   if (link.format === "entity") return "buzz";
-  const target =
-    link.format === "shared"
-      ? link.target
-      : { ...link, kind: "conversation" as const };
-  if (target.kind !== "conversation") return "buzz";
-  return target.threadRootId
-    ? "thread"
-    : target.messageId
-      ? "message"
-      : "channel";
+  return link.threadRootId ? "thread" : link.messageId ? "message" : "channel";
 }
 
 export function buzzLinkTarget(href: string, scope: NavigationScope) {
   const link = parseBuzzLink(href);
   if (!link) return null;
-  if (link.format === "shared")
-    return bindSharedTarget(link.target, scope.viewer);
   if (link.format === "entity") return entityTarget(link.route, scope);
   const { format: _format, ...destination } = link;
   return parseOpenTarget({

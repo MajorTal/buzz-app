@@ -2,7 +2,6 @@ import { expect, it } from "vitest";
 import { renderToStaticMarkup } from "react-dom/server";
 import { LockIcon, TableIcon } from "../../shared/design-system/icons/index";
 import styles from "../../shared/InlineReference.module.css";
-import { targetLink } from "../../features/navigation/targets";
 import { InlineLink, LinkLabel, linkKind } from "./InlineLink";
 import {
   LinkLabelContext,
@@ -10,26 +9,11 @@ import {
   LinkChannelPrivateContext,
 } from "../../features/conversation/LinkLabelContext";
 
-it("identifies exact GitHub hosts, ordinary websites, and valid Buzz locators", () => {
+it("identifies exact GitHub hosts, ordinary websites, and Buzz entity links", () => {
   expect(linkKind("https://github.com/block/buzz")).toBe("github");
   expect(linkKind("https://github.com.example.com/block/buzz")).toBe("web");
   expect(linkKind("https://example.com/github.com")).toBe("web");
-  expect(linkKind(targetLink({ version: 1, kind: "home" }))).toBe("buzz");
-  expect(
-    linkKind(
-      targetLink({
-        version: 1,
-        kind: "conversation",
-        scope: {
-          viewer: "1".repeat(64),
-          communityOrigin: "https://example.com",
-        },
-        channelId: "general",
-        messageId: "2".repeat(64),
-        threadRootId: "2".repeat(64),
-      }),
-    ),
-  ).toBe("thread");
+  expect(linkKind(`buzz://repo?owner=${"a".repeat(64)}&d=buzz`)).toBe("buzz");
 });
 
 it.each([
@@ -63,6 +47,8 @@ it.each([
   "javascript:alert(1)",
   "data:text/html,hello",
   "buzz://unknown",
+  // The retired in-app locator is an unknown host like any other.
+  "buzz://open?target=%7B%22version%22%3A1%2C%22kind%22%3A%22home%22%7D",
   "not a URL",
 ])("leaves unsupported destinations as plain text: %s", (href) => {
   expect(

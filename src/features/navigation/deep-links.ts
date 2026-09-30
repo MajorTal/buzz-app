@@ -39,9 +39,10 @@ export function deepLinkStep(
   if (typeof url !== "string" || !url.startsWith("buzz:"))
     return { fail: "invalid-target" };
   const link = parseBuzzLink(url);
-  // `buzz://open?target=…` is this app's own locator for in-app use, not a Buzz
-  // link, so the OS ingress refuses it like any other unsupported address.
-  if (!link || link.format === "shared") return { fail: "invalid-target" };
+  // Every address outside the Buzz link grammar, unknown hosts included, parses
+  // to null and fails here rather than being dropped; the app has no link form
+  // of its own beyond the Buzz ones.
+  if (!link) return { fail: "invalid-target" };
   try {
     if (!client.viewer || !client.selected) return { fail: "unavailable" };
     if (link.format === "entity")

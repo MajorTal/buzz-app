@@ -71,14 +71,7 @@ export function MessageLink({
   const trigger = useRef<HTMLAnchorElement>(null);
   const internal = isBuzzLink(url);
   const parsed = internal ? parseBuzzLink(url) : null;
-  const destination =
-    parsed?.format === "legacy"
-      ? parsed
-      : parsed?.format === "shared" &&
-          parsed.target.kind === "conversation" &&
-          scope?.slice(0, -65) === parsed.target.scope.communityOrigin
-        ? parsed.target
-        : undefined;
+  const destination = parsed?.format === "legacy" ? parsed : undefined;
   const preview =
     session && destination?.messageId
       ? { channelId: destination.channelId, messageId: destination.messageId }

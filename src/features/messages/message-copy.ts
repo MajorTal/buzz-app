@@ -63,8 +63,8 @@ export function messageCopyLink(
       ...(row.threadRootId ? { threadRootId: row.threadRootId } : {}),
     });
     if (target.kind !== "conversation" || !target.messageId) return undefined;
-    // Public Buzz links bind to the recipient's selected community. Scoped
-    // buzz://open locators remain supported in-app, but cannot be shared to Buzz.
+    // Buzz links carry no community or identity: they bind to the recipient's
+    // selected community, so the sender's scope is deliberately left out.
     const params = new URLSearchParams({
       channel: target.channelId,
       id: target.messageId,

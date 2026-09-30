@@ -6,7 +6,7 @@ import {
   deepLinkStep,
   type DeepLinkShell,
 } from "./deep-links";
-import { targetLink, type OpenTarget } from "./targets";
+import type { OpenTarget } from "./targets";
 import {
   createNavigationController,
   type OpenFailure,
@@ -40,14 +40,9 @@ const message =
 const root = "b".repeat(64);
 const client = { viewer, selected: origin };
 const messageLink = `buzz://message?channel=general&id=${message}&thread=${root}`;
-// What Copy link produces: this app's own in-app locator, which is not a Buzz link.
-const copied = targetLink({
-  version: 1,
-  kind: "conversation",
-  scope: { viewer: "c".repeat(64), communityOrigin: elsewhere },
-  channelId: "general",
-  messageId: message,
-});
+// The retired `buzz://open?target=…` locator is an unknown host like any other.
+const locator =
+  "buzz://open?target=%7B%22version%22%3A1%2C%22kind%22%3A%22home%22%7D";
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
 it("binds message and channel links to the selected community and viewer", () => {
@@ -84,6 +79,29 @@ it("binds message and channel links to the selected community and viewer", () =>
     },
   });
 });
+it("ignores query parameters outside the Buzz link grammar and opens the destination", () => {
+  expect(deepLinkStep(`${messageLink}&foo=bar`, client)).toEqual({
+    open: {
+      version: 1,
+      kind: "conversation",
+      scope: { viewer, communityOrigin: origin },
+      channelId: "general",
+      messageId: message,
+      threadRootId: root,
+    },
+  });
+  expect(
+    deepLinkStep(`${messageLink}&viewer=${"b".repeat(64)}`, client),
+  ).toEqual(deepLinkStep(messageLink, client));
+  expect(deepLinkStep("buzz://channel/general?foo=bar", client)).toEqual({
+    open: {
+      version: 1,
+      kind: "conversation",
+      scope: { viewer, communityOrigin: origin },
+      channelId: "general",
+    },
+  });
+});
 it("fails as unavailable without a selected community or identity, never inventing one", () => {
   expect(
     deepLinkStep("buzz://channel/general", { viewer, selected: null }),
@@ -93,18 +111,10 @@ it("fails as unavailable without a selected community or identity, never inventi
   });
 });
 it.each([
-  // `buzz://open?target=…` is not a Buzz link, however well-formed: neither what
-  // Copy link produces nor an unscoped locator opens from the OS.
-  copied,
-  targetLink({ version: 1, kind: "home" }),
-  targetLink({ version: 1, kind: "settings", section: "appearance" }),
-  targetLink({
-    version: 1,
-    kind: "page",
-    pluginId: "buzz.projects",
-    pageId: "projects",
-    scope: null,
-  }),
+  // The retired locator is not a Buzz link however well-formed its JSON target,
+  // whether unscoped or scoped to a community as early Copy link output was.
+  locator,
+  `buzz://open?target=%7B%22version%22%3A1%2C%22kind%22%3A%22conversation%22%2C%22scope%22%3A%7B%22communityOrigin%22%3A%22https%3A%2F%2Felsewhere.example%22%7D%2C%22channelId%22%3A%22general%22%2C%22messageId%22%3A%22${message}%22%7D`,
   "buzz://open?target=%7B%22version%22%3A1%2C%22kind%22%3A%22home%22%7D&extra=1",
   `buzz://open?target=${"x".repeat(40_000)}`,
   "buzz://join?relay=example&code=abc123",
@@ -125,9 +135,10 @@ it.each([
   "buzz",
   "buzz://user@channel/general",
   "buzz://channel:443/general",
-  "buzz://channel/general?relay=evil",
   `${messageLink}#fragment`,
-  `${messageLink}&viewer=${"b".repeat(64)}`,
+  // Unknown keys are ignored, but a duplicated known key is ambiguous.
+  `buzz://message?channel=general&channel=other&id=${message}`,
+  `${messageLink}&id=${message}`,
   "buzz://message?channel=general&id=bad",
   "https://example.com/?next=buzz://channel/general",
   "javascript:alert(1)",
@@ -240,10 +251,36 @@ it("waits for loading to finish even for links that will fail, then reports them
   expect(t.log).toEqual(["fail:invalid-target"]);
   t.stop();
 });
+it("opens an OS message link carrying unknown query parameters as the bound conversation", async () => {
+  const t = harness(ready);
+  await settle();
+  t.arrive(`${messageLink}&foo=bar&foo=baz`);
+  await settle();
+  expect(t.log).toEqual([
+    `open:${JSON.stringify({
+      version: 1,
+      kind: "conversation",
+      scope: { viewer, communityOrigin: origin },
+      channelId: "general",
+      messageId: message,
+      threadRootId: root,
+    })}`,
+  ]);
+  expect(t.host.fail).not.toHaveBeenCalled();
+  expect(t.host.navigation.snapshot().entry.target).toEqual({
+    version: 1,
+    kind: "conversation",
+    scope: { viewer, communityOrigin: origin },
+    channelId: "general",
+    messageId: message,
+    threadRootId: root,
+  });
+  t.stop();
+});
 it("opens the latest intent from a burst without presenting superseded destinations", async () => {
   const t = harness(ready);
   await settle();
-  t.arrive("buzz://channel/general", copied, messageLink);
+  t.arrive("buzz://channel/general", locator, messageLink);
   await settle();
   expect(t.log).toEqual([
     `open:${JSON.stringify({

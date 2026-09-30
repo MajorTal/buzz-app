@@ -391,11 +391,11 @@ function PreparedMessageMarkdown({
       ? sourceRow
       : { ...sourceRow, content: prepared.content };
   const renderLink = (url: string, label?: string, children?: ReactNode) => {
-    const channel = channelForLink(url, scope, directory.channels);
+    const channel = channelForLink(url, directory.channels);
     return (
       <MessageLink
         url={url}
-        label={label ?? channelLinkLabel(url, scope, directory.channels)}
+        label={label ?? channelLinkLabel(url, directory.channels)}
         registry={extensions?.links}
         onOpenLink={onOpenLink}
         session={session}

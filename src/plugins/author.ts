@@ -75,7 +75,6 @@ export type {
 } from "../features/navigation/controller";
 export type {
   OpenTarget,
-  SharedTarget,
   NavigationScope,
   JsonValue,
 } from "../features/navigation/targets";

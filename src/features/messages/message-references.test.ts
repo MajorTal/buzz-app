@@ -1,7 +1,6 @@
 import { expect, it } from "vitest";
 import { messageReferences } from "./message-references";
 import { channelLinkLabel } from "./ReferenceText";
-import { targetLink } from "../navigation/targets";
 
 const person = "a".repeat(64);
 const agent = "b".repeat(64);
@@ -61,21 +60,10 @@ it("keeps private channel visibility on inline references", () => {
     { label: "#secret", kind: "channel", id: "secret", private: true },
   ]);
 });
-it("resolves channel labels only in the receiving community", () => {
-  const scope = `https://local.example:${person}`;
+it("resolves channel labels from the receiving community's channel list", () => {
   expect(
-    channelLinkLabel(
-      `buzz://message?channel=design&id=${agent}`,
-      scope,
-      channels,
-    ),
+    channelLinkLabel(`buzz://message?channel=design&id=${agent}`, channels),
   ).toBe("design");
-  const shared = targetLink({
-    version: 1,
-    kind: "conversation",
-    channelId: "design",
-    scope: { communityOrigin: "https://other.example", viewer: person },
-    messageId: agent,
-  });
-  expect(channelLinkLabel(shared, scope, channels)).toBeUndefined();
+  expect(channelLinkLabel("buzz://channel/design", channels)).toBe("#design");
+  expect(channelLinkLabel("buzz://channel/unknown", channels)).toBeUndefined();
 });

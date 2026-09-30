@@ -67,6 +67,7 @@ import type {
   CompletionEdit,
   CompletionQuery,
   ComposerObservation,
+  ComposerResource,
 } from "../conversation/contracts";
 import { ComposerCompletions } from "../conversation/ComposerCompletions";
 import { useCompletionEditor } from "../conversation/useCompletionEditor";
@@ -478,6 +479,12 @@ function Composer({
     )
       return false;
     return insert(`@${recipient.name} `, recipient);
+  }
+  function insertResource(resource: ComposerResource): true | string {
+    if (editingDisabled || !outbox?.supports(9) || !input.current?.isConnected)
+      return "The message can't be edited right now";
+    completion.invalidate();
+    return input.current.insertResource(resource);
   }
   function replaceCompletion(
     edit: CompletionEdit,
@@ -1004,6 +1011,7 @@ function Composer({
                 inviteAgents={agentChoices && !editing.target}
                 insertText={(text) => insert(text)}
                 insertMention={insertMention}
+                insertResource={insertResource}
                 focus={() => input.current?.focus()}
               />
             ) : (

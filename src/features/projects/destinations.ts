@@ -43,6 +43,8 @@ export type EntityDetail = {
   commit?: string;
   activity: EventData[];
   items: EventData[];
+  /** The issue/PR list read reached its limit; items may be missing. */
+  truncated?: boolean;
 };
 type Read = (
   filters: readonly ReadFilter[],
@@ -104,6 +106,54 @@ const singleValue = (event: EventData, name: string) => {
 const related = (event: EventData, id: string) =>
   event.tags.some((t) => ["e", "E"].includes(t[0] ?? "") && t[1] === id);
 
+/** Port of ACP `pick_authoritative_project_home` (buzz-acp `prompt_project.rs`).
+ * A project's own `buzz-channel` is presentation only. It is authoritative when an
+ * `a` member is a listed repository whose first `buzz-channel` is this channel and
+ * whose owner or a maintainer signed the project. Callers fail closed on >1 match. */
+export function authoritativeProjects(
+  projects: readonly EventData[],
+  repositories: readonly EventData[],
+  channelId: string,
+) {
+  const listed = (event: EventData) =>
+    !values(event, "buzz-visibility").includes("unlisted") &&
+    entityHex.test(event.pubkey) &&
+    !!value(event, "d")?.trim();
+  const repos = new Map(
+    repositories
+      .filter(
+        (event) =>
+          event.kind === 30617 &&
+          listed(event) &&
+          value(event, "buzz-channel") === channelId,
+      )
+      .map((event) => [
+        `${event.pubkey.toLowerCase()}:${value(event, "d")?.trim()}`,
+        event.tags
+          .filter((t) => t[0] === "maintainers")
+          .flatMap((t) => t.slice(1).map((key) => key.toLowerCase())),
+      ]),
+  );
+  return projects.filter((event) => {
+    if (
+      event.kind !== 30621 ||
+      !listed(event) ||
+      !values(event, "buzz-channel").includes(channelId)
+    )
+      return false;
+    const signer = event.pubkey.toLowerCase();
+    return values(event, "a").some((address) => {
+      const [kind, owner = "", ...rest] = address.split(":");
+      const key = `${owner.trim().toLowerCase()}:${rest.join(":").trim()}`;
+      const maintainers = kind === "30617" && repos.get(key);
+      return (
+        !!maintainers &&
+        (owner.trim().toLowerCase() === signer || maintainers.includes(signer))
+      );
+    });
+  });
+}
+
 /** The host supplies verified, principal-bound reads. No feature can pick an origin or signer. */
 export function projectDestinations(read: Read) {
   async function surviving(entities: Entity[], signal: AbortSignal) {
@@ -163,6 +213,47 @@ export function projectDestinations(read: Read) {
     return entity;
   }
   return {
+    /** Only a complete read is evidence of "none"; a capped read throws. */
+    async home(
+      channelId: string,
+      signal: AbortSignal,
+    ): Promise<
+      { status: "none" | "ambiguous" } | { status: "home"; project: Entity }
+    > {
+      const events = await read(
+        [30621, 30617].map((kind) => ({
+          kinds: [kind],
+          "#buzz-channel": [channelId],
+          limit: 100,
+        })),
+        signal,
+      );
+      if (
+        [30621, 30617].some(
+          (kind) => events.filter((e) => e.kind === kind).length >= 100,
+        )
+      )
+        throw new EntityFailure("unavailable");
+      const heads = new Map<string, EventData>();
+      for (const event of events) {
+        const address = `${event.kind}:${event.pubkey}:${value(event, "d")}`;
+        heads.set(address, newer(heads.get(address), event));
+      }
+      const matches = authoritativeProjects(
+        [...heads.values()],
+        [...heads.values()],
+        channelId,
+      ).map(entityFromEvent);
+      // ACP would still name it; Projects cannot open it, so fail visibly.
+      if (matches.some((project) => !project))
+        throw new EntityFailure("unavailable");
+      // Stricter than ACP: an owner-deleted project is not a home here.
+      const [project, ...others] = await surviving(matches as Entity[], signal);
+      if (!project) return { status: "none" };
+      return others.length
+        ? { status: "ambiguous" }
+        : { status: "home", project };
+    },
     async list(signal: AbortSignal) {
       const events = await read(
         [{ kinds: [30617, 30621], limit: 100 }],
@@ -329,12 +420,12 @@ export function projectDestinations(read: Read) {
         if (repositories.length) {
           const kind = route.tab === "prs" ? 1618 : 1621;
           const addresses = repositories.map((repo) => repo.address);
-          result.items = [
-            ...(await read(
-              [{ kinds: [kind], "#a": addresses, limit: 100 }],
-              signal,
-            )),
-          ].filter(
+          const events = await read(
+            [{ kinds: [kind], "#a": addresses, limit: 100 }],
+            signal,
+          );
+          result.truncated = events.length >= 100;
+          result.items = events.filter(
             (e) =>
               e.kind === kind &&
               values(e, "a").some((a) => addresses.includes(a)),

@@ -595,7 +595,7 @@ whole paragraph. The host owns source offsets, plain-text paste, composition, un
 selected recipient metadata. Token renderers are display-only while editing.
 Names pasted as text never create notification intent.
 
-Tools receive `insertText`, `insertMention({ pubkey, name })` and `focus` commands.
+Tools receive `insertText`, `insertMention({ pubkey, name })`, `insertResource` and `focus` commands.
 Mention insertion atomically records visible text and exact notification intent;
 `true` means the edit was accepted, **not** that membership or delivery succeeded.
 The host serializes successive commands using the latest draft and selection,
@@ -603,6 +603,18 @@ enforces text/recipient limits, and revokes commands on tool removal/replacement
 editor destination/session change, disabled/read-only state and unmount. Names are
 presentation, never recipient resolution. Editing/pasting over an identity span
 removes its intent under the existing draft rules.
+
+`insertResource({ uri, label })` inserts a host-owned inline reference to plugin
+content, such as a project issue or pull request. The host normalizes the label
+(single line, at most 120 code points), requires a navigation-safe URI, and sends
+exactly one ordinary Markdown link, `[escaped label](uri)`. No tags, recipients or
+access grants are added; the receiving agent sees the link. It returns `true` only
+when the draft accepted the atom, otherwise the host's user-facing reason (code,
+another link, 32 resources, or message length), which the tool should show in place.
+The atom is removed whole, restores without its plugin, and copies as its Markdown.
+If later edits or restore would stop it from sending as that link (a preceding `!`,
+surrounding backticks, code/link formatting), the host turns it into the ordinary
+text that will actually be sent, as it does for broken mention intent.
 
 **User intent outlives the tool that created it.** Disabling Mentions removes its
 chooser, not selected recipients, their inline chips and avatar removal controls,

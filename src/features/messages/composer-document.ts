@@ -1,8 +1,14 @@
-import { Schema, type Node as EditorNode } from "prosemirror-model";
+import {
+  Fragment,
+  Schema,
+  Slice,
+  type Node as EditorNode,
+} from "prosemirror-model";
 import { bulletList, orderedList, listItem } from "prosemirror-schema-list";
 import { composerLinkUrl } from "./composer-link";
 import { scanMarkdown } from "../relay/message-content";
 import type { MentionDraft, DraftRecipient } from "./mention-draft";
+import type { ComposerResource } from "../conversation/contracts";
 
 /** The document owns editable marks and exact source tokens. Unimplemented
  * Markdown stays source text, never round-trips through an HTML serializer. */
@@ -71,6 +77,8 @@ export const composerSchema = new Schema<
       attrs: {
         source: {},
         recipient: { default: null },
+        /** Host-owned `{ uri, label }`; valid only while `source` is its link. */
+        resource: { default: null },
         editAsText: { default: false },
       },
       leafText: (node) => node.attrs.source,
@@ -202,7 +210,8 @@ export function readComposerDocument(
           valid(mark.attrs as { pubkey: string; name: string }),
       );
       if (node.isText) return node.mark(marks);
-      if (node.type.name === "token")
+      if (node.type.name === "token") {
+        const resource = composerResource(node.attrs.resource);
         return node.type.create(
           {
             ...node.attrs,
@@ -210,17 +219,24 @@ export function readComposerDocument(
               node.attrs.recipient && valid(node.attrs.recipient)
                 ? node.attrs.recipient
                 : null,
+            resource:
+              resource &&
+              resource.source === node.attrs.source &&
+              !resourceBlockingMarks().some((type) => type.isInSet(marks))
+                ? resource.resource
+                : null,
           },
           null,
           marks,
         );
+      }
       const children: EditorNode[] = [];
       node.forEach((child, offset) => {
         children.push(content(child, position + 1 + offset));
       });
       return node.type.create(node.attrs, children, marks);
     };
-    return content(restored, -1);
+    return demoteBrokenResources(content(restored, -1));
   }
   const points = [
     ...new Set([
@@ -254,6 +270,83 @@ export function readComposerDocument(
     null,
     composerSchema.nodes.paragraph.create(null, nodes),
   );
+}
+
+/** Resource tokens whose source no longer parses as exactly their own link in
+ * the surrounding Markdown (e.g. after `!`, inside backticks, or under a mark). */
+export function brokenResources(
+  doc: EditorNode,
+  source = projectComposerDocument(doc),
+) {
+  const resources = source.tokens.filter((token) => token.node.attrs.resource);
+  if (!resources.length) return [];
+  const { links, tooDeep } = scanMarkdown(
+    composerMarkdownContext(doc, source).text,
+  );
+  return resources.filter(
+    (token) =>
+      tooDeep ||
+      resourceBlockingMarks().some((type) => type.isInSet(token.node.marks)) ||
+      !links.some(
+        (link) =>
+          link.type === "link" &&
+          link.position?.start.offset === token.start &&
+          link.position.end.offset === token.end,
+      ),
+  );
+}
+
+/** Like mention provenance, a resource that would not be sent as its link
+ * becomes the ordinary source text that will actually be sent. */
+export function demoteBrokenResources(doc: EditorNode) {
+  for (const token of brokenResources(doc).reverse())
+    doc = doc.replace(
+      token.from,
+      token.to,
+      new Slice(
+        Fragment.from(
+          composerSchema.text(token.node.attrs.source, token.node.marks),
+        ),
+        0,
+        0,
+      ),
+    );
+  return doc;
+}
+
+/** Marks under which a resource token's source is not sent as its link. */
+export const resourceBlockingMarks = () => {
+  const { code, link, literal, recipient } = composerSchema.marks;
+  return [code, link, literal, recipient];
+};
+
+/** A resource is sent as exactly `source`: one inline Markdown link whose text is
+ * the escaped, single-line label (at most 120 code points) and whose destination
+ * is the unchanged, navigation-safe URI. Anything else is rejected. */
+export function composerResource(
+  value: unknown,
+): { resource: ComposerResource; source: string } | undefined {
+  if (!value || typeof value !== "object") return;
+  const { uri, label } = value as Record<string, unknown>;
+  if (typeof uri !== "string" || typeof label !== "string") return;
+  const text = [
+    ...label.replace(/[\p{Cc}\u202a-\u202e\u2066-\u2069\s]+/gu, " ").trim(),
+  ]
+    .slice(0, 120)
+    .join("")
+    .trimEnd();
+  if (!text || composerLinkUrl(uri) !== uri) return;
+  const source = `[${text.replace(/[\\`[\]*_~<>&|]/g, "\\$&")}](${uri})`;
+  const { tree } = scanMarkdown(source);
+  const link = tree.children?.length === 1 ? tree.children[0] : undefined;
+  if (
+    link?.children?.length !== 1 ||
+    link.children[0]?.type !== "link" ||
+    link.children[0].url !== uri ||
+    link.children[0].position?.end.offset !== source.length
+  )
+    return;
+  return { resource: { uri, label: text }, source };
 }
 
 /** Document positions, editable text offsets, and serialized Markdown offsets

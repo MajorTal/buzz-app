@@ -39,7 +39,12 @@ import {
   projectComposerDocument,
   composerMarkdownContext,
   markdownRanges,
+  composerResource,
+  brokenResources,
+  resourceBlockingMarks,
 } from "./composer-document";
+import { scanMarkdown } from "../relay/message-content";
+import type { ComposerResource } from "../conversation/contracts";
 import {
   activeBlockFormats,
   toggleComposerBlock,
@@ -129,7 +134,14 @@ export function EditableInput({
     placeholder,
   };
   const hosts = useRef(
-    new Map<HTMLElement, { source: string; position(): number | undefined }>(),
+    new Map<
+      HTMLElement,
+      {
+        source: string;
+        resource: ComposerResource | null;
+        position(): number | undefined;
+      }
+    >(),
   );
   const [, refresh] = useState(0);
   const scrollAfterTokens = useRef(false);
@@ -280,6 +292,14 @@ export function EditableInput({
             composerSchema.text(token.node.attrs.source, token.node.marks),
           );
         }
+        // Adjacent edits (a leading `!`, surrounding backticks) can change what
+        // a resource sends. Demote it to that text, in the same history event.
+        for (const token of brokenResources(tr.doc).reverse())
+          tr.replaceWith(
+            token.from,
+            token.to,
+            composerSchema.text(token.node.attrs.source, token.node.marks),
+          );
         if (!tr.docChanged) return;
         if (state.storedMarks) tr.setStoredMarks(state.storedMarks);
         return tr.setMeta("composer-normalized", true);
@@ -409,6 +429,73 @@ export function EditableInput({
         current.current.maxLength
       )
         return false;
+      editor.dispatch(tr.scrollIntoView());
+      editor.focus();
+      return true;
+    };
+    /** True, or the reason shown by the host. The link must survive its context. */
+    const insertResource = (value: ComposerResource): true | string => {
+      if (!editable() || composing.current || editor.composing)
+        return "The message can't be edited right now";
+      const resource = composerResource(value);
+      if (!resource) return "This link can't be added";
+      const { from, to, $from } = editor.state.selection;
+      const stored = editor.state.storedMarks ?? $from.marks();
+      const { code } = composerSchema.marks;
+      if (
+        $from.parent.type.spec.code ||
+        code.isInSet(stored) ||
+        editor.state.doc.rangeHasMark(from, to, code)
+      )
+        return "Links can't be added inside code";
+      const marks = $from.parent.type
+        .allowedMarks(stored)
+        .filter((mark) => !resourceBlockingMarks().includes(mark.type));
+      const source = projection();
+      // Markdown links cannot nest: never split or break an existing link.
+      const { doc } = editor.state;
+      const start = source.source(from),
+        end = source.source(to);
+      if (
+        composerSchema.marks.link
+          .isInSet(doc.resolve(from).nodeBefore?.marks ?? [])
+          ?.isInSet(doc.resolve(to).nodeAfter?.marks ?? []) ||
+        scanMarkdown(composerMarkdownContext(doc, source).text).links.some(
+          ({ position }) => {
+            const first = position?.start.offset ?? 0,
+              last = position?.end.offset ?? 0;
+            return (
+              first < end && last > start && !(start <= first && end >= last)
+            );
+          },
+        )
+      )
+        return "Links can't be added inside another link";
+      // A preceding `!` would make an image; `\` would escape the bracket.
+      const gap = /[!\\]$/.test(source.draft.text.slice(0, start));
+      const tr = closeHistory(editor.state.tr).replaceWith(
+        from,
+        to,
+        Fragment.fromArray([
+          ...(gap ? [composerSchema.text(" ", marks)] : []),
+          composerSchema.nodes.token.create(
+            { source: resource.source, resource: resource.resource },
+            null,
+            marks,
+          ),
+          composerSchema.text(" ", marks),
+        ]),
+      );
+      tr.setSelection(
+        Selection.near(tr.doc.resolve(tr.mapping.map(to, 1)), -1),
+      );
+      const next = projectComposerDocument(tr.doc);
+      if (next.tokens.filter((token) => token.node.attrs.resource).length > 32)
+        return "Add at most 32 links to one message";
+      if (composerMarkdown(next.draft).length > current.current.maxLength)
+        return "Message is too long to add this link";
+      if (brokenResources(tr.doc, next).length)
+        return "Links can't be added inside code or other Markdown here";
       editor.dispatch(tr.scrollIntoView());
       editor.focus();
       return true;
@@ -582,6 +669,11 @@ export function EditableInput({
           (block) => block.code && from < block.to && to > block.from,
         ) ||
         doc.rangeHasMark(from, to, composerSchema.marks.code) ||
+        // Markdown links cannot nest; a resource keeps its own destination.
+        source.tokens.some(
+          (token) =>
+            token.node.attrs.resource && token.from <= to && token.to >= from,
+        ) ||
         (from === to &&
           composerSchema.marks.code.isInSet(
             editor.state.storedMarks ?? doc.resolve(from).marks(),
@@ -840,6 +932,7 @@ export function EditableInput({
             dom.dataset.source = node.attrs.source;
             hosts.current.set(dom, {
               source: node.attrs.source,
+              resource: node.attrs.resource,
               position: getPos,
             });
             return {
@@ -1177,6 +1270,7 @@ export function EditableInput({
       },
       setSelectionRange: { configurable: true, value: setRange },
       insertText: { configurable: true, value: insert },
+      insertResource: { configurable: true, value: insertResource },
       toggleFormat: { configurable: true, value: toggleFormat },
       insertLineBreak: {
         configurable: true,
@@ -1355,7 +1449,18 @@ export function EditableInput({
             item.start === source &&
             item.end === (source ?? 0) + host.source.length,
         );
-        return createPortal(decoration?.content ?? host.source, element);
+        return createPortal(
+          host.resource ? (
+            // Host-owned artwork: restore never depends on the providing plugin.
+            <>
+              <span className="sr-only">Resource: </span>
+              <span className={styles.resource}>{host.resource.label}</span>
+            </>
+          ) : (
+            (decoration?.content ?? host.source)
+          ),
+          element,
+        );
       })}
     </>
   );

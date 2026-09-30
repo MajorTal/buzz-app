@@ -83,7 +83,8 @@ html[data-keyboard-navigation] .input:focus-visible {
   line-height: var(--text-mono-sm--line-height);
   letter-spacing: var(--text-mono-sm--letter-spacing);
 }
-.input a {
+.input a,
+.resource {
   color: inherit;
   text-decoration: underline;
   text-underline-offset: 2px;

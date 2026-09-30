@@ -682,7 +682,15 @@ export const test = base.extend({
         return [sign(13534, [["member", viewer, "member"]])];
       }
       if (filter.kinds?.includes(30617) || filter.kinds?.includes(30621)) {
-        expect(filter).toEqual({ kinds: [30617, 30621], limit: 100 });
+        if ("#buzz-channel" in filter) {
+          // A channel's project-home read: one kind per filter, one channel.
+          expect([[30617], [30621]]).toContainEqual(filter.kinds);
+          expect(filter).toEqual({
+            kinds: filter.kinds,
+            "#buzz-channel": [expect.any(String)],
+            limit: 100,
+          });
+        } else expect(filter).toEqual({ kinds: [30617, 30621], limit: 100 });
         return [];
       }
       if (personalSidebar && filter.ids)

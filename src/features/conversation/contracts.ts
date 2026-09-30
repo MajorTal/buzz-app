@@ -4,6 +4,8 @@ import type { Contribution } from "../../plugins/contributions";
 import type { ChannelMessage } from "../relay/contracts";
 import type { RelaySession } from "../relay/session";
 
+/** Editor-independent reference to plugin content. Not an access grant or recipient. */
+export type ComposerResource = Readonly<{ uri: string; label: string }>;
 export type ComposerToolProps = Readonly<{
   session: RelaySession;
   scope: string;
@@ -18,6 +20,10 @@ export type ComposerToolProps = Readonly<{
    * Prose never resolves to identities. Membership is checked by session delivery.
    * Like insertText, this command is revoked with the tool/destination lifetime. */
   insertMention(recipient: Readonly<{ pubkey: string; name: string }>): boolean;
+  /** Atomically insert a host-owned inline resource at the caret. The host validates
+   * the link, escapes the label and sends exactly `[label](uri)` there; the draft
+   * keeps it after tool removal. Otherwise returns the host's user-facing reason. */
+  insertResource(resource: ComposerResource): true | string;
   focus(): void;
 }>;
 export type ReactionToolProps = Readonly<{

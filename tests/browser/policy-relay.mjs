@@ -320,6 +320,24 @@ export function policyRelay({
             filters.flatMap((filter) => answer(communityOf(url), filter)),
           );
         }
+        if (filters.length === 2 && "#buzz-channel" in filters[0]) {
+          // A channel's project-home read: projects and repositories, one channel.
+          const channel = filters[0]["#buzz-channel"];
+          expect(channel).toEqual([expect.any(String)]);
+          expect(filters).toEqual(
+            [30621, 30617].map((kind) => ({
+              kinds: [kind],
+              "#buzz-channel": channel,
+              limit: 100,
+            })),
+          );
+          const community = communityOf(url);
+          for (const filter of filters)
+            report.queries.push({ community, filter, at: performance.now() });
+          return Response.json(
+            filters.flatMap((filter) => answer(community, filter)),
+          );
+        }
         if (filters.length !== 1) {
           // Sidebar preferences read only these four exact own-author coordinates.
           expect(filters).toHaveLength(4);

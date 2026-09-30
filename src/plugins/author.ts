@@ -36,6 +36,7 @@ export type {
   ComposerCompletion,
   ComposerAccessory,
   ComposerAccessoryProps,
+  ComposerResource,
   ComposerToolProps,
   ComposerTool,
   InlineContent,

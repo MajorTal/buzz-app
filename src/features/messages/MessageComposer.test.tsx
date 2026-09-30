@@ -5,7 +5,7 @@ import "@testing-library/jest-dom/vitest";
 import { composerDOMFixture } from "./composer-testing";
 import { bindNames } from "../identity-names/service";
 import { createAgentDirectory } from "../identity-names/testing";
-import { afterEach, beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   act,
   cleanup,
@@ -42,11 +42,22 @@ import { CustomEmoji as CustomEmojiImage } from "../../bundled/emoji/CustomEmoji
 import type { ComposerInputElement } from "./composer-dom";
 import { profileTarget } from "../profiles/target";
 import { setRememberAgentsPreference } from "./mention-preferences";
+import { ResourcePicker } from "../../bundled/projects/ResourcePicker";
+import { entityHref } from "../projects/routes";
+import type { Entity } from "../projects/destinations";
 
 composerDOMFixture();
 
 const first = { pubkey: "a".repeat(64), name: "Honey" };
 const second = { pubkey: "b".repeat(64), name: "Honey" };
+const resourceOwner = "c".repeat(64);
+const resourceRoute = {
+  type: "issue",
+  owner: resourceOwner,
+  dtag: "game",
+  id: "d".repeat(64),
+} as const;
+const resource = { uri: entityHref(resourceRoute), label: "Fix login" };
 
 beforeEach(() => {
   localStorage.clear();
@@ -1190,12 +1201,14 @@ it("revokes captured tool commands after retargeting, disabling and unmounting",
   act(() => {
     expect(channel.insertText("stale")).toBe(false);
     expect(channel.insertMention(first)).toBe(false);
+    expect(channel.insertResource(resource)).not.toBe(true);
   });
   expect(h.input()).toHaveValue("");
   const thread = h.commands();
   h.retarget({ disabled: true });
   act(() => {
     expect(thread.insertText("disabled")).toBe(false);
+    expect(thread.insertResource(resource)).not.toBe(true);
   });
   h.retarget({ disabled: false });
   act(() => {
@@ -2904,4 +2917,248 @@ it("rejects a known archived recipient at send entry without clearing the draft"
       "A selected recipient is archived. Remove it before sending.",
     ),
   ).toBeVisible();
+});
+
+it("sends a resource between mentions and keeps both after a failed send", () => {
+  const h = mount();
+  act(() => {
+    const { insertMention, insertResource } = h.commands();
+    expect(insertMention(first)).toBe(true);
+    expect(insertResource(resource)).toBe(true);
+    expect(insertMention(second)).toBe(true);
+  });
+  h.messages.send.mockImplementationOnce(() => {
+    throw new Error("outbox full");
+  });
+  h.submit();
+  expect(h.input()).toHaveTextContent("Resource: Fix login");
+  h.submit();
+  expect(h.messages.send.mock.calls.at(-1)?.slice(1, 3)).toEqual([
+    `@Honey [Fix login](${resource.uri}) @Honey `,
+    [first.pubkey, second.pubkey],
+  ]);
+});
+
+describe("project resource picker", () => {
+  const empty: readonly never[] = [];
+  const repository = {
+    type: "repo",
+    owner: resourceOwner,
+    dtag: "game",
+    address: `30617:${resourceOwner}:game`,
+    name: "Game repo",
+    description: "",
+    event: {} as never,
+  } satisfies Entity;
+  const project = {
+    ...repository,
+    type: "project",
+    dtag: "proj",
+    address: `30621:${resourceOwner}:proj`,
+    name: "Proj",
+  } satisfies Entity;
+  const item = {
+    id: resourceRoute.id,
+    kind: 1621,
+    pubkey: resourceOwner,
+    created_at: 5,
+    content: "Fix login",
+    tags: [
+      ["a", repository.address],
+      ["subject", "Fix login"],
+    ],
+  };
+  const row = /^Fix login, Issue in Game repo$/;
+  function picker(
+    home: () => Promise<unknown> = () =>
+      Promise.resolve({ status: "home", project }),
+  ) {
+    const h = mount({ extensions: undefined });
+    let release: (() => void) | undefined;
+    let fail: (() => void) | undefined;
+    const validations: AbortSignal[] = [];
+    const load = vi.fn(
+      (route: { type: string; tab?: string }, signal: AbortSignal) => {
+        if (route.type === "project")
+          return Promise.resolve({
+            items: route.tab === "prs" ? [] : [item],
+            repositories: [repository],
+            truncated: route.tab === "prs",
+          });
+        validations.push(signal);
+        return new Promise((resolve, reject) => {
+          release = () => resolve({});
+          fail = () => reject(new Error("offline"));
+        });
+      },
+    );
+    const homes = vi.fn(home);
+    Object.assign(h.session as object, { projects: { home: homes, load } });
+    const tools: readonly Contribution<ComposerTool>[] = [
+      {
+        id: "resources",
+        key: "projects/resources",
+        pluginId: "projects",
+        revision: "1",
+        title: "Issues and pull requests",
+        component: ResourcePicker,
+      },
+    ];
+    h.retarget({
+      extensions: {
+        tools: { snapshot: () => tools, subscribe: () => () => {} },
+        inline: { snapshot: () => empty, subscribe: () => () => {} },
+        completions: { snapshot: () => empty, subscribe: () => () => {} },
+      },
+    });
+    return {
+      h,
+      homes,
+      validations,
+      release: async () => {
+        await act(async () => {
+          release?.();
+        });
+      },
+      fail: async () => {
+        await act(async () => {
+          fail?.();
+        });
+      },
+      async open() {
+        const trigger = await screen.findByRole("button", {
+          name: "Add issue or pull request",
+        });
+        await waitFor(() => expect(trigger).not.toBeDisabled());
+        await h.user.click(trigger);
+        return trigger;
+      },
+    };
+  }
+
+  it("validates the chosen row, inserts it, closes and leaves focus in the draft", async () => {
+    const p = picker();
+    await p.open();
+    expect(
+      await screen.findByText(/Some issues or pull requests may be missing/),
+    ).toBeVisible();
+    const choice = await screen.findByRole("button", { name: row });
+    expect(choice).toHaveTextContent("Issue · Game repo");
+    // Keyboard: ArrowDown moves from search to the row; Enter in search chooses it.
+    await p.h.user.keyboard("{ArrowDown}");
+    expect(choice).toHaveFocus();
+    await p.h.user.click(screen.getByRole("searchbox"));
+    await p.h.user.keyboard("{Enter}");
+    expect(p.validations).toHaveLength(1);
+    expect(choice).toHaveTextContent("Checking…");
+    await p.release();
+    expect(screen.queryByRole("button", { name: row })).toBeNull();
+    expect(p.h.input()).toHaveTextContent("Resource: Fix login");
+    expect(p.h.input()).toHaveFocus();
+    p.h.submit();
+    expect(p.h.messages.send.mock.calls[0]?.[1]).toBe(
+      `[Fix login](${resource.uri}) `,
+    );
+  });
+
+  it("keeps focus in the popover while a clicked row is checked", async () => {
+    const p = picker();
+    await p.open();
+    await p.h.user.click(await screen.findByRole("button", { name: row }));
+    expect(screen.getByRole("button", { name: row })).toBeDisabled();
+    expect(screen.getByRole("searchbox")).toHaveFocus();
+    expect(screen.getByText("Checking the chosen item…")).toHaveAttribute(
+      "role",
+      "status",
+    );
+    await p.fail();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Could not check this item",
+    );
+    expect(screen.getByRole("searchbox")).toHaveFocus();
+    expect(screen.queryByText("Checking the chosen item…")).toBeNull();
+  });
+
+  it("keeps a rejected insertion in the popover with the host reason", async () => {
+    const p = picker();
+    p.h.fill("`ab`");
+    p.h.input().setSelectionRange(2, 2);
+    await p.open();
+    await p.h.user.click(await screen.findByRole("button", { name: row }));
+    await p.release();
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "Links can't be added inside code or other Markdown here",
+    );
+    expect(screen.getByRole("button", { name: row })).toBeVisible();
+    expect(p.h.input()).toHaveValue("`ab`");
+  });
+
+  it("drops a pending choice when the composer is disabled and re-enabled", async () => {
+    const p = picker();
+    await p.open();
+    await p.h.user.click(await screen.findByRole("button", { name: row }));
+    p.h.retarget({ disabled: true });
+    p.h.retarget({ disabled: false });
+    expect(p.validations[0]?.aborted).toBe(true);
+    expect(screen.queryByRole("button", { name: row })).toBeNull();
+    await p.release();
+    expect(p.h.input()).toHaveValue("");
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("drops a pending choice on send instead of landing it in the next draft", async () => {
+    const p = picker();
+    p.h.fill("first message");
+    await p.open();
+    await p.h.user.click(await screen.findByRole("button", { name: row }));
+    await p.h.user.click(screen.getByRole("button", { name: /^Send/ }));
+    expect(p.h.messages.send.mock.calls[0]?.[1]).toBe("first message");
+    expect(p.validations[0]?.aborted).toBe(true);
+    await p.release();
+    expect(p.h.input()).toHaveValue("");
+    expect(screen.queryByRole("button", { name: row })).toBeNull();
+  });
+
+  it("hides only for no project, and explains ambiguity or failure with a retry", async () => {
+    const none = picker(() => Promise.resolve({ status: "none" }));
+    await waitFor(() => expect(none.homes).toHaveBeenCalled());
+    await act(async () => {});
+    expect(
+      screen.queryByRole("button", { name: "Add issue or pull request" }),
+    ).toBeNull();
+    cleanup();
+    let resolveHome: ((value: unknown) => void) | undefined;
+    const ambiguous = picker(() =>
+      resolveHome
+        ? new Promise((resolve) => {
+            resolveHome = resolve;
+          })
+        : Promise.resolve({ status: "ambiguous" }),
+    );
+    await ambiguous.open();
+    expect(
+      await screen.findByText(/belongs to more than one project/),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: row })).toBeNull();
+    // Ambiguity is recoverable: once the conflict is resolved, retry rereads.
+    resolveHome = () => {};
+    await ambiguous.h.user.click(
+      screen.getByRole("button", { name: "Retry project" }),
+    );
+    expect(await screen.findByText("Loading project…")).toBeInTheDocument();
+    await act(async () => {
+      resolveHome?.({ status: "home", project });
+    });
+    expect(await screen.findByRole("button", { name: row })).toBeVisible();
+    expect(screen.queryByText(/belongs to more than one project/)).toBeNull();
+    cleanup();
+    const failed = picker(() => Promise.reject(new Error("offline")));
+    await failed.open();
+    const retry = await screen.findByRole("button", { name: "Retry project" });
+    const reads = failed.homes.mock.calls.length;
+    await failed.h.user.click(retry);
+    await waitFor(() =>
+      expect(failed.homes.mock.calls.length).toBeGreaterThan(reads),
+    );
+  });
 });

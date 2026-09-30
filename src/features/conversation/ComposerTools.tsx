@@ -64,7 +64,10 @@ function OwnedTool({
   });
   const [commands, setCommands] =
     useState<
-      Pick<ComposerToolProps, "insertText" | "insertMention" | "focus">
+      Pick<
+        ComposerToolProps,
+        "insertText" | "insertMention" | "insertResource" | "focus"
+      >
     >();
   useLayoutEffect(() => {
     let live = true;
@@ -75,6 +78,10 @@ function OwnedTool({
         active() ? current.current.insertText(text) : false,
       insertMention: (recipient) =>
         active() ? current.current.insertMention(recipient) : false,
+      insertResource: (resource) =>
+        active()
+          ? current.current.insertResource(resource)
+          : "The message can't be edited right now",
       focus: () => {
         if (active()) current.current.focus();
       },

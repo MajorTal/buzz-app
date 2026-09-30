@@ -1,6 +1,11 @@
-import { expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { finalizeEvent, getPublicKey } from "nostr-tools";
-import { entityFromEvent, projectDestinations } from "./destinations";
+import {
+  authoritativeProjects,
+  entityFromEvent,
+  projectDestinations,
+} from "./destinations";
+import type { EventData } from "../relay/events";
 import { matchesEvent } from "../relay/projection";
 import type { ReadFilter, RelayEvent } from "../relay/events";
 import type { EntityRoute } from "./routes";
@@ -428,4 +433,177 @@ it("does not interpret project content as description metadata", () => {
   expect(
     entityFromEvent(event(30621, [["d", "project"]], "ignored"))?.description,
   ).toBe("");
+});
+
+describe("authoritative project home (parity with ACP prompt_project.rs)", () => {
+  const CHANNEL = "11111111-1111-4111-8111-111111111111";
+  const other = "22222222-2222-4222-8222-222222222222";
+  const a = "a".repeat(64),
+    b = "b".repeat(64),
+    c = "c".repeat(64);
+  let id = 0;
+  const plain = (
+    pubkey: string,
+    kind: number,
+    tags: string[][],
+  ): EventData => ({
+    id: (++id).toString(16).padStart(64, "0"),
+    pubkey,
+    kind,
+    created_at: 1,
+    content: "",
+    tags,
+  });
+  const proj = (owner: string, slug: string, repo: string) =>
+    plain(owner, 30621, [
+      ["d", slug],
+      ["name", slug],
+      ["buzz-channel", CHANNEL],
+      ["a", repo],
+    ]);
+  const repoAt = (
+    owner: string,
+    d: string,
+    channel: string,
+    extra: string[][] = [],
+  ) => plain(owner, 30617, [["d", d], ["buzz-channel", channel], ...extra]);
+  const coord = `30617:${a}:game`;
+  const pick = (projects: EventData[], repos: EventData[]) =>
+    authoritativeProjects(projects, repos, CHANNEL).map((e) => e.pubkey);
+
+  it("requires_repo_owned_channel_binding", () => {
+    expect(
+      pick([proj(a, "game", coord)], [repoAt(a, "game", CHANNEL)]),
+    ).toEqual([a]);
+    expect(pick([proj(a, "game", coord)], [])).toEqual([]);
+  });
+  it("hostile_project_cannot_claim_foreign_repo", () => {
+    expect(
+      pick([proj(b, "spoof", coord)], [repoAt(a, "game", CHANNEL)]),
+    ).toEqual([]);
+  });
+  it("repo_maintainer_can_authorize_project", () => {
+    expect(
+      pick(
+        [proj(b, "suite", coord)],
+        [repoAt(a, "game", CHANNEL, [["maintainers", c, b]])],
+      ),
+    ).toEqual([b]);
+  });
+  it("ambiguous_authoritative_projects_fail_closed", () => {
+    expect(
+      pick(
+        [proj(a, "one", coord), proj(a, "two", coord)],
+        [repoAt(a, "game", CHANNEL)],
+      ),
+    ).toHaveLength(2);
+  });
+  it("first_repo_channel_binding_is_authoritative", () => {
+    const announcement = repoAt(a, "game", other, [["buzz-channel", CHANNEL]]);
+    expect(pick([proj(a, "game", coord)], [announcement])).toEqual([]);
+  });
+  it("ignores unlisted projects and repositories", () => {
+    const unlisted = ["buzz-visibility", "unlisted"];
+    expect(
+      pick(
+        [plain(a, 30621, [...proj(a, "game", coord).tags, unlisted])],
+        [repoAt(a, "game", CHANNEL)],
+      ),
+    ).toEqual([]);
+    expect(
+      pick([proj(a, "game", coord)], [repoAt(a, "game", CHANNEL, [unlisted])]),
+    ).toEqual([]);
+  });
+
+  const channelRepo = event(30617, [
+    ["d", "repo"],
+    ["buzz-channel", CHANNEL],
+  ]);
+  const home = (slug: string, created_at = 1) =>
+    event(
+      30621,
+      [
+        ["d", slug],
+        ["name", slug],
+        ["buzz-channel", CHANNEL],
+        ["a", address],
+      ],
+      "",
+      created_at,
+    );
+  const signal = () => new AbortController().signal;
+
+  it("reads by #buzz-channel and resolves one surviving home", async () => {
+    const { read, destinations } = fixture([
+      channelRepo,
+      home("one"),
+      repo,
+      project,
+    ]);
+    await expect(destinations.home(CHANNEL, signal())).resolves.toMatchObject({
+      status: "home",
+      project: { dtag: "one", owner },
+    });
+    expect(read.mock.calls[0]?.[0]).toEqual([
+      { kinds: [30621], "#buzz-channel": [CHANNEL], limit: 100 },
+      { kinds: [30617], "#buzz-channel": [CHANNEL], limit: 100 },
+    ]);
+    await expect(destinations.home(other, signal())).resolves.toEqual({
+      status: "none",
+    });
+  });
+  it("fails closed on ambiguity, excludes owner deletions, and treats a capped read as unavailable", async () => {
+    const one = home("one"),
+      two = home("two");
+    await expect(
+      fixture([channelRepo, one, two]).destinations.home(CHANNEL, signal()),
+    ).resolves.toEqual({ status: "ambiguous" });
+    const deletion = event(5, [["a", `30621:${owner}:two`]], "", 2);
+    await expect(
+      fixture([channelRepo, one, two, deletion]).destinations.home(
+        CHANNEL,
+        signal(),
+      ),
+    ).resolves.toMatchObject({ status: "home", project: { dtag: "one" } });
+    const many = Array.from({ length: 100 }, (_, index) => home(`p${index}`));
+    await expect(
+      fixture([channelRepo, ...many]).destinations.home(CHANNEL, signal()),
+    ).rejects.toMatchObject({ reason: "unavailable" });
+  });
+  it("marks a capped issue list as truncated", async () => {
+    const issues = Array.from({ length: 100 }, (_, index) =>
+      event(
+        1621,
+        [
+          ["a", address],
+          ["subject", `Issue ${index}`],
+        ],
+        "",
+        index + 1,
+      ),
+    );
+    const route = {
+      type: "project",
+      owner,
+      dtag: "project",
+      tab: "issues",
+    } as const;
+    expect(
+      (
+        await fixture([
+          repo,
+          project,
+          ...issues.slice(0, 99),
+        ]).destinations.load(route, signal())
+      ).truncated,
+    ).toBe(false);
+    expect(
+      (
+        await fixture([repo, project, ...issues]).destinations.load(
+          route,
+          signal(),
+        )
+      ).truncated,
+    ).toBe(true);
+  });
 });

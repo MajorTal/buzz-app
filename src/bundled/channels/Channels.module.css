@@ -267,6 +267,34 @@
 .channelSection + .channelSection {
   margin-top: var(--space-4);
 }
+.channelSection[data-drop-target] {
+  border-radius: var(--radius-row);
+  background: var(--affordance-panel-hover);
+}
+[data-channel-dragging] {
+  opacity: 0.3;
+}
+.channelDragOverlay {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: max-content;
+  max-width: 100%;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--border-standard);
+  border-radius: var(--radius-control);
+  background: var(--surface-popover);
+  box-shadow: var(--shadow-sm);
+  color: var(--text-standard);
+  font-size: var(--text-body-sm);
+  line-height: var(--text-body-sm--line-height);
+  cursor: grabbing;
+}
+.channelDragOverlay > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .sectionHeader {
   position: relative;
 }

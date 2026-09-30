@@ -408,6 +408,28 @@ async fn verify_owned_event(host: &IdentityHost, event: &serde_json::Value) -> R
     verify_signature(event)
 }
 
+async fn admit_app_data(
+    host: &IdentityHost,
+    event: &serde_json::Value,
+    community: &str,
+) -> Result<()> {
+    verify_owned_event(host, event).await?;
+    // Sidebar preferences and channel recipes share kind 30078; the `d` coordinate selects the contract.
+    let sidebar = event["tags"].as_array().is_some_and(|tags| {
+        tags.iter().any(|tag| {
+            tag[0] == "d"
+                && tag[1]
+                    .as_str()
+                    .is_some_and(crate::identity::sidebar_coordinate)
+        })
+    });
+    if sidebar {
+        return host.admit_sidebar(event.clone()).await;
+    }
+    kit::validate_ciphertext(host, event, community).await?;
+    Ok(())
+}
+
 fn verify_signature(event: &serde_json::Value) -> Result<()> {
     let parsed: nostr::event::Event =
         serde_json::from_value(event.clone()).map_err(|_| "Invalid outgoing signature")?;
@@ -484,8 +506,7 @@ pub(crate) async fn relay_http(
             return Err("Choose between one and eight other people.".into());
         }
         if kind == Some(30078) {
-            verify_owned_event(host.inner(), &event).await?;
-            kit::validate_ciphertext(host.inner(), &event, &community).await?;
+            admit_app_data(host.inner(), &event, &community).await?;
         }
         if kind == Some(9007) {
             verify_owned_event(host.inner(), &event).await?;

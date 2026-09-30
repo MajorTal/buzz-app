@@ -380,7 +380,7 @@ fn validate_sidebar_payload(coordinate: &str, value: &serde_json::Value) -> Resu
     Ok(())
 }
 
-fn sidebar_coordinate(value: &str) -> bool {
+pub(crate) fn sidebar_coordinate(value: &str) -> bool {
     matches!(
         value,
         "channel-sections" | "channel-stars" | "channel-mutes" | "channel-sort"
@@ -494,6 +494,20 @@ impl IdentityHost {
             Ok(serde_json::Value::Object(decoded))
         })
         .await
+    }
+
+    /// Admit for publication only a record shaped exactly like `sign_sidebar` output.
+    pub(crate) async fn admit_sidebar(&self, event: serde_json::Value) -> Result<()> {
+        let tags = event["tags"].clone();
+        let decoded = self.decode_sidebar(vec![event]).await?;
+        let (coordinate, payload) = decoded
+            .as_object()
+            .and_then(|records| records.iter().next())
+            .ok_or("Invalid sidebar record")?;
+        if tags != serde_json::json!([["d", coordinate], ["t", coordinate]]) {
+            return Err("Invalid sidebar record".into());
+        }
+        validate_sidebar_payload(coordinate, payload)
     }
 
     /// Sign only self-encrypted kind-30078 sidebar data; never expose a general NIP-44 primitive.

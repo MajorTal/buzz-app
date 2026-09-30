@@ -1,5 +1,5 @@
 import { FadingLabel } from "./FadingLabel";
-import { useId, useState, type ReactNode } from "react";
+import { useId, useState, type ReactNode, type Ref } from "react";
 import {
   MenuIcon,
   MenuItem,
@@ -34,6 +34,8 @@ export function SidebarSection({
   createChannel,
   newMessage,
   sort,
+  dropRef,
+  dropTarget = false,
   children,
 }: {
   sectionKey: string;
@@ -53,6 +55,8 @@ export function SidebarSection({
         change: (mode: "alpha" | "recent") => void;
       }
     | undefined;
+  dropRef?: Ref<HTMLDivElement> | undefined;
+  dropTarget?: boolean;
   children: ReactNode;
 }) {
   const id = useId();
@@ -80,7 +84,12 @@ export function SidebarSection({
       </div>
     );
   return (
-    <div className={styles.channelSection} data-sidebar-section={sectionKey}>
+    <div
+      ref={dropRef}
+      className={styles.channelSection}
+      data-sidebar-section={sectionKey}
+      data-drop-target={dropTarget || undefined}
+    >
       <div className={styles.sectionHeader}>
         <details open={open}>
           {/* biome-ignore lint/a11y/noStaticElementInteractions: summary has native keyboard activation. */}

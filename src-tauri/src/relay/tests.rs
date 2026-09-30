@@ -854,6 +854,83 @@ async fn sidebar_ipc_only_decodes_verified_self_coordinates_and_signs_valid_payl
 }
 
 #[tokio::test]
+async fn event_writer_admits_sidebar_records_and_recipes_by_their_own_coordinate() {
+    let host = IdentityHost::fixture();
+    let community = "https://relay.test";
+    for (coordinate, payload) in [
+        (
+            "channel-sections",
+            serde_json::json!({"version":1,"sections":[{"id":"group","name":"Group","order":0}],"assignments":{"channel":"group"}}),
+        ),
+        (
+            "channel-stars",
+            serde_json::json!({"version":1,"channels":{"channel":{"starred":true,"updatedAt":1}}}),
+        ),
+        (
+            "channel-mutes",
+            serde_json::json!({"version":1,"channels":{"channel":{"muted":true,"updatedAt":1}}}),
+        ),
+        (
+            "channel-sort",
+            serde_json::json!({"version":1,"groups":{"channels":"recent"}}),
+        ),
+    ] {
+        let event = host
+            .sign_sidebar(coordinate.into(), payload, 1)
+            .await
+            .unwrap();
+        admit_app_data(&host, &event, community).await.unwrap();
+    }
+    let sidebar = host
+        .sign_sidebar(
+            "channel-sort".into(),
+            serde_json::json!({"version":1,"groups":{}}),
+            1,
+        )
+        .await
+        .unwrap();
+    let mut tampered = sidebar.clone();
+    tampered["content"] = serde_json::json!("changed");
+    assert!(admit_app_data(&host, &tampered, community).await.is_err());
+    let mut foreign = sidebar.clone();
+    foreign["pubkey"] = serde_json::json!("02".repeat(32));
+    assert!(admit_app_data(&host, &foreign, community).await.is_err());
+
+    // Anything outside the four sidebar coordinates is still held to the recipe contract.
+    let sign = |tags: Vec<Vec<String>>, content: String| {
+        host.sign(crate::identity::EventTemplate {
+            kind: 30078,
+            created_at: 1,
+            content,
+            tags,
+        })
+    };
+    let recipe = serde_json::json!({"version":1,"community":community,"deleted":false,
+        "value":{"type":"team","id":"team-one","name":"Team","agents":[]}});
+    let ciphertext = host.kit_cipher(recipe.to_string(), true).await.unwrap();
+    let coordinate = "buzz-channel-kit-v1:https%3A%2F%2Frelay.test:team:team-one";
+    let kit_tags = |d: &str| {
+        vec![
+            vec!["d".to_owned(), d.to_owned()],
+            vec!["t".to_owned(), "buzz-channel-kit-v1".to_owned()],
+        ]
+    };
+    let valid = sign(kit_tags(coordinate), ciphertext.clone())
+        .await
+        .unwrap();
+    admit_app_data(&host, &valid, community).await.unwrap();
+    // A recipe cannot borrow a sidebar coordinate, and a sidebar record cannot borrow another.
+    for d in ["channel-sections", "read-state:other", "unknown"] {
+        let event = sign(kit_tags(d), ciphertext.clone()).await.unwrap();
+        assert!(admit_app_data(&host, &event, community).await.is_err());
+    }
+    let mut duplicate = kit_tags(coordinate);
+    duplicate.push(vec!["d".to_owned(), "channel-stars".to_owned()]);
+    let event = sign(duplicate, ciphertext).await.unwrap();
+    assert!(admit_app_data(&host, &event, community).await.is_err());
+}
+
+#[tokio::test]
 async fn sidebar_decoder_interoperates_with_nostr_tools_nip44_v2() {
     // Produced with nostr-tools 2.25.2, private key [1; 32].
     let event: serde_json::Value = serde_json::from_str(r#"{"kind":30078,"created_at":1700000000,"tags":[["d","channel-mutes"],["t","channel-mutes"]],"content":"Ajhdtq+PsGhpLGhyo0hAN55quGVmOE8/p0id4UVmJPz/Aki5aZUHWBymErqORblF9uPjX6XD5DjFJDR18qIHIIullzAvPKE5z336CV5caxsevvNkXoeRk7U0xVpk+piVfM9z2+cgyuJoG3cGMzFp78/53XHDvsEUgtE9Wv8kgvj5vQc=","pubkey":"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f","id":"e4471969b8f1b27fad968343db8deb4346c3e530c69b548f68a6adb31f99628c","sig":"14064569d6085363f32865b2204037c4a5769a09f116209fda3790feef12e6672d1806c7626c6857d0696cfe43f39ed4a8dc13d965989300ec757fb3a2fd44cd"}"#).unwrap();

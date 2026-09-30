@@ -125,10 +125,19 @@ preferences relocated it during the transaction. Read actions require
 `frontier-sync`; hosts lacking mute writes keep read-only preference projection.
 The packaged host decodes verified self-encrypted sidebar records and signs
 only validated sidebar coordinates; it uses its signed HTTP writer and confirms
-via readback.
+via readback. Sidebar records and channel recipes share kind 30078, so that
+writer selects the admission contract by the event's `d` coordinate: the four
+sidebar coordinates must match what the sidebar signer produces, and every
+other coordinate must satisfy the recipe contract.
 
 Move channel, Create new, exclusive Starred placement and startup presentation also
-belong to this persistent sidebar. The session serializes placement, sort and mute
+belong to this persistent sidebar. Rows in saved groups and **Channels** can also be
+dragged with a pointer onto another saved group or **Channels**; the drop is the same
+Move intent, with the same gate, optimistic placement, rollback notice and Retry.
+Only a channel's select surface starts a drag, the surface its row menu wraps; its
+sessions and session draft do not.
+Starred, Forums and Direct messages take no part in dragging, and the row menu
+remains the keyboard path. The session serializes placement, sort and mute
 writes through one queue, retaining one confirmed preferences snapshot beneath
 pending Move and Sort projections. Each confirmation updates only its owned fields
 before reapplying pending intent; failure cannot roll back unrelated confirmed

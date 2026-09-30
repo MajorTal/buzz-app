@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useSyncExternalStore,
+  type ComponentType,
   type ReactNode,
 } from "react";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
@@ -53,6 +54,14 @@ type ItemProps = {
   onHideDm?: (id: string) => void;
   menuEnabled?: boolean;
   sectionKey?: string | undefined;
+  /** Frames the select surface alone, like the context menu; never the child sessions. */
+  selectFrame?:
+    | ComponentType<{
+        channelId: string;
+        sectionKey: string;
+        children: ReactNode;
+      }>
+    | undefined;
   onOpenMenu?: (
     channel: ChannelSummary,
     sectionKey: string,
@@ -111,6 +120,7 @@ function ChannelSidebarItemCore({
   onHideDm,
   menuEnabled,
   sectionKey,
+  selectFrame: SelectFrame,
   onOpenMenu,
   menuOpen = false,
   menuAnchor,
@@ -230,7 +240,7 @@ function ChannelSidebarItemCore({
         );
         // Keep popup semantics on separate DOM nodes: activity owns the button,
         // the context menu wraps only its select surface, not the child sessions.
-        return menuEnabled ? (
+        const select = menuEnabled ? (
           <ContextMenuTrigger
             render={<div />}
             onKeyDown={(event) => {
@@ -248,6 +258,13 @@ function ChannelSidebarItemCore({
           </ContextMenuTrigger>
         ) : (
           activity
+        );
+        return SelectFrame && sectionKey ? (
+          <SelectFrame channelId={channel.id} sectionKey={sectionKey}>
+            {select}
+          </SelectFrame>
+        ) : (
+          select
         );
       }}
       selected={selected}

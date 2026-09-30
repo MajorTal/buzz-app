@@ -120,8 +120,13 @@ an existing supported credential, live development is unavailable; shell and
 fixture tests still work.
 
 Media attachments in live development need `ffmpeg` on the server’s PATH for
-video, HEIC/HEIF, and the existing `voice-note-*.wav` exception (macOS:
-`brew install ffmpeg`; Linux: your distribution’s ffmpeg package). The broker
+video, HEIC/HEIF, and the existing `voice-note-*.wav` exception. Install ffmpeg on the host (macOS: `brew install ffmpeg`; Linux: your
+distribution’s ffmpeg package); HEIC tile grids require ffmpeg 8 or newer.
+Like `block/buzz`, real conversion tests return early when optional host tools
+are missing; tiled-HEIC tests also require ffmpeg 8+ and ffprobe. These tools are
+not pinned through Hermit or provisioned by CI. Packaged apps use the host's
+installed ffmpeg and reject HEIC preparation if its version is older than 8 or
+cannot be determined. The broker
 prepares canonical H.264/AAC MP4 or single-frame JPEG before upload hashes/signs
 those exact bytes. Missing tools and unsupported codecs fail visibly. No generic
 audio conversion or recording UI is added.
@@ -146,8 +151,9 @@ Picker/paste/drop share the same tab-local draft. Files must finish uploading
 before Send; navigation pauses unfinished uploads for explicit Retry. Reload loses
 unsent files. Background Send, attachment-first new sessions and UX polish are
 separate work. Live uploads use the development broker in dev runs and the
-native `relay_upload` path in packaged desktop builds. Packaged HEIC and non-MP4
-video files are not converted by the broker and may be rejected by the relay.
+native `relay_upload` path in packaged desktop builds. The native host prepares
+HEIC and supported video/voice-note inputs with fixed demuxers and bounded child
+processes before upload; it requires ffmpeg installed on the host.
 
 The broker supports reads, live traffic and basic message sending **as your real
 account**. Profile changes and invite admission can also write to real communities.

@@ -76,11 +76,10 @@ read, and only while its read state syncs; Invite shows only where the viewer
 owns or administers the selected community and this build can mint invites,
 with the role read from the relay-signed roster through the selected
 community's existing session rather than a further session request. The
-Membership settings card applies the same gate: it stays registered in native
-builds so owners and admins can still read the relay-signed member list, but
-its Invite members button and per-member actions are absent there, with a
-note that this build can't create invites or change members, since `invite` and
-`member` are broker routes the packaged adapter does not carry. Copy,
+Membership settings card applies the same role gate in both development and
+native builds. Native owners and admins can read the relay-signed member list
+and mint invite links, but direct additions and per-member actions remain absent:
+the packaged adapter does not carry the broker's `member` route. Copy,
 Community settings and Leave work on inactive communities without opening their
 sessions. Leave asks for confirmation, then sends a signed NIP-43 leave request
 (kind 28936) to that community's relay before the device forgets it. Three
@@ -133,10 +132,12 @@ not a plugin key service.
 Packaged builds do not include the broker. Native macOS, Windows and Linux
 [identity import/create](identity.md) and the shared native relay adapter provide
 discovery, admission, leave requests, profile publication, authenticated reads and
-supported event writes. Windows/Linux installed-app acceptance remains unverified.
-Community creation and background connection eviction are not implemented. Native
-agent enrollment has its own [local control contract](agent-control.md). Avatar
-uploads still require the development media host. Agents have local
+supported event writes. Native invite minting and relay-advertised KLIPY GIF search
+use the same captured HTTPS community; neither requires the development broker.
+Windows/Linux installed-app acceptance remains unverified. Community creation and
+background connection eviction are not implemented. Native agent enrollment has
+its own [local control contract](agent-control.md). Avatar uploads still require
+the development media host. Agents have local
 configuration plus separately scoped participation; selecting a community must
 not become a deployment or enrollment command.
 

@@ -1,10 +1,11 @@
-export type RelayGifSearchInfo = {
-  gif?: {
-    provider?: string;
-    search?: string;
-  };
-  supported_extensions?: string[];
-};
+import { nativeIdentityEnabled } from "../identity/service";
+import {
+  relayKlipySearchPath,
+  type RelayGifSearchInfo,
+} from "./gif-capability";
+import { nativeRelayInfo, nativeRelayRequest } from "./native";
+
+export { relayKlipySearchPath } from "./gif-capability";
 
 type KlipyAsset = {
   height?: number;
@@ -45,21 +46,6 @@ export type KlipyGif = {
 };
 
 const CUSTOMER_ID_KEY = "buzz:klipy-customer-id:v1";
-
-/** Accept only the relay-owned KLIPY route advertised through NIP-11. */
-export function relayKlipySearchPath(info: RelayGifSearchInfo): string | null {
-  const path = info.gif?.search;
-  if (
-    info.supported_extensions?.includes("buzz-gif") !== true ||
-    info.gif?.provider !== "klipy" ||
-    typeof path !== "string" ||
-    !/^\/[a-zA-Z0-9/_-]+$/.test(path) ||
-    path.includes("//") ||
-    path.split("/").some((part) => part === "." || part === "..")
-  )
-    return null;
-  return path;
-}
 
 /** Composer scopes end in the viewer key; the prefix is the registered community. */
 export function communityFromScope(scope: string): string | null {
@@ -149,19 +135,18 @@ async function brokerRequest<T>(
   body: unknown | undefined,
   signal?: AbortSignal,
 ): Promise<T> {
-  const response = await fetch(
-    `/api/relay/${encodeURIComponent(community)}/${route}`,
-    {
-      ...(body === undefined
-        ? {}
-        : {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          }),
-      ...(signal ? { signal } : {}),
-    },
-  );
+  const response = nativeIdentityEnabled()
+    ? await nativeRelayRequest(community, route, body, signal)
+    : await fetch(`/api/relay/${encodeURIComponent(community)}/${route}`, {
+        ...(body === undefined
+          ? {}
+          : {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            }),
+        ...(signal ? { signal } : {}),
+      });
   const result = (await response.json()) as T & { error?: string };
   if (!response.ok)
     throw new Error(result.error ?? `GIF request failed (${response.status})`);
@@ -172,6 +157,10 @@ export async function relaySupportsKlipy(
   community: string,
   signal?: AbortSignal,
 ) {
+  if (nativeIdentityEnabled()) {
+    const info = await nativeRelayInfo(community, signal);
+    return relayKlipySearchPath(info) === "/gifs/search";
+  }
   const info = await brokerRequest<RelayGifSearchInfo>(
     community,
     "gif-info",
@@ -187,9 +176,15 @@ export async function fetchKlipyGifs(
   query: string,
   signal?: AbortSignal,
 ): Promise<KlipyGif[]> {
+  const route = nativeIdentityEnabled()
+    ? relayKlipySearchPath(await nativeRelayInfo(community, signal))
+    : "gifs";
+  if (!route) throw new Error("GIF search is unavailable");
+  if (nativeIdentityEnabled() && route !== "/gifs/search")
+    throw new Error("GIF search is unavailable");
   const response = await brokerRequest<KlipyResponse>(
     community,
-    "gifs",
+    route,
     {
       customer_id: customerId(),
       locale: navigator.language || "en-US",

@@ -7,10 +7,9 @@ export const apply: PluginModule["apply"] = (ctx) => {
   const relay = ctx.relay;
   const membership = createCommunityMembership(relay);
   ctx.effect(() => () => membership.dispose());
-  // Registered in every build. Native builds cannot mint invites or change
-  // members, but the card still shows owners and admins the relay-signed
-  // member list and hides those controls itself, so a Settings section,
-  // history entry or in-app locator naming it opens instead of failing.
+  // Registered in every build. The card hides unsupported member changes
+  // itself, so a Settings section, history entry or in-app locator naming it
+  // still opens the roster and invite controls in native builds.
   ctx.settingsCards.register({
     id: "membership",
     title: "Membership",

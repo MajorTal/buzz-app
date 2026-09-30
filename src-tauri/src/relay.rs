@@ -23,7 +23,7 @@ pub(crate) use channel_writes::{
     relay_kit_prepare,
 };
 pub(crate) use kit::relay_kit_sign;
-
+mod media_preparation;
 type Result<T> = std::result::Result<T, String>;
 const MAX_BODY: usize = 1024 * 1024;
 const MAX_RESPONSE: usize = 16 * 1024 * 1024;
@@ -64,7 +64,12 @@ fn request_url(community: &str, path: &str, method: &str) -> Result<Url> {
         "GET" => matches!(path, "/" | "/api/join-policy"),
         "POST" => matches!(
             path,
-            "/query" | "/events" | "/api/invites/claim" | "/api/invites/accept-policy"
+            "/query"
+                | "/events"
+                | "/api/invites"
+                | "/api/invites/claim"
+                | "/api/invites/accept-policy"
+                | "/gifs/search"
         ),
         _ => false,
     };
@@ -730,8 +735,8 @@ fn upload_id(value: Option<&str>) -> Result<&str> {
         .ok_or_else(|| "Invalid upload ID".into())
 }
 
-/// Hashes, signs (`t=upload` + `x`) and sends `PUT /upload` for the exact raw
-/// IPC bytes. Shared TypeScript (`hostUpload`) owns limits, error mapping and
+/// Prepares media when requested, then hashes, signs (`t=upload` + `x`) and
+/// sends `PUT /upload` for the resulting bytes. Shared TypeScript (`hostUpload`) owns limits, error mapping and
 /// descriptor validation, as it does for the dev broker.
 #[tauri::command]
 pub(crate) async fn relay_upload(
@@ -749,14 +754,19 @@ pub(crate) async fn relay_upload(
     };
     // Tauri sets raw IPC `Content-Type` itself, so the file type travels separately.
     let kind = header("x-buzz-content-type");
-    let Some(cancelled) = uploads.start(id)? else {
+    let preparation = header("x-buzz-preparation").map(str::to_owned);
+    let Some(mut cancelled) = uploads.start(id)? else {
         return Err("Upload cancelled".into());
     };
     // Dropping the request future closes the connection, so a cancelled upload
     // stops sending and releases its buffer.
-    let result = tokio::select! {
-        result = upload(host.inner(), url, kind, body.clone()) => result,
-        _ = cancelled => Err("Upload cancelled".into()),
+    let result = if let Some(mode) = preparation.as_deref() {
+        upload_prepared(host.inner(), url, body.clone(), mode, &mut cancelled).await
+    } else {
+        tokio::select! {
+            result = upload(host.inner(), url, kind, body.clone()) => result,
+            _ = &mut cancelled => Err("Upload cancelled".into()),
+        }
     };
     uploads.finish(id);
     result
@@ -766,6 +776,32 @@ pub(crate) async fn relay_upload(
 pub(crate) fn relay_upload_cancel(uploads: tauri::State<'_, Uploads>, id: String) -> Result<()> {
     uploads.cancel(upload_id(Some(&id))?);
     Ok(())
+}
+
+async fn upload_prepared(
+    host: &IdentityHost,
+    url: Url,
+    body: Vec<u8>,
+    mode: &str,
+    cancelled: &mut oneshot::Receiver<()>,
+) -> Result<RelayResponse> {
+    let (body, kind) = match media_preparation::prepare(body, mode, cancelled).await {
+        Ok(value) => value,
+        Err(media_preparation::PreparationError::Cancelled) => {
+            return Err("Upload cancelled".into())
+        }
+        Err(error) => {
+            return Ok(RelayResponse {
+                status: error.status(),
+                headers: BTreeMap::new(),
+                body: serde_json::json!({ "code": error.code() }).to_string(),
+            })
+        }
+    };
+    tokio::select! {
+        result = upload(host, url, Some(kind), body) => result,
+        _ = cancelled => Err("Upload cancelled".into()),
+    }
 }
 
 async fn upload(

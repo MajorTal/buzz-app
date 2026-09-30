@@ -14,12 +14,6 @@ export type CommunityInfo = {
     age_attestation_required: boolean;
   } | null;
 };
-/** Invite minting is a broker-only route; the packaged native adapter has no
- * `invite` allowlist entry (nor a `member` one for roster changes), so surfaces
- * offering invites hide those controls there. The community rail's Invite to
- * community item and the bundled moderation plugin's Membership card share this
- * one gate rather than each deciding for themselves. */
-export const inviteMintingAvailable = () => !nativeIdentityEnabled();
 export async function communityRequest<T>(
   id: string,
   route: string,

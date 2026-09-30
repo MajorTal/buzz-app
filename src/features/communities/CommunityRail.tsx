@@ -7,7 +7,7 @@ import { useToastNotification } from "../../shared/design-system/ui/Toast";
 import type { OpenTarget } from "../navigation/targets";
 import { communityFromScope } from "../relay/gifs";
 import { useRelayConnection } from "../relay/react";
-import { inviteMintingAvailable, requestLeave, type LeaveOutcome } from "./api";
+import { requestLeave, type LeaveOutcome } from "./api";
 import type { Communities, Membership } from "./service";
 import { CommunityDialog } from "./CommunityDialog";
 import { CommunityRailItem } from "./CommunityRailItem";
@@ -78,7 +78,7 @@ export function CommunityRail({
   // them, verified against the authority the selected session already holds
   // rather than a second session contract request. Skip the read where no
   // item could use it.
-  const invites = inviteMintingAvailable() && !!onOpenTarget;
+  const invites = !!onOpenTarget;
   const role = useCommunityRole(invites ? session : undefined, client.viewer);
   const [icons, setIcons] = useState<Record<string, string>>({});
   const membershipIds = client.memberships

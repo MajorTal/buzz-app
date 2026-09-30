@@ -9,7 +9,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { nativeCommunityRequest } from "../../features/communities/native-api";
+import { invoke } from "@tauri-apps/api/core";
 import { nativeIdentityEnabled } from "../../features/identity/service";
 import type { RelayData } from "../../features/relay/service";
 import { CommunityAdmin } from "./CommunityAdmin";
@@ -22,13 +22,6 @@ vi.mock("@tauri-apps/api/core", () => ({
     throw new Error("unexpected native call");
   }),
   isTauri: () => true,
-}));
-// The packaged adapter carries neither the `invite` nor the `member` route,
-// exactly as in native-api.ts.
-vi.mock("../../features/communities/native-api", () => ({
-  nativeCommunityRequest: vi.fn(async () => {
-    throw new Error("This operation is unavailable on the packaged connection");
-  }),
 }));
 
 const owner = "0".repeat(64);
@@ -96,7 +89,7 @@ afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
-  vi.mocked(nativeCommunityRequest).mockClear();
+  vi.mocked(invoke).mockClear();
 });
 
 it("keeps the Membership card registered in a native build", () => {
@@ -117,27 +110,55 @@ it("keeps the Membership card registered in a native build", () => {
   );
 });
 
-it("shows owners the member list read-only, without invite or member controls", async () => {
-  const user = userEvent.setup();
-  expect(nativeIdentityEnabled()).toBe(true);
-  const { relay: data, read } = relay(owner);
-  render(<CommunityAdmin relay={data} active={() => true} />);
-  const list = await screen.findByRole("list", { name: "Members" });
-  expect(within(list).getAllByRole("listitem")).toHaveLength(3);
-  expect(
-    screen.getByText(
-      "This build can’t create invites or change members, so the member list is read-only here.",
-    ),
-  ).toBeVisible();
-  expect(screen.queryByRole("button", { name: "Invite members" })).toBeNull();
-  expect(screen.queryAllByRole("button", { name: /^Actions for / })).toEqual(
-    [],
-  );
-  // The list stays live: Refresh re-reads the roster through the session.
-  await user.click(screen.getByRole("button", { name: "Refresh" }));
-  await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
-  // Nothing reached the packaged adapter: nothing minted, nothing changed,
-  // and nothing went looking for a broker.
-  expect(nativeCommunityRequest).not.toHaveBeenCalled();
-  expect(fetch).not.toHaveBeenCalled();
-});
+it.each([owner, admin])(
+  "lets a native manager %s mint invites without member-change controls",
+  async (viewer) => {
+    const user = userEvent.setup();
+    expect(nativeIdentityEnabled()).toBe(true);
+    const { relay: data, read } = relay(viewer);
+    const url = "https://primary.example/invite/native";
+    vi.mocked(invoke).mockImplementation(async (command, args) => {
+      expect(command).toBe("relay_http");
+      expect(args).toEqual({
+        community: "https://primary.example",
+        path: "/api/invites",
+        method: "POST",
+        body: JSON.stringify({ ttl_secs: 3 * 24 * 60 * 60, max_uses: null }),
+      });
+      return {
+        status: 200,
+        headers: {},
+        body: JSON.stringify({ code: "native", url }),
+      };
+    });
+    render(<CommunityAdmin relay={data} active={() => true} />);
+    const list = await screen.findByRole("list", { name: "Members" });
+    expect(within(list).getAllByRole("listitem")).toHaveLength(3);
+    expect(
+      screen.getByText(
+        "This build can’t change members, but you can share an invite link.",
+      ),
+    ).toBeVisible();
+    expect(
+      screen.getByRole("button", { name: "Invite members" }),
+    ).toBeVisible();
+    expect(screen.queryAllByRole("button", { name: /^Actions for / })).toEqual(
+      [],
+    );
+    // The list stays live: Refresh re-reads the roster through the session.
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
+    await waitFor(() => expect(read).toHaveBeenCalledTimes(2));
+    expect(invoke).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Invite members" }));
+    const dialog = await screen.findByRole("dialog", { name: "Invite people" });
+    expect(await within(dialog).findByDisplayValue(url)).toBeVisible();
+    expect(
+      within(dialog).queryByRole("textbox", { name: "Public identity" }),
+    ).toBeNull();
+    expect(
+      within(dialog).queryByRole("button", { name: "Add member" }),
+    ).toBeNull();
+    expect(invoke).toHaveBeenCalledOnce();
+    expect(fetch).not.toHaveBeenCalled();
+  },
+);

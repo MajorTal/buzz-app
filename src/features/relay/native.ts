@@ -1,6 +1,20 @@
 import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { EventTemplate } from "nostr-tools";
 import { communityDestination, relayOrigin } from "../communities/destination";
+import {
+  audioDemuxer,
+  isHeic,
+  isVoiceNote,
+  videoDemuxer,
+} from "./video-preparation";
+import {
+  hostUpload,
+  readUploadResponse,
+  UPLOAD_TIMEOUT_MS,
+  UploadError,
+  UPLOAD_MAX_BYTES,
+  validateUploadResult,
+} from "./attachments";
 import { eventDto, type RelayEvent } from "./events";
 import {
   coordinate,
@@ -117,7 +131,12 @@ export function nativeMediaUrl(url: string): string {
 
 /** Raw IPC bytes; native code hashes, signs and sends them to `PUT /upload`.
  * Aborting settles at once and tells native code to drop the request. */
-async function nativeUpload(origin: string, file: File, signal: AbortSignal) {
+async function nativeUpload(
+  origin: string,
+  file: File,
+  signal: AbortSignal,
+  preparation?: string,
+) {
   const bytes = await file.arrayBuffer();
   signal.throwIfAborted();
   const id = crypto.randomUUID();
@@ -141,6 +160,7 @@ async function nativeUpload(origin: string, file: File, signal: AbortSignal) {
           "x-buzz-upload-id": id,
           "x-buzz-community": origin,
           "x-buzz-content-type": file.type || "application/octet-stream",
+          ...(preparation ? { "x-buzz-preparation": preparation } : {}),
         },
       }),
       aborted,
@@ -152,6 +172,58 @@ async function nativeUpload(origin: string, file: File, signal: AbortSignal) {
   } finally {
     signal.removeEventListener("abort", abort);
   }
+}
+
+/** Preparation is performed and uploaded inside the host. Converted bytes never
+ * cross back into JS; only the validated relay descriptor does. */
+async function nativeAttachmentUpload(
+  origin: string,
+  file: File,
+  signal: AbortSignal,
+) {
+  signal.throwIfAborted();
+  if (!file.size || file.size > UPLOAD_MAX_BYTES) throw new UploadError("size");
+  const header = new Uint8Array(await file.slice(0, 4096).arrayBuffer());
+  signal.throwIfAborted();
+  const voice = isVoiceNote(file.name);
+  const heic = !voice && isHeic(header, file.name);
+  if (voice && file.size > 128 * 1024 * 1024) throw new UploadError("size");
+  const demuxer = voice
+    ? audioDemuxer(header)
+    : heic
+      ? "mov"
+      : videoDemuxer(header);
+  if (!demuxer) {
+    if (voice || file.type.startsWith("video/")) throw new UploadError("video");
+    return hostUpload(
+      (item, bounded) => nativeUpload(origin, item, bounded),
+      origin,
+    )(file, signal);
+  }
+  // Native preparation has its own 600 s deadline; leave a separate upload
+  // budget, as broker prepareMedia + hostUpload do.
+  const bounded = AbortSignal.any([
+    signal,
+    AbortSignal.timeout(600_000 + UPLOAD_TIMEOUT_MS),
+  ]);
+  const response = await nativeUpload(
+    origin,
+    file,
+    bounded,
+    `${heic ? "image" : voice ? "voice" : "video"}:${demuxer}`,
+  );
+  bounded.throwIfAborted();
+  const body = await readUploadResponse(response);
+  const type = heic ? "image/jpeg" : "video/mp4";
+  const name = `${file.name.replace(/\.[^.]+$/, "") || "Attachment"}.${heic ? "jpg" : "mp4"}`;
+  bounded.throwIfAborted();
+  const size = (body as { size?: number } | null)?.size;
+  if (
+    typeof size !== "number" ||
+    (body as { type?: string } | null)?.type !== type
+  )
+    throw new UploadError("invalid");
+  return validateUploadResult(body, origin, size, name);
 }
 
 export function nativeRelaySigner(community: string): Signer {
@@ -550,6 +622,8 @@ export async function connectNativeTransport(
         "background",
       );
     },
+    uploadAttachment: (file, signal) =>
+      nativeAttachmentUpload(origin, file, signal),
     writer: {
       ...writer,
       kinds: creation ? [...nativeWriteKinds, 9007] : nativeWriteKinds,

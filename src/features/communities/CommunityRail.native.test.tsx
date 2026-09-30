@@ -36,7 +36,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-it("hides Invite to community and disables Mark all as read in a native build", async () => {
+it("offers native owners invites while keeping unsupported read sync disabled", async () => {
   expect(nativeIdentityEnabled()).toBe(true);
   const snapshot: ClientSnapshot = {
     status: "ready",
@@ -46,7 +46,18 @@ it("hides Invite to community and disables Mark all as read in a native build", 
     selected: primary,
     memberships: [{ id: primary, name: "Primary" }],
   };
-  const read = vi.fn(async () => []);
+  const relayAuthor = "f".repeat(64);
+  const read = vi.fn(async () => [
+    {
+      id: "e".repeat(64),
+      kind: 13534,
+      pubkey: relayAuthor,
+      created_at: 1,
+      content: "",
+      sig: "",
+      tags: [["-"], ["member", viewer, "owner"]],
+    },
+  ]);
   const markAllChannelsRead = vi.fn(async () => []);
   const connection = {
     status: "ready",
@@ -54,6 +65,7 @@ it("hides Invite to community and disables Mark all as read in a native build", 
     scope: `${primary}:${viewer}`,
     viewer,
     session: {
+      relayAuthor,
       read,
       unread: {
         // Native builds have no read-state host, so the capability never syncs.
@@ -85,9 +97,10 @@ it("hides Invite to community and disables Mark all as read in a native build", 
   );
   const menu = await screen.findByRole("menu", { name: "Actions for Primary" });
   await within(menu).findByRole("menuitem", { name: "Community settings" });
-  expect(
-    within(menu).queryByRole("menuitem", { name: "Invite to community" }),
-  ).toBeNull();
+  const invite = await within(menu).findByRole("menuitem", {
+    name: "Invite to community",
+  });
+  expect(invite).not.toHaveAttribute("aria-disabled");
   const markAll = within(menu).getByRole("menuitem", {
     name: "Mark all as read",
   });
@@ -95,10 +108,19 @@ it("hides Invite to community and disables Mark all as read in a native build", 
   expect(markAll).toHaveAccessibleDescription(
     "Read state can’t sync on this connection.",
   );
-  // No invite means no roster to gate on, so nothing was read for the menu.
-  expect(read).not.toHaveBeenCalled();
+  expect(read).toHaveBeenCalledWith(
+    [{ kinds: [13534], authors: [relayAuthor], limit: 1 }],
+    expect.objectContaining({ fresh: true }),
+  );
   // Leaving is offered in native builds too, always as the last action.
   const actions = within(menu).getAllByRole("menuitem");
   expect(actions.at(-1)).toHaveTextContent("Leave community");
   expect(actions.at(-1)).not.toHaveAttribute("aria-disabled");
+  fireEvent.click(invite);
+  expect(onOpenTarget).toHaveBeenCalledWith({
+    version: 1,
+    kind: "settings",
+    section: "buzz.moderation/membership",
+    scope: { viewer, communityOrigin: primary },
+  });
 });

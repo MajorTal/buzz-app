@@ -37,6 +37,7 @@ const uploads: { bytes: Uint8Array; headers: Record<string, string> }[] = [];
 let uploadResponse: () => { status?: number; body: unknown };
 const cancels: string[] = [];
 let hangUploads = false;
+let preparedResponse: (() => { status?: number; body: unknown }) | undefined;
 const owners: ReturnType<typeof createOutbox>[] = [];
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -60,6 +61,7 @@ beforeEach(() => {
   uploads.length = 0;
   cancels.length = 0;
   hangUploads = false;
+  preparedResponse = undefined;
   uploadResponse = () => ({ status: 500, body: "" });
   vi.mocked(invoke).mockImplementation(async (command, args, options) => {
     if (command === "identity_restore") return viewer.pubkey;
@@ -92,7 +94,11 @@ beforeEach(() => {
         bytes: new Uint8Array(args as ArrayBuffer),
         headers: (options as { headers: Record<string, string> }).headers,
       });
-      const result = uploadResponse();
+      const result = (options as { headers: Record<string, string> }).headers[
+        "x-buzz-preparation"
+      ]
+        ? (preparedResponse?.() ?? uploadResponse())
+        : uploadResponse();
       return {
         status: result.status ?? 200,
         headers: {},
@@ -1424,4 +1430,103 @@ it("reads the complete snapshot and activity through the native query route", as
   await expect(
     transport.channelActivity?.(["bad/channel"], signal),
   ).rejects.toThrow("Activity filter rejected");
+});
+
+it("prepares HEIC and video in the native upload without dev-broker fetches", async () => {
+  const transport = await connectNativeTransport(community);
+  assert(transport.uploadAttachment);
+  preparedResponse = () => ({
+    body: {
+      url: `${community}/media/${hash}.jpg`,
+      type: "image/jpeg",
+      size: 5,
+      sha256: hash,
+    },
+  });
+  const heic = new File(
+    [new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99])],
+    "a.heic",
+    { type: "image/heic" },
+  );
+  await expect(
+    transport.uploadAttachment(heic, new AbortController().signal),
+  ).resolves.toMatchObject({
+    name: "a.jpg",
+    type: "image/jpeg",
+    size: 5,
+  });
+  expect(uploads.at(-1)?.headers).toMatchObject({
+    "x-buzz-preparation": "image:mov",
+    "x-buzz-community": community,
+  });
+  preparedResponse = () => ({
+    body: {
+      url: `${community}/media/${hash}.mp4`,
+      type: "video/mp4",
+      size: 7,
+      sha256: hash,
+    },
+  });
+  const avi = new File(
+    [new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 65, 86, 73, 32])],
+    "b.avi",
+    { type: "video/avi" },
+  );
+  await expect(
+    transport.uploadAttachment(avi, new AbortController().signal),
+  ).resolves.toMatchObject({
+    name: "b.mp4",
+    type: "video/mp4",
+    size: 7,
+  });
+  expect(uploads.at(-1)?.headers["x-buzz-preparation"]).toBe("video:avi");
+  expect(fetch).not.toHaveBeenCalled();
+});
+
+it.each([
+  [403, { error: "no access" }, "denied"],
+  [413, { error: "too large" }, "size"],
+  [429, { error: "busy" }, "capacity"],
+  [422, { error: "metadata forbidden" }, "metadata"],
+  [415, { error: "unsupported" }, "rejected"],
+  [400, { code: "io" }, "io"],
+])(
+  "maps prepared-upload response %i through the shared policy",
+  async (status, body, code) => {
+    const transport = await connectNativeTransport(community);
+    assert(transport.uploadAttachment);
+    preparedResponse = () => ({ status, body });
+    const avi = new File(
+      [new Uint8Array([82, 73, 70, 70, 0, 0, 0, 0, 65, 86, 73, 32])],
+      "b.avi",
+      { type: "video/avi" },
+    );
+    await expect(
+      transport.uploadAttachment(avi, new AbortController().signal),
+    ).rejects.toMatchObject({ code });
+  },
+);
+
+it("refuses native preparation failures and does not accept a mismatched prepared type", async () => {
+  const transport = await connectNativeTransport(community);
+  assert(transport.uploadAttachment);
+  const heic = new File(
+    [new Uint8Array([0, 0, 0, 24, 102, 116, 121, 112, 104, 101, 105, 99])],
+    "a.heic",
+  );
+  preparedResponse = () => ({ status: 503, body: { code: "ffmpeg" } });
+  await expect(
+    transport.uploadAttachment(heic, new AbortController().signal),
+  ).rejects.toMatchObject({ code: "ffmpeg" });
+  preparedResponse = () => ({
+    body: {
+      url: `${community}/media/${hash}.mp4`,
+      type: "video/mp4",
+      size: 3,
+      sha256: hash,
+    },
+  });
+  await expect(
+    transport.uploadAttachment(heic, new AbortController().signal),
+  ).rejects.toMatchObject({ code: "invalid" });
 });

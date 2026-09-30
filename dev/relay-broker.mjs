@@ -77,7 +77,7 @@ import {
   SIDEBAR_UPLOAD_SLOTS,
 } from "./sidebar-preferences.mjs";
 import { createHostAdmission } from "../src/features/relay/host-admission.ts";
-import { relayKlipySearchPath } from "../src/features/relay/gifs.ts";
+import { relayKlipySearchPath } from "../src/features/relay/gif-capability.ts";
 import {
   validEmojiSetTemplate,
   validReactionContent,

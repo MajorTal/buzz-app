@@ -139,15 +139,15 @@ the selected community's ready session and only while its read state can sync;
 elsewhere it stays visible but disabled with a note saying why. Invite to
 community appears only on the selected community, only when the relay-signed
 roster names the viewer an owner or admin (the same roles the Membership
-settings card reads), and never in native builds, which cannot mint invites; it
-opens the Membership settings card scoped to that community. The rail reads
+settings card reads) in both development and native builds; it opens the
+Membership settings card scoped to that community. The rail reads
 that roster through the selected community's existing session and verifies it
 against the relay authority that session already holds, so the read adds no
-session request to the connection and opens no other session. That card shares the
-rail's gate rather than a copy of it: in native builds it stays registered as a
-read-only member list with a note, without its Invite members button or
-per-member actions, so a Settings section, history entry or `buzz://open`
-locator naming it still opens instead of reporting unavailable. Community settings is
+session request to the connection and opens no other session. That card applies
+the same role gate: in native builds it stays registered with its member list
+and Invite members button, but hides direct additions and per-member actions.
+A Settings section, history entry or `buzz://open` locator naming it still opens
+instead of reporting unavailable. Community settings is
 on every community and opens Settings scoped to that community's origin, which
 selects it on the way. Leave community is on every community and opens an alert
 dialog owned by the rail (“Leave <name>?”) whose destructive confirm shows a

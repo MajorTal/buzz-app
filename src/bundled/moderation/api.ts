@@ -1,11 +1,8 @@
-// Owner/admin requests through the development broker. Roles come from the
-// shared roster reader; the relay decides every change.
+// Owner/admin requests through the selected community adapter. Roles come from
+// the shared roster reader; the relay decides every change.
 import { communityRequest } from "../../features/communities/api";
 import type { Member, Role } from "../../features/communities/roster";
 
-// The rail's gate for Invite to community, so both surfaces agree on which
-// builds can reach the broker-only `invite` and `member` routes below.
-export { inviteMintingAvailable } from "../../features/communities/api";
 export {
   MEMBERSHIP_KIND,
   membersFromSnapshot,

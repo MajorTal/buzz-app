@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/core";
+import { convertFileSrc, invoke } from "@tauri-apps/api/core";
 import type { EventTemplate } from "nostr-tools";
 import { communityDestination, relayOrigin } from "../communities/destination";
 import { eventDto, type RelayEvent } from "./events";
@@ -40,6 +40,7 @@ export const nativeWriteKinds = [
   1984,
   9000,
   9001,
+  30030,
   30315,
   40003,
   40100,
@@ -86,6 +87,51 @@ function nativeResponse(result: {
   );
 }
 
+/** Relay media through the native `buzz-media` scheme (`src-tauri/src/relay.rs`),
+ * which signs each Blossom `get`, including every `Range` request. */
+export function nativeMediaUrl(url: string): string {
+  return convertFileSrc(url, "buzz-media");
+}
+
+/** Raw IPC bytes; native code hashes, signs and sends them to `PUT /upload`.
+ * Aborting settles at once and tells native code to drop the request. */
+async function nativeUpload(origin: string, file: File, signal: AbortSignal) {
+  const bytes = await file.arrayBuffer();
+  signal.throwIfAborted();
+  const id = crypto.randomUUID();
+  let abort = () => {};
+  const aborted = new Promise<never>((_, reject) => {
+    abort = () => {
+      invoke("relay_upload_cancel", { id }).catch(() => {});
+      reject(signal.reason);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    if (signal.aborted) abort();
+  });
+  try {
+    const result = await Promise.race([
+      invoke<{
+        status: number;
+        headers: Record<string, string>;
+        body: string;
+      }>("relay_upload", bytes, {
+        headers: {
+          "x-buzz-upload-id": id,
+          "x-buzz-community": origin,
+          "x-buzz-content-type": file.type || "application/octet-stream",
+        },
+      }),
+      aborted,
+    ]);
+    return new Response(result.body, {
+      status: result.status,
+      headers: result.headers,
+    });
+  } finally {
+    signal.removeEventListener("abort", abort);
+  }
+}
+
 export function nativeRelaySigner(community: string): Signer {
   const origin = communityDestination(community).url;
   return {
@@ -115,6 +161,8 @@ export function nativeRelaySigner(community: string): Signer {
         signal,
       );
     },
+    upload: (file, signal) => nativeUpload(origin, file, signal),
+    media: nativeMediaUrl,
   };
 }
 

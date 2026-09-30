@@ -14,6 +14,8 @@ import { createMessages } from "./messages";
 vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
   isTauri: () => true,
+  convertFileSrc: (path: string, protocol: string) =>
+    `${protocol}://localhost/${encodeURIComponent(path)}`,
 }));
 const viewer = keypair(),
   relay = keypair();
@@ -30,6 +32,10 @@ let respond: (
   | { status?: number; body: unknown }
   | Promise<{ status?: number; body: unknown }>;
 const requests: Request[] = [];
+const uploads: { bytes: Uint8Array; headers: Record<string, string> }[] = [];
+let uploadResponse: () => { status?: number; body: unknown };
+const cancels: string[] = [];
+let hangUploads = false;
 const owners: ReturnType<typeof createOutbox>[] = [];
 function deferred<T>() {
   let resolve!: (value: T) => void;
@@ -49,7 +55,11 @@ beforeEach(() => {
       throw new Error("Packaged connections must not call the dev broker");
     }),
   );
-  vi.mocked(invoke).mockImplementation(async (command, args) => {
+  uploads.length = 0;
+  cancels.length = 0;
+  hangUploads = false;
+  uploadResponse = () => ({ status: 500, body: "" });
+  vi.mocked(invoke).mockImplementation(async (command, args, options) => {
     if (command === "identity_restore") return viewer.pubkey;
     if (command === "relay_sign") {
       expect(
@@ -68,6 +78,26 @@ beforeEach(() => {
         status: result.status ?? 200,
         headers: {},
         body: JSON.stringify(result.body),
+      };
+    }
+    if (command === "relay_upload_cancel") {
+      cancels.push((args as { id: string }).id);
+      return null;
+    }
+    if (command === "relay_upload") {
+      if (hangUploads) return new Promise(() => {});
+      uploads.push({
+        bytes: new Uint8Array(args as ArrayBuffer),
+        headers: (options as { headers: Record<string, string> }).headers,
+      });
+      const result = uploadResponse();
+      return {
+        status: result.status ?? 200,
+        headers: {},
+        body:
+          typeof result.body === "string"
+            ? result.body
+            : JSON.stringify(result.body),
       };
     }
     throw new Error(`Unexpected native command: ${command}`);
@@ -986,4 +1016,115 @@ it("exposes purpose-bound agent readers and fences obsolete observer decoding", 
       "nonce",
     ),
   ).rejects.toThrow("Log authorization unavailable");
+});
+
+const hash = "c".repeat(64);
+it("routes relay media through the authenticated native scheme only", async () => {
+  const transport = await connectNativeTransport(community);
+  const media = `${community}/media/${hash}.png`;
+  expect(transport.media(media)).toBe(
+    `buzz-media://localhost/${encodeURIComponent(media)}`,
+  );
+  expect(transport.media(media, "small")).toBe(
+    `buzz-media://localhost/${encodeURIComponent(`${community}/media/${hash}.thumb.jpg`)}`,
+  );
+  expect(transport.media("https://images.test/cat.png")).toBe(
+    "https://images.test/cat.png",
+  );
+  expect(transport.media("http://images.test/cat.png")).toBeUndefined();
+});
+
+it("publishes custom emoji sets", async () => {
+  const transport = await connectNativeTransport(community);
+  expect(transport.writer?.kinds).toContain(30030);
+});
+
+it("uploads exact bytes natively and validates the relay descriptor", async () => {
+  const transport = await connectNativeTransport(community);
+  assert(transport.uploadAttachment);
+  uploadResponse = () => ({
+    body: {
+      url: `${community}/media/${hash}.png`,
+      type: "image/png",
+      size: 3,
+      sha256: hash,
+    },
+  });
+  const file = new File([new Uint8Array([1, 2, 3])], "a.png", {
+    type: "image/png",
+  });
+  await expect(
+    transport.uploadAttachment(file, new AbortController().signal),
+  ).resolves.toEqual({
+    name: "a.png",
+    url: `${community}/media/${hash}.png`,
+    type: "image/png",
+    size: 3,
+    sha256: hash,
+  });
+  expect(uploads).toEqual([
+    {
+      bytes: new Uint8Array([1, 2, 3]),
+      headers: {
+        "x-buzz-upload-id": expect.stringMatching(/^[0-9a-f-]{36}$/),
+        "x-buzz-community": community,
+        "x-buzz-content-type": "image/png",
+      },
+    },
+  ]);
+  uploadResponse = () => ({
+    body: {
+      url: `https://other.test/media/${hash}.png`,
+      type: "image/png",
+      size: 3,
+      sha256: hash,
+    },
+  });
+  await expect(
+    transport.uploadAttachment(file, new AbortController().signal),
+  ).rejects.toMatchObject({ code: "invalid" });
+});
+
+it.each([
+  [401, "", "denied"],
+  [413, "", "size"],
+  [429, "", "capacity"],
+  [422, { error: "metadata forbidden" }, "metadata"],
+  [415, { error: "unsupported container" }, "rejected"],
+  [500, "internal error", "failed"],
+])(
+  "maps relay upload status %i to a user-facing failure",
+  async (status, body, code) => {
+    const transport = await connectNativeTransport(community);
+    assert(transport.uploadAttachment);
+    uploadResponse = () => ({ status, body });
+    await expect(
+      transport.uploadAttachment(
+        new File(["x"], "a.bin"),
+        new AbortController().signal,
+      ),
+    ).rejects.toMatchObject({ code });
+  },
+);
+
+it("settles a cancelled native upload at once and cancels it natively", async () => {
+  const transport = await connectNativeTransport(community);
+  assert(transport.uploadAttachment);
+  hangUploads = true;
+  const controller = new AbortController();
+  const pending = transport.uploadAttachment(
+    new File(["x"], "a.bin"),
+    controller.signal,
+  );
+  await vi.waitFor(() =>
+    expect(vi.mocked(invoke).mock.calls.at(-1)?.[0]).toBe("relay_upload"),
+  );
+  const [, , options] = vi.mocked(invoke).mock.calls.at(-1) ?? [];
+  controller.abort();
+  await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  expect(cancels).toEqual([
+    (options as { headers: Record<string, string> }).headers[
+      "x-buzz-upload-id"
+    ],
+  ]);
 });

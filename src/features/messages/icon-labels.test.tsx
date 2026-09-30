@@ -1,9 +1,17 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { MediaAttachment } from "./MediaAttachment";
+import { downloadNativeMedia } from "./native-download";
 import { ImageReviewStage } from "./ImageReviewStage";
+vi.mock("./native-download", () => ({ downloadNativeMedia: vi.fn() }));
 afterEach(cleanup);
 it("keeps playback controls named for their actions, not icon components", () => {
   const { container } = render(
@@ -141,4 +149,89 @@ it("does not render stray file attachments as images", () => {
     "Attachment unavailable",
   );
   expect(container.querySelector("img")).toBeNull();
+});
+
+it.each(["buzz-media://localhost", "http://buzz-media.localhost"])(
+  "offers native image download on %s",
+  (origin) => {
+    const url = `https://relay.test/media/${"a".repeat(64)}.png`;
+    const source = `${origin}/${encodeURIComponent(url)}`;
+    render(
+      <ImageReviewStage
+        attachments={[{ url, kind: "image" }]}
+        selectedUrl={url}
+        media={() => source}
+        select={() => {}}
+        onOpenLink={() => false}
+      />,
+    );
+    vi.mocked(downloadNativeMedia).mockResolvedValue(undefined);
+    const link = screen.getByRole("button", { name: "Download image" });
+    expect(link).not.toHaveAttribute("href");
+    fireEvent.click(link);
+    expect(downloadNativeMedia).toHaveBeenCalledWith(source);
+    expect(
+      screen.queryByRole("link", { name: "Open image in browser" }),
+    ).toBeNull();
+  },
+);
+
+it("does not offer an image download for a native lookalike", () => {
+  const url = "https://relay.test/image.png";
+  render(
+    <ImageReviewStage
+      attachments={[{ url, kind: "image" }]}
+      selectedUrl={url}
+      media={() =>
+        `buzz-media://evil.test/${encodeURIComponent(`https://relay.test/media/${"a".repeat(64)}.png`)}`
+      }
+      select={() => {}}
+      onOpenLink={() => false}
+    />,
+  );
+  expect(screen.queryByRole("button", { name: "Download image" })).toBeNull();
+});
+
+it("reports native image download failures without navigating", async () => {
+  const url = `https://relay.test/media/${"a".repeat(64)}.png`;
+  vi.mocked(downloadNativeMedia).mockRejectedValueOnce(
+    new Error("unavailable"),
+  );
+  render(
+    <ImageReviewStage
+      attachments={[{ url, kind: "image" }]}
+      selectedUrl={url}
+      media={() => `buzz-media://localhost/${encodeURIComponent(url)}`}
+      select={() => {}}
+      onOpenLink={() => false}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Download image" }));
+  await waitFor(() =>
+    expect(screen.getByRole("alert")).toHaveTextContent("Download failed"),
+  );
+});
+
+it("clears image download errors when switching to another image", async () => {
+  const first = `https://relay.test/media/${"a".repeat(64)}.png`;
+  const second = `https://relay.test/media/${"b".repeat(64)}.png`;
+  vi.mocked(downloadNativeMedia).mockRejectedValueOnce(new Error("offline"));
+  const props = {
+    attachments: [
+      { url: first, kind: "image" as const },
+      { url: second, kind: "image" as const },
+    ],
+    media: (url: string) => `buzz-media://localhost/${encodeURIComponent(url)}`,
+    select: () => {},
+    onOpenLink: () => false,
+  };
+  const { rerender } = render(
+    <ImageReviewStage {...props} selectedUrl={first} />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Download image" }));
+  await waitFor(() =>
+    expect(screen.getByRole("alert")).toHaveTextContent("Download failed"),
+  );
+  rerender(<ImageReviewStage {...props} selectedUrl={second} />);
+  expect(screen.queryByRole("alert")).toBeNull();
 });

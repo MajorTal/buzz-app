@@ -8,7 +8,12 @@ pub(crate) use agent::{
 use base64::{engine::general_purpose::STANDARD, Engine};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
-use std::{collections::BTreeMap, sync::OnceLock, time::Duration};
+use std::{
+    collections::{BTreeMap, HashMap},
+    sync::OnceLock,
+    time::{Duration, Instant},
+};
+use tokio::sync::oneshot;
 use url::Url;
 
 mod channel_writes;
@@ -207,7 +212,7 @@ fn validate_event(community: &str, event: &EventTemplate) -> Result<()> {
         }
     } else if !matches!(
         event.kind,
-        0 | 7 | 9 | 1984 | 9000 | 9001 | 20001 | 30315 | 40003 | 40100 | 42000
+        0 | 7 | 9 | 1984 | 9000 | 9001 | 20001 | 30030 | 30315 | 40003 | 40100 | 42000
     ) {
         return Err("This event is not supported by the packaged relay connection".into());
     }
@@ -506,10 +511,14 @@ async fn send(
         request = request.header("Accept", "application/nostr+json");
     }
     // Never replay a write after a transport error: it may already have reached the relay.
-    let mut response = request
+    let response = request
         .send()
         .await
         .map_err(|_| "Relay request could not be confirmed")?;
+    read_response(response, response_limit).await
+}
+
+async fn read_response(mut response: reqwest::Response, limit: usize) -> Result<RelayResponse> {
     let status = response.status().as_u16();
     let mut headers = BTreeMap::new();
     for name in ["content-type", "retry-after", "server-timing"] {
@@ -517,9 +526,10 @@ async fn send(
             headers.insert(name.into(), value.into());
         }
     }
+
     let bytes = read_bounded(
         &mut response,
-        response_limit,
+        limit,
         "Relay response was interrupted",
         "Relay response is too large",
     )
@@ -554,6 +564,554 @@ async fn read_bounded(
     }
     Ok(bytes)
 }
+/// The relay's largest accepted upload (videos).
+const MAX_UPLOAD: usize = 500 * 1024 * 1024;
 
+/// A Blossom `Authorization` value. JS never signs these: `relay_sign` rejects
+/// kind 24242, so a script cannot mint a reusable read or a `delete` proof.
+async fn blossom_auth(
+    host: &IdentityHost,
+    url: &Url,
+    verb: &str,
+    content: &str,
+    mut tags: Vec<Vec<String>>,
+) -> Result<String> {
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|_| "System clock is unavailable")?
+        .as_secs();
+    // `server` matches the dev broker's `URL.host` (host plus any explicit port).
+    let server = &url[url::Position::BeforeHost..url::Position::AfterPort];
+    tags.extend([
+        vec!["t".into(), verb.into()],
+        vec!["server".into(), server.into()],
+        // The relay's strict NIP-FI window is 60 seconds.
+        vec!["expiration".into(), (now + 60).to_string()],
+    ]);
+    let event = host
+        .sign(EventTemplate {
+            kind: 24242,
+            created_at: now,
+            content: content.into(),
+            tags,
+        })
+        .await?;
+    Ok(format!(
+        "Nostr {}",
+        STANDARD.encode(
+            serde_json::to_vec(&event).map_err(|_| "Could not encode media authentication")?
+        )
+    ))
+}
+
+/// A cancel may overtake its upload IPC. Pending IDs expire because a cancel
+/// can also arrive after completion or after an upload was rejected before start.
+const PENDING_CANCEL_LIFETIME: Duration = Duration::from_secs(60);
+#[derive(Default)]
+struct UploadState {
+    active: HashMap<String, oneshot::Sender<()>>,
+    pending: HashMap<String, Instant>,
+}
+#[derive(Default)]
+pub(crate) struct Uploads(std::sync::Mutex<UploadState>);
+
+impl Uploads {
+    fn lock(&self) -> std::sync::MutexGuard<'_, UploadState> {
+        self.0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Registers `id`, or returns `None` when it was already cancelled.
+    fn start(&self, id: &str) -> Result<Option<oneshot::Receiver<()>>> {
+        let mut uploads = self.lock();
+        if uploads.pending.remove(id).is_some() {
+            return Ok(None);
+        }
+        if uploads.active.contains_key(id) {
+            return Err("Upload is already in progress".into());
+        }
+        if uploads.active.len() >= 64 {
+            return Err("Uploads are busy".into());
+        }
+        let (sender, receiver) = oneshot::channel();
+        uploads.active.insert(id.into(), sender);
+        Ok(Some(receiver))
+    }
+
+    fn cancel(&self, id: &str) {
+        let mut uploads = self.lock();
+        if let Some(sender) = uploads.active.remove(id) {
+            let _ = sender.send(());
+            return;
+        }
+        let now = Instant::now();
+        uploads
+            .pending
+            .retain(|_, inserted| now.duration_since(*inserted) < PENDING_CANCEL_LIFETIME);
+        if uploads.pending.contains_key(id) {
+            uploads.pending.insert(id.into(), now);
+            return;
+        }
+        if uploads.pending.len() >= 64 {
+            // With independent IPC calls we cannot distinguish an old cancel
+            // from one that overtook its upload. Retire an arbitrary old pending
+            // ID so a new cancellation still has a bounded chance to win.
+            if let Some(old) = uploads.pending.keys().next().cloned() {
+                uploads.pending.remove(&old);
+            }
+        }
+        uploads.pending.insert(id.into(), now);
+    }
+
+    fn finish(&self, id: &str) {
+        self.lock().active.remove(id);
+    }
+}
+
+fn upload_id(value: Option<&str>) -> Result<&str> {
+    value
+        .filter(|id| {
+            (1..=64).contains(&id.len())
+                && id.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+        })
+        .ok_or_else(|| "Invalid upload ID".into())
+}
+
+/// Hashes, signs (`t=upload` + `x`) and sends `PUT /upload` for the exact raw
+/// IPC bytes. Shared TypeScript (`hostUpload`) owns limits, error mapping and
+/// descriptor validation, as it does for the dev broker.
+#[tauri::command]
+pub(crate) async fn relay_upload(
+    host: tauri::State<'_, IdentityHost>,
+    uploads: tauri::State<'_, Uploads>,
+    request: tauri::ipc::Request<'_>,
+) -> Result<RelayResponse> {
+    let header = |name: &str| request.headers().get(name).and_then(|v| v.to_str().ok());
+    let id = upload_id(header("x-buzz-upload-id"))?;
+    let url = origin(header("x-buzz-community").unwrap_or_default())?
+        .join("/upload")
+        .map_err(|_| "Invalid relay path")?;
+    let tauri::ipc::InvokeBody::Raw(body) = request.body() else {
+        return Err("Upload body must be raw bytes".into());
+    };
+    // Tauri sets raw IPC `Content-Type` itself, so the file type travels separately.
+    let kind = header("x-buzz-content-type");
+    let Some(cancelled) = uploads.start(id)? else {
+        return Err("Upload cancelled".into());
+    };
+    // Dropping the request future closes the connection, so a cancelled upload
+    // stops sending and releases its buffer.
+    let result = tokio::select! {
+        result = upload(host.inner(), url, kind, body.clone()) => result,
+        _ = cancelled => Err("Upload cancelled".into()),
+    };
+    uploads.finish(id);
+    result
+}
+
+#[tauri::command]
+pub(crate) fn relay_upload_cancel(uploads: tauri::State<'_, Uploads>, id: String) -> Result<()> {
+    uploads.cancel(upload_id(Some(&id))?);
+    Ok(())
+}
+
+async fn upload(
+    host: &IdentityHost,
+    url: Url,
+    kind: Option<&str>,
+    body: Vec<u8>,
+) -> Result<RelayResponse> {
+    if body.is_empty() || body.len() > MAX_UPLOAD {
+        return Err("File exceeds the supported upload limit".into());
+    }
+    let kind = kind
+        .filter(|kind| valid_type(kind))
+        .unwrap_or("application/octet-stream");
+    let hash = format!("{:x}", Sha256::digest(&body));
+    let auth = blossom_auth(
+        host,
+        &url,
+        "upload",
+        "Upload attachment",
+        vec![vec!["x".into(), hash.clone()]],
+    )
+    .await?;
+    let response = client()?
+        .put(url)
+        // Matches UPLOAD_TIMEOUT_MS; the shared client's 30 s suits JSON calls only.
+        .timeout(Duration::from_secs(600))
+        .header("Authorization", auth)
+        .header("Content-Type", kind)
+        .header("X-SHA-256", hash)
+        .body(body)
+        .send()
+        .await
+        .map_err(|_| "Upload did not finish")?;
+    // A Blossom descriptor is small; the shared validator rejects anything else.
+    read_response(response, 8192).await
+}
+
+/// Largest whole-file media response: the relay's document limit, which also
+/// covers images. Only video can be larger; `<video>` fetches it by `Range`.
+const MAX_MEDIA: usize = 100 * 1024 * 1024;
+/// Open-ended ranges are shortened so playback starts after one small chunk;
+/// the media element requests the next range itself.
+const MEDIA_CHUNK: u64 = 4 * 1024 * 1024;
+/// The relay's own cap on a single 206 response.
+const MAX_MEDIA_RANGE: usize = 16 * 1024 * 1024;
+
+/// `buzz-media://` serves relay `GET /media/*` to `<img>`, `<video>` and
+/// `<audio>`, which cannot send the required Blossom `Authorization` header.
+/// Each request gets a fresh `get` token and forwards only the player's
+/// `Range`, so playback streams and seeks. Which URLs use it is decided in
+/// shared TypeScript (`mediaUrl`); this checks only the relay-blob URL shape,
+/// not saved-community membership (Rust keeps no community list).
+pub(crate) fn media_protocol<R: tauri::Runtime>(
+    ctx: tauri::UriSchemeContext<'_, R>,
+    request: tauri::http::Request<Vec<u8>>,
+    responder: tauri::UriSchemeResponder,
+) {
+    use tauri::Manager as _;
+    let host = ctx.app_handle().state::<IdentityHost>().inner().clone();
+    tauri::async_runtime::spawn(async move {
+        let response = match media_request(&request) {
+            Ok((url, range)) => fetch_media(&host, url, range).await,
+            Err(status) => Err(status),
+        };
+        responder.respond(response.unwrap_or_else(|status| {
+            tauri::http::Response::builder()
+                .status(status)
+                .body(Vec::new())
+                .expect("static response")
+        }));
+    });
+}
+
+/// Decode only the custom scheme URLs emitted by convertFileSrc. The media URL
+/// is independently checked before any authenticated request is made.
+fn download_target(source: &str) -> Option<Url> {
+    let url = Url::parse(source).ok()?;
+    let host_ok = match url.scheme() {
+        "buzz-media" => url.host_str() == Some("localhost"),
+        "http" => url.host_str() == Some("buzz-media.localhost"),
+        _ => false,
+    };
+    if !host_ok
+        || url.port().is_some()
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.query().is_some()
+        || url.fragment().is_some()
+    {
+        return None;
+    }
+    let target = percent_encoding::percent_decode_str(url.path().strip_prefix('/')?)
+        .decode_utf8()
+        .ok()?;
+    media_url(&target)
+}
+
+/// Never interpret untrusted attachment names as paths. A missing or invalid name
+/// falls back to the validated blob's basename.
+fn download_name<'a>(name: &'a str, url: &'a Url) -> &'a str {
+    let stem = name.split('.').next().unwrap_or("");
+    let reserved = stem.trim_end_matches(' ').to_ascii_uppercase();
+    if !name.is_empty()
+        && name.len() <= 255
+        && name != "."
+        && name != ".."
+        && !name.ends_with(['.', ' '])
+        && !matches!(reserved.as_str(), "CON" | "PRN" | "AUX" | "NUL")
+        && !matches!(
+            reserved.as_str(),
+            "COM1"
+                | "COM2"
+                | "COM3"
+                | "COM4"
+                | "COM5"
+                | "COM6"
+                | "COM7"
+                | "COM8"
+                | "COM9"
+                | "LPT1"
+                | "LPT2"
+                | "LPT3"
+                | "LPT4"
+                | "LPT5"
+                | "LPT6"
+                | "LPT7"
+                | "LPT8"
+                | "LPT9"
+        )
+        && !name.chars().any(|c| {
+            c.is_control()
+                || matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'
+                    | '\u{061c}' | '\u{200e}' | '\u{200f}' | '\u{202a}'..='\u{202e}'
+                    | '\u{2066}'..='\u{2069}')
+        })
+    {
+        name
+    } else {
+        url.path().rsplit('/').next().unwrap_or("media")
+    }
+}
+
+/// Fail closed if the OS cannot mark the file as untrusted internet content.
+#[cfg(target_os = "macos")]
+fn mark_download(file: &std::fs::File, _path: &std::path::Path) -> std::io::Result<()> {
+    use std::os::fd::AsRawFd;
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(std::io::Error::other)?
+        .as_secs();
+    let value = format!("0081;{timestamp:x};Buzz;");
+    let result = unsafe {
+        libc::fsetxattr(
+            file.as_raw_fd(),
+            c"com.apple.quarantine".as_ptr(),
+            value.as_ptr().cast(),
+            value.len(),
+            0,
+            0,
+        )
+    };
+    if result == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn mark_download(_file: &std::fs::File, path: &std::path::Path) -> std::io::Result<()> {
+    // Alternate data streams are attached to the same NTFS file, not a sibling.
+    let mut stream = path.as_os_str().to_owned();
+    stream.push(":Zone.Identifier");
+    std::fs::write(stream, b"[ZoneTransfer]\r\nZoneId=3\r\n")
+}
+
+#[cfg(not(any(target_os = "macos", target_os = "windows")))]
+fn mark_download(_file: &std::fs::File, _path: &std::path::Path) -> std::io::Result<()> {
+    Ok(())
+}
+
+fn save_download(
+    directory: &std::path::Path,
+    filename: &str,
+    body: &[u8],
+) -> Result<std::path::PathBuf> {
+    use std::io::Write as _;
+    let (stem, ext) = filename
+        .rsplit_once('.')
+        .filter(|(stem, _)| !stem.is_empty())
+        .map_or((filename, ""), |(stem, ext)| (stem, ext));
+    for index in 0..1000 {
+        let candidate = if index == 0 {
+            filename.to_owned()
+        } else if ext.is_empty() {
+            format!("{stem} ({index})")
+        } else {
+            format!("{stem} ({index}).{ext}")
+        };
+        let path = directory.join(candidate);
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(mut file) => {
+                if let Err(error) = mark_download(&file, &path)
+                    .and_then(|_| file.write_all(body))
+                    .and_then(|_| file.sync_all())
+                {
+                    drop(file);
+                    let _ = std::fs::remove_file(&path);
+                    return Err(format!("Could not save media: {error}"));
+                }
+                return Ok(path);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
+            Err(error) => return Err(format!("Could not save media: {error}")),
+        }
+    }
+    Err("Too many files with this name".into())
+}
+
+/// Persist an authenticated bounded response without replacing an existing file.
+/// The host, not the webview, owns the save path and collision policy.
+#[tauri::command]
+pub(crate) async fn media_download<R: tauri::Runtime>(
+    app: tauri::AppHandle<R>,
+    host: tauri::State<'_, IdentityHost>,
+    source: String,
+    name: String,
+) -> Result<()> {
+    use tauri::Manager as _;
+    let url = download_target(&source).ok_or("Invalid media URL")?;
+    let filename = download_name(&name, &url).to_owned();
+    let directory = app
+        .path()
+        .download_dir()
+        .map_err(|_| "Downloads unavailable")?;
+    let response = fetch_media(host.inner(), url, None)
+        .await
+        .map_err(|_| "Media download failed")?;
+    let body = response.into_body();
+    tauri::async_runtime::spawn_blocking(move || save_download(&directory, &filename, &body))
+        .await
+        .map_err(|_| "Media download interrupted".to_owned())??;
+    Ok(())
+}
+
+/// `buzz-media://localhost/<percent-encoded relay media URL>`, the shape of
+/// `convertFileSrc(url, "buzz-media")` on every desktop platform.
+fn media_request(
+    request: &tauri::http::Request<Vec<u8>>,
+) -> std::result::Result<(Url, Option<String>), u16> {
+    if request.method() != tauri::http::Method::GET {
+        return Err(405);
+    }
+    let encoded = request.uri().path().strip_prefix('/').ok_or(400u16)?;
+    let target = percent_encoding::percent_decode_str(encoded)
+        .decode_utf8()
+        .map_err(|_| 400u16)?;
+    let url = media_url(&target).ok_or(403u16)?;
+    let range = match request.headers().get("range") {
+        None => None,
+        Some(value) => Some(media_range(value.to_str().map_err(|_| 416u16)?).ok_or(416u16)?),
+    };
+    Ok((url, range))
+}
+
+/// Only relay-hosted blobs on an HTTPS origin; never an arbitrary URL.
+fn media_url(target: &str) -> Option<Url> {
+    let url = Url::parse(target).ok()?;
+    let name = url.path().strip_prefix("/media/")?;
+    let (hash, extension) = name.split_once('.').unwrap_or((name, ""));
+    let extension_ok = extension.is_empty()
+        || extension == "thumb.jpg"
+        || (extension.len() <= 8
+            && extension
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit()));
+    let mut base = url.clone();
+    base.set_path("/");
+    (origin(base.as_str()).is_ok()
+        && url.query().is_none()
+        && url.fragment().is_none()
+        && hash.len() == 64
+        && hash.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        && extension_ok)
+        .then_some(url)
+}
+
+/// One `bytes=START-[END]` range, bounded so a response fits one buffer.
+fn media_range(value: &str) -> Option<String> {
+    let (start, end) = value.strip_prefix("bytes=")?.split_once('-')?;
+    let start: u64 = start.parse().ok()?;
+    let last = start.checked_add(MEDIA_CHUNK - 1)?;
+    let end = if end.is_empty() {
+        last
+    } else {
+        end.parse::<u64>().ok()?.min(last)
+    };
+    (end >= start).then(|| format!("bytes={start}-{end}"))
+}
+
+async fn fetch_media(
+    host: &IdentityHost,
+    url: Url,
+    range: Option<String>,
+) -> std::result::Result<tauri::http::Response<Vec<u8>>, u16> {
+    let auth = blossom_auth(host, &url, "get", "Get buzz-media", Vec::new())
+        .await
+        .map_err(|_| 401u16)?;
+    let mut request = client()
+        .map_err(|_| 502u16)?
+        .get(url)
+        // Match the broker's whole-media deadline; large documents may take minutes.
+        .timeout(Duration::from_secs(600))
+        .header("Authorization", auth);
+    if let Some(range) = &range {
+        request = request.header("Range", range);
+    }
+    let mut upstream = request.send().await.map_err(|_| 502u16)?;
+    let status = upstream.status().as_u16();
+    if !matches!(status, 200 | 206) {
+        return Err(status);
+    }
+    let limit = if status == 206 {
+        MAX_MEDIA_RANGE
+    } else {
+        MAX_MEDIA
+    };
+    if upstream
+        .content_length()
+        .is_some_and(|length| length > limit as u64)
+    {
+        return Err(413);
+    }
+    let header = |name: &str| {
+        upstream
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned)
+    };
+    let (kind, disposition) = media_type(header("content-type").as_deref());
+    let mut response = tauri::http::Response::builder()
+        .status(status)
+        .header("Content-Type", kind)
+        .header("Accept-Ranges", "bytes")
+        .header("Cache-Control", "private, max-age=3600")
+        .header("X-Content-Type-Options", "nosniff");
+    if disposition {
+        response = response.header("Content-Disposition", "attachment");
+    }
+    if let Some(value) = header("content-range") {
+        response = response.header("Content-Range", value);
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = upstream.chunk().await.map_err(|_| 502u16)? {
+        if body.len() + chunk.len() > limit {
+            return Err(413);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    response.body(body).map_err(|_| 502)
+}
+
+fn valid_type(kind: &str) -> bool {
+    let token = |part: &str| {
+        !part.is_empty()
+            && part
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || b"!#$&^_.+-".contains(&b))
+    };
+    kind.split_once('/')
+        .is_some_and(|(a, b)| token(a) && token(b))
+}
+
+/// Mirrors the dev broker's `/api/relay/media`: render images (never SVG),
+/// video and audio; everything else is a download.
+fn media_type(value: Option<&str>) -> (String, bool) {
+    let kind = value
+        .unwrap_or_default()
+        .split(';')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase();
+    let inline = valid_type(&kind)
+        && ((kind.starts_with("image/") && kind != "image/svg+xml")
+            || kind.starts_with("video/")
+            || kind.starts_with("audio/"));
+    if inline {
+        (kind, false)
+    } else {
+        ("application/octet-stream".into(), true)
+    }
+}
 #[cfg(test)]
 mod tests;

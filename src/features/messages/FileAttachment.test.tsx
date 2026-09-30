@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
+import { downloadNativeMedia } from "./native-download";
 import { FileAttachment, formatFileSize } from "./FileAttachment";
+
+vi.mock("./native-download", () => ({ downloadNativeMedia: vi.fn() }));
 
 const proxySource = "/api/relay/media?url=https%3A%2F%2Ffixture.test%2Ffile";
 
@@ -145,3 +154,63 @@ it.each(["application/octet-stream", "application/vnd.ms-excel"])(
     expect(screen.getByText("File")).toBeInTheDocument();
   },
 );
+
+const nativeSource = `buzz-media://localhost/${encodeURIComponent(`https://relay.test/media/${"a".repeat(64)}.pdf`)}`;
+
+it("downloads authenticated native documents through the host without navigating", () => {
+  vi.mocked(downloadNativeMedia).mockResolvedValue(undefined);
+  const open = vi.fn(() => false);
+  render(
+    <FileAttachment
+      attachment={{
+        url: "https://relay.test/media/file",
+        kind: "file",
+        name: "report.pdf",
+      }}
+      source={nativeSource}
+      onOpenLink={open}
+    />,
+  );
+  const link = screen.getByRole("button", { name: "Download report.pdf" });
+  expect(link).not.toHaveAttribute("href");
+  expect(screen.getByText("Download file")).toBeInTheDocument();
+  fireEvent.click(link);
+  expect(open).not.toHaveBeenCalled();
+  expect(downloadNativeMedia).toHaveBeenCalledWith(nativeSource, "report.pdf");
+});
+
+it.each([
+  `buzz-media://evil.test/${encodeURIComponent(`https://relay.test/media/${"a".repeat(64)}`)}`,
+  `buzz-media://localhost/${encodeURIComponent("https://relay.test/query")}`,
+])("does not offer a download for native lookalike %s", (source) => {
+  render(
+    <FileAttachment
+      attachment={{ url: "https://relay.test/file", kind: "file" }}
+      source={source}
+      onOpenLink={() => false}
+    />,
+  );
+  expect(screen.getByRole("status")).toHaveTextContent("File unavailable");
+  expect(screen.queryByRole("link")).toBeNull();
+});
+
+it("reports native download failures without navigating", async () => {
+  vi.mocked(downloadNativeMedia).mockRejectedValueOnce(
+    new Error("unavailable"),
+  );
+  render(
+    <FileAttachment
+      attachment={{
+        url: "https://relay.test/file",
+        kind: "file",
+        name: "report.pdf",
+      }}
+      source={nativeSource}
+      onOpenLink={() => false}
+    />,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Download report.pdf" }));
+  await waitFor(() =>
+    expect(screen.getByRole("alert")).toHaveTextContent("Download failed"),
+  );
+});

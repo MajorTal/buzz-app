@@ -13,8 +13,13 @@ import {
   PlusIcon,
 } from "../../shared/design-system/icons/index";
 import type { Attachment } from "../relay/contracts";
-import { isProxySource, safeOpenUrl } from "./attachment-source";
+import {
+  isNativeMediaSource,
+  isProxySource,
+  safeOpenUrl,
+} from "./attachment-source";
 import styles from "./Messages.module.css";
+import { downloadNativeMedia } from "./native-download";
 
 const MIN_ZOOM = 1;
 const MAX_ZOOM = 4;
@@ -51,7 +56,9 @@ export function ImageReviewStage({
   );
   const selected = attachments[selectedIndex] ?? attachments[0];
   const source = selected ? media(selected.url) : undefined;
-  const proxySource = source ? isProxySource(source) : false;
+  const nativeSource = source ? isNativeMediaSource(source) : false;
+  const proxySource = source ? isProxySource(source) || nativeSource : false;
+  const [downloadErrorSource, setDownloadErrorSource] = useState<string>();
   const externalSource = source ? safeOpenUrl(source) && !proxySource : false;
   const {
     zoom,
@@ -280,7 +287,25 @@ export function ImageReviewStage({
             {Math.round(zoom * 100)}%
           </Button>
         </div>
-        {proxySource && (
+        {nativeSource && source && (
+          <IconButton
+            size="compact"
+            type="button"
+            aria-label="Download image"
+            title="Download image"
+            onClick={() => {
+              setDownloadErrorSource(undefined);
+              void downloadNativeMedia(source).catch(() =>
+                setDownloadErrorSource(source),
+              );
+            }}
+            icon={<DownloadIcon size={17} />}
+          />
+        )}
+        {downloadErrorSource === source && (
+          <span role="alert">Download failed</span>
+        )}
+        {proxySource && !nativeSource && (
           <IconButton
             nativeButton={false}
             role="link"

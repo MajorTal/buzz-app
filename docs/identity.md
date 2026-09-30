@@ -94,10 +94,21 @@ authentication. Events older than 15 minutes get a strong ID readback instead of
 being republished or silently re-dated. Missing/failed readback retains uncertainty;
 the user must inspect the conversation before explicitly sending a new message.
 
-Optional capabilities are absent until implemented: protected media/upload,
-repository HTTP and other broker-only
-helpers are not claimed by this adapter. Public HTTPS avatars/icons can display;
-protected media does not gain access from the image CSP allowance. NIP-FI assertion
+Protected media and uploads are native, because the webview cannot attach Blossom
+(kind 24242) authentication itself: `<img>`, `<video>` and `<audio>` send no custom
+headers, and the CSP keeps `connect-src` closed to general HTTPS. Relay `/media/`
+URLs selected by shared TypeScript render through the `buzz-media` URI scheme,
+which validates HTTPS and the `/media/<hash>` URL shape but does not enforce
+saved-community membership; the selected server receives a short-lived token
+scoped to its origin. The scheme signs a fresh 60-second `get` token per request
+and forwards only a bounded single `Range`; non-image/video/audio types (and SVG)
+are served with download disposition and `nosniff`. The main webview does not navigate to protected media for downloads: a narrowly scoped native command authenticates the bounded media GET, saves to the OS Downloads directory without replacing existing files, and rejects unsafe filenames. `relay_upload`
+hashes, signs (`upload` + `x`) and sends the exact bytes JavaScript passes it;
+shared TypeScript (`hostUpload`) owns limits, error mapping and descriptor
+validation. JavaScript never signs kind 24242. HEIC and non-MP4 video conversion
+remain dev-broker-only (ffmpeg), so those files upload unconverted and the relay
+may reject them. Repository HTTP and other
+broker-only helpers are not claimed by this adapter. NIP-FI assertion
 acquisition is not implemented, so deployments enforcing it are outside acceptance.
 Windows/Linux custody, credential migration and release-signing acceptance remain
 separate limitations.

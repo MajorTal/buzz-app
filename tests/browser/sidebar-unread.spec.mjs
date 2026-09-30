@@ -214,8 +214,10 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
     path: info.outputPath("sidebar-unread-hierarchy.png"),
   });
   await expect(cue(page, "below")).toBeVisible();
-  await expect(cue(page, "below")).toHaveText("Unread");
-  await expect(cue(page, "below")).toHaveAccessibleName("Unread below");
+  await expect(cue(page, "below")).toHaveText(/\d+ unread$/);
+  await expect(cue(page, "below")).toHaveAccessibleName(
+    /^\d+ unread conversations? below$/,
+  );
   await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
   const transitionProperties = await cue(page, "below").evaluate((el) =>
     getComputedStyle(el).transitionProperty.split(", "),
@@ -227,8 +229,10 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   await scrollRowAbove(page, "alpha");
   await expect.poll(() => inView(page, "alpha")).toBe(false);
   await expect(cue(page, "above")).toBeVisible();
-  await expect(cue(page, "above")).toHaveText("Unread");
-  await expect(cue(page, "above")).toHaveAccessibleName("Unread above");
+  await expect(cue(page, "above")).toHaveText(/\d+ unread$/);
+  await expect(cue(page, "above")).toHaveAccessibleName(
+    /^\d+ unread conversations? above$/,
+  );
   await expect(cue(page, "above")).toHaveAttribute("data-attention", "false");
   await expect(cue(page, "below")).toHaveAttribute("data-attention", "true");
   await scroll(page, 0);
@@ -543,4 +547,96 @@ test("priority dots stay aligned and use semantic primary color in both modes", 
     });
     await expect(dot).toHaveCSS("background-color", primary);
   }
+});
+
+// One small real-app journey owns preview wiring and CSS geometry. The component
+// matrix covers deduplication, truncation, fallback and profile refresh separately.
+test.describe("DM preview wiring", () => {
+  test.use({
+    largeSidebar: false,
+    dmLabels: true,
+    agentPeers: true,
+    channelIds: [
+      "alpha",
+      "beta",
+      ...Array.from({ length: 12 }, (_, i) => `padding-${i}`),
+    ],
+    historyCounts: { alpha: 1, beta: 1 },
+    dmMembers: {
+      "dm-a": [0],
+      "dm-b": [1],
+      "dm-c": [2],
+      "dm-d": [0],
+      "dm-group": [0, 1],
+      "dm-self": [],
+    },
+  });
+  test("production sidebar wires only 1:1 avatars and preserves their shape and overlap", async ({
+    page,
+    app,
+  }) => {
+    await page.setViewportSize({ width: 1440, height: 500 });
+    await open(page, app);
+    for (const id of ["dm-a", "dm-b", "dm-c", "dm-d", "dm-group", "dm-self"])
+      await expect(
+        row(page, id).locator("[data-channel-unread]"),
+      ).toBeAttached();
+    const below = cue(page, "below");
+    await expect(below.locator("[data-unread-dm]")).toHaveCount(3);
+    const eligible = new Set(["dm-a", "dm-b", "dm-c", "dm-d"]);
+    for (const edge of ["below", "above"]) {
+      if (edge === "above")
+        await list(page).evaluate((el) => {
+          el.scrollTop = el.scrollHeight;
+        });
+      const pill = cue(page, edge);
+      await expect(pill).toBeVisible();
+      const expected = await list(page).evaluate((nav, edge) => {
+        const viewport = nav.getBoundingClientRect();
+        const ids = [...nav.querySelectorAll("button[data-channel-id]")]
+          .filter((row) =>
+            row.querySelector("[data-channel-unread], [data-channel-activity]"),
+          )
+          .filter((row) => {
+            const rect = row.getBoundingClientRect();
+            return edge === "above"
+              ? rect.bottom <= viewport.top
+              : rect.top >= viewport.top + nav.clientHeight;
+          })
+          .map((row) => row.dataset.channelId);
+        return edge === "above" ? ids.reverse() : ids;
+      }, edge);
+      await expect(pill).toHaveAccessibleName(
+        `${expected.length} unread conversations ${edge}`,
+      );
+      const previews = pill.locator("[data-unread-dm]");
+      await expect
+        .poll(() =>
+          previews.evaluateAll((els) => els.map((el) => el.dataset.unreadDm)),
+        )
+        .toEqual(expected.filter((id) => eligible.has(id)).slice(0, 3));
+      await expect(pill.getByRole("img")).toHaveCount(0);
+      for (const preview of await previews.all()) {
+        const avatar = preview.locator("[data-avatar-shape]");
+        await expect(avatar).toHaveCSS("padding", "0px");
+        await expect(avatar).toHaveCSS("width", "20px");
+        await expect(avatar).toHaveCSS("height", "20px");
+      }
+    }
+    await scroll(page, 0);
+    const human = below.locator('[data-unread-dm="dm-a"] [data-avatar-shape]');
+    const agent = below.locator('[data-unread-dm="dm-b"] [data-avatar-shape]');
+    await expect(human).toHaveAttribute("data-avatar-shape", "circle");
+    await expect(human).toHaveCSS("border-radius", "50%");
+    await expect(agent).toHaveAttribute("data-avatar-shape", "squircle");
+    await expect(agent).toHaveCSS("border-radius", "0px");
+    const boxes = await below.locator("[data-unread-dm]").evaluateAll((els) =>
+      els.map((el) => {
+        const { left, right } = el.getBoundingClientRect();
+        return { left, right };
+      }),
+    );
+    expect(boxes[1].left).toBeLessThan(boxes[0].right);
+    expect(boxes[2].left).toBeLessThan(boxes[1].right);
+  });
 });

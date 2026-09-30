@@ -101,20 +101,23 @@ Channel Settings → Diagnostics exposes explicit actions and Unread status/retr
 observed-zero both omit unread styling; the API preserves the distinction. There is
 no notification, feed, or exact-count service here.
 
-When unread rows are outside the sidebar's scroll viewport, floating “Unread”
-buttons reveal the nearest destination in that direction without exposing a count.
-The internal directional set is still deduplicated by destination for geometry and
-priority: ordinary destinations use a quiet treatment; any DM, mention, broadcast,
-or relevant thread destination promotes the same composition to primary. Thread-only
-rows participate, and DMs remain promoted even when their only evidence is thread
-activity. The controls measure existing rendered badges/dots—no extra unread
+When unread rows are outside the sidebar's scroll viewport, floating `N unread`
+buttons reveal the nearest destination in that direction. The number counts distinct
+offscreen conversations with observed unread state, not messages or an exact
+community total. Any visible copy of a conversation excludes it from that edge.
+Both directions preview up to three eligible one-to-one DM avatars, nearest-first,
+with overlapping artwork and no additional overflow chip. Group/self DMs still count
+but do not borrow one participant's avatar. Previews reuse the sidebar's existing
+profile map and media routing; absent pictures use initials, humans use circles,
+and agents use squircles. Avatar artwork is decorative; the button's accessible
+name gives the conversation count and direction without implying a DM-first target.
+The controls retain the current prominent treatment. Thread-only rows participate.
+The controls measure existing rendered badges/dots—no extra unread
 subscriptions or relay reads just to show them. Search-filtered rows do not
 participate. Collapsed sections use the summary's position and expand when revealed.
 A partly visible row is not outside the fold. Activation scrolls and focuses the
-row, retaining its ordinary focus preparation; it does not select the channel or
-acknowledge any messages. The count is destinations, not a potentially misleading
-aggregate message total. Directional destination counts remain internal and are
-not rendered or announced by the control.
+nearest row, retaining its ordinary focus preparation; it does not select the channel,
+prefer a farther DM, or acknowledge any messages.
 
 Thread buttons keep the summary's total reply count and add a dot when the shared
 thread selector has observed unread replies or explicit thread-unread intent.

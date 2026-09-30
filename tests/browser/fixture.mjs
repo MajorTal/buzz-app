@@ -55,6 +55,7 @@ export const test = base.extend({
   largeSidebar: [false, { option: true }],
   iconCongestion: [false, { option: true }],
   dmLabels: [false, { option: true }],
+  dmMembers: [{}, { option: true }],
   agentPeers: [false, { option: true }],
   tallMessages: [false, { option: true }],
   membershipActivity: [false, { option: true }],
@@ -95,6 +96,7 @@ export const test = base.extend({
       largeSidebar,
       iconCongestion,
       dmLabels,
+      dmMembers,
       agentPeers,
       tallMessages,
       membershipActivity,
@@ -199,14 +201,16 @@ export const test = base.extend({
           (i + 1).toString(16).padStart(64, "0"),
         )
       : peerKeys.map(getPublicKey);
-    const dmIds = largeSidebar
-      ? Array.from(
-          { length: 128 },
-          (_, i) => `dm-${i.toString().padStart(3, "0")}`,
-        )
-      : dmLabels
-        ? ["dm-peer", "dm-group"]
-        : [];
+    const dmIds = Object.keys(dmMembers).length
+      ? Object.keys(dmMembers)
+      : largeSidebar
+        ? Array.from(
+            { length: 128 },
+            (_, i) => `dm-${i.toString().padStart(3, "0")}`,
+          )
+        : dmLabels
+          ? ["dm-peer", "dm-group"]
+          : [];
     const personalChannel = "11111111-1111-4111-8111-111111111111";
     const sortingIds = sortingSidebar ? ["cedar", "maple", "willow"] : [];
     const renamedChannels = new Map();
@@ -456,7 +460,9 @@ export const test = base.extend({
       );
     }
     if (sidebarUnread) {
-      for (const id of ["dm-030", "dm-090"])
+      for (const id of Object.keys(dmMembers).length
+        ? Object.keys(dmMembers)
+        : ["dm-030", "dm-090"])
         histories.set(`primary/${id}`, [
           sign(9, [["h", id]], `Unread in ${id}`, peerKey, 1700000900),
         ]);
@@ -770,18 +776,30 @@ export const test = base.extend({
               ...(ownerAgent && lifecycleRows.some((row) => row.id === id)
                 ? [["p", ownerAgent, "", "owner"]]
                 : []),
-              ...(agentPeers && channels.includes(id)
-                ? participants.map((pubkey) => ["p", pubkey, "", "member"])
-                : dmLabels && id === "dm-peer"
-                  ? [["p", participants[0], "", "member"]]
-                  : dmLabels && id === "dm-group"
-                    ? participants.map((pubkey) => ["p", pubkey, "", "member"])
-                    : participants
-                        .slice(
-                          dmIds.indexOf(id) * 8,
-                          (dmIds.indexOf(id) + 1) * 8,
-                        )
-                        .map((pubkey) => ["p", pubkey, "", "member"])),
+              ...(dmMembers[id]
+                ? dmMembers[id].map((index) => [
+                    "p",
+                    participants[index],
+                    "",
+                    "member",
+                  ])
+                : agentPeers && channels.includes(id)
+                  ? participants.map((pubkey) => ["p", pubkey, "", "member"])
+                  : dmLabels && id === "dm-peer"
+                    ? [["p", participants[0], "", "member"]]
+                    : dmLabels && id === "dm-group"
+                      ? participants.map((pubkey) => [
+                          "p",
+                          pubkey,
+                          "",
+                          "member",
+                        ])
+                      : participants
+                          .slice(
+                            dmIds.indexOf(id) * 8,
+                            (dmIds.indexOf(id) + 1) * 8,
+                          )
+                          .map((pubkey) => ["p", pubkey, "", "member"])),
             ]),
           );
       if (filter.kinds?.includes(39000))

@@ -1,3 +1,4 @@
+import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { Button } from "../../shared/design-system/ui/Button";
 import {
   ArrowDownIcon,
@@ -12,12 +13,23 @@ import {
 } from "react";
 import styles from "./Channels.module.css";
 
-type EdgeTarget = { row: HTMLButtonElement; attention: boolean };
+export type UnreadDmPreview = {
+  name: string;
+  src?: string | undefined;
+  isAgent?: boolean | undefined;
+};
+
+type EdgeTarget = {
+  row: HTMLButtonElement;
+  channelId: string;
+  attention: boolean;
+};
 type Edges = { above: EdgeTarget[]; below: EdgeTarget[] };
 
 /** Geometry over rendered unread destinations, not another unread store. */
 function unreadEdges(list: HTMLElement): Edges {
   const edges: Edges = { above: [], below: [] };
+  const visible = new Set<string>();
   const viewport = list.getBoundingClientRect();
   if (!list.clientHeight || !viewport.width) return edges;
   const rows = new Set<HTMLButtonElement>();
@@ -28,6 +40,8 @@ function unreadEdges(list: HTMLElement): Edges {
     if (row) rows.add(row);
   }
   for (const row of rows) {
+    const channelId = row.getAttribute("data-channel-id");
+    if (!channelId) continue;
     // A collapsed section represents its hidden rows at the summary. Clicking
     // an edge cue expands that section before revealing the actual channel.
     const closed = row
@@ -40,10 +54,23 @@ function unreadEdges(list: HTMLElement): Edges {
       row.getAttribute("data-channel-type") === "dm" ||
       row.querySelector('[data-priority="true"]') !== null ||
       row.querySelector("[data-channel-activity]") !== null;
-    const target = { row, attention };
+    const target = { row, channelId, attention };
     if (rect.bottom <= viewport.top) edges.above.push(target);
     else if (rect.top >= viewport.top + list.clientHeight)
       edges.below.push(target);
+    else visible.add(channelId);
+  }
+  // Count destinations, not repeated rows. Any visible copy wins; otherwise
+  // keep the nearest copy for reveal and for the avatar ordering.
+  for (const edge of ["above", "below"] as const) {
+    const seen = new Set(visible);
+    const targets = edge === "above" ? edges[edge].reverse() : edges[edge];
+    edges[edge] = targets.filter(({ channelId }) => {
+      if (seen.has(channelId)) return false;
+      seen.add(channelId);
+      return true;
+    });
+    if (edge === "above") edges[edge].reverse();
   }
   return edges;
 }
@@ -51,9 +78,11 @@ function unreadEdges(list: HTMLElement): Edges {
 export function SidebarUnread({
   children,
   listRef,
+  dmPreviews,
 }: {
   children: ReactNode;
   listRef?: RefObject<HTMLElement | null>;
+  dmPreviews?: ReadonlyMap<string, UnreadDmPreview>;
 }) {
   const ownList = useRef<HTMLElement>(null);
   const list = listRef ?? ownList;
@@ -74,6 +103,7 @@ export function SidebarUnread({
             previous[edge].every(
               (target, i) =>
                 target.row === next[edge][i]?.row &&
+                target.channelId === next[edge][i]?.channelId &&
                 target.attention === next[edge][i]?.attention,
             ),
         )
@@ -97,6 +127,7 @@ export function SidebarUnread({
         "data-channel-unread",
         "data-channel-activity",
         "data-channel-type",
+        "data-channel-id",
         "data-priority",
       ],
     });
@@ -147,13 +178,22 @@ export function SidebarUnread({
         </div>
       </nav>
       {(["above", "below"] as const).map((edge) => {
-        if (!edges[edge].length) return null;
+        const count = edges[edge].length;
+        if (!count) return null;
+        const nearestFirst =
+          edge === "above" ? [...edges[edge]].reverse() : edges[edge];
+        const previews = nearestFirst
+          .flatMap(({ channelId }) => {
+            const preview = dmPreviews?.get(channelId);
+            return preview ? [{ channelId, ...preview }] : [];
+          })
+          .slice(0, 3);
         const Icon = edge === "above" ? ArrowUpIcon : ArrowDownIcon;
         return (
           <div className={styles.unreadEdge} data-edge={edge} key={edge}>
             <Button
               variant="prominent"
-              aria-label={`Unread ${edge}`}
+              aria-label={`${count} unread ${count === 1 ? "conversation" : "conversations"} ${edge}`}
               data-edge={edge}
               data-attention={edges[edge].some(({ attention }) => attention)}
               size="sm"
@@ -162,7 +202,30 @@ export function SidebarUnread({
               onClick={() => reveal(edge)}
             >
               <Icon size={15} aria-hidden="true" />
-              Unread
+              {previews.length > 0 && (
+                <span className={styles.unreadDmPreviews} aria-hidden="true">
+                  <span className={styles.unreadDmStack}>
+                    {previews.map((preview, index) => (
+                      <span
+                        key={preview.channelId}
+                        className={styles.unreadDmAvatar}
+                        data-unread-dm={preview.channelId}
+                        style={{ zIndex: previews.length - index }}
+                      >
+                        <Avatar
+                          src={preview.src}
+                          alt=""
+                          fallback={preview.name}
+                          size="fill"
+                          shape={preview.isAgent ? "squircle" : "circle"}
+                        />
+                      </span>
+                    ))}
+                  </span>
+                  <span>·</span>
+                </span>
+              )}
+              <span className={styles.unreadEdgeLabel}>{count} unread</span>
             </Button>
           </div>
         );

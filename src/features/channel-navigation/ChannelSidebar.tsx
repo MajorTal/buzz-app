@@ -45,7 +45,10 @@ import {
 import { ChannelReadMenuItem } from "../../bundled/channels/ChannelReadMenuItem";
 import { useOptimisticMute } from "../../bundled/channels/useOptimisticMute";
 import { ChannelSidebarItem } from "../../bundled/channels/ChannelSidebarItem";
-import { SidebarUnread } from "../../bundled/channels/SidebarUnread";
+import {
+  SidebarUnread,
+  type UnreadDmPreview,
+} from "../../bundled/channels/SidebarUnread";
 import { SidebarSection } from "../../bundled/channels/SidebarSection";
 import { SidebarGroupIcon } from "../../bundled/channels/SidebarGroupIcon";
 import { CreateSidebarSection } from "../../bundled/channels/CreateSidebarSection";
@@ -227,6 +230,22 @@ function ReadySidebar({
     queries.profiles,
     queries.names,
   );
+  const unreadDmPreviews = useMemo(() => {
+    const previews = new Map<string, UnreadDmPreview>();
+    for (const channel of channels) {
+      if (channel.channelType !== "dm" || channel.participants?.length !== 1)
+        continue;
+      const profile = dmProfiles.get(channel.participants[0] ?? "");
+      previews.set(channel.id, {
+        name: channel.name,
+        src: profile?.picture
+          ? queries.media(profile.picture, "small")
+          : undefined,
+        isAgent: profile?.isAgent,
+      });
+    }
+    return previews;
+  }, [channels, dmProfiles, queries]);
   const workingIds = useSyncExternalStore(
     queries.agentActivity.subscribeWorking,
     queries.agentActivity.workingSnapshot,
@@ -964,7 +983,7 @@ function ReadySidebar({
                 </Button>
               </div>
             )}
-            <SidebarUnread listRef={sidebar.list}>
+            <SidebarUnread listRef={sidebar.list} dmPreviews={unreadDmPreviews}>
               <SidebarNavigation>{children}</SidebarNavigation>
               {sections.map((section) => (
                 <SidebarSection

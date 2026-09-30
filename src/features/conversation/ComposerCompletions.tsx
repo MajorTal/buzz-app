@@ -1,3 +1,9 @@
+import {
+  readComposerSnapshot,
+  composerMarkdownContext,
+} from "../messages/composer-document";
+import type { ComposerSnapshot } from "../messages/mention-draft";
+import { scanMarkdown } from "../relay/message-content";
 import type { ComposerInputElement } from "../messages/composer-dom";
 import { createPortal } from "react-dom";
 import { useCompletionPosition } from "./useCompletionPosition";
@@ -28,6 +34,47 @@ import styles from "./Completions.module.css";
 
 const RETRY = Symbol("retry-completion");
 
+// Channel links belong in prose, not inside existing links or code.
+// Run only after a channel trigger matches; ordinary typing does no extra parsing.
+function channelCompletionInProse(
+  text: string,
+  document: ComposerSnapshot | undefined,
+  query: CompletionQuery,
+) {
+  const doc = readComposerSnapshot(document);
+  const context = doc ? composerMarkdownContext(doc) : { text, protected: [] };
+  const overlaps = (start: number, end: number) =>
+    query.start < end && query.end > start;
+  if (context.protected.some(({ start, end }) => overlaps(start, end)))
+    return false;
+  const { tree, tooDeep } = scanMarkdown(context.text);
+  if (tooDeep) return false;
+  const pending = [tree];
+  while (pending.length) {
+    const node = pending.pop();
+    if (!node) continue;
+    const start = node.position?.start.offset;
+    const end = node.position?.end.offset;
+    if (start === undefined || end === undefined || !overlaps(start, end))
+      continue;
+    if (
+      [
+        "code",
+        "inlineCode",
+        "link",
+        "linkReference",
+        "image",
+        "imageReference",
+        "definition",
+        "html",
+      ].includes(node.type)
+    )
+      return false;
+    pending.push(...(node.children ?? []));
+  }
+  return true;
+}
+
 export function ComposerCompletions({
   registry,
   editor,
@@ -42,6 +89,7 @@ export function ComposerCompletions({
   /** Chip ranges and the draft text they were measured against. */
   resolved: Readonly<{
     text: string;
+    document?: ComposerSnapshot;
     recipients: readonly Readonly<{ start: number; end: number }>[];
   }>;
   replace(
@@ -63,6 +111,11 @@ export function ComposerCompletions({
     resolved.text === observation.text &&
     matchCompletion(providers, observation, context, resolved.recipients);
   if (!match || !observation) return null;
+  if (
+    match.provider.pluginId === "buzz.channels" &&
+    !channelCompletionInProse(observation.text, resolved.document, match.query)
+  )
+    return null;
   return (
     <ContributionBoundary
       key={JSON.stringify([
@@ -117,10 +170,14 @@ function OwnedCompletion({
   const id = useId();
   const compact = provider.pluginId === "buzz.emoji";
   const mention = provider.pluginId === "buzz.mentions";
+  const channel = provider.pluginId === "buzz.channels";
+  const named = mention || channel;
   const popup = useCompletionPosition(
     input,
     compact ? 0.375 : 1,
-    mention ? { preferAbove: true, gap: 4, maxWidth: 380 } : undefined,
+    named
+      ? { preferAbove: true, gap: 4, maxWidth: channel ? 480 : 380 }
+      : undefined,
   );
   const list = useRef<HTMLDivElement>(null);
   const [result, setResult] = useState<CompletionResult>();
@@ -294,7 +351,8 @@ function OwnedCompletion({
             className={styles.popup}
             aria-label={`${provider.title} suggestions`}
             data-compact={compact || undefined}
-            data-mention={mention || undefined}
+            data-mention={named || undefined}
+            data-channel={channel || undefined}
           >
             <div
               id={id}
@@ -322,7 +380,7 @@ function OwnedCompletion({
                     if (event.button === 0) event.preventDefault();
                   }}
                   onPointerMove={
-                    compact || mention
+                    compact || named
                       ? () => {
                           revealSelection.current = false;
                           setSelected(item.id);
@@ -338,7 +396,7 @@ function OwnedCompletion({
                     </span>
                   )}
                   <span className={styles.label} data-completion-label>
-                    {mention ? (
+                    {named ? (
                       <span className={styles.name}>{item.label}</span>
                     ) : (
                       item.label
@@ -356,6 +414,11 @@ function OwnedCompletion({
                       </small>
                     )}
                   </span>
+                  {channel && i === selectedIndex && (
+                    <span aria-hidden="true" className={styles.acceptKey}>
+                      Enter
+                    </span>
+                  )}
                 </div>
               ))}
               {result?.retry && (
@@ -370,7 +433,7 @@ function OwnedCompletion({
                     if (event.button === 0) event.preventDefault();
                   }}
                   onPointerMove={
-                    compact || mention
+                    compact || named
                       ? () => {
                           revealSelection.current = false;
                           setSelected(RETRY);

@@ -140,3 +140,16 @@
   color: var(--text-subtle);
   cursor: not-allowed;
 }
+
+.popup[data-channel] .list {
+  max-height: 320px;
+}
+.acceptKey {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-chip);
+  background: var(--surface-inset);
+  color: var(--text-subtle);
+  font-family: inherit;
+  font-size: var(--text-caption);
+}

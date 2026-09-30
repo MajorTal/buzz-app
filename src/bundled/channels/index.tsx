@@ -1,3 +1,5 @@
+import { ChannelCompletion } from "./ChannelCompletion";
+import { channelQuery } from "./channel-query";
 import { isChannelRoute } from "../../features/channel-navigation/routes";
 import type { PluginModule } from "../../plugins/api";
 import { ChannelsPage } from "./ChannelsPage";
@@ -13,6 +15,12 @@ export const inject = [
   "channelTemplates",
 ];
 export const apply: PluginModule["apply"] = (ctx) => {
+  ctx.conversation.registerCompletion({
+    id: "channel-typeahead",
+    title: "Channel",
+    match: ({ text, start }) => channelQuery(text, start),
+    component: ChannelCompletion,
+  });
   const extensions = ctx.conversation;
   const agentControl = ctx.agentControl;
   const relay = ctx.relay;

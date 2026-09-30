@@ -7,6 +7,11 @@ import { createRoot } from "react-dom/client";
 import { finalizeEvent } from "nostr-tools";
 import { Context } from "@deepseek-ai/cordis";
 import { createPluginManager } from "../../src/plugins/manager";
+import { PagesService } from "../../src/features/pages/service";
+import { PanelsService } from "../../src/features/panels/service";
+import { SettingsCardsService } from "../../src/features/settings/service";
+import { TemplateProvidersService } from "../../src/features/channel-templates/provider";
+import { provideNavigation } from "../../src/features/navigation/service";
 import { ConversationService } from "../../src/features/conversation/service";
 import { bundledPlugins } from "../../src/bundled";
 import { bindNames } from "../../src/features/identity-names/service";
@@ -47,7 +52,22 @@ const naming = new URLSearchParams(location.search).has("identity-names");
 let colliding = false;
 const delayed = new URLSearchParams(location.search).has("delayed-profiles");
 const testControls = new URLSearchParams(location.search).has("test-controls");
+const channels = new URLSearchParams(location.search).has("channels");
 const stream = new URLSearchParams(location.search).has("stream");
+// Opt-in roster scale for local typing diagnostics; ordinary journeys keep two channels.
+const channelCount = Math.min(
+  1000,
+  Math.max(
+    0,
+    Number(new URLSearchParams(location.search).get("channel-count")) || 0,
+  ),
+);
+const extraChannels = Array.from({ length: channelCount }, (_, index) => [
+  roster(relay, `scale-${index}`, [viewer.pubkey], time),
+  metadata(relay, `scale-${index}`, `general-${index}`, time, [
+    ["t", "stream"],
+  ]),
+]).flat();
 const searches: string[] = [];
 const heldSearches: string[] = [];
 let searchGate: Promise<void> | undefined;
@@ -137,7 +157,13 @@ const owner = createRelaySession(
                 stream ? [["t", "stream"]] : [],
               ),
           roster(relay, "other", [viewer.pubkey], time),
-          metadata(relay, "other", "Other"),
+          metadata(
+            relay,
+            "other",
+            "Other",
+            undefined,
+            channels ? [["t", "stream"], ["private"]] : [],
+          ),
           profile(viewer, { name: "Viewer" }),
           profile(first, {
             name: delayed ? "Mary Jane" : "Honey",
@@ -149,6 +175,7 @@ const owner = createRelaySession(
             picture: "https://avatars.test/app-icon.png",
           }),
           ...(admission ? [profile(outsider, { name: "Outside Person" })] : []),
+          ...extraChannels,
           ...publications,
         ];
         return events.filter((event) =>
@@ -200,7 +227,11 @@ const disabledCalls: {
 const plugins = createPluginManager(context, {
   bundled: [
     ...bundledPlugins.filter(({ manifest }) =>
-      ["buzz.emoji", "buzz.mentions"].includes(manifest.id),
+      [
+        "buzz.emoji",
+        "buzz.mentions",
+        ...(channels ? ["buzz.channels", "buzz.links"] : []),
+      ].includes(manifest.id),
     ),
     {
       manifest: {
@@ -238,6 +269,19 @@ const plugins = createPluginManager(context, {
   ],
 });
 const conversation = new ConversationService(context);
+if (channels) {
+  new PagesService(context);
+  new PanelsService(context);
+  new SettingsCardsService(context);
+  new TemplateProvidersService(context);
+  provideNavigation(context);
+  context.provide("agentControl", browserControl);
+  // Only the composer is mounted; the Channels page never consumes this service.
+  context.provide("relay", {
+    snapshot: () => ({ session: namedSession }),
+    subscribe: () => () => {},
+  });
+}
 Object.assign(window, {
   mentionFixture: {
     async collide(value: boolean) {

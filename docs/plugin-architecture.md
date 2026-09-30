@@ -619,7 +619,7 @@ are not runtime capability negotiation or cross-version compatibility promises.
 
 ### Composer completion providers
 
-Emoji and Mentions each register a separate `registerCompletion` contribution.
+Emoji, Mentions and Channels each register a separate `registerCompletion` contribution.
 The host observes focused, enabled textarea text and collapsed UTF-16 selection,
 then chooses the valid syntax match closest to the caret (greatest range start),
 with `order` and contribution key breaking ties. This lets a later emoji trigger
@@ -661,6 +661,18 @@ Community matches come only from the current session catalog. Mentions performs
 bounded background enrichment through the shared profile directory, not per-key
 network reads or a separate identity cache. Multi-word filtering stays in the
 provider so a delayed name can appear without another editor event.
+
+Channels filters the session's confirmed joined stream/forum roster locally, including
+private channels but excluding archived, cached, read-only and unnamed entries.
+`#` opens at most 20 choices, ranked exact, prefix, then substring with alphabetical
+ties; namesakes include their channel IDs. No typing-driven reads or public-channel
+discovery are added. Empty ready results hide the popup; loading and explicit
+error/retry states remain visible. Selection rechecks current membership and name,
+then inserts an escaped, ID-backed Markdown link without notification recipients.
+The shared editor host checks raw Markdown and rich code/link/literal ranges only
+after a Channels syntax match, keeping suggestions in prose (including headings).
+Ordinary typing skips that extra context scan. Popup positioning and keyboard/IME
+behavior remain host-owned; no new completion API or editor command is introduced.
 
 This is the same host-matched preview as toolbar tools, not version negotiation or
 a sandbox. Inline mention pills remain outside this completion implementation.

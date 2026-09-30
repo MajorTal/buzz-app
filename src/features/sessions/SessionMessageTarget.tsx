@@ -157,6 +157,7 @@ function SelectedMessage({
   return (
     <section
       ref={scroller}
+      data-message-scroller
       className={messages.feed}
       aria-label="Selected session message"
     >

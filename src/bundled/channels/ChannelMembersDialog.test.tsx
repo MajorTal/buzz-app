@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import { npubEncode } from "nostr-tools/nip19";
 import userEvent from "@testing-library/user-event";
-import { afterEach, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { createRelaySession } from "../../features/relay/session";
 import { keypair, profile, roster, signed } from "../../features/relay/testing";
 import { matchesEvent } from "../../features/relay/projection";
@@ -460,4 +460,14 @@ it("keeps known members quiet while rechecking membership without enabling unver
   } finally {
     await act(async () => release());
   }
+});
+
+beforeEach(() => {
+  // jsdom hides [popover] but has no native top layer. Browser tests own paint.
+  HTMLElement.prototype.showPopover = function () {
+    this.style.display = "block";
+  };
+});
+afterEach(() => {
+  Reflect.deleteProperty(HTMLElement.prototype, "showPopover");
 });

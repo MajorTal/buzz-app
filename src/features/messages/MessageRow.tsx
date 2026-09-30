@@ -176,6 +176,7 @@ export const MessageRow = memo(function MessageRow({
     !channelList.channels.find((channel) => channel.id === row.channelId)
       ?.readOnly
   );
+  const rowRef = useRef<HTMLDivElement>(null);
   const menuTrigger = useRef<HTMLButtonElement>(null);
   const [reporting, setReporting] = useState<"open" | "sent">();
   const reportActive = reporting !== undefined;
@@ -261,7 +262,7 @@ export const MessageRow = memo(function MessageRow({
           </span>
         </div>
       )}
-      <div className={styles.message} data-layout={layout}>
+      <div ref={rowRef} className={styles.message} data-layout={layout}>
         {layout === "continuation" ? (
           <span className={styles.messageGutter}>
             <MessageTimestamp createdAt={row.createdAt} compact />
@@ -353,6 +354,7 @@ export const MessageRow = memo(function MessageRow({
           <div className={styles.messageHeader}>
             {!row.membership && (
               <MessageActionBar
+                rowRef={rowRef}
                 menuTriggerRef={menuTrigger}
                 messageId={row.id}
                 onReply={

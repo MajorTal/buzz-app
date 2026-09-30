@@ -8,7 +8,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { MessageReactionControls, MessageReactions } from "./MessageReactions";
 import { createRelaySession } from "../relay/session";
 import {
@@ -35,8 +35,16 @@ const viewer = keypair(),
   other = keypair(),
   relay = keypair();
 const owners: { dispose(): void }[] = [];
+beforeEach(() => {
+  // jsdom hides [popover] but does not implement showPopover. Model opening
+  // for content assertions; browser tests cover top-layer painting and clipping.
+  HTMLElement.prototype.showPopover = function () {
+    this.style.display = "block";
+  };
+});
 afterEach(() => {
   cleanup();
+  Reflect.deleteProperty(HTMLElement.prototype, "showPopover");
   for (const owner of owners.splice(0)) owner.dispose();
   localStorage.clear();
 });

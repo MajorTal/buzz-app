@@ -251,6 +251,15 @@
 
   /* A preview is supplemental context; destination cards can also open it.
      It is portal-rendered by Base UI so a clipped parent cannot hide it. */
+  .buzz-preview-card-positioner[popover] {
+    margin: 0;
+    padding: 0;
+    border: 0;
+    overflow: visible;
+    background: transparent;
+    color: inherit;
+  }
+
   .buzz-preview-card {
     display: grid;
     width: max-content;

@@ -1,10 +1,12 @@
 import { PreviewCard as BasePreviewCard } from "@base-ui/react/preview-card";
 import {
+  useCallback,
   useRef,
   type ReactElement,
   type ReactNode,
   type RefObject,
 } from "react";
+import { behindActiveModal, observeModals } from "../modalLayer";
 
 export type PreviewCardProps = {
   /** The one interactive element that anchors and reveals this preview. */
@@ -49,6 +51,18 @@ export function PreviewCard({
 }: PreviewCardProps) {
   const triggerRef = useRef<HTMLAnchorElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const promote = useCallback((positioner: HTMLDivElement) => {
+    // Join the top layer after the hovered row's floating actions, but not
+    // above a modal the trigger is outside. The portal is never inside one.
+    // Base UI still owns placement, timing, focus and unmounting.
+    const update = () => {
+      const trigger = triggerRef.current;
+      if (trigger && behindActiveModal(trigger)) positioner.hidePopover?.();
+      else positioner.showPopover?.();
+    };
+    update();
+    return observeModals(update);
+  }, []);
   const focusedTrigger = useRef<HTMLElement | null>(null);
   const closingPopup = useRef<HTMLDivElement | null>(null);
   const restoreFocus = () => {
@@ -121,6 +135,9 @@ export function PreviewCard({
           anchor={anchor}
           align="start"
           sideOffset={8}
+          positionMethod="fixed"
+          popover="manual"
+          ref={promote}
           className="buzz-preview-card-positioner"
         >
           <BasePreviewCard.Popup

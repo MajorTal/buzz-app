@@ -559,6 +559,7 @@ function ReviewComments({
   return (
     <section
       ref={comments}
+      data-message-scroller
       className={styles.mediaReviewThread}
       aria-label="Media comments"
     >

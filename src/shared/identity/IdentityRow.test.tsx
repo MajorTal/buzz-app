@@ -3,7 +3,7 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useEffect } from "react";
-import { afterEach, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, expect, it, vi } from "vitest";
 import { npubEncode } from "nostr-tools/nip19";
 import { ToastProvider } from "../design-system/ui/Toast";
 import { IdentityRow } from "./IdentityRow";
@@ -91,4 +91,14 @@ it("reports clipboard denial and leaves the full key available for manual copy",
   ).toBeVisible();
   expect(card).toHaveTextContent(npubEncode(pubkey));
   expect(screen.queryByText("Copied npub")).not.toBeInTheDocument();
+});
+
+beforeEach(() => {
+  // jsdom hides [popover] but has no native top layer. Browser tests own paint.
+  HTMLElement.prototype.showPopover = function () {
+    this.style.display = "block";
+  };
+});
+afterEach(() => {
+  Reflect.deleteProperty(HTMLElement.prototype, "showPopover");
 });

@@ -169,7 +169,7 @@ it("controls playback, speed and sound without native controls", async () => {
   expect(play).toHaveBeenCalledOnce();
   expect(screen.getByRole("button", { name: "Pause video" })).toBeVisible();
   fireEvent.click(screen.getByRole("button", { name: "Playback speed: 1x" }));
-  fireEvent.click(screen.getByRole("button", { name: "1.5x" }));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: "1.5x" }));
   expect(video.playbackRate).toBe(1.5);
   fireEvent.change(screen.getByRole("slider", { name: "Video volume" }), {
     target: { value: "0.5" },
@@ -197,10 +197,10 @@ it("closes the speed menu with Escape without closing review", async () => {
   fireEvent.click(
     await screen.findByRole("button", { name: "Playback speed: 1x" }),
   );
-  fireEvent.keyDown(screen.getByRole("button", { name: "1.5x" }), {
+  fireEvent.keyDown(screen.getByRole("menuitemradio", { name: "1.5x" }), {
     key: "Escape",
   });
-  expect(screen.queryByRole("group", { name: "Playback speed" })).toBeNull();
+  expect(screen.queryByRole("menu", { name: /^Playback speed:/ })).toBeNull();
   expect(close).not.toHaveBeenCalled();
 });
 
@@ -281,11 +281,14 @@ it("leaves editing, native sliders, speed menus, and modified arrow keys alone",
     expect(video.currentTime).toBe(25);
   }
   fireEvent.click(screen.getByRole("button", { name: "Playback speed: 1x" }));
-  const speedMenu = screen.getByRole("group", { name: "Playback speed" });
+  const speedMenu = screen.getByRole("menu", { name: /^Playback speed:/ });
   expect(
-    fireEvent.keyDown(within(speedMenu).getByRole("button", { name: "2x" }), {
-      key: "ArrowLeft",
-    }),
+    fireEvent.keyDown(
+      within(speedMenu).getByRole("menuitemradio", { name: "2x" }),
+      {
+        key: "ArrowLeft",
+      },
+    ),
   ).toBe(true);
   expect(video.currentTime).toBe(25);
 });

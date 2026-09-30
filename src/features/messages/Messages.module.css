@@ -1524,6 +1524,9 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
   background: var(--surface-inset);
 }
 
+.messageActionsSlot {
+  display: contents;
+}
 .messageActions {
   @apply popover-surface;
   order: 1;
@@ -1558,42 +1561,50 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
   }
 }
 @media (hover: hover) and (pointer: fine) {
-  .messageActions {
-    position: absolute;
-    flex-wrap: nowrap;
-    max-width: none;
-    inset-inline-end: 0;
-    top: calc(100% + var(--space-1));
-    translate: 0 -100%;
-    z-index: 2;
-    opacity: 0;
-    pointer-events: none;
-    margin-inline-start: 0;
-  }
-  /* Anchor to the real author line, including when its metadata wraps. */
+  /* Preserve main's author-line anchor without reserving extra message space. */
   .messageHeader {
     position: relative;
   }
-  /* A continuation has no visible author line; end the bar at its header
-     instead of deriving clearance from row padding or half the bar's height. */
-  .message[data-layout="continuation"] .messageActions {
+  .messageActionsSlot {
+    display: block;
+    position: absolute;
+    inset-inline-end: 0;
+    top: calc(100% + var(--space-1));
+    width: 100%;
+    height: 0;
+  }
+  .message[data-layout="continuation"] .messageActionsSlot {
     top: 0;
   }
-  /* Keep pointer travel to the lifted bar inside the hovered row without
-     changing spacing or intercepting the preceding row while at rest. */
+  .messageActions {
+    flex-wrap: nowrap;
+    max-width: none;
+    opacity: 0;
+    pointer-events: none;
+    translate: 0 -100%;
+  }
+  /* Closed controls remain focusable at the slot, not at viewport offsets. */
+  .messageActions[popover] {
+    position: absolute;
+    inset: auto;
+    inset-block-start: 0;
+    inset-inline-end: 0;
+    margin: 0;
+    overflow: visible;
+  }
+  .messageActions[popover]:popover-open {
+    position: fixed;
+    inset: auto;
+    opacity: 1;
+    pointer-events: auto;
+  }
+  /* Retain pointer travel to the lifted toolbar without adding row spacing. */
   .message:hover::before {
     content: "";
     position: absolute;
     bottom: 100%;
     inset-inline: 0;
     height: var(--space-2);
-  }
-  .message:hover .messageActions,
-  .message:focus-within .messageActions,
-  .messageActions[data-open],
-  .messageActions:has([aria-haspopup][aria-expanded="true"]) {
-    opacity: 1;
-    pointer-events: auto;
   }
 }
 
@@ -1734,7 +1745,8 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
     opacity: 0;
   }
   .message:hover .continuationTime,
-  .message:focus-within .continuationTime {
+  .message:focus-within .continuationTime,
+  .message[data-actions-revealed] .continuationTime {
     opacity: 1;
   }
 }
@@ -2005,11 +2017,6 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
   }
 }
 
-.mediaPreview[data-video-preview]:has([aria-expanded="true"]) {
-  overflow: visible;
-  clip-path: none;
-  z-index: 5;
-}
 .mediaPreview[data-video-preview] .mediaVideo,
 .mediaPreview[data-video-preview] .mediaPoster {
   border-radius: inherit;

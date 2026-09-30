@@ -91,6 +91,88 @@ test("older session root and reply links fetch and reveal inline, then sending r
   await expect(selected(page)).toHaveCount(0);
 });
 
+// Browser-only: top-layer painting and hit testing against a real scroll pane.
+test("selected message actions hide beyond their pane and return with it", async ({
+  page,
+  app,
+}) => {
+  await page.goto(app.origin);
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.fixtureNavigation?.snapshot().status),
+    )
+    .toBe("opened");
+  expect(
+    await openTarget(page, target(app, app.exact.target.id, app.exact.root.id)),
+  ).toEqual({ status: "opened" });
+  const pane = selected(page);
+  const row = pane.locator(`[data-message-id="${app.exact.target.id}"]`);
+  await expect(row).toBeFocused();
+  const actions = row.getByRole("group", {
+    name: "Message actions",
+    includeHidden: true,
+  });
+  const shown = (visible) =>
+    expect
+      .poll(() => actions.evaluate((bar) => bar.matches(":popover-open")))
+      .toBe(visible);
+  // Fixture replies are short; stand in for a long selected message whose pane
+  // scrolls well past the toolbar's anchor.
+  await row.locator(":scope > [data-layout]").evaluate((node) => {
+    node.style.minHeight = "1600px";
+  });
+  await settle(page, pane);
+  await row.getByText("Exact reply edited", { exact: true }).hover();
+  await shown(true);
+  const focused = actions.getByRole("button").first();
+  await focused.focus();
+  await page.mouse.move(0, 0);
+  await shown(true);
+  const back = page.getByRole("button", {
+    name: "Back to latest",
+    exact: true,
+  });
+  const backBox = await back.boundingBox();
+  const point = {
+    x: backBox.x + backBox.width / 2,
+    y: backBox.y + backBox.height / 2,
+  };
+  // Scroll the anchor up under the selected-message navigation.
+  await actions.evaluate((bar, point) => {
+    const section = bar.closest("section");
+    section.scrollTop +=
+      bar.parentElement.getBoundingClientRect().top -
+      point.y +
+      bar.offsetHeight / 2;
+  }, point);
+  await settle(page, pane);
+  await shown(false);
+  await expect(actions).toHaveCSS("opacity", "0");
+  await expect(focused).toBeFocused();
+  expect(
+    await back.evaluate(
+      (button, point) =>
+        button.contains(document.elementFromPoint(point.x, point.y)),
+      point,
+    ),
+  ).toBe(true);
+  await pane.evaluate((section) => {
+    section.scrollTop = 0;
+  });
+  await settle(page, pane);
+  await shown(true);
+  await expect
+    .poll(() =>
+      actions.evaluate((bar) => {
+        const rect = bar.getBoundingClientRect();
+        const slot = bar.parentElement.getBoundingClientRect();
+        const pane = bar.closest("section").getBoundingClientRect();
+        return Math.abs(rect.bottom - slot.top) < 1 && rect.bottom > pane.top;
+      }),
+    )
+    .toBe(true);
+});
+
 const membershipTest = test.extend({ membershipActivity: true });
 membershipTest(
   "a loaded session reply reveals in the existing timeline without an exact lookup",

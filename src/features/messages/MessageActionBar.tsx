@@ -5,6 +5,7 @@ import {
   useState,
   type ReactNode,
   type Ref,
+  type RefObject,
 } from "react";
 import {
   ChatCircleIcon,
@@ -22,6 +23,7 @@ import {
 } from "../../shared/design-system/ui/Menu";
 import { ToastNotice } from "../../shared/design-system/ui/Toast";
 import styles from "./Messages.module.css";
+import { useFloatingActionBar } from "./useFloatingActionBar";
 
 const AfterMenuClose = createContext<
   ((action: () => void) => void) | undefined
@@ -37,7 +39,9 @@ export function MessageActionBar({
   overflowItems,
   messageId,
   menuTriggerRef,
+  rowRef,
 }: {
+  rowRef?: RefObject<HTMLDivElement | null>;
   messageId?: string;
   menuTriggerRef?: Ref<HTMLButtonElement>;
   onReply?: (() => void) | undefined;
@@ -48,6 +52,9 @@ export function MessageActionBar({
   overflowItems?: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+  const slotRef = useRef<HTMLDivElement>(null);
+  const floating = useFloatingActionBar(rowRef, barRef, slotRef, open);
   const [copying, setCopying] = useState(false);
   const [notice, setNotice] = useState<{ text: string; error: boolean }>();
   const busy = useRef(false);
@@ -73,30 +80,31 @@ export function MessageActionBar({
   };
   return (
     <>
-      {/* biome-ignore lint/a11y/useSemanticElements: This groups message actions, not form fields. */}
-      <div
-        className={styles.messageActions}
-        data-open={open || undefined}
-        role="group"
-        aria-label="Message actions"
-      >
-        {quickControls}
-        {onReply && (
-          <IconButton
-            aria-label="Reply"
-            title={
-              replyDisabled ? "Reply unavailable for this message" : "Reply"
-            }
-            size="sm"
-            disabled={replyDisabled}
-            icon={<ChatCircleIcon />}
-            onClick={(event) => {
-              event.currentTarget.focus();
-              onReply();
-            }}
-          />
-        )}
-        <span>
+      <div ref={slotRef} className={styles.messageActionsSlot}>
+        {/* biome-ignore lint/a11y/useSemanticElements: This groups message actions, not form fields. */}
+        <div
+          className={styles.messageActions}
+          ref={barRef}
+          popover={floating ? "manual" : undefined}
+          role="group"
+          aria-label="Message actions"
+        >
+          {quickControls}
+          {onReply && (
+            <IconButton
+              aria-label="Reply"
+              title={
+                replyDisabled ? "Reply unavailable for this message" : "Reply"
+              }
+              size="sm"
+              disabled={replyDisabled}
+              icon={<ChatCircleIcon />}
+              onClick={(event) => {
+                event.currentTarget.focus();
+                onReply();
+              }}
+            />
+          )}
           <IconButton
             aria-label="Copy link"
             title={link ? "Copy link" : "Message link unavailable"}
@@ -107,58 +115,58 @@ export function MessageActionBar({
               if (link) void copy(() => link, "Link");
             }}
           />
-        </span>
-        <MenuRoot
-          open={open}
-          onOpenChange={(next) => {
-            if (next) setHandingOffFocus(false);
-            setOpen(next);
-          }}
-          onOpenChangeComplete={(opened) => {
-            if (!opened) {
-              const action = afterClose.current;
-              afterClose.current = undefined;
-              action?.();
-            }
-          }}
-        >
-          <MenuTrigger
-            render={
-              <IconButton
-                ref={menuTriggerRef}
-                aria-label="More message actions"
-                title="More message actions"
-                size="sm"
-                icon={<DotsThreeIcon />}
-              />
-            }
-          />
-          <MenuPopup
-            align="end"
-            data-message-id={messageId}
-            // A boolean preserves Base UI's safeguard when focus already moved.
-            // A callback returning true would force focus back over a newer action.
-            finalFocus={!handingOffFocus}
+          <MenuRoot
+            open={open}
+            onOpenChange={(next) => {
+              if (next) setHandingOffFocus(false);
+              setOpen(next);
+            }}
+            onOpenChangeComplete={(opened) => {
+              if (!opened) {
+                const action = afterClose.current;
+                afterClose.current = undefined;
+                action?.();
+              }
+            }}
           >
-            <AfterMenuClose.Provider
-              value={(action) => {
-                setHandingOffFocus(true);
-                afterClose.current = action;
-              }}
+            <MenuTrigger
+              render={
+                <IconButton
+                  ref={menuTriggerRef}
+                  aria-label="More message actions"
+                  title="More message actions"
+                  size="sm"
+                  icon={<DotsThreeIcon />}
+                />
+              }
+            />
+            <MenuPopup
+              align="end"
+              data-message-id={messageId}
+              // A boolean preserves Base UI's safeguard when focus already moved.
+              // A callback returning true would force focus back over a newer action.
+              finalFocus={!handingOffFocus}
             >
-              <MenuItem
-                disabled={copying}
-                onClick={() => void copy(copyText, "Message")}
+              <AfterMenuClose.Provider
+                value={(action) => {
+                  setHandingOffFocus(true);
+                  afterClose.current = action;
+                }}
               >
-                <MenuIcon>
-                  <CopyIcon />
-                </MenuIcon>
-                Copy message
-              </MenuItem>
-              {overflowItems}
-            </AfterMenuClose.Provider>
-          </MenuPopup>
-        </MenuRoot>
+                <MenuItem
+                  disabled={copying}
+                  onClick={() => void copy(copyText, "Message")}
+                >
+                  <MenuIcon>
+                    <CopyIcon />
+                  </MenuIcon>
+                  Copy message
+                </MenuItem>
+                {overflowItems}
+              </AfterMenuClose.Provider>
+            </MenuPopup>
+          </MenuRoot>
+        </div>
       </div>
       {notice && (
         <ToastNotice

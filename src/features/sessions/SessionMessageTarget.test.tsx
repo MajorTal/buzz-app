@@ -213,6 +213,10 @@ it("keeps a verified exact target readable if unrelated thread context fails", a
   );
   const selected = screen.getByText("Selected reply");
   expect(selected).toBeVisible();
+  // Floating message actions hide once their anchor leaves this scroll pane.
+  expect(
+    screen.getByRole("region", { name: "Selected session message" }),
+  ).toHaveAttribute("data-message-scroller");
   // Let reveal run before teardown; rendering text alone can outrun its frame.
   await waitFor(() =>
     expect(selected.closest("[data-message-id]")).toHaveFocus(),

@@ -142,7 +142,7 @@ it("offers inline seek, speed and volume controls and hands off the scrubbed pos
   });
   expect(video.currentTime).toBe(32);
   fireEvent.click(screen.getByRole("button", { name: "Playback speed: 1x" }));
-  fireEvent.click(screen.getByRole("button", { name: "0.25x" }));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: "0.25x" }));
   expect(video.playbackRate).toBe(0.25);
   fireEvent.change(screen.getByRole("slider", { name: "Video volume" }), {
     target: { value: "0.25" },
@@ -176,7 +176,7 @@ it("shares the saved playback speed with mounted previews and later videos", () 
   })[0];
   if (!firstSpeed) throw new Error("Missing speed control");
   fireEvent.click(firstSpeed);
-  fireEvent.click(screen.getByRole("button", { name: "1.75x" }));
+  fireEvent.click(screen.getByRole("menuitemradio", { name: "1.75x" }));
   expect(
     [...container.querySelectorAll("video")].map((video) => video.playbackRate),
   ).toEqual([1.75, 1.75]);

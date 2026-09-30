@@ -17,6 +17,13 @@ import {
   SpeakerHighIcon,
   SpeakerSlashIcon,
 } from "../../shared/design-system/icons";
+import {
+  MenuRoot,
+  MenuTrigger,
+  MenuPopup,
+  MenuRadioGroup,
+  MenuRadioItem,
+} from "../../shared/design-system/ui/Menu";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { formatMediaTime } from "./media-timecode";
 import styles from "./VideoPlayer.module.css";
@@ -63,11 +70,8 @@ export function VideoControls({
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
   const [rate, setRate] = useState(savedSpeed);
-  const [menu, setMenu] = useState(false);
   const [hover, setHover] = useState<number>();
   const [notice, setNotice] = useState<string>();
-  const speedButton = useRef<HTMLButtonElement>(null);
-  const speedMenu = useRef<HTMLFieldSetElement>(null);
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -136,18 +140,6 @@ export function VideoControls({
         video.removeEventListener(event, listener);
     };
   }, [videoRef]);
-  useEffect(() => {
-    if (!menu) return;
-    const dismiss = (event: PointerEvent) => {
-      if (
-        !speedMenu.current?.contains(event.target as Node) &&
-        !speedButton.current?.contains(event.target as Node)
-      )
-        setMenu(false);
-    };
-    document.addEventListener("pointerdown", dismiss);
-    return () => document.removeEventListener("pointerdown", dismiss);
-  }, [menu]);
   const toggle = () => {
     const video = videoRef.current;
     if (!video) return;
@@ -271,56 +263,43 @@ export function VideoControls({
           {videoTime(duration)}
         </span>
         <div className={styles.speed}>
-          <button
-            data-buzz-ui=""
-            ref={speedButton}
-            type="button"
-            aria-label={`Playback speed: ${rate}x`}
-            aria-expanded={menu}
-            onClick={() => setMenu(!menu)}
-          >
-            {rate}x
-          </button>
-          {menu && (
-            <fieldset
-              ref={speedMenu}
-              className={styles.speedMenu}
-              aria-label="Playback speed"
-              onKeyDown={(event) => {
-                if (event.key === "Escape") {
-                  event.stopPropagation();
-                  setMenu(false);
-                  speedButton.current?.focus();
-                }
-              }}
+          <MenuRoot modal={false}>
+            <MenuTrigger
+              render={<button data-buzz-ui="" type="button" />}
+              aria-label={`Playback speed: ${rate}x`}
             >
-              <span>Speed</span>
-              {speeds.map((speed) => (
-                <button
-                  data-buzz-ui=""
-                  type="button"
-                  key={speed}
-                  aria-pressed={rate === speed}
-                  onClick={() => {
-                    if (videoRef.current) videoRef.current.playbackRate = speed;
-                    setRate(speed);
-                    try {
-                      localStorage.setItem(speedKey, String(speed));
-                    } catch {
-                      /* Playback works without storage. */
-                    }
-                    window.dispatchEvent(
-                      new CustomEvent(speedEvent, { detail: speed }),
-                    );
-                    setMenu(false);
-                    speedButton.current?.focus();
-                  }}
-                >
-                  {speed}x {rate === speed ? "✓" : ""}
-                </button>
-              ))}
-            </fieldset>
-          )}
+              {rate}x
+            </MenuTrigger>
+            <MenuPopup
+              side="top"
+              align="end"
+              size="compact"
+              render={<div className="dark" data-color-mode="dark" />}
+            >
+              <MenuRadioGroup
+                value={String(rate)}
+                onValueChange={(value) => {
+                  const speed = Number(value);
+                  if (videoRef.current) videoRef.current.playbackRate = speed;
+                  setRate(speed);
+                  try {
+                    localStorage.setItem(speedKey, String(speed));
+                  } catch {
+                    /* Playback works without storage. */
+                  }
+                  window.dispatchEvent(
+                    new CustomEvent(speedEvent, { detail: speed }),
+                  );
+                }}
+              >
+                {speeds.map((speed) => (
+                  <MenuRadioItem key={speed} value={String(speed)} closeOnClick>
+                    {speed}x
+                  </MenuRadioItem>
+                ))}
+              </MenuRadioGroup>
+            </MenuPopup>
+          </MenuRoot>
         </div>
         <div className={styles.volume}>
           <button

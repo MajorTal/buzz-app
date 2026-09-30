@@ -585,3 +585,375 @@ async fn discovery_body_is_bounded_for_length_and_chunked_transfer() {
         task.join().unwrap();
     }
 }
+
+#[tokio::test]
+async fn sidebar_ipc_only_decodes_verified_self_coordinates_and_signs_valid_payloads() {
+    let host = IdentityHost::fixture();
+    let payload =
+        serde_json::json!({"version":1,"channels":{"channel":{"starred":true,"updatedAt":1}}});
+    let event = host
+        .sign_sidebar("channel-stars".into(), payload.clone(), 1)
+        .await
+        .unwrap();
+    verify(&event);
+    assert_eq!(
+        host.decode_sidebar(vec![event.clone()]).await.unwrap()["channel-stars"],
+        payload
+    );
+    assert!(host
+        .decode_sidebar(vec![event.clone(), event.clone()])
+        .await
+        .is_err());
+    assert!(host.decode_sidebar(vec![event.clone(); 5]).await.is_err());
+    let mut tampered = event.clone();
+    tampered["content"] = serde_json::json!("changed");
+    assert!(host.decode_sidebar(vec![tampered]).await.is_err());
+    let mut wrong_coordinate = event.clone();
+    wrong_coordinate["tags"][0][1] = serde_json::json!("unknown");
+    assert!(host.decode_sidebar(vec![wrong_coordinate]).await.is_err());
+    assert!(host
+        .sign_sidebar("other".into(), payload.clone(), 1)
+        .await
+        .is_err());
+    assert!(host.sign_sidebar("channel-stars".into(), serde_json::json!({"version":1,"channels":{"c":{"starred":"not boolean","updatedAt":1}}}), 1).await.is_err());
+    let other = IdentityHost::fixture()
+        .sign_sidebar(
+            "channel-sort".into(),
+            serde_json::json!({"version":1,"groups":{}}),
+            1,
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        host.decode_sidebar(vec![other]).await.unwrap()["channel-sort"]["version"],
+        1
+    );
+}
+
+#[tokio::test]
+async fn sidebar_decoder_interoperates_with_nostr_tools_nip44_v2() {
+    // Produced with nostr-tools 2.25.2, private key [1; 32].
+    let event: serde_json::Value = serde_json::from_str(r#"{"kind":30078,"created_at":1700000000,"tags":[["d","channel-mutes"],["t","channel-mutes"]],"content":"Ajhdtq+PsGhpLGhyo0hAN55quGVmOE8/p0id4UVmJPz/Aki5aZUHWBymErqORblF9uPjX6XD5DjFJDR18qIHIIullzAvPKE5z336CV5caxsevvNkXoeRk7U0xVpk+piVfM9z2+cgyuJoG3cGMzFp78/53XHDvsEUgtE9Wv8kgvj5vQc=","pubkey":"1b84c5567b126440995d3ed5aaba0565d71e1834604819ff9c17f5e9d5dd078f","id":"e4471969b8f1b27fad968343db8deb4346c3e530c69b548f68a6adb31f99628c","sig":"14064569d6085363f32865b2204037c4a5769a09f116209fda3790feef12e6672d1806c7626c6857d0696cfe43f39ed4a8dc13d965989300ec757fb3a2fd44cd"}"#).unwrap();
+    assert_eq!(
+        IdentityHost::fixture()
+            .decode_sidebar(vec![event])
+            .await
+            .unwrap()["channel-mutes"],
+        serde_json::json!({"version":1,"channels":{"cross":{"muted":true,"updatedAt":1}}})
+    );
+}
+
+#[tokio::test]
+async fn sidebar_signer_matches_projection_lengths_and_preserves_unknown_sort_entries() {
+    let host = IdentityHost::fixture();
+    let unicode = "界".repeat(120);
+    let groups = serde_json::json!({"version":1,"sections":[{"id":"group","name":unicode,"order":0}],"assignments":{"c":"group"}});
+    let event = host
+        .sign_sidebar("channel-sections".into(), groups.clone(), 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        host.decode_sidebar(vec![event]).await.unwrap()["channel-sections"],
+        groups
+    );
+    // A valid head from another client must remain writable after a native move.
+    let mut existing = groups.clone();
+    existing["assignments"]["other"] = serde_json::json!("group");
+    let event = host
+        .sign_sidebar("channel-sections".into(), existing.clone(), 2)
+        .await
+        .unwrap();
+    assert_eq!(
+        host.decode_sidebar(vec![event]).await.unwrap()["channel-sections"],
+        existing
+    );
+    // Same preservation vector as dev/sidebar-sort.test.mjs: unrelated modes,
+    // section keys and top-level metadata survive an override update.
+    let sort = serde_json::json!({"version":1,"future":{"x":1},"groups":{
+        "channels":"recent","section:elsewhere":"recent","future":"next-mode","section:work":"recent"
+    }});
+    let event = host
+        .sign_sidebar("channel-sort".into(), sort.clone(), 1)
+        .await
+        .unwrap();
+    assert_eq!(
+        host.decode_sidebar(vec![event]).await.unwrap()["channel-sort"],
+        sort
+    );
+    assert!(host.sign_sidebar("channel-sections".into(), serde_json::json!({"version":1,"sections":[{"id":"group","name":"界".repeat(257),"order":0}],"assignments":{}}), 1).await.is_err());
+}
+
+#[tokio::test]
+async fn sidebar_signer_supports_large_records_without_expanding_general_signing() {
+    let host = IdentityHost::fixture();
+    let channels: serde_json::Map<String, serde_json::Value> = (0..500)
+        .map(|i| {
+            (
+                format!("{i:08x}-1234-1234-1234-123456789abc"),
+                serde_json::json!({"starred":true,"updatedAt":1700000000000_u64}),
+            )
+        })
+        .collect();
+    let event = host
+        .sign_sidebar(
+            "channel-stars".into(),
+            serde_json::json!({"version":1,"channels":channels}),
+            1,
+        )
+        .await
+        .unwrap();
+    verify(&event);
+    assert!(event["content"].as_str().unwrap().len() > 64 * 1024);
+    assert_eq!(
+        host.decode_sidebar(vec![event]).await.unwrap()["channel-stars"]["channels"]
+            .as_object()
+            .unwrap()
+            .len(),
+        500
+    );
+    let muted: serde_json::Map<String, serde_json::Value> = (0..500)
+        .map(|i| {
+            (
+                format!("{i:08x}-1234-1234-1234-123456789abc"),
+                serde_json::json!({"muted":i % 2 == 0,"updatedAt":1700000000000_u64}),
+            )
+        })
+        .collect();
+    let event = host
+        .sign_sidebar(
+            "channel-mutes".into(),
+            serde_json::json!({"version":1,"channels":muted}),
+            1,
+        )
+        .await
+        .unwrap();
+    verify(&event);
+    assert_eq!(
+        host.decode_sidebar(vec![event]).await.unwrap()["channel-mutes"]["channels"]
+            .as_object()
+            .unwrap()
+            .len(),
+        500
+    );
+    let assignments: serde_json::Map<String, serde_json::Value> = (0..1000)
+        .map(|i| {
+            (
+                format!("{i:08x}-1234-1234-1234-123456789abc"),
+                serde_json::json!("group"),
+            )
+        })
+        .collect();
+    let event = host.sign_sidebar("channel-sections".into(), serde_json::json!({
+        "version":1,"sections":[{"id":"group","name":"Work","order":0}],"assignments":assignments
+    }), 1).await.unwrap();
+    verify(&event);
+    assert_eq!(
+        host.decode_sidebar(vec![event]).await.unwrap()["channel-sections"]["assignments"]
+            .as_object()
+            .unwrap()
+            .len(),
+        1000
+    );
+    assert!(host
+        .sign(EventTemplate {
+            kind: 9,
+            created_at: 1,
+            tags: vec![],
+            content: "x".repeat(65_536)
+        })
+        .await
+        .is_err());
+}
+
+#[tokio::test]
+async fn sidebar_signer_and_decoder_match_broker_plaintext_boundaries() {
+    let host = IdentityHost::fixture();
+    // Unknown string sort modes are preserved by both clients; use one to place
+    // actual JSON exactly on each wire-format and application budget boundary.
+    let prefix = r#"{"groups":{"future":""#;
+    let suffix = r#""},"version":1}"#;
+    for size in [65_408, 65_409, 65_535, 65_536, 128 * 1024] {
+        let filler = "x".repeat(size - prefix.len() - suffix.len());
+        let payload = serde_json::json!({"version":1,"groups":{"future":filler}});
+        assert_eq!(serde_json::to_string(&payload).unwrap().len(), size);
+        let event = host
+            .sign_sidebar("channel-sort".into(), payload.clone(), 1)
+            .await
+            .unwrap();
+        verify(&event);
+        assert_eq!(
+            host.decode_sidebar(vec![event]).await.unwrap()["channel-sort"],
+            payload
+        );
+    }
+    let oversized = serde_json::json!({
+        "version":1,"groups":{"future":"x".repeat(128 * 1024 - prefix.len() - suffix.len() + 1)}
+    });
+    assert_eq!(
+        serde_json::to_string(&oversized).unwrap().len(),
+        128 * 1024 + 1
+    );
+    assert_eq!(
+        host.sign_sidebar("channel-sort".into(), oversized, 1)
+            .await
+            .unwrap_err(),
+        "Sidebar plaintext budget exceeded"
+    );
+}
+
+#[tokio::test]
+async fn sidebar_decoder_accepts_broker_extended_length_sections_alongside_other_preferences() {
+    let host = IdentityHost::fixture();
+    let section = "12345678-1234-1234-1234-123456789abc";
+    let assignments: serde_json::Map<String, serde_json::Value> = (0..1000)
+        .map(|i| {
+            (
+                format!("{i:08x}-1234-1234-1234-123456789abc"),
+                serde_json::json!(section),
+            )
+        })
+        .collect();
+    let sections = serde_json::json!({"version":1,"sections":[{"id":section,"name":"Work","order":0}],"assignments":assignments});
+    assert!(serde_json::to_vec(&sections).unwrap().len() > 65_535);
+    let mut events = vec![host
+        .sign_sidebar("channel-sections".into(), sections.clone(), 1)
+        .await
+        .unwrap()];
+    for coordinate in ["channel-stars", "channel-mutes", "channel-sort"] {
+        let payload = if coordinate == "channel-sort" {
+            serde_json::json!({"version":1,"groups":{}})
+        } else {
+            serde_json::json!({"version":1,"channels":{}})
+        };
+        events.push(
+            host.sign_sidebar(coordinate.into(), payload, 1)
+                .await
+                .unwrap(),
+        );
+    }
+    let decoded = host.decode_sidebar(events).await.unwrap();
+    assert_eq!(decoded["channel-sections"], sections);
+    assert_eq!(decoded["channel-stars"]["version"], 1);
+    assert_eq!(decoded["channel-mutes"]["version"], 1);
+    assert_eq!(decoded["channel-sort"]["version"], 1);
+}
+
+#[tokio::test]
+async fn sidebar_decoder_accepts_four_maximum_plaintext_records_and_bounds_total_upload() {
+    let host = IdentityHost::fixture();
+    let mut events = Vec::new();
+    for coordinate in [
+        "channel-sort",
+        "channel-sections",
+        "channel-stars",
+        "channel-mutes",
+    ] {
+        // Preserved top-level data can fill the plaintext budget without
+        // bypassing each coordinate's validated schema or the signer boundary.
+        let mut value = match coordinate {
+            "channel-sort" => serde_json::json!({"version":1,"groups":{},"future":""}),
+            "channel-sections" => {
+                serde_json::json!({"version":1,"sections":[],"assignments":{},"future":""})
+            }
+            _ => serde_json::json!({"version":1,"channels":{},"future":""}),
+        };
+        let overhead = serde_json::to_vec(&value).unwrap().len();
+        value["future"] = serde_json::json!("x".repeat(128 * 1024 - overhead));
+        assert_eq!(serde_json::to_vec(&value).unwrap().len(), 128 * 1024);
+        events.push(
+            host.sign_sidebar(coordinate.into(), value, 1)
+                .await
+                .unwrap(),
+        );
+    }
+    let request_len = serde_json::to_vec(&events).unwrap().len();
+    assert!(request_len > 512 * 1024 && request_len < 768 * 1024);
+    assert_eq!(
+        host.decode_sidebar(events)
+            .await
+            .unwrap()
+            .as_object()
+            .unwrap()
+            .len(),
+        4
+    );
+}
+
+#[tokio::test]
+async fn sidebar_decoder_loads_four_populated_bounded_coordinates() {
+    let host = IdentityHost::fixture();
+    let section = "00000000-1234-1234-1234-123456789abc";
+    let assignments: serde_json::Map<String, serde_json::Value> = (0..1000)
+        .map(|i| {
+            (
+                format!("{i:08x}-1234-1234-1234-123456789abc"),
+                serde_json::json!(section),
+            )
+        })
+        .collect();
+    let sections: serde_json::Value =
+        serde_json::json!({"version":1,"sections":[],"assignments":assignments});
+    let named_sections: Vec<_> = (0..100)
+        .map(|i| serde_json::json!({"id":format!("{i:08x}-1234-1234-1234-123456789abc"),"name":"N".repeat(198),"order":i}))
+        .collect();
+    let mut sections = sections;
+    sections["sections"] = serde_json::json!(named_sections);
+    let mut events = vec![host
+        .sign_sidebar("channel-sections".into(), sections.clone(), 1)
+        .await
+        .unwrap()];
+    for (coordinate, field) in [("channel-stars", "starred"), ("channel-mutes", "muted")] {
+        let channels: serde_json::Map<String, serde_json::Value> = (0..500)
+            .map(|i| {
+                (
+                    format!("{i:08x}-5678-1234-1234-123456789abc"),
+                    serde_json::json!({field: true, "updatedAt": 1_700_000_000_000_u64}),
+                )
+            })
+            .collect();
+        let event = host
+            .sign_sidebar(
+                coordinate.into(),
+                serde_json::json!({"version":1,"channels":channels}),
+                1,
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            host.decode_sidebar(vec![event.clone()]).await.unwrap()[coordinate]["channels"]
+                .as_object()
+                .unwrap()
+                .len(),
+            500
+        );
+        events.push(event);
+    }
+    let sort = serde_json::json!({"version":1,"groups":{"channels":"recent"}});
+    events.push(
+        host.sign_sidebar("channel-sort".into(), sort.clone(), 1)
+            .await
+            .unwrap(),
+    );
+    let request_bytes = serde_json::to_vec(&events).unwrap().len();
+    assert!(
+        request_bytes > 256 * 1024,
+        "fixture must cross old aggregate budget: {request_bytes}"
+    );
+    let decoded = host.decode_sidebar(events).await.unwrap();
+    assert_eq!(decoded["channel-sections"], sections);
+    assert_eq!(
+        decoded["channel-stars"]["channels"]
+            .as_object()
+            .unwrap()
+            .len(),
+        500
+    );
+    assert_eq!(
+        decoded["channel-mutes"]["channels"]
+            .as_object()
+            .unwrap()
+            .len(),
+        500
+    );
+    assert_eq!(decoded["channel-sort"], sort);
+}

@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { createHash } from "node:crypto";
 import { afterEach, expect, it } from "vitest";
 import { generateSecretKey, getPublicKey, verifyEvent } from "nostr-tools";
+import { SIDEBAR_HEAD_BYTES } from "./sidebar-preferences.mjs";
 import { relayBrokerPlugin } from "./relay-broker.mjs";
 import { prepareSidebarSort } from "./sidebar-sort.mjs";
 import { connectBrokerTransport } from "../src/features/relay/transport.ts";
@@ -145,7 +146,7 @@ it.each(["query", "oversized", "publication", "receipt", "conflict"])(
     if (failure === "query")
       h.failQuery(new Response("failed", { status: 503 }));
     if (failure === "oversized")
-      h.failQuery(new Response(`[${" ".repeat(270000)}]`));
+      h.failQuery(new Response(`[${" ".repeat(SIDEBAR_HEAD_BYTES)}]`));
     if (failure === "publication")
       h.failPublication(new Response("failed", { status: 503 }));
     if (failure === "receipt")

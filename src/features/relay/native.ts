@@ -24,6 +24,7 @@ import {
   type ReadTransport,
   type Signer,
 } from "./transport";
+import { nativeSidebar } from "./native-sidebar";
 
 export const nativeWriteKinds = [
   30078,
@@ -283,6 +284,7 @@ export async function connectNativeTransport(
       },
     },
 
+    ...nativeSidebar(transport),
     writer: {
       ...writer,
       kinds: creation ? [...nativeWriteKinds, 9007] : nativeWriteKinds,

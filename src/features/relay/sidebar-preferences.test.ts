@@ -39,6 +39,56 @@ const expected = {
   muted: [],
 };
 
+it("decodes four individually bounded populated preferences beyond the former aggregate limit", async () => {
+  const viewer = keypair();
+  const key = nip44.v2.utils.getConversationKey(viewer.secret, viewer.pubkey);
+  const encrypted = (coordinate: string, value: unknown) =>
+    signed(viewer, {
+      kind: 30078,
+      tags: [["d", coordinate]],
+      content: nip44.v2.encrypt(JSON.stringify(value), key),
+    });
+  const section = "00000000-1234-1234-1234-123456789abc";
+  const id = (i: number) =>
+    `${i.toString(16).padStart(8, "0")}-1234-1234-1234-123456789abc`;
+  const sections = {
+    version: 1,
+    sections: Array.from({ length: 100 }, (_, i) => ({
+      id: id(i),
+      name: "N".repeat(198),
+      order: i,
+    })),
+    assignments: Object.fromEntries(
+      Array.from({ length: 1000 }, (_, i) => [id(i), section]),
+    ),
+  };
+  const channels = (field: "starred" | "muted") => ({
+    version: 1,
+    channels: Object.fromEntries(
+      Array.from({ length: 500 }, (_, i) => [
+        `${i.toString(16).padStart(8, "0")}-5678-1234-1234-123456789abc`,
+        { [field]: true, updatedAt: 1_700_000_000_000 },
+      ]),
+    ),
+  });
+  const events = [
+    encrypted("channel-sections", sections),
+    encrypted("channel-stars", channels("starred")),
+    encrypted("channel-mutes", channels("muted")),
+    encrypted("channel-sort", { version: 1, groups: { channels: "recent" } }),
+  ];
+  expect(Buffer.byteLength(JSON.stringify(events))).toBeGreaterThan(256 * 1024);
+  const projected = (
+    await import("../../../dev/sidebar-preferences.mjs")
+  ).decodeSidebarPreferences(events, viewer.secret);
+  expect(projected.sections).toHaveLength(100);
+  expect(Object.keys(projected.assignments)).toHaveLength(1000);
+  expect(projected.starred).toHaveLength(500);
+  expect(projected.muted).toHaveLength(500);
+  expect(projected.sort).toEqual({ channels: "recent" });
+  key.fill(0);
+});
+
 it("reads legacy preferences through the production session, transport, and bounded broker decoder without publishing", async () => {
   const viewer = keypair(),
     relay = keypair(),
@@ -201,7 +251,7 @@ it("reads legacy preferences through the production session, transport, and boun
     ])
       expect((await post(invalid)).status).toBe(400);
     expect((await post(records, "https://evil.test")).status).toBe(403);
-    expect((await post("x".repeat(256 * 1024))).status).toBe(413);
+    expect((await post("x".repeat(768 * 1024))).status).toBe(413);
     expect(
       (await post(records, base, "unregistered/sidebar-preferences")).status,
     ).toBe(400);
@@ -241,7 +291,7 @@ it("reads legacy preferences through the production session, transport, and boun
       await aborted;
       // Oversize and successful completion both return their slot.
       expect(
-        await (await upload(JSON.stringify("x".repeat(256 * 1024)))).response,
+        await (await upload(JSON.stringify("x".repeat(768 * 1024)))).response,
       ).toBe(413);
       expect(await (await upload("[]")).response).toBe(200);
       const expired = held

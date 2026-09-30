@@ -68,6 +68,7 @@ import {
   assertSidebarAssignmentIntent,
   mutateSidebarAssignment,
   SIDEBAR_REQUEST_BYTES,
+  SIDEBAR_HEAD_BYTES,
   SIDEBAR_UPLOAD_MS,
   SIDEBAR_UPLOAD_SLOTS,
 } from "./sidebar-preferences.mjs";
@@ -127,7 +128,6 @@ function validProfilePicture(value) {
 const MAX_FILTERS = 4,
   MAX_LIMIT = 500,
   MAX_INFLIGHT = 6,
-  SIDEBAR_HEAD_BYTES = SIDEBAR_REQUEST_BYTES + 4096,
   UPSTREAM_TIMEOUT_MS = 20000,
   KEEPALIVE_MS = 60000;
 

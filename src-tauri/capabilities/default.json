@@ -16,7 +16,8 @@
     "allow-relay-kit-prepare",
     "allow-relay-kit-decode",
     "allow-relay-direct-message",
-
+    "allow-relay-decode-sidebar",
+    "allow-relay-sign-sidebar",
     "allow-get-os-idle-seconds",
     "allow-plugin-import-folder",
     "allow-plugin-import-git",

@@ -38,6 +38,8 @@ fn main() {
             "relay_kit_prepare",
             "relay_kit_decode",
             "relay_direct_message",
+            "relay_decode_sidebar",
+            "relay_sign_sidebar",
             "get_os_idle_seconds",
             "plugin_import_folder",
             "plugin_import_git",

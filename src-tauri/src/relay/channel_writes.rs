@@ -192,7 +192,7 @@ pub(crate) async fn relay_kit_decode(
     let viewer = host.viewer().await?;
     let mut decoded = Vec::with_capacity(events.len());
     for event in events {
-        let raw: nostr::Event =
+        let raw: nostr::event::Event =
             serde_json::from_value(event.clone()).map_err(|_| "Invalid channel recipe")?;
         raw.verify().map_err(|_| "Invalid channel recipe")?;
         if event.get("pubkey").and_then(Value::as_str) != Some(&viewer)

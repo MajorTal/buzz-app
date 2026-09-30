@@ -4,7 +4,8 @@ import {
   SIDEBAR_COORDINATES,
 } from "../src/features/relay/sidebar-preferences.ts";
 
-export const SIDEBAR_REQUEST_BYTES = 256 * 1024;
+export const SIDEBAR_REQUEST_BYTES = 768 * 1024; // Four bounded encrypted coordinates.
+export const SIDEBAR_HEAD_BYTES = 192 * 1024 + 4096; // One signed coordinate plus response framing.
 export const SIDEBAR_UPLOAD_SLOTS = 2;
 export const SIDEBAR_UPLOAD_MS = 10_000;
 /** Local host decoder, deliberately not an arbitrary NIP-44 decrypt capability. */

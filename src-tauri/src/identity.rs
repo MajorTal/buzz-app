@@ -1,5 +1,10 @@
 //! One create-only human identity. Never consult legacy, agent, file or environment keys.
 use bech32::{primitives::decode::CheckedHrpstring, Bech32, Hrp};
+use nostr::{
+    event::Event,
+    key::{Keys, SecretKey as NostrSecretKey},
+    nips::nip44,
+};
 use secp256k1::{Keypair, PublicKey, Secp256k1, SecretKey};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -31,6 +36,14 @@ pub(crate) struct EventTemplate {
 
 impl Key {
     fn sign(&self, event: EventTemplate) -> Result<serde_json::Value> {
+        self.sign_bounded(event, 64 * 1024)
+    }
+
+    fn sign_bounded(
+        &self,
+        event: EventTemplate,
+        max_event_bytes: usize,
+    ) -> Result<serde_json::Value> {
         let pubkey = self.viewer()?;
         let serialized = serde_json::to_vec(&serde_json::json!([
             0,
@@ -41,7 +54,7 @@ impl Key {
             event.content
         ]))
         .map_err(|_| "Could not encode relay event")?;
-        if serialized.len() > 64 * 1024 {
+        if serialized.len() > max_event_bytes {
             return Err("Relay event is too large".into());
         }
         let hash = Sha256::digest(serialized);
@@ -253,6 +266,108 @@ impl Identity {
     }
 }
 
+// Reject renderer-supplied arbitrary ciphertext/plaintext at the purpose-bound signer.
+fn validate_sidebar_payload(coordinate: &str, value: &serde_json::Value) -> Result<()> {
+    let invalid = || "Invalid sidebar payload".to_owned();
+    let data = value.as_object().ok_or_else(invalid)?;
+    if data.get("version").and_then(|v| v.as_u64()) != Some(1) {
+        return Err(invalid());
+    }
+    let text = |v: &serde_json::Value, max: usize| {
+        v.as_str()
+            .is_some_and(|s| !s.trim().is_empty() && s.encode_utf16().count() <= max)
+    };
+    match coordinate {
+        "channel-sections" => {
+            let sections = data
+                .get("sections")
+                .and_then(|v| v.as_array())
+                .ok_or_else(invalid)?;
+            let assignments = data
+                .get("assignments")
+                .and_then(|v| v.as_object())
+                .ok_or_else(invalid)?;
+            if sections.len() > 100 || assignments.len() > 1000 {
+                return Err(invalid());
+            }
+            let mut ids = std::collections::HashSet::new();
+            for section in sections {
+                let entry = section.as_object().ok_or_else(invalid)?;
+                let id = entry.get("id").ok_or_else(invalid)?;
+                if !text(id, 256)
+                    || !ids.insert(id.as_str().unwrap())
+                    || !entry.get("name").is_some_and(|v| text(v, 256))
+                    || !entry
+                        .get("order")
+                        .and_then(|v| v.as_f64())
+                        .is_some_and(f64::is_finite)
+                    || entry.get("icon").is_some_and(|v| !text(v, 128))
+                {
+                    return Err(invalid());
+                }
+            }
+            if assignments.iter().any(|(id, section)| {
+                id.trim().is_empty()
+                    || id.encode_utf16().count() > 256
+                    || !section
+                        .as_str()
+                        .is_some_and(|v| !v.trim().is_empty() && v.encode_utf16().count() <= 256)
+            }) {
+                return Err(invalid());
+            }
+        }
+        "channel-stars" | "channel-mutes" => {
+            let channels = data
+                .get("channels")
+                .and_then(|v| v.as_object())
+                .ok_or_else(invalid)?;
+            if channels.len() > 500 {
+                return Err(invalid());
+            }
+            let field = if coordinate == "channel-stars" {
+                "starred"
+            } else {
+                "muted"
+            };
+            for (id, entry) in channels {
+                let entry = entry.as_object().ok_or_else(invalid)?;
+                if id.trim().is_empty()
+                    || id.encode_utf16().count() > 256
+                    || !entry.get(field).is_some_and(|v| v.is_boolean())
+                    || !entry
+                        .get("updatedAt")
+                        .and_then(|v| v.as_f64())
+                        .is_some_and(|v| v.is_finite() && v >= 0.0)
+                {
+                    return Err(invalid());
+                }
+            }
+        }
+        "channel-sort" => {
+            let groups = data
+                .get("groups")
+                .and_then(|v| v.as_object())
+                .ok_or_else(invalid)?;
+            if groups.len() > 104
+                || groups
+                    .iter()
+                    .any(|(group, mode)| group.encode_utf16().count() > 264 || !mode.is_string())
+            {
+                return Err(invalid());
+            }
+        }
+        _ => return Err(invalid()),
+    }
+    Ok(())
+}
+
+fn sidebar_coordinate(value: &str) -> bool {
+    matches!(
+        value,
+        "channel-sections" | "channel-stars" | "channel-mutes" | "channel-sort"
+    )
+}
+
 #[derive(Clone)]
 pub struct IdentityHost(Arc<Mutex<Identity>>);
 impl IdentityHost {
@@ -269,6 +384,105 @@ impl IdentityHost {
             identity
                 .restore()?
                 .ok_or_else(|| "Set up your identity first".into())
+        })
+        .await
+    }
+
+    /// Only verified, self-authored sidebar coordinates may cross the decrypt boundary.
+    pub(crate) async fn decode_sidebar(
+        &self,
+        events: Vec<serde_json::Value>,
+    ) -> Result<serde_json::Value> {
+        with_identity(self.clone(), move |identity| {
+            identity.restore()?;
+            let State::Ready(key) = &identity.state else {
+                return Err("Set up your identity first".into());
+            };
+            if events.len() > 4
+                || serde_json::to_vec(&events)
+                    .map_err(|_| "Invalid sidebar records")?
+                    .len()
+                    > 768 * 1024
+            {
+                return Err("Invalid sidebar records".into());
+            }
+            let secret = NostrSecretKey::from_slice(key.0.as_ref())
+                .map_err(|_| "Invalid sidebar records")?;
+            let public = Keys::new(secret.clone()).public_key();
+            let mut decoded = serde_json::Map::new();
+            for raw in events {
+                let tags = raw["tags"].as_array().ok_or("Invalid sidebar record")?;
+                let coordinates: Vec<_> = tags.iter().filter(|tag| tag[0] == "d").collect();
+                let coordinate = coordinates
+                    .first()
+                    .and_then(|tag| tag[1].as_str())
+                    .ok_or("Invalid sidebar record")?
+                    .to_owned();
+                let count = coordinates.len();
+                let event: Event =
+                    serde_json::from_value(raw).map_err(|_| "Invalid sidebar record")?;
+                event.verify().map_err(|_| "Invalid sidebar record")?;
+                if event.kind.as_u16() != 30078
+                    || event.pubkey != public
+                    || count != 1
+                    || !sidebar_coordinate(&coordinate)
+                    || decoded.contains_key(&coordinate)
+                {
+                    return Err("Invalid sidebar record".into());
+                }
+                let plaintext = nip44::decrypt(&secret, &public, &event.content)
+                    .map_err(|_| "Invalid sidebar record")?;
+                if plaintext.len() > 128 * 1024 {
+                    return Err("Sidebar plaintext budget exceeded".into());
+                }
+                decoded.insert(
+                    coordinate,
+                    serde_json::from_str(&plaintext).map_err(|_| "Invalid sidebar record")?,
+                );
+            }
+            Ok(serde_json::Value::Object(decoded))
+        })
+        .await
+    }
+
+    /// Sign only self-encrypted kind-30078 sidebar data; never expose a general NIP-44 primitive.
+    pub(crate) async fn sign_sidebar(
+        &self,
+        coordinate: String,
+        payload: serde_json::Value,
+        created_at: u64,
+    ) -> Result<serde_json::Value> {
+        if !sidebar_coordinate(&coordinate) {
+            return Err("Invalid sidebar coordinate".into());
+        }
+        validate_sidebar_payload(&coordinate, &payload)?;
+        let plaintext = serde_json::to_string(&payload).map_err(|_| "Invalid sidebar payload")?;
+        // Match the broker's bounded extended-length NIP-44 records.
+        if plaintext.len() > 128 * 1024 {
+            return Err("Sidebar plaintext budget exceeded".into());
+        }
+        with_identity(self.clone(), move |identity| {
+            identity.restore()?;
+            let State::Ready(key) = &identity.state else {
+                return Err("Set up your identity first".into());
+            };
+            let secret = NostrSecretKey::from_slice(key.0.as_ref())
+                .map_err(|_| "Invalid sidebar payload")?;
+            let public = Keys::new(secret.clone()).public_key();
+            let content = nip44::encrypt(&secret, &public, &plaintext, nip44::Version::V2)
+                .map_err(|_| "Could not encrypt sidebar preferences")?;
+            key.sign_bounded(
+                EventTemplate {
+                    kind: 30078,
+                    created_at,
+                    content,
+                    tags: vec![
+                        vec!["d".into(), coordinate.clone()],
+                        vec!["t".into(), coordinate],
+                    ],
+                },
+                192 * 1024,
+            )
         })
         .await
     }
@@ -356,8 +570,8 @@ impl IdentityHost {
             let State::Ready(key) = &identity.state else {
                 return Err("Set up your identity first".into());
             };
-            let secret = nostr::SecretKey::from_slice(key.0.as_ref()).map_err(|_| INVALID)?;
-            let public = nostr::Keys::new(secret.clone()).public_key();
+            let secret = NostrSecretKey::from_slice(key.0.as_ref()).map_err(|_| INVALID)?;
+            let public = Keys::new(secret.clone()).public_key();
             if encrypt {
                 nostr::nips::nip44::encrypt(
                     &secret,

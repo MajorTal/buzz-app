@@ -564,6 +564,11 @@ text to 16 KiB. Its ten-second deadline includes queued/authentication time.
 Disconnect, cancellation or timeout after dispatch, throwing sends, malformed
 receipts and internal/unknown negative receipts remain uncertain. Only a proven
 unsent operation or documented validation/admission rejection proves non-delivery.
+A compare-and-set refusal is proven too: `conflict:` for workflow and NIP-AR
+artifact (45010) events, which the dev broker answers as 409 like the relay's
+`/events`. Either reaches the outbox as `failed`; an artifact write carries a fixed
+`conflict:` error, so its writer reloads and reconciles instead of retrying a
+stale revision.
 NIP-01 rejection does not guarantee rollback of Buzz command side effects. Accepted
 command receipt text stays ephemeral; it is never journaled or replaced by an echo.
 

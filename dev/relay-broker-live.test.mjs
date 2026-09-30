@@ -1376,6 +1376,41 @@ test.each([
   },
 );
 
+test.each([
+  ["conflict: artifact head changed", "failed", "conflict: the relay state"],
+  ["error: internal server error", "unknown", "could not be confirmed"],
+])(
+  "artifact refusal %s reaches broker/outbox as %s / %s",
+  async (reason, delivery, error) => {
+    const h = await harness();
+    let traffic, owner;
+    try {
+      browserFetch(h.base);
+      const transport = await connectBrokerTransport(h.base);
+      traffic = transport.subscribe(callbacks);
+      await until(() => h.requests.length >= 1);
+      owner = createOutbox(transport.viewer, transport.writer, {
+        load: () => [],
+        save() {},
+      });
+      const id = owner.outbox.send({
+        kind: 45010,
+        content: "",
+        tags: [["h", "00000000-0000-4000-8000-000000000001"]],
+      });
+      await until(() => h.publications.length === 1);
+      await h.sockets[0].receive(["OK", id, false, reason]);
+      await until(() => owner.outbox.snapshot()[0]?.delivery === delivery);
+      expect(owner.outbox.snapshot()[0].error).toContain(error);
+    } finally {
+      owner?.dispose();
+      traffic?.dispose();
+      vi.unstubAllGlobals();
+      await h.close();
+    }
+  },
+);
+
 test("joined batches survive the real HTTP boundary and retirement only rebuilds the affected scope", async () => {
   const h = await harness();
   let traffic;

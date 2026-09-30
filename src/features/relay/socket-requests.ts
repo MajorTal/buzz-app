@@ -107,9 +107,11 @@ export function createSocketPublications(wake: () => void) {
           /^(invalid|blocked|restricted|auth-required|rate-limited):/.test(
             data[3],
           ) ||
-          // Buzz workflow CAS/authority refusals precede domain mutation.
+          // Buzz workflow CAS/authority and artifact CAS refusals precede
+          // domain mutation.
           ([30620, 46020].includes(job.event.kind) &&
-            /^(conflict|forbidden):/.test(data[3]));
+            /^(conflict|forbidden):/.test(data[3])) ||
+          (job.event.kind === 45010 && data[3].startsWith("conflict:"));
         job.finish(
           undefined,
           new SocketRequestError(

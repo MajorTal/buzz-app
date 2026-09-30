@@ -1,6 +1,6 @@
 import { beforeEach, afterEach, assert, expect, it, vi } from "vitest";
 import { connectSignedTransport } from "./transport";
-import { PublishRejected } from "./outbox";
+import { createOutbox, PublishRejected } from "./outbox";
 import { keypair, signed } from "./testing";
 
 const filters = [{ kinds: [0], limit: 1 }];
@@ -149,3 +149,37 @@ it("explicit quota rejection is retryable; missing response stays unknown with n
   await vi.advanceTimersByTimeAsync(500);
   expect(fetcher).toHaveBeenCalledTimes(2);
 });
+it.each([
+  [
+    409,
+    "failed",
+    "conflict: the relay state changed; reload before writing again",
+  ],
+  [500, "unknown", "Relay delivery could not be confirmed (500)"],
+])(
+  "artifact write answered %s reaches the outbox as %s",
+  async (status, delivery, error) => {
+    const identity = signer();
+    const transport = await connectSignedTransport(
+      identity,
+      "https://artifact.test",
+      "relay",
+    );
+    assert.exists(transport.writer);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({ error: "conflict: artifact head changed" }, { status }),
+      ),
+    );
+    const owner = createOutbox(transport.viewer, transport.writer, {
+      load: () => [],
+      save() {},
+    });
+    owner.outbox.send({ kind: 45010, content: "", tags: [["h", "c"]] });
+    await vi.waitFor(() =>
+      expect(owner.outbox.snapshot()[0]).toMatchObject({ delivery, error }),
+    );
+    owner.dispose();
+  },
+);

@@ -1228,6 +1228,13 @@ async function signedPost(
 /** A transport failure is an unknown outcome; only a definitive rejection is a failed write. */
 export async function acceptPublish(response: Response, id: string) {
   if (!response.ok) {
+    // The relay answers 409 only for a compare-and-set refusal before mutation,
+    // and the broker relays the socket's equivalent the same way. The fixed
+    // prefix tells the writer to reload and reconcile rather than retry.
+    if (response.status === 409)
+      throw new PublishRejected(
+        "conflict: the relay state changed; reload before writing again",
+      );
     if ([400, 401, 403, 404, 413, 422].includes(response.status))
       throw new PublishRejected(
         `Relay rejected the message (${response.status})`,

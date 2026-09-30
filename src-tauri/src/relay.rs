@@ -223,7 +223,7 @@ fn validate_event(community: &str, event: &EventTemplate) -> Result<()> {
         }
     } else if !matches!(
         event.kind,
-        0 | 7 | 9 | 1984 | 9000 | 9001 | 20001 | 30030 | 30315 | 40003 | 40100 | 42000
+        0 | 7 | 9 | 1984 | 9000 | 9001 | 20001 | 30030 | 30315 | 40003 | 40100 | 42000 | 45010
     ) {
         return Err("This event is not supported by the packaged relay connection".into());
     }

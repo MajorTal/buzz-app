@@ -15,6 +15,7 @@ Site to host, posted to `window.parent` (the request carries no secret):
 Host to site, posted only to the framed origin:
 
 ```js
+{ type: "buzz.nostr-bind.prompt", version: 1, challengeId }  // bar shown
 { type: "buzz.nostr-bind.result", version: 1, challengeId, event }
 { type: "buzz.nostr-bind.result", version: 1, challengeId,
   error: "declined" | "expired" | "unavailable" | "invalid" }
@@ -22,8 +23,9 @@ Host to site, posted only to the framed origin:
 
 The site should accept a result only when `event.source === window.parent` and
 `challengeId` matches its pending challenge, then submit `event` to its own
-verifier. With no answer after a few seconds, or any `error`, it falls back to
-its ordinary code flow.
+verifier. A `prompt` arrives at once when the host shows its bar; with no
+`prompt` or `result` after a moment there is no Buzz host, and the site uses its
+ordinary code flow. `declined` means the user dismissed the bar.
 
 ## Host rules
 
@@ -38,10 +40,12 @@ its ordinary code flow.
   The site's code is still copied unchanged into the signed tags.
 - One request is pending at a time; a second is answered `unavailable`. A
   challenge id is answered at most once; repeats are ignored.
-- The host shows "*framed origin* wants to sign you in as *viewer*" above the
-  frame. The origin text comes from the host, never the site. Nothing is signed
-  until the user presses **Sign in**; **Not now** answers `declined`. There is
-  no remembered consent. Reloading the frame retires a pending request.
+- The host shows a one-tap bar above the frame: the viewer's avatar, a
+  **Continue as *viewer*** button and "to *framed host*". The host text comes
+  from the host, never the site. Nothing is signed until the user presses
+  **Continue**; dismissing the bar answers `declined`. There is no remembered
+  consent. Reloading the frame retires a pending request. A site may send its
+  request on load, so the bar is the only sign-in step.
 
 ## Signer
 

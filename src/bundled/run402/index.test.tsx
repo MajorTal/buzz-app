@@ -226,7 +226,7 @@ function renderSignIn(sign?: (tags: unknown) => Promise<never>) {
   render(
     <SiteView
       site={site}
-      signIn={{ sign, viewerName: () => "Tal" }}
+      signIn={{ sign, viewer: () => ({ name: "Tal" }) }}
       result={{ kind: "embeddable", projectId: "prj_1" }}
       retry={noop}
     />,
@@ -262,12 +262,17 @@ it("asks before signing a framed site in and answers only that origin", async ()
   expect(screen.queryByRole("region", { name: "Sign-in request" })).toBeNull();
   send(bindRequest(challengeA));
   const bar = screen.getByRole("region", { name: "Sign-in request" });
-  expect(bar).toHaveTextContent(`${siteOrigin} wants to sign you in as Tal`);
+  expect(bar).toHaveTextContent(`Continue as Tal`);
+  expect(bar).toHaveTextContent(`to ${new URL(siteOrigin).host}`);
   expect(sign).not.toHaveBeenCalled();
   // One request at a time; a repeated challenge is not asked twice.
   send(bindRequest(challengeB));
   send(bindRequest(challengeA));
   expect(post.mock.calls).toEqual([
+    [
+      { type: "buzz.nostr-bind.prompt", version: 1, challengeId: challengeA },
+      siteOrigin,
+    ],
     [
       {
         type: "buzz.nostr-bind.result",
@@ -279,10 +284,14 @@ it("asks before signing a framed site in and answers only that origin", async ()
     ],
   ]);
   post.mockClear();
-  await userEvent.click(screen.getByRole("button", { name: "Sign in" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Continue as Tal" }),
+  );
   expect(sign).toHaveBeenCalledTimes(1);
   expect(sign.mock.calls[0]?.[0]).toContainEqual(["origin", siteOrigin]);
-  expect(screen.getByRole("button", { name: "Not now" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Dismiss sign-in" }),
+  ).toBeDisabled();
   expect(post).not.toHaveBeenCalled();
   release(signed);
   await waitFor(() =>
@@ -303,7 +312,9 @@ it("declines without signing, and answers invalid or unsigned requests at once",
   const sign = vi.fn();
   const { post, send } = renderSignIn(sign);
   send(bindRequest(challengeA));
-  await userEvent.click(screen.getByRole("button", { name: "Not now" }));
+  await userEvent.click(
+    screen.getByRole("button", { name: "Dismiss sign-in" }),
+  );
   expect(sign).not.toHaveBeenCalled();
   expect(post).toHaveBeenCalledWith(
     {

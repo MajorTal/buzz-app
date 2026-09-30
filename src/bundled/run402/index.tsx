@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowClockwiseIcon,
   ArrowSquareOutIcon,
+  XIcon,
 } from "../../shared/design-system/icons";
+import { Avatar } from "../../shared/Avatar";
 import type { PluginModule } from "../../plugins/api";
 import type { PanelProps } from "../../features/panels/service";
 import { Button } from "../../shared/design-system/ui/Button";
@@ -11,6 +13,7 @@ import { loadEmbeddingPolicy, type EmbeddingPolicy } from "./config";
 import {
   parseNostrBindRequest,
   type NostrBindError,
+  type NostrBindPrompt,
   type NostrBindRequest,
   type NostrBindResult,
 } from "./nostr-bind";
@@ -29,7 +32,7 @@ export const apply: PluginModule["apply"] = (ctx) => {
   const signIn: SignIn = {
     // Only the dev broker signs sign-in bindings; native identity has no signer yet.
     sign: nativeIdentityEnabled() ? undefined : signNostrBind,
-    viewerName: () => viewerName(ctx.relay),
+    viewer: () => viewer(ctx.relay),
   };
   ctx.panels.register({
     id: "site",
@@ -42,14 +45,19 @@ export const apply: PluginModule["apply"] = (ctx) => {
 /** The host's half of "Sign in with Buzz" (docs/run402-sign-in.md). */
 export type SignIn = Readonly<{
   sign: ((tags: NostrBindTags) => Promise<NostrBindEvent>) | undefined;
-  viewerName(): string;
+  viewer(): Viewer;
 }>;
+export type Viewer = Readonly<{ name: string; picture?: string | undefined }>;
 
-function viewerName(relay: RelayData) {
+function viewer(relay: RelayData): Viewer {
   const { viewer, session } = relay.snapshot();
-  if (!viewer) return "your Buzz identity";
-  const name = session.profiles.snapshot().get(viewer)?.name.trim();
-  return name || `${npubEncode(viewer).slice(0, 12)}…`;
+  if (!viewer) return { name: "your Buzz identity" };
+  const profile = session.profiles.snapshot().get(viewer);
+  return {
+    name: profile?.name.trim() || `${npubEncode(viewer).slice(0, 12)}…`,
+    // Relay-hosted pictures need the session's media access, as elsewhere in the app.
+    picture: profile?.picture && session.media(profile.picture, "small"),
+  };
 }
 
 /** Sandbox for a cross-origin tenant site: its own origin, scripts and forms; never the top window. */
@@ -237,7 +245,16 @@ export function SiteView({
         reply(request.challengeId, { error: request.error });
       else if (pending.current || !signIn?.sign)
         reply(request.challengeId, { error: "unavailable" });
-      else settle({ ...request, name: signIn.viewerName() });
+      else {
+        settle({ ...request, viewer: signIn.viewer() });
+        // Tells the site the bar is up, so it can tell "no Buzz host" from "not tapped yet".
+        const prompt: NostrBindPrompt = {
+          type: "buzz.nostr-bind.prompt",
+          version: 1,
+          challengeId: request.challengeId,
+        };
+        frame.current?.contentWindow?.postMessage(prompt, origin);
+      }
     };
     window.addEventListener("message", listener);
     return () => window.removeEventListener("message", listener);
@@ -301,50 +318,59 @@ export function SiteView({
         </Button>
         <OpenInBrowser site={site} />
       </div>
-      {consent && (
-        <section className={styles.consent} aria-label="Sign-in request">
-          <p>
-            <strong>{origin}</strong> wants to sign you in as{" "}
-            <strong>{consent.name}</strong>
-          </p>
-          <Button
-            variant="quiet"
-            size="compact"
-            disabled={!!consent.busy}
-            onClick={() => {
-              settle();
-              reply(consent.challengeId, { error: "declined" });
-            }}
-          >
-            Not now
-          </Button>
-          <Button
-            variant="primary"
-            size="compact"
-            loading={!!consent.busy}
-            disabled={!!consent.busy}
-            onClick={() => void approve(consent)}
-          >
-            Sign in
-          </Button>
-        </section>
-      )}
-      <iframe
-        key={reloads}
-        ref={frame}
-        onLoad={post}
-        className={styles.frame}
-        src={site.url}
-        title={site.host}
-        sandbox={FRAME_SANDBOX}
-        referrerPolicy="strict-origin-when-cross-origin"
-        allow=""
-      />
+      {/* The sign-in card floats over the site so the page never shifts under it. */}
+      <div className={styles.stage}>
+        {consent && (
+          <section className={styles.consent} aria-label="Sign-in request">
+            <Avatar
+              name={consent.viewer.name}
+              src={consent.viewer.picture}
+              className="size-8"
+            />
+            <div className={styles.consentMain}>
+              <Button
+                variant="primary"
+                size="compact"
+                autoFocus
+                loading={!!consent.busy}
+                disabled={!!consent.busy}
+                onClick={() => void approve(consent)}
+              >
+                Continue as {consent.viewer.name}
+              </Button>
+              <p>to {new URL(origin).host}</p>
+            </div>
+            <Button
+              variant="ghost"
+              size="compact"
+              aria-label="Dismiss sign-in"
+              disabled={!!consent.busy}
+              onClick={() => {
+                settle();
+                reply(consent.challengeId, { error: "declined" });
+              }}
+            >
+              <XIcon size={14} />
+            </Button>
+          </section>
+        )}
+        <iframe
+          key={reloads}
+          ref={frame}
+          onLoad={post}
+          className={styles.frame}
+          src={site.url}
+          title={site.host}
+          sandbox={FRAME_SANDBOX}
+          referrerPolicy="strict-origin-when-cross-origin"
+          allow=""
+        />
+      </div>
     </div>
   );
 }
 
-type Consent = NostrBindRequest & { name: string; busy?: boolean };
+type Consent = NostrBindRequest & { viewer: Viewer; busy?: boolean };
 
 function OpenInBrowser({ site, block }: { site: Run402Site; block?: boolean }) {
   return (

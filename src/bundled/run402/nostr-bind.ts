@@ -11,6 +11,12 @@ export type NostrBindRequest = Readonly<{
   tags: NostrBindTags;
 }>;
 export type NostrBindError = "declined" | "expired" | "unavailable" | "invalid";
+export type NostrBindPrompt = Readonly<{
+  type: "buzz.nostr-bind.prompt";
+  version: 1;
+  challengeId: string;
+}>;
+
 export type NostrBindResult = Readonly<
   { type: "buzz.nostr-bind.result"; version: 1; challengeId: string } & (
     | { event: NostrBindEvent }

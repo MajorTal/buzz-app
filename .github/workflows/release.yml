@@ -242,6 +242,13 @@ jobs:
           gh release download preview-feed --pattern latest.json --dir "$RUNNER_TEMP/served"
           cmp "$RUNNER_TEMP/candidate/latest.json" "$RUNNER_TEMP/served/latest.json"
 
+      - name: Prune old preview releases and tags
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: node scripts/prune-preview-releases.mjs --apply
+
   windows:
     if: github.repository == 'block/buzz-app' && inputs.candidates
     name: Windows x64 candidate (unsigned)

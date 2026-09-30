@@ -80,6 +80,37 @@ Recover from a broken feed by promoting a higher tested build; for key loss or
 client failure, distribute a manually installed Apple-signed DMG. Do not assume
 rolling back a signed archive can undo an installed update.
 
+## Preview retention
+
+After successful promotion and feed read-back, the same serialized job removes
+old versioned preview releases **and their Git tags**, keeping the union of:
+
+- the latest **10 published previews**, ordered by publication time;
+- every preview published within the last **seven days** (including the boundary);
+- the preview currently referenced by `preview-feed/latest.json`.
+
+Cleanup only considers non-draft prereleases with canonical
+`v<app-version>-preview.<run-number>.<attempt>` tags. Stable releases, other tag
+formats, and the rolling `preview-feed` release are never deleted. The feed is
+read again before cleanup; an unavailable/invalid feed, missing target, failed
+listing, or invalid preview publication date aborts before deletion. A deletion
+failure stops cleanup and fails the job, without rolling back the promoted feed;
+inspect the release/tag state before rerunning. Cleanup also runs after successful
+manual promotions, but never after failed promotion or Windows/Linux candidates.
+
+To inspect the current plan without deleting anything, from an authenticated
+checkout:
+
+```sh
+GH_REPO=block/buzz-app bin/node scripts/prune-preview-releases.mjs
+```
+
+The workflow passes `--apply` to execute the plan. Removed release download links
+stop working; clients holding a removed version's download URL must check the feed
+again. The age window is measured from publication, not promotion. Actions build
+artifacts have a separate seven-day retention policy and do not control GitHub
+release retention.
+
 ## Prerequisites
 
 Deploy [the signing infrastructure](https://github.com/squareup/tf-mobuild-workers/pull/1398)

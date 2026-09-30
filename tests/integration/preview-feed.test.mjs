@@ -198,4 +198,12 @@ test("successful preview publication promotes automatically; manual recovery byp
     promotionStep.run.indexOf("scripts/preview-feed.mjs verify") <
       promotionStep.run.indexOf("gh release upload preview-feed"),
   );
+  const cleanupStep = promotion.steps.at(-1);
+  assert.equal(
+    cleanupStep.run,
+    "node scripts/prune-preview-releases.mjs --apply",
+  );
+  assert.equal(cleanupStep.if, "success()");
+  assert.equal(cleanupStep.env.GH_REPO, `\${{ github.repository }}`);
+  assert.equal(cleanupStep.env.GH_TOKEN, `\${{ github.token }}`);
 });

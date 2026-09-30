@@ -2,15 +2,27 @@ import { invoke } from "@tauri-apps/api/core";
 import type { EventTemplate } from "nostr-tools";
 import { communityDestination } from "../communities/destination";
 import { eventDto } from "./events";
+import { workflowHost, workflowRunsPath } from "../workflows/http";
+import { WORKFLOW_KINDS } from "../workflows/protocol";
 import {
   connectSignedTransport,
+  admittedSignedWorkflowRead,
   type ReadTransport,
   type Signer,
 } from "./transport";
 import { PublishRejected } from "./outbox";
 
 export const nativeWriteKinds = [
-  7, 9, 1984, 9000, 9001, 30315, 40003, 40100, 42000,
+  7,
+  9,
+  1984,
+  9000,
+  9001,
+  30315,
+  40003,
+  40100,
+  42000,
+  ...WORKFLOW_KINDS,
 ] as const;
 
 /** Cancellation fences JS results; a dispatched native write may still complete. */
@@ -38,6 +50,14 @@ export async function nativeRelayRequest(
   // IPC cannot abort reqwest. Retain the shared admission slot until native work
   // settles (bounded by its timeout), then reject any obsolete result.
   bounded.throwIfAborted();
+  return nativeResponse(result);
+}
+
+function nativeResponse(result: {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}): Response {
   return new Response(
     [204, 205, 304].includes(result.status) ? null : result.body,
     { status: result.status, headers: result.headers },
@@ -105,6 +125,32 @@ export async function connectNativeTransport(
   // Capabilities describe implemented host operations, not everything this key can sign.
   return {
     ...transport,
+    workflows: workflowHost(async (route, body, signal) => {
+      if (route !== "workflow-runs") throw new Error("Invalid workflow read");
+      workflowRunsPath(body);
+      signal.throwIfAborted();
+      const response = await admittedSignedWorkflowRead(
+        origin,
+        transport.viewer,
+        async () => {
+          const result = await invoke<{
+            status: number;
+            headers: Record<string, string>;
+            body: string;
+          }>("relay_workflow_runs", {
+            community: origin,
+            id: (body as { id: string }).id,
+            cursor:
+              (body as { cursor?: { before: string; beforeId: string } })
+                .cursor ?? null,
+          });
+          return nativeResponse(result);
+        },
+        signal,
+      );
+      signal.throwIfAborted();
+      return response;
+    }),
     writer: {
       ...writer,
       kinds: nativeWriteKinds,

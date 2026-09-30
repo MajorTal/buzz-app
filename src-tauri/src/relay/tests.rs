@@ -75,9 +75,8 @@ fn fixture_server(response: &'static str) -> (Url, std::thread::JoinHandle<(Stri
                             .strip_prefix("content-length: ")
                             .map(str::to_owned)
                     })
-                    .unwrap()
-                    .parse()
-                    .unwrap();
+                    .map(|value| value.parse().unwrap())
+                    .unwrap_or(0);
                 if body.len() == length {
                     let result = (headers.into(), body.into());
                     socket.write_all(response.as_bytes()).unwrap();
@@ -99,6 +98,8 @@ async fn native_http_signs_exact_bytes_and_never_follows_redirects() {
         url.clone(),
         "POST",
         Some(body.into()),
+        true,
+        MAX_RESPONSE,
     )
     .await
     .unwrap();
@@ -187,6 +188,33 @@ fn real_ipc_restores_identity_signs_and_rejects_invalid_requests() {
             "kind": 22242, "created_at": 123, "tags": [["relay", "wss://other.test"], ["challenge", "nonce"]], "content": ""
         }
     })).is_err());
+    let id = "11111111-1111-4111-8111-111111111111";
+    assert!(invoke(
+        "relay_sign",
+        serde_json::json!({
+            "community": "https://relay.test", "event": {
+                "kind": 5, "created_at": 123,
+                "tags": [["h", id], ["a", format!("30620:{}:{id}", "a".repeat(64))]], "content": ""
+            }
+        })
+    )
+    .is_err());
+    let deletion = invoke("relay_sign", serde_json::json!({
+        "community": "https://relay.test", "event": {
+            "kind": 5, "created_at": 123,
+            "tags": [["h", id], ["a", format!("30620:{}:{id}", public.as_str().unwrap())]], "content": ""
+        }
+    })).unwrap();
+    verify(&deletion);
+    assert!(invoke(
+        "relay_workflow_runs",
+        serde_json::json!({
+            "community": "https://relay.test", "id": "../query", "cursor": null
+        })
+    )
+    .unwrap_err()
+    .to_string()
+    .contains("Invalid workflow read"));
 }
 
 #[tokio::test]
@@ -215,4 +243,141 @@ async fn signing_is_verifiable_and_does_not_export_a_key() {
         })
         .await
         .is_err());
+}
+
+#[test]
+fn workflow_history_is_fixed_and_cannot_retarget_native_http() {
+    let id = "11111111-1111-4111-8111-111111111111";
+    let cursor = WorkflowCursor {
+        before: "2026-09-29T20:00:00Z".into(),
+        before_id: id.into(),
+    };
+    assert_eq!(workflow_runs_url("https://relay.test", id, Some(&cursor)).unwrap().as_str(),
+        "https://relay.test/workflows/11111111-1111-4111-8111-111111111111/runs?limit=20&before=2026-09-29T20%3A00%3A00Z&before_id=11111111-1111-4111-8111-111111111111");
+    for invalid in [
+        "../query",
+        "11111111-1111-4111-8111-111111111111?target=x",
+        "11111111-1111-4111-8111-111111111111/../query",
+    ] {
+        assert!(workflow_runs_url("https://relay.test", invalid, None).is_err());
+    }
+    assert!(workflow_runs_url(
+        "https://relay.test",
+        id,
+        Some(&WorkflowCursor {
+            before: "2026-09-29T20:00:00Z&target=x".into(),
+            before_id: id.into()
+        })
+    )
+    .is_err());
+    assert!(request_url(
+        "https://relay.test",
+        "/workflows/11111111-1111-4111-8111-111111111111/runs",
+        "GET"
+    )
+    .is_err());
+}
+
+#[test]
+fn workflow_signer_rejects_nonworkflow_deletes_and_invalid_commands() {
+    let id = "11111111-1111-4111-8111-111111111111";
+    let mut event = EventTemplate {
+        kind: 5,
+        created_at: 1,
+        content: "".into(),
+        tags: vec![
+            vec!["h".into(), id.into()],
+            vec!["a".into(), format!("30620:{}:{id}", "a".repeat(64))],
+        ],
+    };
+    assert!(validate_event("https://relay.test", &event).is_ok());
+    event.tags[1][1] = format!("30030:{}:{id}", "a".repeat(64));
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.tags[1][1] = format!("30620:{}:{id}", "a".repeat(64));
+    event.tags.push(vec!["e".into(), "b".repeat(64)]);
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.tags.pop();
+    event.kind = 46020;
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.tags[1] = vec!["d".into(), id.into()];
+    assert!(validate_event("https://relay.test", &event).is_ok());
+    event.content = "not empty".into();
+    assert!(validate_event("https://relay.test", &event).is_err());
+}
+
+#[tokio::test]
+async fn workflow_get_is_authenticated_without_payload_and_never_redirects() {
+    let (mut url, task) = fixture_server("HTTP/1.1 302 Found\r\nLocation: https://other.test/\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}");
+    url.set_path("/workflows/11111111-1111-4111-8111-111111111111/runs");
+    url.set_query(Some("limit=20"));
+    let response = send(
+        &IdentityHost::fixture(),
+        url.clone(),
+        "GET",
+        None,
+        true,
+        1024 * 1024,
+    )
+    .await
+    .unwrap();
+    assert_eq!(response.status, 302);
+    let (headers, body) = task.join().unwrap();
+    assert!(headers
+        .starts_with("GET /workflows/11111111-1111-4111-8111-111111111111/runs?limit=20 HTTP/1.1"));
+    assert!(body.is_empty());
+    let encoded = headers
+        .lines()
+        .find_map(|line| line.strip_prefix("authorization: Nostr "))
+        .unwrap();
+    let event: serde_json::Value =
+        serde_json::from_slice(&STANDARD.decode(encoded).unwrap()).unwrap();
+    assert_eq!(event["tags"][0], serde_json::json!(["u", url.as_str()]));
+    assert_eq!(event["tags"][1], serde_json::json!(["method", "GET"]));
+    assert_eq!(event["tags"].as_array().unwrap().len(), 3);
+    verify(&event);
+}
+
+#[test]
+fn shared_kind_five_signer_accepts_message_and_reaction_deletion_only_in_broker_shape() {
+    let id = "a".repeat(64);
+    let mut event = EventTemplate {
+        kind: 5,
+        created_at: 123,
+        content: String::new(),
+        tags: vec![
+            vec!["h".into(), "room".into()],
+            vec!["e".into(), id.clone()],
+            vec!["k".into(), "9".into()],
+            vec!["client-id".into(), "intent".into()],
+        ],
+    };
+    assert!(validate_event("https://relay.test", &event).is_ok());
+    event.created_at = 9_007_199_254_740_992;
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.created_at = 123;
+    event.content = "not empty".into();
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.content.clear();
+    event.tags[0][1].clear();
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.tags[0][1] = "😀".repeat(128);
+    assert!(validate_event("https://relay.test", &event).is_ok());
+    event.tags[0][1].push('😀');
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.tags[0][1] = "room".into();
+    event.tags[2][1] = "7".into();
+    assert!(validate_event("https://relay.test", &event).is_ok());
+    event.tags[2][1] = "40002".into();
+    assert!(validate_event("https://relay.test", &event).is_ok());
+    event.tags[2][1] = "30620".into();
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.tags[2][1] = "9".into();
+    event.tags.push(vec!["e".into(), id.clone()]);
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.tags.pop();
+    event.tags[1][1] = "A".repeat(64);
+    assert!(validate_event("https://relay.test", &event).is_err());
+    event.tags[1][1] = id;
+    event.tags.push(vec!["a".into(), "30620:other:id".into()]);
+    assert!(validate_event("https://relay.test", &event).is_err());
 }

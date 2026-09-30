@@ -9,6 +9,7 @@
     "allow-identity-export",
     "allow-relay-sign",
     "allow-relay-http",
+    "allow-relay-workflow-runs",
     "allow-get-os-idle-seconds",
     "allow-plugin-import-folder",
     "allow-plugin-import-git",

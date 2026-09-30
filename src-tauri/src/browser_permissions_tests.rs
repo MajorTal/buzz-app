@@ -66,6 +66,7 @@ fn native_command_permissions_allow_only_main_webview() {
         "identity_export",
         "relay_sign",
         "relay_http",
+        "relay_workflow_runs",
         "get_os_idle_seconds",
         "plugin_import_folder",
         "plugin_import_git",

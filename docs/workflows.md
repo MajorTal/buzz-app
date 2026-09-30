@@ -2,8 +2,8 @@
 
 The bundled page owns the editor and drafts. The existing relay session owns
 configuration reads and commands through its reader and durable outbox; the dev
-broker owns authentication and the fixed run-history route. The relay executes
-workflows. No separate connection, cache, outbox, scheduler or backend changes.
+broker or native host owns authentication and the fixed run-history route. The
+relay executes workflows. No separate connection, cache, outbox, scheduler or backend changes.
 See the [capability contract](../src/features/workflows/types.ts).
 
 ## Scope
@@ -49,8 +49,8 @@ See the [capability contract](../src/features/workflows/types.ts).
   shows the relative `/hooks/{id}` route only.
 - Destructive deletion confirmation, manual run, and on-demand run/trace history in
   20-row pages with the relay's exact `(before,beforeId)` cursor.
-- No approval UI, lifecycle negotiation, alternative signed-host adapter,
-  plugin command-replay API or JSON trigger inputs.
+- No approval UI, lifecycle negotiation, plugin command-replay API or JSON
+  trigger inputs.
 
 ## Recovery and limits
 
@@ -130,8 +130,11 @@ including one invalidation observer when discovery is idle.
 Reads begin on UI interest and stop on unmount or access loss; no background poll.
 Transient socket recovery cancels stale reads but retains the draft. Live-session
 commands use the shared socket's result-bearing OK receipt; disconnect after send
-leaves the outcome unknown and never automatically replays the command. The dev broker requires a live owner and matched frontend/host versions; only
-the pre-existing direct signed adapter retains HTTP publication. Refresh checks current data.
+leaves the outcome unknown and never automatically replays the command. The dev
+broker requires a live owner and matched frontend/host versions. The packaged
+native host publishes through its signed HTTP transport and serves
+workflow history through a fixed authenticated GET; relay-authorized workflow
+events share the existing outbox. Refresh checks current data.
 Actual access loss purges private snapshots before callbacks. Drafts are editor-local,
 not durable, and never move between viewers or communities. The broker preserves
 same-origin checks, signature validation, captured principal quotas, cancellation,

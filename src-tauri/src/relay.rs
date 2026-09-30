@@ -43,6 +43,73 @@ fn request_url(community: &str, path: &str, method: &str) -> Result<Url> {
         .map_err(|_| "Invalid relay path".into())
 }
 
+fn workflow_uuid(value: &str) -> bool {
+    uuid::Uuid::parse_str(value).is_ok()
+        && value.len() == 36
+        && value
+            .bytes()
+            .all(|byte| byte.is_ascii_lowercase() || byte.is_ascii_digit() || byte == b'-')
+}
+
+fn valid_workflow_time(value: &str) -> bool {
+    // Timestamp syntax is bounded here; relay owns interpretation of the cursor.
+    value.bytes().all(|byte| {
+        byte.is_ascii_digit() || matches!(byte, b'-' | b'T' | b':' | b'.' | b'Z' | b'+')
+    })
+}
+
+fn workflow_runs_url(community: &str, id: &str, cursor: Option<&WorkflowCursor>) -> Result<Url> {
+    if !workflow_uuid(id)
+        || cursor.is_some_and(|c| {
+            !workflow_uuid(&c.before_id)
+                || c.before.len() > 40
+                || !c.before.as_bytes().get(0..10).is_some_and(|prefix| {
+                    prefix.iter().enumerate().all(|(i, b)| {
+                        if i == 4 || i == 7 {
+                            *b == b'-'
+                        } else {
+                            b.is_ascii_digit()
+                        }
+                    })
+                })
+                || c.before.as_bytes().get(10) != Some(&b'T')
+                || !valid_workflow_time(&c.before)
+        })
+    {
+        return Err("Invalid workflow read".into());
+    }
+    let mut url = origin(community)?
+        .join(&format!("/workflows/{id}/runs"))
+        .map_err(|_| "Invalid workflow read")?;
+    {
+        let mut query = url.query_pairs_mut();
+        query.append_pair("limit", "20");
+        if let Some(cursor) = cursor {
+            query.append_pair("before", &cursor.before);
+            query.append_pair("before_id", &cursor.before_id);
+        }
+    }
+    Ok(url)
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(crate) struct WorkflowCursor {
+    before: String,
+    before_id: String,
+}
+
+#[tauri::command]
+pub(crate) async fn relay_workflow_runs(
+    host: tauri::State<'_, IdentityHost>,
+    community: String,
+    id: String,
+    cursor: Option<WorkflowCursor>,
+) -> Result<RelayResponse> {
+    let url = workflow_runs_url(&community, &id, cursor.as_ref())?;
+    send(host.inner(), url, "GET", None, true, 1024 * 1024).await
+}
+
 #[tauri::command]
 pub(crate) async fn relay_sign(
     host: tauri::State<'_, IdentityHost>,
@@ -50,7 +117,22 @@ pub(crate) async fn relay_sign(
     event: EventTemplate,
 ) -> Result<serde_json::Value> {
     validate_event(&community, &event)?;
-    host.sign(event).await
+    let workflow_delete = if event.kind == 5 {
+        event
+            .tags
+            .iter()
+            .find(|tag| tag[0] == "a")
+            .map(|tag| tag[1].clone())
+    } else {
+        None
+    };
+    let signed = host.sign(event).await?;
+    if workflow_delete
+        .is_some_and(|coordinate| coordinate.split(':').nth(1) != signed["pubkey"].as_str())
+    {
+        return Err("Only the workflow author can manage it".into());
+    }
+    Ok(signed)
 }
 
 fn validate_event(community: &str, event: &EventTemplate) -> Result<()> {
@@ -79,11 +161,115 @@ fn validate_event(community: &str, event: &EventTemplate) -> Result<()> {
         {
             return Err("Relay authentication does not match this community".into());
         }
+    } else if event.kind == 5 {
+        if !valid_message_deletion(event) {
+            validate_workflow_template(event)?;
+        }
+    } else if matches!(event.kind, 30620 | 46020) {
+        validate_workflow_template(event)?;
     } else if !matches!(
         event.kind,
         0 | 7 | 9 | 1984 | 9000 | 9001 | 20001 | 30315 | 40003 | 40100 | 42000
     ) {
         return Err("This event is not supported by the packaged relay connection".into());
+    }
+    Ok(())
+}
+
+/** Keep the shared kind-5 writer aligned with the broker's channel-local deletion shape. */
+fn valid_message_deletion(event: &EventTemplate) -> bool {
+    if event.kind != 5
+        || event.created_at > 9_007_199_254_740_991
+        || !event.content.is_empty()
+        || event.tags.len() > 106
+        || event
+            .tags
+            .iter()
+            .any(|tag| tag.len() != 2 || !matches!(tag[0].as_str(), "h" | "e" | "k" | "client-id"))
+    {
+        return false;
+    }
+    let channels: Vec<_> = event.tags.iter().filter(|tag| tag[0] == "h").collect();
+    let targets: Vec<_> = event.tags.iter().filter(|tag| tag[0] == "e").collect();
+    let kinds: Vec<_> = event.tags.iter().filter(|tag| tag[0] == "k").collect();
+    channels.len() == 1
+        && !channels[0][1].is_empty()
+        && channels[0][1].encode_utf16().count() <= 256
+        && (1..=100).contains(&targets.len())
+        && targets.iter().all(|tag| {
+            tag[1].len() == 64
+                && tag[1]
+                    .bytes()
+                    .all(|b| b.is_ascii_hexdigit() && !b.is_ascii_uppercase())
+        })
+        && targets
+            .iter()
+            .enumerate()
+            .all(|(i, tag)| targets[..i].iter().all(|prior| prior[1] != tag[1]))
+        && (1..=3).contains(&kinds.len())
+        && kinds
+            .iter()
+            .all(|tag| matches!(tag[1].as_str(), "7" | "9" | "40002"))
+}
+
+fn validate_workflow_template(event: &EventTemplate) -> Result<()> {
+    let expected = if event.kind == 5 { "a" } else { "d" };
+    if event.tags.len() > 8
+        || event.content.len() > 24_000
+        || (event.kind != 30620 && !event.content.is_empty())
+        || event.tags.iter().any(|tag| {
+            tag.len() != 2
+                || tag.iter().any(|value| value.len() > 256)
+                || !matches!(
+                    tag[0].as_str(),
+                    "h" | "d" | "a" | "expected-revision" | "client-id"
+                )
+        })
+        || event.tags.iter().filter(|tag| tag[0] == "h").count() != 1
+        || event.tags.iter().filter(|tag| tag[0] == expected).count() != 1
+        || event.tags.iter().any(|tag| {
+            (tag[0] == "d" && expected != "d")
+                || (tag[0] == "a" && expected != "a")
+                || (tag[0] == "expected-revision" && event.kind != 30620)
+        })
+        || event
+            .tags
+            .iter()
+            .enumerate()
+            .any(|(i, tag)| event.tags[..i].iter().any(|prior| prior[0] == tag[0]))
+    {
+        return Err("Malformed workflow command".into());
+    }
+    let coordinate = &event.tags.iter().find(|tag| tag[0] == expected).unwrap()[1];
+    let id = if event.kind == 5 {
+        let Some(("30620", owner, id)) = coordinate
+            .split_once(':')
+            .and_then(|(kind, rest)| rest.split_once(':').map(|(owner, id)| (kind, owner, id)))
+        else {
+            return Err("Malformed workflow command".into());
+        };
+        if owner.len() != 64
+            || !owner
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        {
+            return Err("Malformed workflow command".into());
+        }
+        id
+    } else {
+        coordinate.as_str()
+    };
+    if !workflow_uuid(id)
+        || !workflow_uuid(&event.tags.iter().find(|tag| tag[0] == "h").unwrap()[1])
+        || event.tags.iter().any(|tag| {
+            tag[0] == "expected-revision"
+                && (tag[1].len() != 64
+                    || !tag[1]
+                        .bytes()
+                        .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase()))
+        })
+    {
+        return Err("Malformed workflow command".into());
     }
     Ok(())
 }
@@ -124,7 +310,15 @@ pub(crate) async fn relay_http(
     {
         return Err("Invalid relay request body".into());
     }
-    send(host.inner(), url, &method, body).await
+    send(
+        host.inner(),
+        url,
+        &method,
+        body,
+        method == "POST",
+        MAX_RESPONSE,
+    )
+    .await
 }
 
 async fn send(
@@ -132,12 +326,17 @@ async fn send(
     url: Url,
     method: &str,
     body: Option<String>,
+    authenticated: bool,
+    response_limit: usize,
 ) -> Result<RelayResponse> {
     let mut request = client()?.request(
         reqwest::Method::from_bytes(method.as_bytes()).map_err(|_| "Invalid relay method")?,
         url.clone(),
     );
-    if let Some(body) = body {
+    if authenticated {
+        let payload = body
+            .as_ref()
+            .map(|body| format!("{:x}", Sha256::digest(body.as_bytes())));
         let auth = host
             .sign(EventTemplate {
                 kind: 27235,
@@ -146,15 +345,17 @@ async fn send(
                     .map_err(|_| "System clock is unavailable")?
                     .as_secs(),
                 content: String::new(),
-                tags: vec![
-                    vec!["u".into(), url.to_string()],
-                    vec!["method".into(), method.into()],
+                tags: [
                     vec![
-                        "payload".into(),
-                        format!("{:x}", Sha256::digest(body.as_bytes())),
+                        vec!["u".into(), url.to_string()],
+                        vec!["method".into(), method.into()],
                     ],
-                    vec!["nonce".into(), uuid::Uuid::new_v4().to_string()],
-                ],
+                    payload
+                        .map(|hash| vec![vec!["payload".into(), hash]])
+                        .unwrap_or_default(),
+                    vec![vec!["nonce".into(), uuid::Uuid::new_v4().to_string()]],
+                ]
+                .concat(),
             })
             .await?;
         request = request
@@ -168,8 +369,10 @@ async fn send(
                     )
                 ),
             )
-            .header("Content-Type", "application/json")
-            .body(body);
+            .header("Content-Type", "application/json");
+        if let Some(body) = body {
+            request = request.body(body);
+        }
     } else {
         request = request.header("Accept", "application/nostr+json");
     }
@@ -191,7 +394,7 @@ async fn send(
         .await
         .map_err(|_| "Relay response was interrupted")?
     {
-        if bytes.len() + chunk.len() > MAX_RESPONSE {
+        if bytes.len() + chunk.len() > response_limit {
             return Err("Relay response is too large".into());
         }
         bytes.extend_from_slice(&chunk);

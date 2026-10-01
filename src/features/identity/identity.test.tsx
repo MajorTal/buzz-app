@@ -11,6 +11,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { createIdentity, nativeIdentityEnabled } from "./service";
 import { IdentitySetup } from "./IdentitySetup";
 import { PrivateKey } from "./PrivateKey";
@@ -18,8 +19,16 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: vi.fn(),
   isTauri: vi.fn(() => true),
 }));
+vi.mock("@tauri-apps/api/window", () => ({
+  getCurrentWindow: vi.fn(),
+}));
 const viewer = "ab".repeat(32);
 const key = "nsec-fixture-only";
+function titleBar() {
+  const header = document.querySelector("header");
+  if (!header) throw new Error("Missing native title bar");
+  return header;
+}
 function deferred<T>() {
   let resolve!: (value: T) => void;
   const promise = new Promise<T>((done) => {
@@ -32,6 +41,69 @@ afterEach(() => {
   vi.resetAllMocks();
   vi.unstubAllEnvs();
   vi.restoreAllMocks();
+});
+
+it("keeps native titlebar actions available throughout identity setup without dragging form controls", async () => {
+  vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+  const startDragging = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(getCurrentWindow).mockReturnValue({
+    startDragging,
+  } as unknown as ReturnType<typeof getCurrentWindow>);
+  const restored = deferred<null>();
+  const imported = deferred<string>();
+  vi.mocked(invoke).mockImplementation((command) => {
+    if (command === "identity_restore") return restored.promise;
+    if (command === "identity_import") return imported.promise;
+    if (command === "title_bar_double_click") return Promise.resolve();
+    throw new Error("Unexpected command");
+  });
+  const identity = createIdentity();
+  const user = userEvent.setup();
+  render(
+    <IdentitySetup identity={identity}>
+      <p>Signed in</p>
+    </IdentitySetup>,
+  );
+  const drag = () => {
+    fireEvent.mouseDown(titleBar(), {
+      button: 0,
+      detail: 1,
+    });
+  };
+  drag();
+  expect(startDragging).toHaveBeenCalledTimes(1);
+  await act(async () => restored.resolve(null));
+  drag();
+  expect(startDragging).toHaveBeenCalledTimes(2);
+  await user.click(screen.getByRole("button", { name: "Use an existing key" }));
+  await user.type(screen.getByLabelText("Private key (nsec)"), key);
+  expect(startDragging).toHaveBeenCalledTimes(2);
+  drag();
+  expect(startDragging).toHaveBeenCalledTimes(3);
+  await user.click(screen.getByRole("button", { name: "Use this key" }));
+  expect(screen.getByRole("status")).toHaveTextContent("Saving your identity");
+  drag();
+  expect(startDragging).toHaveBeenCalledTimes(4);
+  await user.dblClick(titleBar());
+  expect(invoke).toHaveBeenCalledWith("title_bar_double_click");
+  await act(async () => imported.resolve(viewer));
+  expect(document.querySelector("header")).toBeNull();
+  expect(screen.getByText("Signed in")).toBeVisible();
+  identity.dispose();
+});
+
+it.each([
+  [true, "Win32"],
+  [true, "Linux x86_64"],
+  [false, "MacIntel"],
+])("does not add a macOS titlebar for native=%s on %s", (native, platform) => {
+  vi.mocked(isTauri).mockReturnValue(native);
+  vi.spyOn(navigator, "platform", "get").mockReturnValue(platform);
+  vi.mocked(invoke).mockReturnValue(new Promise(() => {}));
+  const identity = createIdentity();
+  render(<IdentitySetup identity={identity}>Signed in</IdentitySetup>);
+  expect(document.querySelector("header")).toBeNull();
+  identity.dispose();
 });
 
 it("offers alternatives, passes exactly the imported key, and keeps secrets out of snapshots", async () => {
@@ -70,6 +142,11 @@ it("offers alternatives, passes exactly the imported key, and keeps secrets out 
 });
 
 it("restore denial does not become first run or generate a replacement", async () => {
+  vi.spyOn(navigator, "platform", "get").mockReturnValue("MacIntel");
+  const startDragging = vi.fn().mockResolvedValue(undefined);
+  vi.mocked(getCurrentWindow).mockReturnValue({
+    startDragging,
+  } as unknown as ReturnType<typeof getCurrentWindow>);
   vi.mocked(invoke)
     .mockRejectedValueOnce("Keychain access was denied")
     .mockResolvedValueOnce(viewer);
@@ -86,6 +163,11 @@ it("restore denial does not become first run or generate a replacement", async (
   expect(
     screen.queryByRole("button", { name: "Create a new identity" }),
   ).toBeNull();
+  fireEvent.mouseDown(titleBar(), {
+    button: 0,
+    detail: 1,
+  });
+  expect(startDragging).toHaveBeenCalledOnce();
   await user.click(
     screen.getByRole("button", { name: "Retry secure storage access" }),
   );

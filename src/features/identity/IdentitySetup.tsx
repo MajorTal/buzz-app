@@ -1,4 +1,6 @@
 import { useState, useSyncExternalStore, type ReactNode } from "react";
+import { isTauri } from "@tauri-apps/api/core";
+import { macTitleBarDragHandlers } from "../../app/shell/title-bar";
 import { Button } from "../../shared/design-system/ui/Button";
 import { Input } from "../../shared/design-system/ui/Input";
 import type { Identity } from "./service";
@@ -16,6 +18,12 @@ export function IdentitySetup({
   if (state.status === "ready") return children;
   return (
     <main className="p-8" aria-labelledby="identity-setup-title">
+      {isTauri() && /Mac/i.test(navigator.platform) && (
+        <header
+          className="-mx-8 -mt-8 mb-8 h-14"
+          {...macTitleBarDragHandlers}
+        />
+      )}
       <h1 id="identity-setup-title" className="text-heading">
         Your Buzz identity
       </h1>

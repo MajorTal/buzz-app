@@ -91,7 +91,7 @@ function fixture(
 ) {
   const owner = createRelaySession(null);
   owners.push(owner);
-  const list: ChannelList = {
+  let list: ChannelList = {
     status: "ready",
     channels: ["alpha", "beta", "gamma"].map((id) => ({
       id,
@@ -99,6 +99,7 @@ function fixture(
       channelType: "stream",
     })),
   };
+  const listeners = new Set<() => void>();
   const live = {
     ...owner.session.live.snapshot(),
     roster: { state: "verified" as const },
@@ -107,8 +108,30 @@ function fixture(
     ...owner.session,
     ...(sidebarPreferences ? { sidebarPreferences } : {}),
     live: { ...owner.session.live, snapshot: () => live },
-    channels: { ...owner.session.channels, list: () => list, ensureList() {} },
+    channels: {
+      ...owner.session.channels,
+      list: () => list,
+      ensureList() {},
+      subscribeList(listener: () => void) {
+        listeners.add(listener);
+        return () => listeners.delete(listener);
+      },
+    },
   };
+  // Like the store: changed summaries are replaced, the rest keep identity.
+  const publish = (
+    id: string,
+    change: Partial<ChannelList["channels"][number]>,
+  ) =>
+    act(() => {
+      list = {
+        ...list,
+        channels: list.channels.map((channel) =>
+          channel.id === id ? { ...channel, ...change } : channel,
+        ),
+      };
+      for (const listener of listeners) listener();
+    });
   const snapshot: RelaySnapshot = {
     status,
     ...(status === "ready"
@@ -151,7 +174,7 @@ function fixture(
       </ChannelSidebar>
     </ChannelNavigationProvider>
   );
-  return { view, navigator, snapshot, list, session };
+  return { view, navigator, snapshot, list, session, publish };
 }
 
 it("does not rebuild unchanged rows on channel switches and refreshes session action eligibility", async () => {
@@ -197,6 +220,31 @@ it("does not rebuild unchanged rows on channel switches and refreshes session ac
   fireEvent.click(screen.getByRole("button", { name: "gamma" }));
   expect(h.navigator.open).toHaveBeenCalledWith(
     expect.objectContaining({ kind: "conversation", channelId: "gamma" }),
+  );
+});
+
+it("rebuilds only the changed row on a list publish and keeps session actions current", async () => {
+  const h = fixture();
+  render(h.view("alpha"));
+  await screen.findByRole("button", { name: "gamma" });
+  const alpha = rowRender.mock.calls
+    .filter(([props]) => props.channel.id === "alpha")
+    .pop()?.[0];
+  rowRender.mockClear();
+  h.publish("beta", { preview: "hello" });
+  expect(rowRender.mock.calls.map(([props]) => props.channel.id)).toEqual([
+    "beta",
+  ]);
+  // The callbacks alpha kept must still see the published list.
+  h.publish("gamma", { readOnly: true });
+  alpha.onNewSession("gamma");
+  expect(h.navigator.open).not.toHaveBeenCalled();
+  alpha.onNewSession("beta");
+  expect(h.navigator.open).toHaveBeenCalledWith(
+    expect.objectContaining({
+      kind: "page",
+      route: { version: 1, params: { kind: "new-session", parentId: "beta" } },
+    }),
   );
 });
 

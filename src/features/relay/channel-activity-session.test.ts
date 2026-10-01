@@ -122,6 +122,25 @@ it("reads no roster activity for A–Z, deduplicates Recent demand, and projects
     h.owner.dispose();
   }
 });
+it("keeps other channels' summaries when one channel's live activity advances", async () => {
+  const h = setup();
+  try {
+    await h.initial();
+    h.live().receive([message(h.peer, "alpha", "a1", 50)]);
+    h.live().receive([message(h.peer, "beta", "b1", 60)]);
+    const find = (id: string) =>
+      h.channels.list().channels.find((channel) => channel.id === id);
+    const alpha = find("alpha");
+    const beta = find("beta");
+    expect(beta?.lastActivityAt).toBe(60);
+    h.live().receive([message(h.peer, "alpha", "a2", 90)]);
+    expect(find("alpha")).not.toBe(alpha);
+    expect(find("alpha")?.lastActivityAt).toBe(90);
+    expect(find("beta")).toBe(beta);
+  } finally {
+    h.owner.dispose();
+  }
+});
 it("retries failed Recent activity after an explicit roster refresh", async () => {
   const h = setup();
   try {

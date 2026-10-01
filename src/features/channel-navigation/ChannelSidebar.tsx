@@ -399,7 +399,9 @@ function ReadySidebar({
   );
   const startSession = useCallback(
     (parentId: string) => {
-      const parent = channels.find((channel) => channel.id === parentId);
+      const parent = queries.channels
+        .list()
+        .channels.find((channel) => channel.id === parentId);
       if (
         !viewer ||
         relay.snapshot().session !== queries ||
@@ -428,7 +430,6 @@ function ReadySidebar({
       });
     },
     [
-      channels,
       viewer,
       relay,
       queries,
@@ -495,14 +496,16 @@ function ReadySidebar({
     (channelId: string, _agent: string, messageId: string | undefined) => {
       const root =
         messageId &&
-        channels.find((channel) => channel.id === channelId)?.channelType !==
+        queries.channels
+          .list()
+          .channels.find((channel) => channel.id === channelId)?.channelType !==
           "session" &&
         queries.channels
           .window(channelId)
           .rows.some((row) => row.id === messageId && !row.threadRootId);
       openActivityMessage(channelId, messageId, root ? messageId : undefined);
     },
-    [queries, channels, openActivityMessage],
+    [queries, openActivityMessage],
   );
   const openAgentActivity = useCallback(
     (channelId: string, agent: string) => {

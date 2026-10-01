@@ -142,7 +142,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     purpose:
       "Compact feedback without moving the page or hiding recovery actions.",
     behavior:
-      "Base UI owns announcements, focus, expiry and dismissal; unresolved recovery stays visible",
+      "Base UI owns announcements, focus, expiry and dismissal; unresolved recovery stays visible.",
     variants: ["transient", "actionable", "dismissible"],
     status: "core",
     collection: "components",
@@ -154,7 +154,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "alert-dialog",
     name: "AlertDialog",
     purpose: "Confirm a consequential action before continuing.",
-    behavior: "Base UI owns modal focus and alert-dialog semantics",
+    behavior: "Base UI owns modal focus and alert-dialog semantics.",
     variants: ["default", "pending"],
     status: "core",
     collection: "components",
@@ -166,7 +166,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "tooltip",
     name: "Tooltip",
     purpose: "A short hint for an already labelled control.",
-    behavior: "Base UI owns focus, positioning and dismissal",
+    behavior: "Base UI owns focus, positioning and dismissal.",
     variants: ["default"],
     status: "proposed",
     collection: "components",
@@ -180,7 +180,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "Dialog",
     purpose: "A shared modal frame with title, content and actions.",
     behavior:
-      "Base UI owns focus, positioning, dismissal and transition presence; shared motion tokens animate entry and exit",
+      "Base UI owns focus, positioning, dismissal and transition presence; shared motion tokens animate entry and exit.",
     variants: ["default", "expanded", "motion none", "flex body"],
     status: "proposed",
     collection: "components",
@@ -193,7 +193,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "checkbox",
     name: "Checkbox",
     purpose: "Choose an independent option.",
-    behavior: "Base UI owns form and keyboard semantics",
+    behavior: "Base UI owns form and keyboard semantics.",
     variants: ["default", "disabled", "invalid"],
     status: "proposed",
     collection: "components",
@@ -206,7 +206,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "radio-group",
     name: "RadioGroup",
     purpose: "Choose one option, including labelled settings cards.",
-    behavior: "Base UI owns form and keyboard semantics",
+    behavior: "Base UI owns form and keyboard semantics.",
     variants: ["default", "disabled", "invalid"],
     status: "proposed",
     collection: "components",
@@ -223,7 +223,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "textarea",
     name: "Textarea",
     purpose: "A multiline field with shared label and validation behavior.",
-    behavior: "Base UI owns form and keyboard semantics",
+    behavior: "Base UI owns form and keyboard semantics.",
     variants: ["default", "disabled", "invalid"],
     status: "proposed",
     collection: "components",
@@ -236,7 +236,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "input",
     name: "Input",
     purpose: "A single-line text field.",
-    behavior: "Base UI owns form and keyboard semantics",
+    behavior: "Base UI owns form and keyboard semantics.",
     variants: ["default", "disabled", "invalid"],
     status: "proposed",
     collection: "components",
@@ -249,7 +249,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "field",
     name: "Field",
     purpose: "Label, description and error for a form control.",
-    behavior: "Base UI owns form and keyboard semantics",
+    behavior: "Base UI owns form and keyboard semantics.",
     variants: ["default", "disabled", "invalid"],
     status: "proposed",
     collection: "components",
@@ -262,9 +262,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "swap-workspace",
     name: "Panel Swap",
     purpose:
-      "Custom two-panel movement experiment. The actual panel follows the pointer, its neighbor slides into the vacated position after halfway, and release settles the panel into place. Resize continuously between them; widths and heights are remembered separately. A single directional edge cue previews switching between side-by-side and vertical arrangements; orientation and size change only on release. Drag empty header space to rearrange, or drag the title onto the other header to preview combining as tabs. A translucent purple title pill follows tab drags while both panes stay in place. A purple insertion line marks the destination header; release combines the panes in one layout update. Drag a combined tab toward an edge to separate it with a black directional cue. Only movement animates; resizing and structural size changes are immediate. No full-pane overlay or timed hold.",
+      "Explore two-panel resizing, swapping, and tab grouping. Drag empty header space to rearrange: the panel follows the pointer, its neighbor moves after halfway, and release settles the layout. Drag a title onto another header to combine panels as tabs; a purple pill and insertion line show the destination while both panes stay in place. Release combines them in one layout update. Drag a combined tab toward an edge to separate it; a black directional cue shows the split. Edge cues also preview horizontal or vertical arrangements, applied on release. Widths and heights are remembered separately. Only movement animates; resizing and structural changes are immediate, with no timed hold or full-panel overlay.",
     behavior:
-      "Pointer capture, live transforms, keyboard swapping, and Base UI separator semantics",
+      "Pointer capture, live transforms, keyboard swapping, and Base UI separator semantics.",
     variants: ["two panels"],
     status: "proposed",
     collection: "product-ui",
@@ -283,8 +283,8 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "flex-workspace",
     name: "Flex Layout",
     purpose:
-      "Compare standard FlexLayout docking with the existing Dockview workspace. Blank panels with rounded tabs and Buzz colors; no custom drag handles or placement restrictions.",
-    behavior: "FlexLayout tabs, docking, and resizing",
+      "Compare FlexLayout docking with the Dockview playground. Drag and resize blank panels using the library’s standard controls, with Buzz colors and rounded tabs. There are no custom drag handles or placement restrictions.",
+    behavior: "FlexLayout tabs, docking, and resizing.",
     variants: ["native docking"],
     status: "proposed",
     collection: "product-ui",
@@ -298,7 +298,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "DocView",
     purpose:
       "Arrange panels with continuous resizing and purple edge-drop highlights. Navigation stays anchored at the upper left; a panel may sit below it. Only splits that leave both panels usable are offered. No presets or tab stacking.",
-    behavior: "Dockview pointer dragging and resize",
+    behavior: "Dockview pointer dragging and resize.",
     variants: ["split-only"],
     status: "proposed",
     collection: "product-ui",
@@ -335,7 +335,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "switch",
     name: "Switch",
     purpose: "A labelled setting that is on or off.",
-    behavior: "Base UI owns checked state and keyboard behavior",
+    behavior: "Base UI owns checked state and keyboard behavior.",
     variants: ["off", "on", "disabled", "visible or accessible-only label"],
     status: "proposed",
     collection: "components",
@@ -348,8 +348,8 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "button",
     name: "Button",
     purpose:
-      "A bounded capsule-shaped, single-line action with shared emphasis, loading and destructive states.",
-    behavior: "Base UI Button",
+      "Trigger an action with a single-line label. Choose its emphasis and size, and use the shared loading or destructive state when needed.",
+    behavior: "Base UI Button.",
     variants: [
       "prominent",
       "subtle",
@@ -371,8 +371,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
   {
     slug: "icon-button",
     name: "IconButton",
-    purpose: "A compact icon-only action that always owns an accessible label.",
-    behavior: "Composes Buzz Button",
+    purpose:
+      "Trigger an action with an icon. Give every IconButton an accessible label that describes the action.",
+    behavior: "Composes Buzz Button.",
     variants: [
       "prominent",
       "subtle",
@@ -400,8 +401,8 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "avatar",
     name: "Avatar",
     purpose:
-      "A person or agent identity image with a stable fallback. Circle by default; callers can select the proposed squircle shape from display-only agent evidence.",
-    behavior: "Base UI Avatar",
+      "Show a person or agent with an image or stable fallback. Use a circle for a person and a squircle for an agent, based on identity data supplied by the caller.",
+    behavior: "Base UI Avatar.",
     variants: ["small", "default", "large", "fill", "circle", "squircle"],
     status: "proposed",
     collection: "components",
@@ -414,9 +415,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "preview-card",
     name: "PreviewCard",
     purpose:
-      "A portal-rendered, non-modal preview of an object's already-available context.",
+      "Show an object’s available context in a non-modal preview on hover or focus.",
     behavior:
-      "Base UI Preview Card; optional destination anchor supports pointer and keyboard activation",
+      "Base UI Preview Card; optional destination anchor supports pointer and keyboard activation.",
     variants: ["default", "destination"],
     status: "proposed",
     collection: "components",
@@ -430,7 +431,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "InlineChip",
     purpose:
       "A reference to a person, agent, channel, message, or link shown inline in a sentence.",
-    behavior: "Semantic native button or image role",
+    behavior: "Semantic native button or image role.",
     variants: [
       "person",
       "agent",
@@ -452,9 +453,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "full-page-surface",
     name: "FullPageSurface",
     purpose:
-      "The optional single rounded surface filling a page’s available workspace. Pages with multi-panel composition do not use it.",
+      "Use one rounded surface to fill a page’s workspace. For multiple panels, compose Panel directly.",
     behavior:
-      "Semantic native region; the page owns content padding, scrolling, alignment, and composition",
+      "Semantic native region; the page owns content padding, scrolling, alignment, and composition.",
     variants: ["full workspace"],
     status: "proposed",
     collection: "components",
@@ -467,8 +468,8 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "panel",
     name: "Panel",
     purpose:
-      "An independently legible workspace surface sitting on the atmospheric workspace backdrop. It owns only the rounded surface — fill, border, shadow, and clipping — never a header, content, or resize behaviour.",
-    behavior: "Semantic native region",
+      "Group workspace content on a shared surface. Panel owns fill, border, corners, shadow, and clipping; the feature owns headers, spacing, scrolling, and resizing.",
+    behavior: "Semantic native region.",
     variants: ["panel"],
     status: "proposed",
     collection: "components",
@@ -481,8 +482,8 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "tabs",
     name: "Tabs",
     purpose:
-      "A single-select switch between sibling views. `chrome` is the glass pill for the app gradient; `panel` is an underline for a plain surface; `workspace` is quiet title tabs for a combined pane; `navigation` composes NavigationItem with icons or avatars, a 12rem width, and a trailing close action. Closable items add a sibling close button and support Delete on the tab. Selection, retained content, and fallback after closing belong to the caller.",
-    behavior: "Base UI Tabs",
+      "Switch between sibling views. Choose chrome for the app backdrop, panel for a plain surface, workspace for combined panes, or navigation for 12rem tabs with icons or avatars. Closable tabs provide a sibling close button and support Delete. The caller owns selection, retained content, and the next selection after closing.",
+    behavior: "Base UI Tabs.",
     variants: ["chrome", "panel", "workspace", "navigation"],
     status: "proposed",
     collection: "components",
@@ -495,8 +496,8 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "header",
     name: "Header",
     purpose:
-      "Content title with optional subtitle, eyebrow, icon and actions; compact InlineHeader for groups.",
-    behavior: "Semantic heading with caller-selected level",
+      "Introduce page content with a title and optional subtitle, eyebrow, icon, or actions. Use InlineHeader for groups within the page.",
+    behavior: "Semantic heading with caller-selected level.",
     variants: ["header", "inline"],
     status: "proposed",
     collection: "components",
@@ -508,8 +509,8 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "panel-header",
     name: "PanelHeader",
     purpose:
-      "A panel's shared 2.5rem minimum-height header row: optional leading navigation, icon, title, and trailing actions. It composes controls supplied through actions but owns neither the panel container nor the content below it.",
-    behavior: "Semantic native header",
+      "Give a panel a consistent header with optional navigation, icon, title, and actions. The row has a 2.5rem minimum height; the panel and its content stay with the caller.",
+    behavior: "Semantic native header.",
     variants: ["default", "compact"],
     status: "proposed",
     collection: "components",
@@ -523,7 +524,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "search-field",
     name: "SearchField",
     purpose: "A compact filter field with a search cue and clear action.",
-    behavior: "Base UI Field and Input",
+    behavior: "Base UI Field and Input.",
     variants: ["default", "capsule"],
     status: "proposed",
     collection: "components",
@@ -538,7 +539,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     purpose:
       "The message drafting frame: editable content, contextual information, tools, send state and delivery feedback.",
     behavior:
-      "Native form and textarea semantics; product capabilities supply rich editing and tool behavior",
+      "Native form and textarea semantics; product capabilities supply rich editing and tool behavior.",
     variants: [
       "empty",
       "draft",
@@ -560,7 +561,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "navigation-section",
     name: "NavigationSection",
     purpose: "A named group of related rows in a dense workspace navigator.",
-    behavior: "Semantic native section",
+    behavior: "Semantic native section.",
     variants: ["default"],
     status: "proposed",
     collection: "components",
@@ -574,7 +575,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "NavigationItem",
     purpose:
       "A selectable destination row or pill with optional icon and metadata.",
-    behavior: "Base UI Button",
+    behavior: "Base UI Button.",
     variants: ["row", "pill", "option", "inset", "selected"],
     status: "proposed",
     collection: "components",
@@ -588,7 +589,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "Accordion",
     purpose: "Reveal related content without leaving the page.",
     behavior:
-      "Base UI owns expansion, keyboard activation, and panel semantics; keepMounted preserves local form state while collapsed",
+      "Base UI owns expansion, keyboard activation, and panel semantics; keepMounted preserves local form state while collapsed.",
     variants: [
       "default",
       "form",
@@ -607,9 +608,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "combobox",
     name: "Combobox",
     purpose:
-      "A searchable form field with an integrated browse control and shared option popup.",
+      "Search and choose from a set of options. The field includes a browse control and a shared option popup.",
     behavior:
-      "Base UI owns keyboard navigation and selection; callers own filtering, custom values and async discovery",
+      "Base UI owns keyboard navigation and selection; callers own filtering, custom values and async discovery.",
     variants: ["default", "loading", "disabled"],
     status: "proposed",
     collection: "components",
@@ -623,7 +624,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     purpose:
       "An anchored surface for supporting details, short forms, and interactive content.",
     behavior:
-      "Base UI owns positioning, focus restoration and dismissal; feature code owns content and state",
+      "Base UI owns positioning, focus restoration and dismissal; feature code owns content and state.",
     variants: ["content", "list", "none", "compact", "wide"],
     status: "proposed",
     collection: "components",
@@ -637,7 +638,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     purpose:
       "A label, optional description, leading artwork and trailing detail inside a choice.",
     behavior:
-      "Presentational content; the containing control owns selection, interaction and semantics",
+      "Presentational content; the containing control owns selection, interaction and semantics.",
     variants: ["label", "description", "icon", "avatar", "trailing detail"],
     status: "proposed",
     collection: "components",
@@ -650,7 +651,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "Menu",
     purpose: "Present contextual actions and choices from a compact trigger.",
     behavior:
-      "Base UI owns positioning, dismissal, keyboard navigation, selection, and nested submenus",
+      "Base UI owns positioning, dismissal, keyboard navigation, selection, and nested submenus.",
     variants: [
       "actions",
       "compact",
@@ -670,8 +671,9 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     slug: "select",
     name: "Select",
     purpose:
-      "A labelled choice with inline, compact row and full-width form layouts.",
-    behavior: "Base UI owns focus, keyboard selection, grouping, and dismissal",
+      "Choose one value from a finite list. Use inline for compact filters, compact for trailing row choices, and field for forms.",
+    behavior:
+      "Base UI owns focus, keyboard selection, grouping, and dismissal.",
     variants: [
       "inline",
       "compact",

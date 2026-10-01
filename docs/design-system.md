@@ -1,24 +1,26 @@
 # Design system and appearance
 
-The shared components live in `src/shared/design-system` and appear at
-`/tests/fixtures/design-system.html`. Buzz follows Block UI’s approach to semantic
-roles, controls and states, using Base UI for behavior and public fonts and assets.
-The app imports the same form and overlay styles as the component viewer.
-See [the adoption map](design-system-adoption.md) for ownership and retained adapters.
+Build new Buzz UI with the components and roles in `src/shared/design-system`. Explore
+them in the standalone viewer at `/tests/fixtures/design-system.html`. The app and
+viewer share form and overlay styles, Base UI behavior, and public fonts and assets.
+[The adoption map](design-system-adoption.md) identifies shared owners and the behavior
+that stays with each feature.
 
-The **host** owns appearance, including startup and recovery. A plugin must not be
-required to render the shell correctly. Pages still own their layout and behavior;
-this is shared styling, not a second component registry or a parallel `core/` tree.
+The **host** owns appearance, startup, and recovery so the shell renders without a
+plugin. Pages own their layout and product behavior. Keep these responsibilities in
+their existing owners; do not introduce a second component registry or parallel `core/`
+tree.
 
-## First release contract
+## Appearance behavior
 
-Settings → Appearance offers **Light**, **Dark**, and **System**, defaulting to System. System
-follows the computer's color scheme as it changes. The choice
-is device-local (`buzz-appearance.v1` in browser-origin localStorage), not a community
-profile or relay event. There is no theme marketplace or appearance sync
-between devices. Another same-origin window observes saved changes without rebuilding
-pages or relay services. Failed storage reads open safely in System; failed saves apply
-for this session and expose a retry in Appearance. Invalid stored values use System.
+In Settings → Appearance, choose **Light**, **Dark**, or **System**. The default,
+System, follows the computer’s color scheme as it changes. The choice is stored on this
+device under `buzz-appearance.v1` in browser-origin localStorage. It does not sync
+through community profiles or relay events, and no theme marketplace is available.
+
+Other same-origin windows observe saved changes without rebuilding pages or relay
+services. Failed reads and invalid values fall back to System. Failed saves keep the
+selection for the current session and show a retry in Appearance.
 
 `public/appearance-init.js` runs as a parser-blocking same-origin script in the HTML
 head, before the React bundle. It sets `data-color-mode` on `<html>`; CSS supplies the
@@ -28,9 +30,10 @@ storage key/parser is intentionally tiny and checked against the service in test
 browser theme-color metadata. `app/services.ts` owns its lifetime, including disposal.
 The built-in palettes do not fetch anything or wait for plugin/relay startup.
 
-Native window decorations and pre-WebView launch color are **not** controlled by a
-CSS attribute. An attended packaged-app check is still needed before claiming native
-chrome/relaunch parity; no broad Tauri capability or CSP expansion was added here.
+Native window decorations and the color before WebView startup have separate owners.
+Verify them in an attended packaged-app check before claiming native chrome or relaunch
+parity. The appearance implementation does not broaden Tauri capabilities or CSP
+permissions.
 
 ## Tokens and shared controls
 
@@ -60,18 +63,18 @@ The standalone design viewer imports the real shared controls without app startu
 identity or relay services. Check the actual app as well as specimens, in both
 themes and at narrow, intermediate and wide widths with enlarged text.
 
-## Future theme contributions (design boundary, not implemented API)
+## Future theme contributions
 
-A theme's identity is separate from its `light | dark` color mode. Future first-party
-or plugin definitions can contribute named, versioned semantic values; the host owns
-validation, explicit user selection, applying/removing overrides and a built-in
-fallback when a contribution disappears. Do not make feature components branch on
+There is no theme contribution API yet. A future theme would have an identity separate
+from its `light | dark` mode and contribute named, versioned semantic values. The host
+would own validation, explicit selection, applying and removing overrides, and fallback
+when a contribution disappears. Do not make feature components branch on
 specific theme names. Do not advertise internal source imports as a versioned SDK.
 Add a supported contribution API only with its first real external consumer and
 unload/rollback tests. Trusted same-process plugins can already execute arbitrary
 code; these authoring conventions are not a sandbox or CSS security boundary.
 
-## Evidence and remaining validation
+## Appearance checks
 
 `shared/theme/service.test.ts` checks parser/bootstrap agreement, denied storage,
 save/retry/restore, events and disposal. `tokens.test.ts` checks complete paint roles
@@ -81,8 +84,8 @@ accessibility audit (transparency, images and focus placement need inspection).
 `tests/browser/appearance.spec.mjs` exercises the production frontend with fixture
 relay data in Chromium and WebKit: Settings controls, reload, denied save/retry,
 cross-window updates preserving a live draft/DOM/scroll anchor, responsive screenshots,
-and the dark document while the entire application JS bundle is withheld. Existing
-Settings journeys also cover the added navigation stop. No live relay writes occur.
+and the dark document while the entire application JS bundle is withheld. Settings
+journeys also cover Appearance navigation. These tests do not write to a live relay.
 
 Emoji Mart uses the root mode and an in-place attribute observer, disposed with the
 picker. Browser regressions cover host Settings changes through an open widget,
@@ -92,14 +95,15 @@ script, Settings writes/retry, host lifetime and widget initial/update/disposal 
 Run the design guards, unit tests and relevant browser journeys for a changed
 component. Native window chrome and relaunch still need an attended packaged-app
 check; browser checks do not establish native acceptance or third-party plugin
-styling. Keep full batch validation separate from an interactive preview.
+styling. Follow the contribution workflow’s iteration and validation gates; record an
+interactive preview separately from a validated batch.
 
 
 
 ## Interface size and shortcuts
 
 The host owns a separate device-local `buzz-font-scale.v1` preference (80–200%,
-10% steps; default/reset 100%). Color-mode storage is unchanged. Settings →
+10% steps; default/reset 100%). This preference is independent of color-mode storage. Settings →
 Appearance supplies visible decrease/increase/reset controls and save-failure retry.
 The bootstrap and appearance service apply `--buzz-text-scale`; invalid persisted
 values fall back to 100%, and same-origin storage events re-read the latest choice.
@@ -107,7 +111,8 @@ values fall back to 100%, and same-origin storage events re-read the latest choi
 Command+, opens Settings on Apple platforms. Command+= / Command++ enlarge the interface,
 Command+- reduces it and Command+0 resets. Other platforms use Control. Zoom works
 while typing and in dialogs without changing browser/WebView zoom; Settings does
-not navigate behind an open modal. The [shortcut service](plugin-architecture.md#in-app-keyboard-shortcuts)
+not navigate behind an open modal. The [shortcut
+service](plugin-architecture.md#in-app-keyboard-shortcuts)
 also serves plugins and owns event dispatch/lifetime rules.
 
 The preference scales the root rem size, so shared typography, controls, icons and
@@ -128,18 +133,17 @@ dispatcher, grouped by owner, with each owner's deliberate numeric order,
 per-row Change/Reset and Reset all. Buzz's host rows use a functional sequence
 (navigation, interface sizing, search/settings, then development-only actions); plugins
 choose the order of their own actions. Equal orders use stable registry identity
-and then title as tie-breakers. It
-is built from existing components (`Input`, `Button`, `NavigationSection`,
+and then title as tie-breakers. The page uses existing components (`Input`, `Button`,
+`NavigationSection`,
 the shared PreferenceRow layout) and `formatBinding`, which renders chords as glyphs
 in Control, Option, Shift, Command order on Apple platforms (⇧⌘K) and as words
-elsewhere (Ctrl+Shift+K), with a plain-words accessible label. A row whose chord
-another listed shortcut also answers to carries a plain "Also used by …" line in
-subtle text, no colour. Two pieces are
-provisional and await a design pass: the key-combo `<kbd>` chip
+elsewhere (Ctrl+Shift+K), with a plain-words accessible label. When another listed
+shortcut uses the same chord, the row shows “Also used by …” in subtle text. Two
+feature-owned pieces still need a design pass: the key-combo `<kbd>` chip
 (`src/features/shortcuts/KeyCombo.tsx`) and the inline key-capture control
-(`src/features/shortcuts/KeyCaptureControl.tsx`). Both are deliberately
-black-and-white: capture composes the shared Input with feature-owned sizing
-and keyboard handling; notices retain explicit alert text in neutral roles.
+(`src/features/shortcuts/KeyCaptureControl.tsx`). Both use neutral colors. Capture
+composes Input with feature-owned sizing and keyboard handling; notices retain explicit
+alert text.
 The keycaps use standard text, surface, border and radius tokens. Both live outside
 `src/shared/design-system/ui/`, and are marked with a `DESIGN PASS PENDING` file
 comment and `data-design-pass="pending"` on their root so they are greppable.
@@ -148,7 +152,8 @@ leave capture without saving, with an accessible instruction explaining the exit
 Rows wrap their actions before the title collapses.
 
 `tests/browser/shortcuts.spec.mjs` covers real key dispatch to Settings and actual
-message/composer text, icon/control/spacing geometry, draft/node preservation, reset/limits/reload, modal/editor/
+message/composer text, icon/control/spacing geometry, draft/node preservation,
+reset/limits/reload, modal/editor/
 Shadow DOM guards, the independent example's disable/re-enable path, and rebinding
 that example's shortcut from Settings → Shortcuts (host conflict refused, new chord
 fires, old chord does not, persists across reload, reset restores). These
@@ -157,8 +162,8 @@ attended desktop shortcut try remains necessary for native acceptance.
 
 ## Incremental system integration
 
-The host entry `src/shared/styles/globals.css` now loads the shared system's
-palette, typography roles, materials and component styles with one Tailwind reset.
+The host entry `src/shared/styles/globals.css` loads the shared palette, typography,
+materials, and components with one Tailwind reset.
 It does not import the viewer's global entry, preference owner, docking vendor CSS
 or workspace experiments. Panel styling remains defined only by the shared system.
 
@@ -169,7 +174,8 @@ forward to the same shared roles; they are not the vocabulary for new work.
 remain available outside shared-control boundaries.
 
 Shared primitives carry `data-buzz-ui`, including portal popup roots. Legacy
-native-element selectors exclude that boundary and its descendants (without native CSS scope); shared typography starts there.
+native-element selectors exclude that boundary and its descendants (without native CSS
+scope); shared typography starts there.
 For new custom compositions use the same boundary and named type roles, not old
 native-element styling. Inline chips deliberately inherit their sentence's type.
 Do not nest legacy UI inside a migrated boundary without explicitly migrating it.
@@ -183,14 +189,18 @@ preference and full-document typography; its settings do not change the host.
 BentoWorkspace still uses the viewer preference helper and is not ready for app
 adoption; no workspace experiment is imported by app startup.
 
-The host mounts the shared input-modality hook once, including cleanup. Shared
-keyboard focus remains visible; pointer focus does not acquire a ring.
+The host mounts and cleans up the shared input-modality hook once. Its keyboard-focus
+recipes remain visible while pointer focus stays quiet. The standalone viewer loads a
+separate global outline suppression; see [Temporary focus
+appearance](../src/shared/design-system/DESIGN.md#temporary-focus-appearance). Preserve
+this explicit distinction rather than adding local focus overrides.
 
 The actual-app Appearance/shortcuts journeys cover startup, preferences, focus,
 and the temporary font/color compatibility contracts. Remove compatibility checks
 as their legacy consumers disappear; no separate legacy viewer or test suite is
-needed. Browser checks do not establish native or packaged acceptance. Broad scan
-remains an agreed integration-batch gate.
+needed. Browser checks do not establish native or packaged acceptance. Run `just scan`
+only when explicitly requested or needed to reproduce a broad integration failure, as
+the contribution workflow requires.
 
 ## Baseline ownership and exceptions
 
@@ -204,9 +214,9 @@ These are static guardrails, not a substitute for browser checks.
 Anchored emoji, mention, completion, account and diagnostics surfaces use
 `popover-surface` for their border, fill, elevation and layer. Their placement,
 scrolling and specialized keyboard/editor interactions remain feature-owned.
-Transient picker/typeahead highlights use `affordance-subtle-hover` directly,
-not a popover-wide override of persistent selection, so they stay visible on the
-raised dark surface. Compact completion/emoji layouts may select shared radius
+Completion highlights use `affordance-popover-selected` so they remain visible on the
+raised dark surface. The shared popover recipe maps selection to this same role. Compact
+completion/emoji layouts may select shared radius
 tokens to fit their inner geometry. Shared Button/IconButton `title` props render
 a shared Tooltip; content titles (full names, timestamps and media descriptions) remain native.
 
@@ -218,16 +228,15 @@ renderer-owned. The design viewer's layout experiments are not bundled app UI.
 Plugin examples consume public CSS roles and host fallbacks. External plugins
 cannot be guaranteed to follow this system; no new plugin API is introduced here.
 
-The browser adoption regression changes semantic fill, type and spacing values
-and checks the actual Settings button, inline chips and production CSS inside
-message-history containers and anchored popups. It exists because DOM emulation
-cannot establish CSS layer ownership.
+The browser adoption test changes semantic fill, type, and spacing values, then checks a
+Settings button, inline chips, message-history containers, and anchored popups. This
+verifies production CSS ownership across the real DOM and stylesheet layers.
 
 ## Message specimens
 
-`just design` includes **Product patterns → Messages**, a catalogue of current
-message content, attachments, delivery feedback, thread summaries, and membership
-activity. Examples render the production message components against local sample
+`just design` includes **Patterns → Messages**, a catalog of message content,
+attachments, delivery feedback, thread summaries, and membership activity. Examples
+render the production message components against local sample
 data; filters, narrow preview, and reset help compare states without a relay.
 
 Product specimens live in `tests/fixtures/message-gallery` and run in a separate
@@ -238,8 +247,8 @@ available viewport height.
 The gallery scrolls inside its isolated document so fullscreen media and its
 Close control stay visible. Theme changes reload sample state.
 
-This is a visual inventory, not live delivery or plugin validation. Composer,
-presence, unread tracking, and timeline pagination remain outside this first pass.
+Use this gallery to compare rendered message states. It does not validate live delivery,
+plugins, composer behavior, presence, unread tracking, or timeline pagination.
 
 ## Content headers and settings fills
 
@@ -248,16 +257,16 @@ Use `Header` for a settings page's title and introductory subtitle, and
 actions and heading level; the default levels are h2 and h3. Keep heading IDs on
 the title for labelled regions. `PanelHeader` still owns workspace chrome, and
 `DialogTitle`/`DialogDescription` retain dialog labelling semantics; do not replace
-those with a generic heading. The initial adoption covers Profile, Plugins,
-Appearance, Shortcuts and Notifications; other pages can adopt these when touched.
+those with a generic heading. Profile, Plugins, Appearance, Shortcuts, and Notifications
+use these headers. Adopt them on other pages when those pages are updated.
 
 Light-mode inset fields and quiet fills use neutral-2 (#f5f5f6). Panel and floating hover use
 that same stop; subtle-button hover is #f1f1f2. In dark mode, panels, popovers,
 subtle controls, and hover fills have separate steps. See the shared DESIGN.md
 quiet surface stack.
 
-Authored CSS dimensions now use rem across shell, channel, message, picker, and
-settings layouts. Physical strokes and browser/media measurement coordinates
+Authored dimensions use rem across shell, channel, message, picker, and settings
+layouts. Physical strokes and browser/media measurement coordinates
 remain pixels. The host interface-size preference scales the root; the timeline
 measures its rem-sized leading region for the virtualizer’s pixel start margin.
 
@@ -293,8 +302,8 @@ its text and icon; the caller must also disable its control. Icons are decorativ
 and must not contain interactive content. Keep plugin management actions and errors
 outside the primary toggle row. Pages retain ownership of grouping and dividers.
 
-The PreferenceRow catalog page includes interactive switch, checkbox, button,
-icon, subtitle, disabled, and required-status examples.
+Use the PreferenceRow page in the viewer to inspect switches, checkboxes, buttons,
+icons, subtitles, disabled states, and required-status text.
 
 Standard Button sizes use the 14px `text-label-sm` role while retaining their
 existing minimum heights. The extra-small capsule keeps its caption role.

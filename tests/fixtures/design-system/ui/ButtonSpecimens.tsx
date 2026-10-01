@@ -1,3 +1,5 @@
+import { ExamplePreview } from "./ExamplePreview";
+import { SectionHeading } from "./primitives";
 import { useState } from "react";
 import {
   ArrowRightIcon,
@@ -45,12 +47,11 @@ function ButtonMatrix({ kind }: { kind: "text" | "icon" }) {
       aria-label={`${kind === "text" ? "Button" : "Icon button"} variants`}
       className="component-specimen-stack"
     >
-      <div className="space-y-2">
-        <h2 className="text-label">Emphasis and sizes</h2>
-        <p className="text-body-sm text-subtle">
-          Small · 32px, medium · 40px, large · 52px. Hover, press, or Tab
-          through the controls to inspect their states.
-        </p>
+      <div className="flex flex-col gap-6">
+        <SectionHeading
+          title="Emphasis and sizes"
+          description="Small · 32px, medium · 40px, large · 52px. Hover, press, or Tab through the controls to inspect their states."
+        />
         <fieldset className="flex flex-wrap gap-2" aria-label="Preview state">
           {(["enabled", "disabled", "loading"] as const).map((value) => (
             <Button
@@ -71,11 +72,19 @@ function ButtonMatrix({ kind }: { kind: "text" | "icon" }) {
           aria-label={`${variant} examples`}
           className="component-specimen-group"
         >
-          <h3 className="text-body-sm text-tertiary">
+          <h3 className="text-label text-primary">
             {variant} · {descriptions[variant]}
           </h3>
-          <div
-            className={`component-specimen-frame ${variant === "inverted" ? "bg-surface-inverse" : ""}`}
+          <ExamplePreview
+            className={`${variant === "inverted" ? "bg-surface-inverse" : ""}`}
+            code={(kind === "text" ? ["xs", ...sizes] : sizes)
+              .map((size) => {
+                const stateProp = state === "enabled" ? "" : ` ${state}`;
+                return kind === "text"
+                  ? `<Button size="${size}" variant="${variant}"${stateProp}>\n  <ArrowRightIcon aria-hidden="true" /> Continue\n</Button>`
+                  : `<IconButton size="${size}" variant="${variant}"${stateProp}\n  aria-label="Add item" icon={<PlusIcon aria-hidden="true" />} />`;
+              })
+              .join("\n\n")}
           >
             <div className="component-specimen-row">
               {(kind === "text" ? (["xs", ...sizes] as const) : sizes).map(
@@ -110,7 +119,7 @@ function ButtonMatrix({ kind }: { kind: "text" | "icon" }) {
                 ),
               )}
             </div>
-          </div>
+          </ExamplePreview>
         </section>
       ))}
     </section>
@@ -122,20 +131,52 @@ export function ButtonSpecimen() {
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="component-specimen-stack">
-      <div className="component-specimen-frame justify-center">
+      <ExamplePreview
+        className="justify-center"
+        code={`<Button>Continue</Button>`}
+      >
         <Button>Continue</Button>
-      </div>
+      </ExamplePreview>
       <ButtonMatrix kind="text" />
       <section
         aria-label="Button behavior"
         className="component-specimen-group"
       >
-        <h2 className="text-body-sm text-tertiary">Loading and expansion</h2>
-        <p className="text-body-sm text-subtle">
-          Saving keeps the same width and focus. Finish the example with the
-          separate completion control.
-        </p>
-        <div className="component-specimen-frame">
+        <SectionHeading
+          title="Loading and expansion"
+          description="Saving keeps the same width and focus. Finish the example with the separate completion control."
+        />
+        <ExamplePreview
+          code={`<div className="min-w-0 space-y-4">
+  <div className="flex flex-wrap items-start gap-4">
+    <Button
+      loading={loading}
+      variant="prominent"
+      onClick={() => setLoading(true)}
+    >
+      Save changes
+    </Button>
+    <Button disabled={!loading} onClick={() => setLoading(false)}>
+      Complete saving
+    </Button>
+  </div>
+  <Button
+    aria-expanded={expanded}
+    aria-controls="button-example-details"
+    onClick={() => setExpanded(!expanded)}
+  >
+    Show details
+  </Button>
+  <p
+    id="button-example-details"
+    hidden={!expanded}
+    className="text-body-sm text-subtle"
+  >
+    The trigger keeps its pressed emphasis while this content is
+    expanded.
+  </p>
+</div>`}
+        >
           <div className="min-w-0 space-y-4">
             <div className="component-specimen-row">
               <Button
@@ -165,16 +206,40 @@ export function ButtonSpecimen() {
               expanded.
             </p>
           </div>
-        </div>
+        </ExamplePreview>
       </section>
       <section aria-label="Button content" className="component-specimen-group">
-        <h2 className="text-body-sm text-tertiary">Single-line labels</h2>
-        <p className="text-body-sm text-subtle">
-          Labels stay on one line. Let the surrounding layout wrap whole
-          controls or scroll when space is limited, rather than squeezing the
-          label.
-        </p>
-        <div className="component-specimen-frame">
+        <SectionHeading
+          title="Single-line labels"
+          description="Labels stay on one line. Let the surrounding layout wrap whole controls or scroll when space is limited, rather than squeezing the label."
+        />
+        <ExamplePreview
+          code={`<div className="min-w-0 space-y-4">
+  <div className="flex flex-wrap items-start gap-4">
+    <Button>Text only</Button>
+    <Button>
+      <PlusIcon aria-hidden="true" /> Create project
+    </Button>
+    <Button>
+      Continue <ArrowRightIcon aria-hidden="true" />
+    </Button>
+    <Button variant="outline">Choose a workspace</Button>
+  </div>
+  <div className="flex w-full max-w-96 items-center gap-4">
+    <p className="m-0 min-w-0 flex-1 text-body-sm text-secondary">
+      Changes affect future starts and restarts. Running work is never
+      restarted automatically.
+    </p>
+    <Button variant="prominent">Apply changes</Button>
+  </div>
+  <div className="max-w-48">
+    <Button>
+      <PlusIcon aria-hidden="true" /> Allow notifications for this
+      workspace
+    </Button>
+  </div>
+</div>`}
+        >
           <div className="min-w-0 space-y-4">
             <div className="component-specimen-row">
               <Button>Text only</Button>
@@ -200,7 +265,7 @@ export function ButtonSpecimen() {
               </Button>
             </div>
           </div>
-        </div>
+        </ExamplePreview>
       </section>
     </div>
   );
@@ -209,14 +274,31 @@ export function ButtonSpecimen() {
 export function IconButtonSpecimen() {
   return (
     <div className="component-specimen-stack">
-      <div className="component-specimen-frame justify-center">
+      <ExamplePreview
+        className="justify-center"
+        code={`<IconButton
+  aria-label="Add item"
+  icon={<PlusIcon aria-hidden="true" />}
+/>`}
+      >
         <IconButton
           aria-label="Add item"
           icon={<PlusIcon aria-hidden="true" />}
         />
-      </div>
+      </ExamplePreview>
       <ButtonMatrix kind="icon" />
-      <div className="component-specimen-frame">
+      <ExamplePreview
+        label="Row-end action"
+        code={`<div className="flex min-h-12 items-center rounded-row bg-affordance-subtle">
+  <span className="px-control-inset text-body-sm">Row action</span>
+  <IconButton
+    size="sm"
+    shape="row-end"
+    aria-label="Row actions"
+    icon={<DotsThreeIcon aria-hidden="true" />}
+  />
+</div>`}
+      >
         <div className="flex min-h-12 items-center rounded-row bg-affordance-subtle">
           <span className="px-control-inset text-body-sm">Row action</span>
           <IconButton
@@ -226,28 +308,49 @@ export function IconButtonSpecimen() {
             icon={<DotsThreeIcon aria-hidden="true" />}
           />
         </div>
-      </div>
-      <div className="component-specimen-frame">
+      </ExamplePreview>
+      <ExamplePreview
+        code={`<IconButton
+  size="xs"
+  shape="control"
+  aria-label="Dense formatting option"
+  title="Dense formatting option (20px)"
+  icon={<PlusIcon />}
+/>
+<code className="text-mono-sm">size="xs" · 20px</code>`}
+      >
         <IconButton
           size="xs"
           shape="control"
           aria-label="Dense formatting option"
-          title="Dense formatting option (28px)"
+          title="Dense formatting option (20px)"
           icon={<PlusIcon />}
         />
-        <code className="text-mono-sm">size="xs" · 28px</code>
-      </div>
+        <code className="text-mono-sm">size="xs" · 20px</code>
+      </ExamplePreview>
       <section
         className="component-specimen-group"
         aria-label="Buzz icon treatments"
       >
-        <h2 className="text-body-sm text-tertiary">Buzz treatments</h2>
-        <p className="text-body-sm text-subtle">
-          Tint supports quiet composer actions. Chrome uses the workspace glass
-          material. Round is the default; control corners remain an explicit
-          option.
-        </p>
-        <div className="component-specimen-frame">
+        <SectionHeading
+          title="Buzz treatments"
+          description="Tint supports quiet composer actions. Chrome uses the workspace glass material. Round is the default; control corners remain an explicit option."
+        />
+        <ExamplePreview
+          code={`<div className="flex flex-wrap items-start gap-4">
+  <IconButton
+    variant="tint"
+    aria-label="Tinted add"
+    icon={<PlusIcon aria-hidden="true" />}
+  />
+  <IconButton
+    variant="subtle"
+    shape="control"
+    aria-label="Control shape"
+    icon={<GearIcon aria-hidden="true" />}
+  />
+</div>`}
+        >
           <div className="component-specimen-row">
             <IconButton
               variant="tint"
@@ -261,22 +364,54 @@ export function IconButtonSpecimen() {
               icon={<GearIcon aria-hidden="true" />}
             />
           </div>
-        </div>
+        </ExamplePreview>
       </section>
       <section
         className="component-specimen-group"
         aria-label="Avatar icon treatments"
       >
-        <h2 className="text-body-sm text-tertiary">
-          Avatar · Transparent cutouts
-        </h2>
-        <p className="text-body-sm text-subtle">
-          Hover, press, or open the menu: the backdrop stays visible through the
-          avatar cutout. Tab to the enabled control to inspect keyboard focus.
-        </p>
-        <div
-          className="component-specimen-frame"
-          style={{ background: "var(--bg-app)" }}
+        <SectionHeading
+          title="Avatar · Transparent cutouts"
+          description="Hover, press, or open the menu: the backdrop stays visible through the avatar cutout. Tab to the enabled control to inspect keyboard focus."
+        />
+        <ExamplePreview
+          backdrop
+          code={`<div className="flex flex-wrap items-start gap-4">
+  <MenuRoot>
+    <MenuTrigger
+      render={
+        <IconButton
+          variant="avatar"
+          aria-label="Avatar profile menu"
+          icon={
+            <Avatar
+              alt="Alex Morgan"
+              fallback="A"
+              size="fill"
+              statusBadge="online"
+            />
+          }
+        />
+      }
+    />
+    <MenuPopup size="compact">
+      <MenuItem>View profile</MenuItem>
+    </MenuPopup>
+  </MenuRoot>
+  <IconButton
+    variant="avatar"
+    disabled
+    aria-label="Disabled avatar profile"
+    icon={
+      <Avatar
+        alt="Sam Rivera"
+        fallback="S"
+        size="fill"
+        statusBadge="away"
+      />
+    }
+  />
+</div>`}
         >
           <div className="component-specimen-row">
             <MenuRoot>
@@ -314,18 +449,30 @@ export function IconButtonSpecimen() {
               }
             />
           </div>
-        </div>
+        </ExamplePreview>
       </section>
       <section
         className="component-specimen-group"
         aria-label="Chrome icon treatments"
       >
-        <h2 className="text-body-sm text-tertiary">
+        <h2 className="text-label text-primary">
           Chrome · Workspace glass material
         </h2>
-        <div
-          className="component-specimen-frame"
-          style={{ background: "var(--bg-app)" }}
+        <ExamplePreview
+          backdrop
+          code={`<div className="flex flex-wrap items-start gap-4">
+  <IconButton
+    variant="chrome"
+    aria-label="Chrome settings"
+    icon={<GearIcon aria-hidden="true" />}
+  />
+  <IconButton
+    variant="chrome"
+    disabled
+    aria-label="Disabled chrome settings"
+    icon={<GearIcon aria-hidden="true" />}
+  />
+</div>`}
         >
           <div className="component-specimen-row">
             <IconButton
@@ -340,25 +487,29 @@ export function IconButtonSpecimen() {
               icon={<GearIcon aria-hidden="true" />}
             />
           </div>
-        </div>
+        </ExamplePreview>
       </section>
       <section
         className="component-specimen-group"
         aria-label="Media icon treatment"
       >
-        <h2 className="text-body-sm text-tertiary">
+        <h2 className="text-label text-primary">
           Media · Static dark glass over video
         </h2>
-        <div
-          className="component-specimen-frame"
-          style={{ background: "var(--bg-app)" }}
+        <ExamplePreview
+          backdrop
+          code={`<IconButton
+  variant="media"
+  aria-label="Media settings"
+  icon={<GearIcon aria-hidden="true" />}
+/>`}
         >
           <IconButton
             variant="media"
             aria-label="Media settings"
             icon={<GearIcon aria-hidden="true" />}
           />
-        </div>
+        </ExamplePreview>
       </section>
     </div>
   );

@@ -1,30 +1,35 @@
 # Buzz design system
 
-The design system this app is moving to, imported from `block/buzz`'s `desktop-new`
-worktree, including its in-progress layout playgrounds. It is the styling source
-for new UI and for existing surfaces as they move onto the system. This initial
-port adds the system and its viewer without migrating existing app surfaces.
+Shared components, tokens, and styles for Buzz. Use them for new UI and when
+migrating existing surfaces. The system originated in the `block/buzz`
+`desktop-new` worktree; its layout playgrounds remain experimental.
 
-## Ownership and locations
+Read [the design guide](DESIGN.md) for product decisions,
+[Maintaining the design system](MAINTAINING_DESIGN_SYSTEM.md) for how to evolve
+them, and [the agent guide](AGENTS.md) before editing with an agent.
 
-- `src/shared/design-system/`: shared components, tokens, styles, chip presentation helpers, registries and colocated tests.
-- `tests/fixtures/design-system/`: standalone viewer, documentation pages and interactive specimens. It renders the real shared components, not copies.
-- `scripts/design-system/`: scoped type, color, contrast and token-consumer checks.
+## Where to work
 
-Read `DESIGN.md` for design decisions and `MAINTAINING_DESIGN_SYSTEM.md` for
-stewardship. Proposed work retains its status; historical examples in the design
-guide are rationale, not a claim that those features were ported.
+- `src/shared/design-system/`: shared components, tokens, styles, chip presentation helpers, registries, and colocated tests.
+- `tests/fixtures/design-system/`: the standalone viewer and its interactive examples, using the real shared components.
+- `scripts/design-system/`: type, color, contrast, and token-consumer guards.
 
-## Run from the repository root
+## Run the viewer
+
+From the repository root:
 
 ```sh
-bin/pnpm install --frozen-lockfile
-bin/pnpm design:dev
+bin/just design
 ```
 
-Open http://localhost:1442/tests/fixtures/design-system.html.
-The same fixture path works under the normal web dev server, at the
-worktree-derived port `just web` prints.
+Open [the local viewer](http://localhost:1442/tests/fixtures/design-system.html).
+`bin/pnpm design:dev` starts the viewer directly after dependencies are installed.
+The same fixture path works on the port printed by `just web`.
+
+## Check and build
+
+Use the root contribution workflow to choose checks for the current iteration.
+The system provides these scoped commands:
 
 ```sh
 bin/pnpm design:typecheck
@@ -32,35 +37,36 @@ bin/pnpm design:check
 bin/pnpm design:census
 bin/pnpm design:test
 bin/pnpm design:test:browser
+bin/pnpm design:build
 ```
 
 The browser command builds the host and viewer, then tests Chromium and WebKit.
-`bin/pnpm design:build` produces `dist/design-system`; serve that directory and
-open `tests/fixtures/design-system.html`. Hash links survive static-host reloads.
-The build rejects source outside the system/viewer and copies no public directory,
-native configuration or source maps. No publishing configuration is included.
+`design:build` writes `dist/design-system`; serve that directory and open
+`tests/fixtures/design-system.html`. Hash routes support static-host reloads.
+The core build rejects application imports and bundles shared artwork explicitly.
+It copies no public directory, native configuration, or source maps. Publishing is
+not configured.
 
-## What is intentionally absent
+## Viewer boundaries
 
-The core viewer bundle has no session shell, navigation controller, agent
-setup/activity, composer, conversation feature, relay client, native adapter,
-local lab or identity data.
-Blank layout playgrounds and generic inline reference presentations are retained.
+The core viewer runs without app startup, sessions, agent setup, conversation
+features, relay services, native adapters, or live identity data. It includes shared
+Composer examples, generic inline references, and blank layout playgrounds.
 
-The Messages product-pattern page embeds a separately built local fixture using
-production message renderers and sample data. It does not import product code into
-the core viewer or start live services. See [message specimens](../../../docs/design-system.md#message-specimens).
+**Patterns → Messages** embeds a separate local fixture with production
+message renderers and sample data. It does not add product imports to the core
+bundle or start live services. See [message
+specimens](../../../docs/design-system.md#message-specimens).
 
-## Compatibility boundary
+## Host integration
 
-The host owns the appearance lifecycle and now loads the shared palette,
-typography roles, materials and component styles through its coordinated entry.
-Existing UI keeps temporary legacy styling until deliberately migrated. Shared
-primitives mark their own styling boundary, including portal roots; new product
-compositions use those primitives and named roles, never viewer furniture.
+The host owns appearance and loads the shared palette, type, materials, and
+component styles through one coordinated entry point. Existing callers may still
+use compatibility styles until they migrate. Shared primitives mark their styling
+boundary, including portal roots. Product compositions use those primitives and
+semantic roles.
 
 See [the host integration contract](../../../docs/design-system.md#incremental-system-integration)
-for compatibility names, text scaling, keyboard focus and actual-app regression coverage.
-The viewer stays an independent document and preference owner. Workspace experiments
-remain excluded from host startup; BentoWorkspace still reads viewer preferences
-and needs a host adapter before product adoption.
+for compatibility names, text scaling, focus, and app regression coverage.
+The viewer owns its separate document and preferences. Workspace experiments stay
+out of host startup; BentoWorkspace needs a host preference adapter before adoption.

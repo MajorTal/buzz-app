@@ -114,7 +114,7 @@ const TEXT_ROLES = [
   "--purple-12", // accent text: links, active nav, chip labels
   "--red-12", // error text: failed session start, rejected form
   "--amber-12", // warning text in delivery notices and dialogs
-  "--green-12", // completion text in the foundation alignment proposal
+  "--green-12", // success text
 ];
 
 /**

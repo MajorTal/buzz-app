@@ -1,83 +1,67 @@
 # Shared design system adoption
 
-Buzz keeps Base UI for interaction behavior and uses its own public palette,
-Inter and JetBrains Mono. No private fonts, packages, artwork or business examples
-are required. The visual direction follows Block UI: clear semantic color roles,
-pill actions, consistent fields and shared states.
+Buzz uses shared semantic colors, Inter and JetBrains Mono, and Base UI interaction
+primitives. The visual direction follows Block UI’s controls and states. Public
+fonts, packages, and generic examples keep the system independent of private assets.
 
-## From the audit to the app
+Use this map to find the shared owner before changing a product surface.
 
-| Audit area | Shared owner | App adoption |
+## Shared owners and app uses
+
+| Area | Shared owner | App uses |
 | --- | --- | --- |
-| Colors and type | Semantic surface, text, border and affordance roles | Host aliases forward to shared roles; feature CSS uses role names; inline links have paired text and hover roles. |
-| Action sizes and states | Button and IconButton | Retry, refresh, delete, recovery, composer send and picker triggers. Buttons use 32/40/52px minimum sizes and allow labels to wrap. |
-| Forms and choices | Field, Input, Textarea, RadioGroup, Checkbox | Profile, community setup, appearance, plugin import and workflow editing. |
-| Search | SearchField | Channels, pages, members and GIFs preserve their query, ref and keyboard handlers. |
-| Navigation | NavigationItem | Settings, channel rows, shell destinations, Home and community choices. Route destinations remain buttons, not tabs. |
-| Tabs | Tabs | Emoji/GIF uses associated panels and Base UI keyboard activation. Workflow mode retains its existing externally owned editor view. |
-| Modals | Dialog and AlertDialog | Page search, community setup and workflow confirmations. Pending work prevents dismissal; focus returns to the opener. |
-| Panels and headers | Panel and PanelHeader | Settings, channels and companion cards use shared paint. Grids, scrolling, docks and subscriptions stay with the feature. |
-| Feedback | Toast | Agent-start, live-update, sidebar preferences and Settings feedback use a source-owned stack. Recovery stays available; form errors, blocked pages and lasting paused-state context remain inline. |
-| Hints | Tooltip | Control titles and agent activity use keyboard-accessible, dismissible hints. Accessible names stay on the controls. |
-| Sessions and activity | NavigationItem, Button, IconButton, Panel and PanelHeader | Session history, agent choice, child-channel navigation and activity actions retain unread, admission, draft and focus behavior. Base UI owns their menus. |
-| Media stages | surface-inverse with text-inverse | Preserve existing stage values and measure their text pairing explicitly; images and video pixels stay renderer-owned. |
+| Colors and type | Surface, text, border, affordance, and complete type roles | Host aliases forward to shared roles. Feature CSS uses role names; inline links pair text and hover roles. |
+| Actions | Button and IconButton | Retry, refresh, delete, recovery, composer send, and picker triggers. Standard sizes are 32/40/52px minimums. Labels stay on one line; surrounding layouts reflow whole controls or scroll. |
+| Forms and choices | Field, Input, Textarea, RadioGroup, Checkbox | Profile, community setup, appearance, plugin import, and workflow editing. |
+| Search | SearchField | Channels, pages, members, and GIFs retain their query, refs, and keyboard handlers. |
+| Navigation | NavigationItem | Settings, channel rows, shell destinations, Home, and community choices. Route destinations use button semantics, not tab semantics. |
+| Tabs | Tabs | Emoji/GIF connects tabs to panels with Base UI keyboard activation. Workflow mode keeps its feature-owned editor view. |
+| Modals | Dialog and AlertDialog | Page search, community setup, and workflow confirmations. Pending work prevents dismissal; focus restoration follows the shared contract. |
+| Panels and headers | Panel and PanelHeader | Settings, channels, and companion cards share appearance. Features own grids, scrolling, docks, and subscriptions. |
+| Feedback | Toast | Agent-start, live-update, sidebar preferences, and Settings recovery use a source-owned stack. Form errors, blocked pages, and lasting paused-state context stay inline. |
+| Hints | Tooltip | Control hints and agent activity support keyboard access and dismissal. Controls keep their own accessible names. |
+| Sessions and activity | NavigationItem, Button, IconButton, Panel, PanelHeader | Session history, agent choice, child-channel navigation, and activity actions retain unread, admission, draft, and focus behavior. Base UI owns their menus. |
+| Media stages | `surface-inverse` and `text-inverse` | Preserve the stage’s existing values and measure text pairings. Renderers own image and video pixels. |
 
-## Deliberate local ownership
+## What stays with the feature
 
-- The rich message editor keeps its caret, IME, selection and completion logic.
-  Completion rows retain `aria-activedescendant` while using shared colors and type.
-- GIF and image tiles retain native media-selection buttons and image geometry.
-  Search, retry, playback and zoom actions use shared controls. The image zoom
-  range retains native range behavior and reads semantic colors; there is no
-  separate shared Slider. Media modal focus, drag regions, playback and timecode
-  ownership stay with the renderer.
-- Emoji Mart keeps its shadow-root adapter and native search behavior. Its search
-  field mirrors SearchField's 40px minimum size, 12px control corners, 14px body
-  type, inset fill, metadata placeholder and perimeter focus border. Keyboard
-  focus and reduced motion are immediate. It does not own another appearance
-  preference.
-- Native disclosures remain for persisted channel groups and diagnostic content.
-  They are disclosures, not application menus; their content and state remain local.
-- Avatars, previews, links, mentions and thread summaries retain their identity
-  and navigation ownership. Composer mentions use inert shared InlineChip rendering;
-  editing or deleting the mention removes its explicit mention intent. Host-owned
-  recipient avatars beside the mention tool also allow clearing that intent without
-  changing authored text; Sessions can still route to the selected or sole agent.
-  Shared appearance does not move their data.
-- Panel marks its surface separately from interactive components. Native product
-  and plugin content inside it can still receive host defaults.
-- Legacy utility names remain available through the host bridge for existing
-  callers and plugins. They are aliases, not another palette. Use the semantic
-  names and shared components for new work.
+Shared appearance does not transfer ownership of product data or interaction.
+
+- **Rich editor:** caret, IME, selection, and completion logic stay with the editor. Completion rows keep `aria-activedescendant` while using shared colors and type.
+- **Media:** GIF and image tiles retain native selection buttons and geometry. Search, retry, playback, and zoom actions use shared controls. Image zoom uses a native range with semantic colors; there is no shared Slider. The renderer owns modal focus, drag regions, playback, and timecodes.
+- **Emoji Mart:** the shadow-root adapter retains native search behavior. Search mirrors the shared 40px minimum field, 12px corners, 14px body type, inset fill, metadata placeholder, and perimeter stroke. Keyboard focus and reduced motion are immediate. The widget uses the host appearance preference.
+- **Disclosures:** persisted channel groups and diagnostic content retain native disclosure semantics and local state.
+- **Identity and navigation:** avatars, previews, links, mentions, and thread summaries keep their existing owners. Composer mentions use inert InlineChip rendering. Editing or deleting a mention removes its explicit intent; host-owned recipient avatars can clear that intent without changing authored text. Sessions may still route to the selected or sole agent.
+- **Host defaults:** Panel marks its surface separately from interactive controls, so native product and plugin content inside it can still receive host defaults.
+- **Compatibility:** legacy utilities forward to shared roles for existing callers and plugins. Use semantic names and shared components in new work.
 
 ## Form adoption
 
-Agent import uses shared Input and Select styling without local element overrides.
-Do not add container selectors that repaint shared inputs, textareas or selects.
+Agent import uses shared Input and Select styling. Do not add feature selectors
+that repaint shared inputs, textareas, or selects.
 
-Environment variable-name errors and link-lab URL errors belong to Field. Workflow
-validation retains one owner (`editor-model.ts`); its issue includes the field and
-step location when available. Form mode attaches name, message, delay and timeout
-errors to the corresponding control, revealing step options when a timeout needs
-attention. YAML mode attaches draft validation to the YAML field and restores its
-helper description after correction. Unsupported Form-mode conversion is a
-separate notice: valid advanced YAML is still valid and saveable.
+Field owns environment variable-name and link-lab URL errors. Workflow validation
+stays in `editor-model.ts`, with field and step locations on each issue when known.
+Form mode connects name, message, delay, and timeout errors to their controls and
+reveals step options when a timeout needs attention. YAML mode shows validation
+on the YAML field and restores its helper text after correction.
 
-Keep request failures, permissions and whole-workflow problems as feature-level
-notices. They must not mark an unrelated input invalid. Styling and message
-placement do not change save gates, secret handling, or relay validation.
+Unsupported conversion to Form mode is a separate notice: valid advanced YAML
+remains valid and saveable. Keep request failures, permissions, and whole-workflow
+problems in feature-level notices instead of marking an unrelated field invalid.
+Shared styling does not change save gates, secret handling, or relay validation.
 
-## Checking a migration
+## Check a migration
 
-Check pointer and keyboard behavior, loading and failures, both color modes,
-narrow layouts and enlarged text. A rendered app check matters: a component can
-look right in the viewer while its stylesheet is missing from the host.
+Exercise pointer and keyboard paths, loading, failure, and recovery. Inspect both
+themes, narrow layouts, and enlarged text in the actual app; a viewer example
+cannot confirm that the host loads the right stylesheet.
 
-Browser journeys retain community joining, workflow save/recovery, draft and
-sidebar persistence, media insertion and focus checks. Visual assertions should
-track the shared treatment. The media journey now checks tab/panel associations,
-keyboard activation and search clearing instead of the retired picker-specific
-stretch animation. No browser journey is removed by this migration.
+Retain browser coverage for community joining, workflow save/recovery, draft and
+sidebar persistence, media insertion, and focus. Media coverage includes tab/panel
+associations, keyboard activation, and search clearing. Moving to shared styles is
+not a reason to remove a browser journey or weaken its behavioral assertions.
 
-Before review/integration, run the contribution workflow’s full batch checks.
-Draft PRs and a running preview are not claims of native or full-suite validation.
+Follow [the contribution workflow](contributing.md#interactive-product-iteration)
+for iteration and completed-batch checks. Record deferred checks. A draft PR or
+running preview does not establish native behavior or full validation.

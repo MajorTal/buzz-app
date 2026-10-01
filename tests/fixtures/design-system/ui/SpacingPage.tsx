@@ -12,12 +12,12 @@ export function SpacingPage() {
       <PageHeader
         title="Spacing"
         status="forming"
-        intro="A short six-step rhythm extracted from the Messages frame. The first roles capture only the relationships repeated by the workspace and its dense navigator; new roles arrive when another real component earns them."
+        intro="Use the spacing scale for consistent insets and gaps. Named roles describe recurring relationships, from controls within a row to sections on a page."
       />
 
       <Section
         title="Scale"
-        description="Components use these steps through roles where the distance carries product meaning."
+        description="Use a named spacing role when it describes the relationship. Add a role only when a real component needs it."
       >
         <FoundationScale
           items={SPACE.map((item) => ({
@@ -39,7 +39,7 @@ export function SpacingPage() {
           scrollable lists. Empty states follow the same content edge.
         </p>
         <Link to="/design/design-guide" className="text-body underline">
-          Read DESIGN.md → Align row content, not state backgrounds
+          Read the row alignment guidance
         </Link>
       </Section>
 

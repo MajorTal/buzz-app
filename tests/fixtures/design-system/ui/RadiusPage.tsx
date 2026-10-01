@@ -8,7 +8,7 @@ export function RadiusPage() {
       <PageHeader
         title="Radius"
         status="forming"
-        intro="Four corner roles reproduce the Messages frame without turning every measured curve into a choice: dense rows, controls, major panels, and fully round identity or chrome."
+        intro="Choose corners by purpose: rows, fields, panels, text buttons, or fully rounded controls. Keep the shared role with the component so its states retain the same shape."
       />
 
       <Section title="Roles">

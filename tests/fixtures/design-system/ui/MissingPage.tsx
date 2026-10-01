@@ -1,3 +1,4 @@
+import { PageHeader } from "./primitives";
 import { Link } from "@tanstack/react-router";
 
 /**
@@ -11,13 +12,15 @@ import { Link } from "@tanstack/react-router";
 export function MissingPage({ what = "page" }: { what?: string }) {
   return (
     <>
-      <header className="component-page-heading">
-        <h1 className="text-title text-primary">Not in the system</h1>
-        <p className="text-body text-tertiary">
-          This {what} does not exist, or its link changed. The navigation lists
-          everything the system documents.
-        </p>
-      </header>
+      <PageHeader
+        title="Not in the system"
+        intro={
+          <>
+            This {what} does not exist, or its link changed. The navigation
+            lists everything the system documents.
+          </>
+        }
+      />
       <p className="text-body text-secondary">
         <Link to="/design" className="text-purple-12 underline">
           Go to the overview

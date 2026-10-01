@@ -140,12 +140,12 @@ export function BaseUiPage() {
     <>
       <PageHeader
         title="Base UI backing"
-        intro="Which components inherit behaviour from Base UI, and which author it themselves. Read from the component registry, which is bound to the imports in the component files — so a component that gains or drops a Base UI part cannot leave this page saying otherwise."
+        intro="See which Base UI primitives each Buzz component uses, directly or through another component. The registry and its tests keep this reference aligned with component imports."
       />
 
       <Section
         title="Every component"
-        description="The second column is what the file imports itself. The third is what reaches it through a component it composes — IconButton imports nothing from Base UI, but it renders a Buzz Button, so Base UI's Button is still underneath it."
+        description="Base UI part lists direct imports. Inherited lists primitives used through another Buzz component: IconButton, for example, gets Base UI Button behavior through Button."
       >
         <table className="w-full table-fixed border-collapse text-left">
           <caption className="sr-only">
@@ -183,8 +183,8 @@ export function BaseUiPage() {
       </Section>
 
       <Section
-        title="The count"
-        description="Stated so the balance is visible rather than counted by hand each time someone asks."
+        title="Coverage"
+        description="Counts include direct imports and behavior inherited through composition."
       >
         <dl className="flex flex-wrap gap-x-12 gap-y-4 rounded-xl bg-neutral-2 px-5 py-4">
           <div className="flex flex-col gap-1">
@@ -194,7 +194,7 @@ export function BaseUiPage() {
             </dd>
           </div>
           <div className="flex flex-col gap-1">
-            <dt className="text-body-sm text-tertiary">Native elements only</dt>
+            <dt className="text-body-sm text-tertiary">Without Base UI</dt>
             <dd className="text-body text-primary">
               {native.length} of {rows.length}
             </dd>
@@ -209,8 +209,8 @@ export function BaseUiPage() {
       </Section>
 
       <Section
-        title="Where a dash is the right answer"
-        description="These author their own markup, and that is the decision — not an omission. A wrapper around a native header buys a dependency and no behaviour."
+        title="Components without Base UI parts"
+        description="These components use native elements or another library. Static headers and surfaces need no Base UI primitive; interactive components must still provide the required keyboard and accessibility behavior."
       >
         <div className="flex flex-col">
           {native.map(({ component }) => (
@@ -234,10 +234,10 @@ export function BaseUiPage() {
       </Section>
 
       <Note>
-        A dash in the third column too means the component owns its keyboard,
-        focus, and assistive semantics outright — InlineChip is the case to
-        watch, because it switches between a control and an image role and has
-        to get both right without help. See{" "}
+        A dash means there is no Base UI part in that column. For components
+        with no direct or inherited part, check the behavior notes above.
+        InlineChip, for example, owns its native button and image semantics.
+        Consult{" "}
         <a
           href={BASE_UI_DOCS_ROOT}
           target="_blank"
@@ -246,7 +246,7 @@ export function BaseUiPage() {
         >
           the Base UI component index
         </a>{" "}
-        for a part that could take that work over.
+        when adding shared interactions.
       </Note>
     </>
   );

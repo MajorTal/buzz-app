@@ -1,4 +1,4 @@
-# DESIGN.md
+# Design guide
 
 ## Direction
 
@@ -53,7 +53,8 @@ This guide describes how to use the system: surface relationships, hierarchy,
 identity, interaction and composition. The token registry documents the available
 values and their purpose.
 
-Run `pnpm design:dev` and open `/tests/fixtures/design-system.html` to see the system rendered from the tokens themselves.
+Run `pnpm design:dev` and open `/tests/fixtures/design-system.html` to see the system
+rendered from the tokens themselves.
 
 ## Identity shapes
 
@@ -63,8 +64,9 @@ not density or emphasis. The caller supplies identity type from domain data,
 never a name or picture heuristic. `size="fill"` fills the owning layout’s
 available space. Shape clips the artwork, never the interactive focus target.
 Avatar-only controls use `IconButton variant="avatar"` so the surrounding backdrop
-shows through their cutouts at rest, hover, press, and while a menu is open. The
-button retains its unmasked keyboard focus ring.
+shows through their cutouts at rest, hover, press, and while a menu is open. The focus
+target stays unmasked. Its keyboard-ring recipe remains subject to the temporary focus
+appearance policy below.
 Circular and squircle avatars can add `statusBadge="online" | "away" | "offline"`. The dot
 uses a semantic green, yellow, or grey role with light and dark values. Its inset
 cutout and dot scale with the existing avatar size; the dot is separate from the
@@ -79,8 +81,8 @@ Away uses an unoutlined Amber 10 fill at the designer's explicit request.
 1.4.11 3:1 non-text contrast target on supported neutral surfaces. The contrast
 guard reports exact accepted light-mode role/color/surface pairs; other pairs
 remain enforced. This exception is not an accessibility pass. Dark Away meets
-3:1 on these opaque surfaces. Offline stays unoutlined. Badge footprints,
-Bézier artwork cutouts, presence behavior and accessible names are unchanged.
+3:1 on these opaque surfaces. Offline stays unoutlined. Keep badge footprints, Bézier
+artwork cutouts, presence behavior, and accessible names with the shared Avatar owner.
 
 For a separate trailing action attached to a row, use `IconButton shape="row-end"`
 in a stretched flex slot. It keeps the size-selected width, fills the row height,
@@ -104,8 +106,8 @@ whether a caller supplied a secret: callers must use public-identity fields only
 
 Keep the full key for routing, persistence, identity comparisons, and explicit key
 copy actions. Short labels are recognition aids, not proof of identity. Full-key
-inspection/export surfaces remain explicit exceptions. Existing surfaces are not
-migrated automatically; new abbreviated public-key displays should reuse this rule.
+inspection/export surfaces remain explicit exceptions. Reuse this formatter for new
+abbreviated public-key displays; migrate existing surfaces deliberately.
 
 Identity display names use the active naming policy, not a separate composer rule.
 The default policy compares trimmed resolved names case-sensitively (`Honey` and
@@ -130,37 +132,72 @@ Removal is immediate and reduced motion disables the reveal animation.
 
 ## Posture
 
-Buzz is a place where people build together and bring their agents into the room. Everyday surfaces stay quiet, crisp, and highly functional; character shows up in identity, guidance, transitions, and ceremony rather than in the chrome of ordinary work. Colour is signal, not decoration. When in doubt, the interface gets out of the way of the conversation.
+Buzz is a place for people and their agents to build together. Keep everyday
+surfaces quiet and functional so the conversation stays central. Use character
+in identity, guidance, transitions, and ceremony. Use color to convey meaning.
 
 ## Surface and depth
 
-- **Panels sit on the backdrop; the backdrop is a gradient.** The app shell uses one `Panel joined` around navigation and content. Nested Panels keep their opaque fill and clipping but lose independent borders, rounding, and shadows; layout owners separate adjacent regions with `border-standard` hairlines. Standalone Panels retain their own outer surface.
-- **A region is separated by a soft fill, not by an outline.** Reach for `bg-inset` before reaching for a border. A bordered box announces its own edges; a filled one lets the content sit in a place. Grouping is the common case, so the quiet treatment is the default one.
-- **Use border-standard for quiet separators, border-prominent for controls and border-focus for keyboard focus.** Error and warning boundaries have their own roles. Measure real surfaces in both themes.
-- **No page-wide gradient behind documentation or dense reading.** The gradient is the product's backdrop for chrome and panels. Behind a column of prose it fights the text and makes contrast position-dependent — such surfaces sit on `bg-panel`.
-- **Shadows stay at the threshold of perception.** If a shadow is obvious, it is too strong. The two elevation values are the whole vocabulary.
-- **Floating controls share one outer material.** Menus, selects, popovers, and preview cards use the opaque `floating-surface`: floating fill, primary boundary, panel radius, and graduated lift. Each component still owns its content padding and interaction behavior; sharing the container does not imply that a preview behaves like a menu.
-- **Floating rows need their own hover contrast.** Menu, select, and popover activity rows use `affordance-floating-hover` (neutral 2 in light mode, neutral 5 in dark). Supporting text becomes standard text on highlight so it stays readable. Selection marks remain independent of hover. Small action menus and compact account popovers use 10px `radius-row` outer corners with a 4px list inset and 8px inner rows (80% of the outer radius). Their hover uses `affordance-subtle-hover` with immediate feedback. Default/wide menus, content popovers, pickers, dialogs, and alert dialogs retain 24px `radius-panel` outer corners. Choose compact explicitly for short action lists, never automatically from viewport width.
-- **Elevation is carried by shadow in light mode and by lightness in dark mode.** On a near-black background there is nothing darker for a shadow to cast, so a floating surface becomes a step lighter instead. Never reach for a stronger shadow to make something float in dark mode.
-- **On a translucent surface, elevation reads as less translucency, not as a lighter colour.** A glass container with a fully opaque child looks layered; the same container with a merely brighter child looks unchanged.
-- **Light comes from one direction, and every glass surface agrees on it.** A glass rim is bright along the lit edge and dimmer on the opposite one; that is what makes it read as a material rather than an outline. Two surfaces lit from different directions in the same view look like a mistake.
-- **A glass rim is not an outline.** If a surface needs a visible boundary rather than a material edge, it wants a border role, not glass.
-- **Glass needs something behind it worth seeing.** Translucency over a flat fill is wasted cost; use it where the gradient, an image, or content actually shows through.
-- **Only panels and chrome should sit directly on the gradient as a default.** Text and hairlines on a gradient have position-dependent contrast. Good practice rather than a hard rule — a rotated label pill on the backdrop is fine.
-- **A translucent surface has no contrast guarantee, and this one is measured.** `check-contrast` pairs each text role with the *opaque* surface roles, so glass is invisible to it — the surface a person actually reads against is the fill composited over whatever gradient happens to be behind it, which varies by position on screen. Sampled from a rendered dark-mode screenshot, primary glass over Night garden runs from `#162e28` in its quiet regions to `#1e4a3c` where the green glow reaches through. On the darker end everything clears; on the brighter end **`text-secondary` measures Lc 58 and `text-tertiary` Lc 43**, against targets of 60 and 45. Marginal, and only in a region the glow reaches — but real, and no guard can see it. Three ways out, none obviously right: make the gradients' bright stops dimmer where panels sit, raise the glass fill a ramp step under a bright backdrop, or keep meta text off glass. **Deliberately unresolved** — it needs the real product content on screen, not a token edit.
-- **A redundant fill on glass is not free — it compounds.** Two identical translucent layers are not one layer: `glass-2` over `glass-2` composites to **0.77 alpha**, a value no token holds. Four panels each set the same fill as the container they exactly covered, so panels meant to be the most translucent surface in the system read as nearly solid. Before giving a region a glass fill, check whether its parent already is glass; if the region covers it, it needs no fill of its own.
-- **A component that can sit on either the gradient or a panel says so, with a variant.** `Tabs` takes `chrome` (a glass pill for the app backdrop) or `panel` (an underline for a plain surface); `IconButton` has the same axis as its `chrome` variant. The failure that earned it: the chrome container is `glass-2`, which over a white panel composites to pure white, and its selected pill is `neutral-1` — also pure white. Container and selection became one colour with only a shadow between them, and no guard could see it because the component had no way to state which background it expected. **The fix was never to retint `--bg-chrome-selected`** — that moves the collision rather than removing it. **One component with a variant, not two components:** behaviour, keyboard model, accessibility, props, and the Base UI parts underneath are identical, so a sibling component would duplicate all of it to change how selection is drawn, and the two would drift exactly as the four hand-assembled chrome surfaces did. When adding a component that could appear in both places, give it the axis and put both on its specimen page — the chrome-only specimen is why this defect survived until it appeared on a real screen.
+Use the surface that matches the content and its position in the interface.
 
-Underlined panel tabs keep their labels at intrinsic width and scroll their own
-Base UI tablist when the content column is narrow. Keyboard navigation reveals
-the focused tab; the shared panel grid must use a shrinkable column so tab labels
-do not widen the content below them.
+- **Panels:** the shell uses one `Panel joined` around navigation and content on the gradient backdrop. Nested Panels keep their opaque fill and clipping but lose independent borders, corners, and shadows. The layout owner separates adjacent regions with `border-standard` hairlines. Standalone Panels keep their own outer treatment.
+- **Recessed regions:** use `bg-inset` for a region pushed into its surrounding surface. Use quiet fills where they communicate separation; reserve outlines for boundaries that need to be identified.
+- **Reading surfaces:** documentation and dense prose sit on `bg-panel`. Keep page-wide gradients behind product chrome and panels, where their changing contrast will not interfere with reading.
+- **Borders:** use `border-standard` for quiet separators, `border-prominent` for controls, and `border-focus` for keyboard-focus recipes. Errors and warnings have their own boundary roles. Measure the actual pairing in both themes.
+- **Shadows:** use the two shared elevation values and keep them subtle. Light mode relies on shadow; dark mode also raises the fill’s lightness. Do not strengthen a shadow to separate a dark floating surface.
+
+### Floating surfaces
+
+Menus, Select, Popover, and PreviewCard share `floating-surface`: an opaque fill,
+primary boundary, panel radius, and lift. Each component owns its content spacing
+and interaction. Shared material does not make these controls interchangeable.
+
+Default and wide menus, content popovers, pickers, dialogs, and alert dialogs use
+24px `radius-panel` corners. Short action menus and compact account popovers opt
+into 10px `radius-row` corners, a 4px list inset, and 8px inner rows. Choose compact
+for the content, never automatically because the viewport is narrow.
+
+Floating rows use `affordance-floating-hover` (neutral 2 light / neutral 5 dark).
+Supporting text becomes standard text on highlight. Keep persistent selection
+independent of hover. Compact menus use `affordance-subtle-hover` with immediate
+feedback and retain their separate selected fill.
+
+### Glass
+
+Use glass where a gradient, image, or content is visible behind it. Apply the
+complete material so fill, blur, rim, and optional shadow stay together.
+
+- More opaque glass reads as a higher layer. A brighter fill alone does not communicate the same depth.
+- Keep the rim’s light direction consistent across surfaces. Use a border role when you need a visible boundary rather than a material edge.
+- Avoid adding a glass fill when the region already covers an identical glass parent. Two `glass-2` layers composite to 0.77 alpha and become more opaque than either intended layer.
+- Panels and chrome normally sit directly on the gradient. Text placed there needs inspection because its contrast changes with position; small decorative labels may be deliberate exceptions.
+
+**Unresolved contrast:** opaque token checks cannot validate glass over a variable
+backdrop. A rendered dark-mode sample of primary glass over Night garden ranged
+from `#162e28` to `#1e4a3c`. In the brighter area, `text-secondary` measured Lc 58
+and `text-tertiary` Lc 43, below their 60 and 45 targets. Review real product
+content before choosing a fix: dim the backdrop, increase glass opacity, or keep
+metadata off that glass surface. These measurements do not establish a general
+contrast guarantee.
+
+### Match controls to their surface
+
+Use `Tabs variant="chrome"` for a glass pill on the backdrop and `variant="panel"`
+for an underline on a plain surface. IconButton also provides a `chrome` variant.
+A chrome selection can blend into a white panel; choose the appropriate variant
+instead of retinting `--bg-chrome-selected` for one caller. Keep shared behavior
+in one component and show both surface variants in its examples.
+
+Panel tabs keep labels at intrinsic width and scroll within the Base UI tablist
+when space is limited. Keyboard navigation reveals the focused tab. The surrounding
+panel grid must have a shrinkable column so tabs do not widen other content.
 
 ## Temporary focus appearance
 
-Focus outlines are currently hidden globally at the designer's request while
-forms are being polished. The centralized override in styles/globals.css takes
-precedence over the keyboard-ring recipes documented below. Keep focusability,
+The shared global stylesheet currently hides focus outlines at the designer’s request
+while forms are being polished. The override in `styles/globals.css` takes precedence
+over the keyboard-ring recipes in this guide. This is a known visible-focus
+accessibility exception, not an accessibility pass. Keep focusability,
 Tab order, input modality, selection, and focus restoration intact. Do not add
 local replacement rings or disable keyboard interaction. Shared text fields now use
 a border flush with the field perimeter: surface-inset fill and a 1px
@@ -169,7 +206,8 @@ field-scoped --border variable selects transparent, active, or error color for
 the reserved 1px border, so state changes do not shift the layout. Keyboard
 focus and reduced motion change immediately. Composite fields own one stroke
 around the input and actions; error strokes retain priority. Placeholders use
-text-metadata, one step quieter than supporting text, in both themes. This supersedes the older keyboard-only
+text-metadata, one step quieter than supporting text, in both themes. This supersedes
+the older keyboard-only
 and no-container-ring recipes for these fields. Existing component
 recipes remain so this temporary visual decision can be reversed in one place.
 
@@ -229,21 +267,21 @@ is called complete; token math alone cannot validate the CSS cascade.
 
 Button and IconButton share prominent, subtle, ghost, inverted, destructive,
 outline and link emphasis. Inverted is for an inverse surface; link keeps its
-background clear and underlines on interaction. Its
-32 / 40 / 52px sizes are sm / md / lg at the default scale, with minimum
+background clear and underlines on interaction. Their 32 / 40 / 52px sizes are sm / md /
+lg at the default scale, with minimum
 heights that accommodate larger text. Text buttons use `--radius-capsule`
 (1.625rem / 26px): capsule-shaped through the default 52px large size,
 clamped naturally on shorter controls, and bounded on taller ones. Reuse this
 role for similarly sized actions; `--radius-pill` remains the fully round role
 for circles and pills of any height. Fields retain `--radius-control`.
 
-Button labels stay on one line and do not shrink in flex layouts, following
-shadcn's `whitespace-nowrap shrink-0` behavior without changing Buzz's sizing,
-emphasis, or Base UI interactions. Parents must reflow whole controls or provide
+Button labels stay on one line and do not shrink in flex layouts (`whitespace-nowrap
+shrink-0`). Parents must reflow whole controls or provide
 scrolling when space is limited. Composite reply summaries may reflow whole
 avatar/count groups without wrapping individual labels. Small buttons use 16px
 side padding and 16px icons; medium and large use 24px side padding and 24px icons.
-Labels use the complete text-label-sm / text-label roles, with an 8px icon gap.
+Standard Button labels use the complete `text-label-sm` role with an 8px icon gap; the
+extra-small capsule uses `text-caption`.
 
 IconButton defaults to round and uses the same sm/md/lg sizes. Existing names
 remain compatibility aliases: primary/solid → prominent, quiet → subtle,
@@ -256,8 +294,8 @@ colors while blocking activation; never swap in a differently sized loading labe
 Pointer hover uses shared state timing; expanded triggers retain pressed emphasis.
 Keep keyboard-only focus and reduced-motion behavior owned by the system.
 
-IconButton also offers `xs` (28px with 16px icons) for dense composer formatting
-options, preserving the original toolbar layout. Mode toggles remain `sm`.
+IconButton also offers `xs` (20px with 12px icons) for dense formatting actions. Mode
+toggles remain `sm`.
 
 IconButton defaults to round across all sizes and variants. Use `shape="control"`
 only when a rectangular control shape is explicitly needed. Disabled ghost icons
@@ -296,7 +334,7 @@ reversible transform transition. Keyboard navigation and reduced motion switch
 the orientation immediately. Loading indicators keep their separate behavior.
 
 Fields share a 40px minimum size at the default scale, the control radius,
-text-body (now 14px / 20px across Buzz), and the 16px control inset. Derive vertical padding from the control
+text-body (14px / 20px), and the 16px control inset. Derive vertical padding from the control
 size, text line height, and boundary; do not force a fixed height that clips
 larger text or wrapped Select values. Textarea uses the control inset on all four
 sides (16px at the default scale), with manual vertical resizing and a code variant.
@@ -309,21 +347,24 @@ variant, SearchField, and Combobox.Control already own their label and supportin
 text; do not add a second Field around them. Use description/error for connected
 help and validation. An error replaces the secondary description until it clears;
 keep the accessible description synchronized with the visible message. Validation
-strokes belong to the outer field, never its auxiliary buttons. Keep feature-owned asynchronous status connected through
+strokes belong to the outer field, never its auxiliary buttons. Keep feature-owned
+asynchronous status connected through
 aria-describedby. Forms own 16px between adjacent fields and the 32px section
 gap between named groups.
 
 InputGroup shares the inline frame for SearchField and Combobox. Icons use an
 8px gap, and trailing actions retain a stable slot. SearchField uses the same
-12px control radius as other fields, with no separate navigator shape. Focus belongs to the input or action,
+12px control radius as other fields, with no separate navigator shape. Focus belongs to
+the input or action,
 while the frame owns the active perimeter stroke. Read-only values can be
 read and copied; disabled actions cannot change a value. Search clear restores
 input focus. Features still own filtering, custom values, and async recovery.
 
 SearchField, Combobox.Control, and code Textarea default to no autocorrection,
 capitalization, or spellcheck. Callers can override these defaults explicitly.
-Ordinary Input and prose Textarea retain platform defaults. See the
-[exact-text input audit](../../../docs/input-correction-audit.md) for remaining fields.
+Ordinary Input and prose Textarea retain platform defaults. Check the defaults in
+`ui/SearchField.tsx`, `ui/Combobox.tsx`, and `ui/Textarea.tsx` when adding an exact-text
+field.
 
 The Forms page in Just Design documents states, usage, and a form-in-dialog
 example. Review it with both themes, narrow widths, and enlarged text before
@@ -356,25 +397,32 @@ and let the containing item own state and padding. Use the small shared avatar
 for identity choices, retaining human/agent shapes.
 
 PopoverPopup uses 16px content padding, or `padding="list"` when its rows own their
-spacing. Use `size="compact"` with list padding for short account/action surfaces: 14rem width and 10px corners. `MenuPopup size="compact"` uses the same corner, inset, row and hover treatment for short action lists. Content and wide popovers retain 24px corners. Name it with PopoverTitle or aria-label; PopoverDescription connects
+spacing. Use `size="compact"` with list padding for short account/action surfaces: 14rem
+width and 10px corners. `MenuPopup size="compact"` uses the same corner, inset, row and
+hover treatment for short action lists. Content and wide popovers retain 24px corners.
+Name it with PopoverTitle or aria-label; PopoverDescription connects
 supporting copy. Hover opening is optional and remains configured by its feature.
-Use `padding="none"` for an embedded picker that owns its internal spacing, such as emoji/GIF content.
+Use `padding="none"` for an embedded picker that owns its internal spacing, such as
+emoji/GIF content.
 Menus and popovers use a quicker version of the form dropdown motion: 75ms entry
 and 60ms exit (half the state/fast duration tokens), a 2px offset and blur-to-sharp
 opacity fade. Movement uses
 easing-settle; opacity and filter use easing-state. The offset follows the actual
 placement side toward the trigger, including collision flips and nested menus.
 This extends the designer-requested blur exception to these anchored surfaces.
-Keyboard navigation and reduced motion remove transitions, movement, and blur. The Just Design Menu, Popover and ChoiceRow pages
+Keyboard navigation and reduced motion remove transitions, movement, and blur. The Just
+Design Menu, Popover and ChoiceRow pages
 show these contracts and their compositions.
 
 ## Compositions
 
 PanelHeader owns one consistent header frame: leading `navigation`, title/icon,
 and trailing `actions`. Use a toolbar IconButton with ArrowLeft for a local back
-action and X for closing the panel. The default 2.5rem (40px at the default root size) minimum height aligns conversation,
+action and X for closing the panel. The default 2.5rem (40px at the default root size)
+minimum height aligns conversation,
 thread, profile, tabbed workspace, and Todos headers. The compact variant shares
-this height. Headers use 0.25rem inline padding (matching the centered 2rem controls’ block inset), 1rem identity icons, and
+this height. Headers use 0.25rem inline padding (matching the centered 2rem controls’
+block inset), 1rem identity icons, and
 0.25rem gaps between action buttons without reducing their hit areas. Navigation
 tabs use 1rem icons or fill avatars and 0.5rem leading padding.
 Header spacing, icons, and controls scale with rem; separators remain
@@ -461,9 +509,12 @@ remain above the stack. Content updates do not restart expiry; timeout changes d
 Tabs with content use renderPanel, which lets Base UI connect each tab and panel.
 Route navigation uses NavigationItem with aria-current instead. Tabs can also
 compose NavigationItem through the `navigation` variant: these retain tab
-semantics, use 12rem widths with ellipsis and a subtle selected fill, accept avatars/icons, and place a sibling close
-button over reserved trailing space. Navigation tab strips scroll horizontally with a thin native scrollbar. The main
-channel header uses the same control with a single non-closable tab with `showSelection={false}` (no selection or hover fill); channel
+semantics, use 12rem widths with ellipsis and a subtle selected fill, accept
+avatars/icons, and place a sibling close
+button over reserved trailing space. Navigation tab strips scroll horizontally with a
+thin native scrollbar. The main
+channel header uses the same control with a single non-closable tab with
+`showSelection={false}` (no selection or hover fill); channel
 actions remain in the header action slot. The settings launcher uses
 `data-highlight-expanded="false"` to preserve disclosure semantics without a
 sticky pressed treatment; the selected tab owns the open-state indicator.
@@ -491,11 +542,13 @@ the hovered row’s trailing action unobstructed.
 
 ## Menu row corners
 
-Every shared menu item uses `--radius-pill` on all four corners. First, middle and
-last rows keep the same fully rounded highlight, so moving between them does not
-change its shape. Direct items, grouped choices and submenu triggers share this
-recipe. Do not add positional or feature-local radius overrides, derive a special
-menu inset radius, or change the global row radius to correct a menu.
+Default and wide menus use `--radius-pill` for every row. First, middle, and last
+items keep the same highlight shape, including grouped choices and submenu
+triggers. Compact menus use their shared 8px inner corners within the 10px outer
+surface.
+
+Use these shared recipes. Do not add positional or feature-local radius overrides,
+derive a new inset radius, or change the global row radius for one menu.
 
 ## Align row content, not state backgrounds
 
@@ -523,33 +576,33 @@ should remain legible without a state background to explain it.
 
 ## State
 
-- **Design default, hover, pressed, focus, selected, disabled and loading states where they apply.** Pressed changes fill without moving the control. Loading keeps the label footprint and prevents repeated activation; CSS alone cannot enforce it.
-- **Hover means one step more contrast, in whichever direction that surface needs.** A light row darkens, a dark chip lightens. Direction lives in the value.
-- **Selected is a persistent statement, not a stronger hover.** It should be legible without a cursor present.
-- **A selected item in a toggle group is not interactive.** Clicking it does nothing, so it gets no hover.
-- **Disabled communicates unavailability, not quietness.** It is not a fourth level of the emphasis ramp.
-- **Never hide the only way out of a state.** Before adding a visibility rule, ask what happens when the state it assumes is wrong, and whether the person can still recover.
+Define default, hover, pressed, focus, selected, disabled, and loading states where
+they apply. Keep the same control recognizable across those states.
+
+- Pressed changes the fill without moving the control.
+- Loading preserves the label’s space and blocks repeated activation in behavior, not just CSS.
+- Hover adds contrast appropriate to the surface: a light row darkens, while a dark chip may lighten.
+- Selection remains visible after the pointer leaves. A selected toggle-group item does nothing when selected again and has no hover treatment.
+- Disabled means unavailable. Do not use it as a quieter text-emphasis level.
+- Keep a way to recover visible even when a state assumption or visibility rule is wrong.
 
 ## Emphasis
 
-- **Three levels of text: normal, lesser, really lesser.** If a fourth seems necessary, the thing wants a different size, weight, or position instead of a fourth colour.
-- **Two text colours do most of the work.** Treat the third level as genuinely for metadata.
-- **Borders describe their job:** a quiet edge, a control boundary or focus.
-- **Weight and size carry hierarchy before colour does.** Reaching for a louder colour to fix hierarchy usually means the size relationship is wrong.
+Use three text levels: primary content, supporting text, and metadata. Primary
+and supporting text should carry most of the interface. If you need more hierarchy,
+first adjust size, weight, position, or grouping rather than adding a fourth color.
+
+Name borders for their purpose: quiet separation, control boundaries, or focus.
 
 ## Type
 
-Two layers, and the same rule as colour: only roles are used when building a
-screen. Layer 1 is the raw ramps (`--type-size-*`, `--type-leading-*`,
-`--type-tracking-*`, `--type-weight-*`); layer 2 is the roles, which register in
-Tailwind's `--text-*` namespace and become utilities like `text-body`. The
-authoring lives in `src/shared/design-system/styles/typography.css`.
+Use complete type roles when building a screen. The raw ramps (`--type-size-*`,
+`--type-leading-*`, `--type-tracking-*`, `--type-weight-*`) supply values; roles combine
+them into Tailwind utilities such as `text-body`. Both live in `styles/typography.css`.
 
-**Size roles and colour roles never collide**, because they live in different
-namespaces: colour registers as `--color-*` and is named for emphasis
-(`text-primary`), size registers as `--text-*` and is named for an editorial job
-(`text-body`). So `text-primary text-body` is one colour plus one setting, and no
-name ever means both.
+Color and type roles use separate namespaces. Color registers as `--color-*`; type
+registers as `--text-*`. For example, `text-standard text-body` combines a color with a
+complete type setting.
 
 The active sizes are 12, 14, 16, 18, 20, 24, 28, 32, 36, 44, 56, 72 and 96px
 at 100% interface size. Sans roles use Inter and mono roles use JetBrains Mono.
@@ -565,43 +618,49 @@ Values scale with the host interface-size preference.
   `--type-xsmall-size` points to the existing 12px step, keeping the semantic
   independent from caption even though their sizes currently match. `text-mono-lg` and
   `text-mono-sm` are compatibility aliases for this same setting, not extra sizes.
-- Caption uses 12/16 and 0.0133em tracking. Default reading text is 16/24.
+- Caption uses 12/16 and 0.0133em tracking. Buzz’s `text-body` uses 14/20; `text-label` uses 16/24 and `text-body-lg` uses 20/28.
 - Preserve text preferences and browser zoom. Author values in scaled rem and
   keep layout geometry independent of text scaling.
 
 Typography provenance: the ramp and role settings derive from the pinned
-[Block UI typography specification](https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json).
+[Block UI typography
+specification](https://github.com/squareup/design-blockinterface/blob/eff766161ba8aaee3258ca107f0d904dd542c708/blockUI/docs/type.resolution.draft.json).
 The values documented above define this system, including the 12px xsmall role.
 
 ## Both modes
 
-- **Design in both modes, not in light and then dark.** Dark is not a filter applied afterwards: elevation, glass, and accent text all behave differently there.
-- **Accent text moves in opposite directions between modes.** Darker than its fill on a light background, lighter on a dark one.
-- **A tint is a pale wash in light mode and a deep one in dark.** The name describes the job, not the lightness.
-- **Check the pairing, not the swatch.** A colour is only right in the context of what sits on it and behind it.
-- **Every dark value in this system is authored rather than observed.** The design exploration it came from is light-only. Treat anything that looks wrong in dark as a finding.
+Design and inspect light and dark mode together. Elevation, glass, and accent text
+need their own values in each mode.
+
+- Accent text is darker than its fill on light surfaces and lighter on dark surfaces.
+- Tints are pale in light mode and deep in dark mode; their names describe their purpose.
+- Check text with its actual fill and backdrop, including interactive states.
+- The original design exploration was light-only. Buzz’s dark values are authored choices and should be revised when rendered evidence shows a problem.
 
 ## Density and rhythm
 
-- **Scrollbars share one native treatment.** Use `scrollbar-width: thin` and
-  `scrollbar-color: var(--scrollbar-thumb) transparent`. The thumb is gray in
-  both modes. Load the shared scrollbar recipe into vendor shadow roots too;
-  let the browser own scrolling and scrollbar visibility.
+Choose the content structure first: a list, reading column, gallery, settings
+group, or workspace. Use generous space by default, with tighter relationships
+inside a group than between groups.
 
-- **Dense data renders as rows with dividers, edge to edge.** Wrapping every list item in its own card is the most common way a functional surface becomes a marketing page.
-- **Content that separates itself needs no divider, and no container.** A divider is for uniform rows where the eye needs a line to track along. When each entry already carries a visible difference — a colour swatch, a type specimen, an avatar — the content is the separator, and adding a rule or a card on top is redundant structure. Space alone is enough.
-- **Never judge a value against a surface it will not be used on.** A swatch on a grey fill, or a type specimen in a tinted box, is being evaluated in a context the product will never reproduce. Samples sit on the page. The one exception is a value that needs a backdrop to exist at all — translucency needs something behind it, and a white surface swatch needs a hairline or it renders as nothing.
-- **Cards are for widgets, galleries, and settings groups.** A card is a bordered, padded region on the page, not a different depth.
-- **A card carries no default fill.** It sits on `bg-panel` and is grouped by a hairline or by spacing. Fill on a card is reserved for `bg-hover`, and only where the card is actually clickable — so a filled card always means *you are pointing at this*, never merely *this is a box*. This is why there is no `bg-card` role: a card with no default fill needs no name. It also rules out the cards-in-cards look, where a filled card inside a filled panel reads as a stack of empty text fields. Reaching for `bg-inset` here is the specific mistake — `inset` means pushed in, like an input or a code block, which is the opposite gesture from grouping.
-- **Pick the frame before the content.** Decide what the surface is — a list, a reading column, a workspace — before filling it.
-- **Whitespace is generous by default.** Crowding reads as a different product.
+- Dense data uses edge-to-edge rows and dividers where a line helps track the row.
+- Distinct swatches, type samples, and avatars often need only space between them. Avoid adding a card or divider when the content already separates itself.
+- Show samples on the surface where they will be used. Glass needs a backdrop; a white swatch on white needs a quiet boundary.
+- Cards group widgets, gallery items, or settings. They sit on `bg-panel` with spacing or a hairline and have no default fill. Use `bg-hover` only for an interactive card’s hover state. There is no `bg-card` role; `bg-inset` is for recessed content such as inputs or code blocks.
+- Use native thin scrollbars: `scrollbar-width: thin` and `scrollbar-color: var(--scrollbar-thumb) transparent`. The thumb is gray in both modes. Load the shared recipe into vendor shadow roots and let the browser control scrolling and visibility.
 
 ## Motion
 
-- **Direct manipulation follows the pointer exactly, with no easing.** Smoothing during a drag or resize reads as lag. Spring physics belongs to what happens after release.
-- **A drag gesture must not select text in whatever it passes over.**
-- **Never animate blur.** Re-blurring a large surface every frame is expensive enough to feel. Animate opacity instead.
-- **Motion explains a change; it does not decorate one.** If removing an animation loses no information, remove it.
+Use motion to explain a change in state, position, or structure. Remove animation
+that adds no useful information.
+
+Direct manipulation follows the pointer without easing. Apply settling motion
+after release, and prevent a drag from selecting text it passes over.
+
+Keep blur fixed during general surface transitions; animate opacity instead.
+The form dropdown, menu, popover, and tooltip sections document narrow,
+designer-requested blur exceptions. Respect each component’s keyboard and
+reduced-motion treatment.
 
 ## Colour structure
 
@@ -612,7 +671,7 @@ screens consume those roles so one shared edit can change every caller.
 |---|---|---|
 | **Palette** | `--purple-9`, `--neutral-4` | Shared token definitions; each hue has authored light and dark steps. |
 | **Roles** | `--surface-panel`, `--text-danger`, `--affordance-subtle-hover` | Component recipes and product screens. |
-| **Components** | Button, TextField, Dialog | Product features that need the same appearance and behavior. |
+| **Components** | Button, Input, Dialog | Product features that need the same appearance and behavior. |
 
 Choose a role by its job, even when it uses the same palette step in both modes.
 Add roles for real uses and their required states; document the intended surfaces
@@ -654,14 +713,9 @@ separate WCAG 3:1 non-text ratio; decorative separators and hover fills do not.
 - **Use both measurements.** The ratio establishes the AA floor; APCA adds a
   polarity-aware readability check. A perceptual pass alone does not establish
   WCAG conformance, and a numeric pass does not replace rendered inspection.
-- **Constrain the fill, never degrade the text.** If neither black nor white
-  carries a fill legibly, the fill is wrong — it is not a valid solid. Move the
-  fill's lightness and keep the hue; do not settle for the less-bad text.
-- **A paired text token is derived, not authored.** `text-on-*` is a function of
-  its fill, so it is generated with the fill and never hand-set. Every hand-set
-  pairing in this system has been wrong at least once.
-- **One implementation of the rule.** Desktop, mobile, and web must not each
-  compute their own pairing; they diverge and the same defect ships three times.
+- **Adjust the fill to support readable text.** If neither black nor white is legible on a solid fill, change its lightness while preserving the hue.
+- **Derive paired text from its fill.** Generate `text-on-*` with the fill instead of setting it independently.
+- **Share the pairing logic.** Desktop, mobile, and web use one implementation.
 - **Size a text step against the worst surface it can land on**, including
   hover, pressed and selected fills. A step that only clears a panel at rest
   can fail when a menu row highlights.
@@ -673,15 +727,9 @@ separate WCAG 3:1 non-text ratio; decorative separators and hover fills do not.
   that a control is unavailable. Never put information a person needs there.
 - **`pnpm design:check` enforces this.** Every text role is measured against
   every surface it can sit on, in both modes, parsed from `tokens.css` so the
-  check cannot drift from the tokens. Exceptions live in that script with a
-  stated reason, which keeps the list short and arguable.
-- **A tint's hover is the hardest surface an identity has**, so a `text-*` role is
-  sized against that rather than against the neutral panel. Every failure the
-  audit found on a coloured surface was on a tint-hover, never at rest.
-- **Hairline dividers are not held to a contrast target.** WCAG's 3:1 non-text
-  rule covers boundaries needed to identify a *control* or its state, not
-  grouping lines. Buzz's borders measure 1.2–1.8:1, which is where Radix and
-  Apple ship theirs; raising them would draw the box the fill already implies.
+  check cannot drift from the tokens. Keep exceptions in the owning guard with a stated reason.
+- **Check identity text on tint hover.** Measure its `text-*` role against the highlighted tint as well as its resting surface.
+- **Decorative dividers have no contrast target.** WCAG’s 3:1 non-text requirement applies to boundaries needed to identify a control or state. Keep quiet grouping lines distinct from required control boundaries.
   Error and warning boundary roles must reach 3:1 against surface-base,
   surface-panel, surface-inset and surface-popover in both themes. The contrast
   guard checks these role mappings and status dots separately from text and
@@ -691,7 +739,7 @@ separate WCAG 3:1 non-text ratio; decorative separators and hover fills do not.
 
 Inline links and mentions use Blue 11 with Blue 3 hover in both modes.
 Blue 11 is tuned for the supported surface stack: #0b5fa8 in light mode and
-#83c4ff in dark. The former pair-specific link exemptions have been removed.
+#83c4ff in dark. These pairs have no link-specific contrast exemptions.
 The contrast guard checks APCA and WCAG AA (4.5:1) on opaque text pairs, including
 hover and pressed fills. Metadata uses neutral 9 (#5f5f5f) in light mode so small
 labels remain readable even on the pressed neutral 4 surface.
@@ -711,7 +759,7 @@ Borders stay decorative unless needed to identify a control or state.
 ### Relative sizing
 
 Use rem for authored UI dimensions and spacing, semantic roles for text, and
-unitless line-height. At the default 16px root the migration retains geometry.
+unitless line-height. Dimensions are based on a 16px root at the default interface size.
 The host interface-size preference scales the root, so text, numeric icons and
 rem layout spacing grow together. Keep physical hairlines, optical offsets, and runtime
 geometry returned by the browser or media APIs in pixels. Sidebar resize limits
@@ -720,23 +768,38 @@ the timeline measures its rem-sized leading region for Virtua's pixel start marg
 
 ## Writing
 
-- **Every word earns its place.** Prefer the shortest phrasing that stays accurate.
-- **Labels say what happens, not what the thing is called internally.**
-- **Empty states say what this place is for and what to do next.** An empty state is a first impression, not an error.
-- **Errors say what happened and what to do about it.** A message the person cannot act on is decoration.
+Use direct, familiar language and remove words that do not help someone decide or act.
+
+- Labels describe the action or destination in the reader’s terms.
+- Empty states explain what belongs there and provide a useful next step.
+- Errors explain what happened and how to recover, beside the affected control.
+- Keep names and capitalization consistent across the flow.
 
 ## Accessibility
 
-- **Every interactive element has explicit assistive semantics, and one owner per label.** Two widgets claiming the same label produces duplicate screen-reader stops.
-- **Contrast comes from the paired token, not from judgement.** Where a background is not neutral, its text is named for it.
-- **Keyboard, pointer, and shortcut paths must not diverge.** When adding an input handler, enumerate the ways a person can reach it and check the ones that are not the mouse.
-- **Focus rings are for keyboard navigation, not pointer navigation.** Gate every authored focus treatment with `html[data-keyboard-navigation]` and `:focus-visible`; the app-root input-modality owner supplies that attribute. Mouse, pen, and touch focus stays quiet, including programmatic focus during a drag. Keyboard focus remains clearly visible on the control itself.
-- **Colour is never the only carrier of meaning by default.** Pair it with text, shape, or position. The solid avatar status badges in [Identity shapes](#identity-shapes) are an intentional product exception; preserve their solid fills and expose known status through the owning accessible label or description.
+Give every interactive element an accessible name, with one owner for each label.
+Use paired text roles on colored surfaces and verify the rendered contrast.
+
+Keep keyboard, pointer, and shortcut paths consistent. When adding an input handler,
+identify and check every supported way to reach the action.
+
+The intended focus recipe requires both `html[data-keyboard-navigation]` and
+`:focus-visible`. The app-root modality owner supplies the attribute; pointer
+focus stays quiet, including programmatic focus during a drag. The shared global
+outline suppression is a temporary exception: follow
+[Temporary focus appearance](#temporary-focus-appearance) rather than adding a
+local replacement.
+
+Pair color with text, shape, or position. Solid avatar status badges are an explicit
+product exception, including the light Away badge’s accepted contrast shortfall.
+Preserve their fills and expose known status through the owning accessible label
+or description. See [Identity shapes](#identity-shapes).
 
 ## Responsiveness
 
-- **Design for narrow, intermediate, and wide, not just wide.** Intermediate widths are where layouts usually break.
-- **Text scales with the person's preference and with zoom.** Anything readable uses relative units; fixed pixel text freezes and breaks zoom.
+Check narrow, intermediate, and wide layouts, including enlarged text and browser
+zoom. Use relative units for readable content so the interface respects the
+person’s size preference. Allow content to reflow before it clips.
 
 ## Growing the system
 
@@ -748,27 +811,53 @@ the timeline measures its rem-sized leading region for Virtua's pixel start marg
 
 ## Components
 
-- **Compose existing components freely. Never reimplement one.**
-- **Focus is keyboard-only visual navigation.** Pointer focus stays quiet; keyboard navigation gives the focused control—not its container—a visible focus ring. Browsers can retain `:focus-visible` after programmatic focus too, so every component focus treatment must explicitly require `html[data-keyboard-navigation]`; do not rely on the base-layer reset to defeat a component-layer outline or shadow. Never add a `:focus-within` focus ring to a container: it duplicates the child control's signal and makes pointer focus noisy.
-- **Base UI is the behavior layer.** Before writing an interactive shared component, inspect Base UI for the matching primitive. When one exists, wrap and compose it; Base UI owns focus, keyboard behavior, positioning, portals, and dismissal, while Buzz owns the visual language and product semantics. Reach for native elements only when Base UI has no matching primitive or the component is semantically static.
-- **Need a variant that doesn't exist? Add it, mark it proposed.** If a variant almost fits but you would cancel several of its states, the base is wrong for the job and the system is missing a variant.
-- **Never add a boolean prop for a visual difference.** Variants are enumerable, so an agent can read the list and pick; booleans multiply, and nobody designed most of the combinations. New props are for data and behaviour, not appearance.
-- **Used by one feature? It lives in that feature's folder.** Used by two? Propose it as shared. The folder is the namespace.
+Reuse and compose existing components before adding another.
+
+- **Behavior:** inspect Base UI before building an interactive shared component. Use its matching primitive for focus, keyboard behavior, positioning, portals, and dismissal. Buzz owns appearance and product semantics. Use native elements where Base UI has no matching primitive or the component is static.
+- **Variants:** add a missing visual variant for a real use and mark it proposed. Do not cancel several existing states to force an unsuitable variant to fit.
+- **Props:** use named variants for visual differences, never a new boolean appearance prop. Keep data and behavior props distinct from appearance choices.
+- **Ownership:** keep a component with its first feature. A second real use can justify proposing it as shared.
+- **Focus recipes:** require `html[data-keyboard-navigation]` and `:focus-visible` on the control. Do not rely on a base-layer reset to override component-layer styles or add a `:focus-within` ring around its container. Preserve these recipes while the temporary global outline suppression is active; shared fields follow the perimeter-stroke exception documented above.
 
 ## Using the system
 
-- **Use an existing component before creating one, and an existing role before adding one.**
-- **A new visual treatment that repeats belongs in the system, not in the feature.**
-- **If a shared role fails in a real context, repair the role — never work around it locally.** A documentation specimen frame needed a border but `border-primary` was neutral-4 in both modes, which measured 1.08:1 on the dark page. The wrong response was the one we made first: name `neutral-6` directly and call documentation furniture a special case. The right response was to ask whether the one shared boundary role was wrong, measure it on every surface it reaches, and make it `neutral-4` light / `neutral-6` dark. The frame then returned to `border-primary`, and every product divider improved with it. **A local exception is evidence the shared decision is incomplete, not a licence to bypass it.**
-- **Choose the job first.** Page → surface-base; card → surface-panel; popup → surface-popover; recessed region → surface-inset. Controls use affordance roles; labels use text roles; edges use border roles.
-- **A role is useful because it names a purpose.** It does not need different palette steps in each theme to earn its name.
-- **If a screen looks right but breaks these rules, the rules are probably wrong — say so.** This document is meant to be argued with, not worked around.
+Choose a component and a role by their purpose:
+
+| Need | Shared role or owner |
+| --- | --- |
+| Page background | `surface-base` |
+| Panel or card surface | `surface-panel` |
+| Popup | `surface-popover` |
+| Recessed region | `surface-inset` |
+| Control states | Affordance roles |
+| Labels and reading text | Text roles |
+| Edges | Border roles |
+
+When a shared role fails in context, measure its supported surfaces and repair the
+shared decision. Do not substitute a palette step in one feature. For example,
+`border-primary` uses neutral-4 in light mode and neutral-6 in dark so its quiet
+boundary remains visible on both page surfaces.
+
+A role names a purpose even when it uses the same palette step in both modes.
+Repeated visual treatments belong in the system. If a real design exposes an
+unsuitable rule, explain the conflict and improve the rule rather than working
+around it locally.
 
 ## Icons
 
-Phosphor is the only general icon family. Import named icons from `icons/index.ts`, which re-exports individual upstream modules. Add exports as needed; no approval list. SVG-only widgets use individual assets through `icons/svg.ts`. Do not import the upstream packages elsewhere or reintroduce other icon libraries. All six native weights remain designer choices: no size-to-weight or selection-to-fill rules. For chat and conversation metaphors, prefer the rounded `ChatCircle` family (including `ChatsCircle`) over square or teardrop variants; choose the matching dots, text, or slash variant when the meaning requires it. Keep accessible names on controls and decorative artwork hidden from assistive technology.
+Phosphor is the only general icon family. Import named icons from `icons/index.ts`,
+which re-exports individual upstream modules. Add exports as needed; no approval list.
+SVG-only widgets use individual assets through `icons/svg.ts`. Do not import the
+upstream packages elsewhere or reintroduce other icon libraries. All six native weights
+remain designer choices: no size-to-weight or selection-to-fill rules. For chat and
+conversation metaphors, prefer the rounded `ChatCircle` family (including `ChatsCircle`)
+over square or teardrop variants; choose the matching dots, text, or slash variant when
+the meaning requires it. Keep accessible names on controls and decorative artwork hidden
+from assistive technology.
 
-OneDrive is a designer-approved custom brand mark: its complete outline is recreated on Phosphor’s square canvas, uses the same current-color and sizing behavior, and stays in the shared icon gateway. It does not permit another general icon library.
+OneDrive is a designer-approved custom brand mark: its complete outline is recreated on
+Phosphor’s square canvas, uses the same current-color and sizing behavior, and stays in
+the shared icon gateway. It does not permit another general icon library.
 
 ### Picker search and choices
 

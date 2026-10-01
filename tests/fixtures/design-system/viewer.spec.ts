@@ -212,6 +212,7 @@ test("status badges keep avatar sizes and show a clear cutout in both modes", as
         }
       }
     }
+    await large.scrollIntoViewIfNeeded();
     const box = await large.boundingBox();
     if (!box) throw new Error("Large status avatar is not visible");
     const clip = {
@@ -375,10 +376,9 @@ test("built viewer loads every specimen and foundation without app connections",
     "Glass",
     "Motion",
     "Base UI backing",
-    "Foundation alignment",
     "Maintaining the system",
-    "DESIGN.md",
-    "AGENTS.md",
+    "Design guide",
+    "Agent guide",
   ]) {
     await nav.getByRole("link", { name, exact: true }).click();
     await expect(page.locator("main h1")).toBeVisible();
@@ -526,104 +526,6 @@ test("icon inventory is routed, complete, decorative, and responsive", async ({
   }
 });
 
-test("foundation proposals are independent, local, and usable in both modes", async ({
-  page,
-}) => {
-  await page.goto(`${viewer}#/design/foundation-alignment`);
-  const current = page.getByRole("region", {
-    name: "Current tokens",
-    exact: true,
-  });
-  const proposal = page.getByRole("region", {
-    name: "Selected proposal",
-    exact: true,
-  });
-  const color = page.getByRole("switch", { name: "Status color" });
-  const reading = page.getByRole("switch", { name: "Larger reading text" });
-  const spacing = page.getByRole("switch", { name: "More section space" });
-
-  for (const mode of ["light", "dark"]) {
-    const theme = page.getByRole("button", { name: `Use ${mode} mode` });
-    if (await theme.count()) await theme.click();
-    await expect(proposal.locator("[data-reading]")).toHaveCSS(
-      "font-size",
-      "14px",
-    );
-    await expect(proposal.locator(".alignment-project")).toHaveCSS(
-      "row-gap",
-      "32px",
-    );
-    const neutral = await current
-      .locator("[data-status]")
-      .evaluate((el) => getComputedStyle(el).color);
-    await expect(proposal.locator("[data-status]")).toHaveCSS("color", neutral);
-
-    await color.click();
-    await expect(proposal.locator("[data-status]")).not.toHaveCSS(
-      "color",
-      neutral,
-    );
-    await expect(proposal.locator("[data-reading]")).toHaveCSS(
-      "font-size",
-      "14px",
-    );
-    await expect(proposal.locator(".alignment-project")).toHaveCSS(
-      "row-gap",
-      "32px",
-    );
-    await reading.focus();
-    await page.keyboard.press("Space");
-    await expect(reading).toBeChecked();
-    await expect(proposal.locator("[data-reading]")).toHaveCSS(
-      "font-size",
-      "20px",
-    );
-    await spacing.click();
-    await expect(proposal.locator(".alignment-project")).toHaveCSS(
-      "row-gap",
-      "64px",
-    );
-    await expect(current.locator("[data-reading]")).toHaveCSS(
-      "font-size",
-      "14px",
-    );
-    await expect(current.locator(".alignment-project")).toHaveCSS(
-      "row-gap",
-      "32px",
-    );
-    await expect(current.locator("[data-status]")).toHaveCSS("color", neutral);
-
-    for (const width of [390, 800, 1280]) {
-      await page.setViewportSize({ width, height: 900 });
-      await expect(page.getByRole("table")).toHaveCount(3);
-      await expect(page.getByRole("table").first()).toBeVisible();
-      expect(
-        await page.evaluate(
-          () => document.documentElement.scrollWidth <= window.innerWidth,
-        ),
-      ).toBe(true);
-    }
-    await color.click();
-    await reading.click();
-    await spacing.focus();
-    await page.keyboard.press("Space");
-    await expect(spacing).not.toBeChecked();
-  }
-  await proposal
-    .getByRole("button", { name: "Follow project", exact: true })
-    .click();
-  await expect(
-    proposal.getByRole("button", { name: "Following project" }),
-  ).toHaveAttribute("aria-pressed", "true");
-  await expect(
-    current.getByRole("button", { name: "Follow project", exact: true }),
-  ).toHaveAttribute("aria-pressed", "false");
-  await page.reload();
-  await expect(color).not.toBeChecked();
-  await expect(reading).not.toBeChecked();
-  await expect(spacing).not.toBeChecked();
-});
-
 test("narrow, intermediate and wide layouts preserve theme and keyboard interaction", async ({
   page,
   browserName,
@@ -645,7 +547,7 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
     ).toBe(true);
   }
   const primary = page.getByRole("button", {
-    name: "prominent lg",
+    name: "prominent md",
     exact: true,
   });
   await primary.click();
@@ -658,7 +560,7 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
       : "Tab";
   await page.keyboard.press(tab);
   await expect(
-    page.getByRole("button", { name: "subtle xs", exact: true }),
+    page.getByRole("button", { name: "prominent lg", exact: true }),
   ).toBeFocused();
   await expect(page.locator("html")).toHaveAttribute(
     "data-keyboard-navigation",
@@ -670,7 +572,7 @@ test("narrow, intermediate and wide layouts preserve theme and keyboard interact
   );
   await page.keyboard.press(tab);
   await expect(
-    page.getByRole("button", { name: "subtle xs", exact: true }),
+    page.getByRole("button", { name: "prominent lg", exact: true }),
   ).toBeFocused();
   await expect(page.locator("html")).toHaveAttribute(
     "data-keyboard-navigation",
@@ -1817,6 +1719,9 @@ test("toast recovery stays reachable across themes, sizes, keyboard scrolling an
   });
   await expect(modal).toBeVisible();
   await expect(region).toHaveCount(1); // Base UI keeps live regions announced during modals.
+  await expect(
+    modal.getByRole("button", { name: "Close", exact: true }),
+  ).toBeFocused();
   await page.keyboard.press("F6");
   await expect
     .poll(() =>
@@ -2007,14 +1912,16 @@ test("popovers return focus and nested popovers close before their dialog", asyn
   await page.keyboard.press("Escape");
   await expect(popup).toHaveCount(0);
   await expect(trigger).toBeFocused();
-  await expect(page.getByRole("status")).toHaveText("Workspace: Design studio");
+  await expect(
+    page.getByRole("status").filter({ hasText: /^Workspace:/ }),
+  ).toHaveText("Workspace: Design studio");
   await trigger.click();
   await expect(input).toHaveValue("Design studio");
   await input.fill("Research studio");
   await popup.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText(
-    "Workspace: Research studio",
-  );
+  await expect(
+    page.getByRole("status").filter({ hasText: /^Workspace:/ }),
+  ).toHaveText("Workspace: Research studio");
   const activityTrigger = page.getByRole("button", {
     name: "Recent activity",
     exact: true,
@@ -2251,4 +2158,161 @@ test("menus and popovers reuse the dropdown unblur and placement offset", async 
       await finish();
     }
   }
+});
+
+// Native focus, responsive chrome, and hash-anchor scrolling require a browser.
+test("documentation navigation keeps the article reachable at narrow widths", async ({
+  page,
+  browserName,
+}) => {
+  await page.setViewportSize({ width: 320, height: 800 });
+  await page.goto(`${viewer}#/design/design-guide`);
+  const browse = page.getByRole("button", { name: /Browse pages/ });
+  await expect(browse).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("main h1")).toBeInViewport();
+  const tab =
+    browserName === "webkit" && process.platform === "darwin"
+      ? "Alt+Tab"
+      : "Tab";
+  await page.keyboard.press(tab);
+  await expect(
+    page.getByRole("button", { name: "Skip to content" }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(page.locator("main")).toBeFocused();
+  await expect(page).toHaveURL(/#\/design\/design-guide$/);
+  await browse.click();
+  const nav = page.getByRole("navigation", { name: "Design system" });
+  await nav.getByRole("link", { name: "Glass", exact: true }).click();
+  await expect(browse).toHaveAttribute("aria-expanded", "false");
+  await expect(page.locator("main")).toBeFocused();
+  await expect(
+    page.getByRole("heading", { name: "Glass", exact: true }),
+  ).toBeInViewport();
+  await expect(
+    nav.getByRole("link", { name: "Color", exact: true }),
+  ).toBeHidden();
+
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await expect(
+    nav.getByRole("link", { name: "Color", exact: true }),
+  ).toBeVisible();
+  await nav.getByRole("link", { name: "Design guide", exact: true }).click();
+  await page
+    .getByRole("link", { name: "Identity shapes", exact: true })
+    .click();
+  await expect(page).toHaveURL(/#\/design\/design-guide#identity-shapes$/);
+  await expect(page.locator("#identity-shapes")).toBeInViewport();
+});
+
+// Browser geometry catches document overflow, hidden reference columns, and
+// truncated sample labels that a DOM emulator cannot measure.
+test("documentation tables and token ramps reflow without hiding labels", async ({
+  page,
+}) => {
+  for (const width of [320, 720, 1280]) {
+    await page.setViewportSize({ width, height: 900 });
+    for (const route of ["design-guide", "color", "glass"]) {
+      await page.goto(`${viewer}#/design/${route}`);
+      await expect(page.locator("main h1")).toBeVisible();
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBe(width);
+      if (route === "design-guide") {
+        const table = page.locator(".design-doc-table-scroll").first();
+        if (width === 320) {
+          await expect(
+            page.getByText("Wide tables scroll horizontally.").first(),
+          ).toBeVisible();
+          await table.focus();
+          await page.keyboard.press("ArrowRight");
+          await expect
+            .poll(() => table.evaluate((element) => element.scrollLeft))
+            .toBeGreaterThan(0);
+          await page.keyboard.press("ArrowLeft");
+          await expect
+            .poll(() => table.evaluate((element) => element.scrollLeft))
+            .toBe(0);
+        }
+      }
+      if (route === "glass") {
+        await expect(page.locator(".glass-ramp code")).toHaveCount(5);
+        await expect
+          .poll(() =>
+            page
+              .locator(".glass-ramp code, .glass-ramp span")
+              .evaluateAll(
+                (elements) =>
+                  elements.filter(
+                    (element) => element.scrollWidth > element.clientWidth,
+                  ).length,
+              ),
+          )
+          .toBe(0);
+      }
+    }
+  }
+});
+
+// Real browser focus, responsive geometry, and route-to-section navigation are
+// the browser boundary. Clipboard outcomes and draft retention are unit tested.
+test("documentation code tabs and contents work with keyboard and narrow layouts", async ({
+  page,
+}) => {
+  await page.goto(`${viewer}#/design/components/input`);
+  const tabs = page.getByRole("tablist", { name: "Input states view" });
+  await tabs.getByRole("tab", { name: "Preview", exact: true }).focus();
+  await page.keyboard.press("ArrowRight");
+  await expect(
+    tabs.getByRole("tab", { name: "Code", exact: true }),
+  ).toBeFocused();
+  await page.keyboard.press("Enter");
+  const codePanel = page.getByRole("tabpanel", { name: "Code", exact: true });
+  await expect(codePanel).toBeVisible();
+  for (const width of [320, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    if (width === 320) {
+      await codePanel.focus();
+      await page.keyboard.press("PageDown");
+      await expect
+        .poll(() => codePanel.evaluate((element) => element.scrollTop))
+        .toBeGreaterThan(0);
+    }
+    await expect
+      .poll(() =>
+        page.evaluate(
+          () => document.documentElement.scrollWidth <= window.innerWidth,
+        ),
+      )
+      .toBe(true);
+  }
+  await page
+    .getByRole("navigation", { name: "Design system", exact: true })
+    .getByRole("link", { name: "Popover", exact: true })
+    .click();
+  const contents = page.getByRole("navigation", {
+    name: "On this page",
+    exact: true,
+  });
+  await contents
+    .getByRole("button", { name: "Placement", exact: true })
+    .click();
+  const heading = page.getByRole("heading", { name: "Placement", exact: true });
+  await expect(heading).toBeFocused();
+  await expect
+    .poll(async () => (await heading.boundingBox())?.y)
+    .toBeLessThan(100);
+  await page
+    .getByRole("navigation", { name: "Design system", exact: true })
+    .getByRole("link", { name: "Button", exact: true })
+    .click();
+  await expect(
+    contents.getByRole("button", { name: "Placement", exact: true }),
+  ).toHaveCount(0);
+  await expect(
+    contents.getByRole("button", {
+      name: "Loading and expansion",
+      exact: true,
+    }),
+  ).toBeVisible();
 });

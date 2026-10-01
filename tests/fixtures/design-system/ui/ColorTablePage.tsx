@@ -139,7 +139,7 @@ export function ColorTablePage() {
     <>
       <PageHeader
         title="Token table"
-        intro="Every colour token in one list: the name you type, the base token it resolves through, and the value it actually paints. Values are read from the live cascade rather than written down, so this table cannot drift from the system — and it re-resolves when you switch modes."
+        intro="Look up a color token, its source, and the value it renders. Values come from the current CSS and update when you switch appearance."
       />
 
       <div className="mb-6">
@@ -163,14 +163,14 @@ export function ColorTablePage() {
             by what the color does, then let the shared palette supply its light
             and dark values. See the{" "}
             <Link to="/design/color" className="text-purple-12 underline">
-              colour page
+              Color guide
             </Link>
             .
           </Note>
 
           <Section
             title="Roles"
-            description="Grouped as they are in the system. The base column is what the role points at; the value column is where that chain ends."
+            description="Base shows the token a role references. Value shows the final color or treatment in the current mode."
           >
             <TokenTable rows={roleRows} resolved={resolved} showGroups />
           </Section>
@@ -178,17 +178,16 @@ export function ColorTablePage() {
       ) : view === "choices" ? (
         <>
           <Note>
-            Each numbered choice is a stable selection rather than a scene name:
+            Each numbered token pairs a light scene with a dark scene:
             <code className="text-mono"> gradient-1 </code> resolves to Sky
             field in light mode and Night garden in dark. Product surfaces keep
-            using <code className="text-mono">bg-app</code>; an appearance
-            preference can select another numbered choice without knowing which
-            mode is active.
+            using <code className="text-mono">bg-app</code>; the token mapping
+            chooses the treatment for the active mode.
           </Note>
 
           <Section
             title="Semantic backdrop choices"
-            description="Four paired selections. The base column exposes the named treatment currently selected for this mode."
+            description="Four choices, each with a light and dark treatment. Base shows the treatment active in the current mode."
           >
             <TokenTable
               rows={backdropChoiceRows}
@@ -209,7 +208,7 @@ export function ColorTablePage() {
 
           <Section
             title="Palette values and ramps"
-            description="Every hue has twelve authored steps, alongside the named light and dark backdrop treatments and the glass translucency ramp. These hold raw values, which is why the base column is empty for them."
+            description="Raw values include twelve steps per hue, named backdrop treatments, and the glass ramp. Their Base cells are empty because they do not reference another token."
           >
             <TokenTable rows={rampRows} resolved={resolved} showGroups />
           </Section>
@@ -236,8 +235,7 @@ function TokenTable({
        with the swatch for a fourth column. */
     <table className="w-full table-fixed border-collapse text-left">
       <caption className="sr-only">
-        Colour tokens, the base token each resolves through, and the value it
-        paints
+        Color tokens, their source tokens, and their rendered values
       </caption>
       <colgroup>
         <col className="w-1/3 sm:w-[29%]" />

@@ -81,18 +81,18 @@ export function ColorPage() {
     <>
       <PageHeader
         title="Color"
-        intro="Four layers, and only the role layer is used when building a screen. The palette holds raw values — colour ramps and named backdrop treatments. Semantic tokens hold stable choices. Roles hold interface meanings. Everything below is rendered from the token registry, so a token added there appears here automatically and this page cannot drift from the system."
+        intro="Choose colors by their purpose: surface, text, border, or action. Shared roles connect those purposes to the palette in light and dark mode. The examples below come from the token registry."
       />
 
       <Section
         title="Layer 0 — the palette"
-        description="Every hue, twelve steps, authored per mode — the only place a literal colour lives. It exists because the layer above it was 114 hand-picked values with nothing keeping two tokens that do the same job in agreement, and they drifted. Dark steps are authored for dark surfaces rather than derived by dimming light ones, so a subtler deep colour is a step you pick instead of an opacity you write."
+        description="Each hue has twelve steps with separate light and dark values. Define raw color values here, then use semantic roles in components. Choose the appropriate step in a shared mapping instead of changing opacity locally."
       >
         <div className="flex flex-col gap-6">
           {PALETTE.map((hue) => (
             <div key={hue.id} className="flex flex-col gap-2">
               <div className="flex flex-wrap items-baseline gap-2">
-                <h3 className="text-body text-primary">{hue.id}</h3>
+                <h3 className="text-label text-primary">{hue.id}</h3>
                 <span className="text-body-sm text-tertiary">
                   {hue.usedBy ? `drawn from by ${hue.usedBy}` : "unassigned"}
                 </span>
@@ -103,7 +103,7 @@ export function ColorPage() {
                   the values came from — step 4 as "component hover" — long after
                   this product had made step 4 its one border weight. Unrendered
                   documentation cannot be checked by looking. */}
-              <div className="flex gap-1">
+              <div className="color-palette-ramp">
                 {hue.steps.map((step) => (
                   <div
                     key={step.variable}
@@ -129,12 +129,12 @@ export function ColorPage() {
 
       <Section
         title="Layer 0 — backdrop treatments"
-        description="These are named visual compositions, not colour ramps: each holds the exact colours, geometry, falloff, and sometimes a vignette that make a scene. A treatment exists only in the mode where its name is true; its paired counterpart is a different named scene, not a dimmed copy. Components never reference these."
+        description="Each backdrop treatment defines a scene’s colors, geometry, and light falloff for one mode. A semantic backdrop choice pairs a light scene with a dark scene. Components use that choice through a role rather than referencing a treatment directly."
       >
         <div className="flex flex-col gap-6">
           {(["light", "dark"] as const).map((mode) => (
             <div key={mode} className="flex flex-col gap-2">
-              <h3 className="text-body text-primary">{mode} mode</h3>
+              <h3 className="text-label text-primary">{mode} mode</h3>
               <div className="flex flex-col">
                 {BACKDROP_TREATMENTS.filter(
                   (treatment) => treatment.mode === mode,
@@ -152,7 +152,7 @@ export function ColorPage() {
 
       <Section
         title="Layer 1 — semantic backdrop choices"
-        description="A numbered choice is the stable cross-mode selection: choose one slot and its named light and dark treatments travel together. An appearance setting selects gradient-1 through gradient-4; product surfaces still use bg-app."
+        description="Each gradient-1 through gradient-4 token pairs light and dark treatments. Product surfaces use bg-app, which resolves to the active backdrop. "
       >
         <div className="flex flex-col">
           {BACKDROP_CHOICES.map((choice) => {
@@ -186,23 +186,19 @@ export function ColorPage() {
 
       <Section
         title="Layer 0 — translucency"
-        description="Glass is the one ramp that is not a hue: each step is the mode\u2019s own surface colour at an increasing opacity, so a hover moves one step up rather than holding its own literal. It stays separate because genuine translucency \u2014 something behind showing through \u2014 is a different axis from colour, and it is the one place alpha is legitimately baked into a value. Components never reference these."
+        description="The glass ramp increases the opacity of each mode’s surface color. Shared materials combine these fills with blur and a rim. Use a complete glass material in a component, not a raw ramp step."
       >
         <div className="flex flex-col gap-8">
           {RAMPS.map((ramp) => (
             <div key={ramp.id} className="flex flex-col gap-3">
               <div className="flex flex-col gap-1">
-                <h3 className="text-body text-primary">{ramp.name}</h3>
-                <p className="max-w-2xl text-body-sm text-secondary">
+                <h3 className="text-label text-primary">{ramp.name}</h3>
+                <p className="max-w-2xl text-body text-secondary">
                   {ramp.description}
                 </p>
               </div>
               <div
-                className={`grid gap-3 ${
-                  ramp.steps.length > 6
-                    ? "grid-cols-4 sm:grid-cols-6"
-                    : "grid-cols-3 sm:grid-cols-5"
-                } ${ramp.translucent ? "rounded-xl bg-app p-4" : ""}`}
+                className={`color-semantic-ramp ${ramp.translucent ? "rounded-xl bg-app p-4" : ""}`}
               >
                 {ramp.steps.map((step) => (
                   <Swatch
@@ -227,8 +223,8 @@ export function ColorPage() {
           {ROLE_GROUPS.map((group) => (
             <div key={group.id} className="flex flex-col gap-2">
               <div className="flex flex-col gap-1">
-                <h3 className="text-body text-primary">{group.name}</h3>
-                <p className="max-w-2xl text-body-sm text-secondary">
+                <h3 className="text-label text-primary">{group.name}</h3>
+                <p className="max-w-2xl text-body text-secondary">
                   {group.description}
                 </p>
               </div>
@@ -244,7 +240,7 @@ export function ColorPage() {
 
       <Section
         title="Deliberate exceptions"
-        description="Literal values exist only in the palette, and nothing above it holds one — except these. The list is short and complete on purpose: a vague exception policy is how a layered system quietly erodes."
+        description="These shared treatments need values outside the color ramps. Each exception records its purpose so it can be reviewed when the system changes."
       >
         {/* No swatch here to do the separating, so these entries keep a little
             structure — the token name leads and the spacing groups it with its
@@ -253,7 +249,7 @@ export function ColorPage() {
           {EXCEPTIONS.map((exception) => (
             <div key={exception.name} className="flex flex-col gap-1">
               <code className="text-mono text-purple-12">{exception.name}</code>
-              <p className="max-w-2xl text-body-sm text-secondary">
+              <p className="max-w-2xl text-body text-secondary">
                 {exception.why}
               </p>
             </div>
@@ -262,10 +258,9 @@ export function ColorPage() {
       </Section>
 
       <Note>
-        Every dark value in this system is authored rather than observed — the
-        design exploration it was derived from is light-only. Toggle the mode in
-        the sidebar and treat anything that looks wrong as a finding, not a
-        given.
+        The original design exploration covered light mode. Dark values were
+        authored for Buzz. Use the appearance control in the navigation header
+        to compare both modes, and report combinations that are hard to read.
       </Note>
     </>
   );

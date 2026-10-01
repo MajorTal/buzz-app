@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { COMPONENTS } from "../../../../src/shared/design-system/ui/registry";
-import { COMPONENT_SPECIMENS } from "./componentSpecimens";
+import { PageHeader } from "./primitives";
 
 export function ComponentsPage() {
   const topLevelComponents = COMPONENTS.filter(
@@ -10,26 +10,24 @@ export function ComponentsPage() {
 
   return (
     <>
-      <header className="component-page-heading">
-        <h1 className="text-title text-primary">Components</h1>
-      </header>
+      <PageHeader
+        title="Components"
+        intro="Find a component by its purpose, then explore its examples and states."
+      />
       <div className="component-overview-grid">
         {topLevelComponents.map((component) => {
-          const Specimen = COMPONENT_SPECIMENS[component.slug];
           const children = COMPONENTS.filter(
             (candidate) => candidate.parent === component.slug,
           );
           return (
             <article key={component.slug} className="component-overview-item">
-              <div className="component-overview-preview">
-                {Specimen ? <Specimen /> : null}
-              </div>
               <Link
                 to="/design/components/$component"
                 params={{ component: component.slug }}
-                className="text-body text-primary"
+                className="component-overview-link"
               >
-                {component.name}
+                <h2 className="text-label text-primary">{component.name}</h2>
+                <p className="text-body text-secondary">{component.purpose}</p>
               </Link>
               {children.length > 0 ? (
                 <nav aria-label={`${component.name} components`}>

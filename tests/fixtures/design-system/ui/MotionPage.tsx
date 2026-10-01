@@ -8,7 +8,7 @@ export function MotionPage() {
       <PageHeader
         title="Motion"
         status="forming"
-        intro="State changes are quick and geometry settles deliberately. Direct manipulation itself remains immediate: a panel follows the pointer with no smoothing, then uses the settling curve only after release."
+        intro="Use motion to explain a change in state or position. Controls respond quickly; dragged panels follow the pointer exactly and settle after release."
       />
 
       <Section title="Roles">
@@ -23,13 +23,13 @@ export function MotionPage() {
 
       <Section
         title="Rules"
-        description="The values are small; the constraints are the system."
+        description="Use shared timing and curves, preserve immediate direct manipulation, and respect reduced motion."
       >
         <ul className="flex list-disc flex-col gap-2 pl-5">
           {[
             "Direct manipulation follows the pointer exactly. Easing begins only after release.",
-            "Never animate blur. Change opacity when glass enters or leaves.",
-            "Reduced motion makes every transition immediate without changing state.",
+            "Avoid animating blur. The design guide records narrow exceptions for shared popups and tooltips; glass transitions use opacity.",
+            "Reduced motion removes movement without changing state. Follow each component’s documented treatment; tooltips retain a fade.",
             "Motion explains selection, entry, exit, or changed geometry; it never decorates still content.",
           ].map((rule) => (
             <li key={rule} className="text-body text-secondary">

@@ -15,18 +15,23 @@ export function PageHeader({
   title,
   intro,
   status,
+  children,
 }: {
   title: string;
-  intro: string;
+  intro?: ReactNode;
   status?: string;
+  children?: ReactNode;
 }) {
   return (
-    <header className="mb-14 flex flex-col gap-4">
+    <header className="design-page-header">
       <div className="flex flex-wrap items-center gap-3">
         <h1 className="text-title text-primary">{title}</h1>
         {status ? <StatusPill>{status}</StatusPill> : null}
       </div>
-      <p className="max-w-2xl text-body-lg text-secondary">{intro}</p>
+      {intro ? (
+        <p className="design-page-intro text-body text-secondary">{intro}</p>
+      ) : null}
+      {children}
     </header>
   );
 }
@@ -46,24 +51,43 @@ export function StatusPill({ children }: { children: ReactNode }) {
   );
 }
 
+/** One heading treatment for foundation, pattern, and component documentation. */
+export function SectionHeading({
+  title,
+  description,
+  id,
+}: {
+  title: string;
+  description?: string | undefined;
+  id?: string;
+}) {
+  return (
+    <header className="design-section-heading">
+      <h2 id={id} className="text-label text-primary">
+        {title}
+      </h2>
+      {description ? (
+        <p className="design-section-description text-body text-secondary">
+          {description}
+        </p>
+      ) : null}
+    </header>
+  );
+}
+
 export function Section({
   title,
   description,
   children,
 }: {
   title: string;
-  description?: string;
+  description?: string | undefined;
   children: ReactNode;
 }) {
   return (
-    <section className="mb-14 flex flex-col gap-5">
-      <div className="flex flex-col gap-2">
-        <h2 className="text-heading text-primary">{title}</h2>
-        {description ? (
-          <p className="max-w-2xl text-body text-secondary">{description}</p>
-        ) : null}
-      </div>
-      {children}
+    <section className="design-section">
+      <SectionHeading title={title} description={description} />
+      <div className="design-section-content">{children}</div>
     </section>
   );
 }
@@ -82,7 +106,7 @@ export function Stub({ what, decide }: { what: string; decide: string[] }) {
       <p className="text-body text-secondary">{what}</p>
       <div className="flex flex-col gap-2">
         <p className="text-body text-tertiary">Still to decide</p>
-        <ul className="flex list-disc flex-col gap-1.5 pl-4">
+        <ul className="flex list-disc flex-col gap-1.5 ps-4">
           {decide.map((item) => (
             <li key={item} className="text-body-sm text-secondary">
               {item}
@@ -125,7 +149,7 @@ export function Row({ children }: { children: ReactNode }) {
  * Separation comes from space alone.
  */
 export function Specimens({ children }: { children: ReactNode }) {
-  return <div className="flex flex-col gap-7">{children}</div>;
+  return <div className="flex flex-col gap-8">{children}</div>;
 }
 
 /** Renders a live swatch of whatever a CSS custom property currently holds. */
@@ -148,7 +172,7 @@ export function Swatch({
         }`}
         style={{ background: `var(${variable})` }}
       />
-      <code className="truncate text-mono text-primary">{label}</code>
+      <code className="break-words text-mono text-primary">{label}</code>
       {sublabel ? (
         <span className="text-body-sm text-tertiary">{sublabel}</span>
       ) : null}

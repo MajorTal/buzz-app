@@ -33,7 +33,6 @@ import { BaseUiPage } from "./ui/BaseUiPage";
 import { SystemDocumentPage } from "./ui/SystemDocumentPage";
 import { MessagesPage } from "./ui/MessagesPage";
 import { MissingPage } from "./ui/MissingPage";
-import { FoundationAlignmentPage } from "./ui/FoundationAlignmentPage";
 
 // Explicit design-only routes: no import of the app route tree or native startup.
 // Hash history keeps deep links reloadable on a static file host.
@@ -125,11 +124,6 @@ const pages = [
     getParentRoute: () => design,
     path: "motion",
     component: MotionPage,
-  }),
-  createRoute({
-    getParentRoute: () => design,
-    path: "foundation-alignment",
-    component: FoundationAlignmentPage,
   }),
   createRoute({
     getParentRoute: () => design,

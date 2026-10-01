@@ -1,3 +1,4 @@
+import { ExamplePreview } from "./ExamplePreview";
 import { Calendar } from "../../../../src/shared/design-system/ui/Calendar";
 import { FieldButton } from "../../../../src/shared/design-system/ui/FieldButton";
 import {
@@ -81,57 +82,83 @@ type Destination = (typeof DESTINATIONS)[number]["value"];
 
 function CalendarSpecimen() {
   const [date, setDate] = useState(new Date());
-  return <Calendar mode="single" required selected={date} onSelect={setDate} />;
+  return (
+    <SpecimenFrame
+      code={`<Calendar mode="single" required selected={date} onSelect={setDate} />`}
+    >
+      <Calendar mode="single" required selected={date} onSelect={setDate} />
+    </SpecimenFrame>
+  );
 }
 
 function FieldButtonSpecimen() {
   const [duration, setDuration] = useState("Today");
   return (
-    <MenuRoot>
-      <MenuTrigger render={<FieldButton aria-label="Duration" />}>
-        {duration}
-      </MenuTrigger>
-      <MenuPopup>
-        <MenuRadioGroup value={duration} onValueChange={setDuration}>
-          {["Today", "This week", "Custom"].map((item) => (
-            <MenuRadioItem key={item} value={item}>
-              {item}
-            </MenuRadioItem>
-          ))}
-        </MenuRadioGroup>
-      </MenuPopup>
-    </MenuRoot>
+    <SpecimenFrame
+      code={`<MenuRoot>
+  <MenuTrigger render={<FieldButton aria-label="Duration" />}>
+    {duration}
+  </MenuTrigger>
+  <MenuPopup>
+    <MenuRadioGroup value={duration} onValueChange={setDuration}>
+      {["Today", "This week", "Custom"].map((item) => (
+        <MenuRadioItem key={item} value={item}>
+          {item}
+        </MenuRadioItem>
+      ))}
+    </MenuRadioGroup>
+  </MenuPopup>
+</MenuRoot>`}
+    >
+      <MenuRoot>
+        <MenuTrigger render={<FieldButton aria-label="Duration" />}>
+          {duration}
+        </MenuTrigger>
+        <MenuPopup>
+          <MenuRadioGroup value={duration} onValueChange={setDuration}>
+            {["Today", "This week", "Custom"].map((item) => (
+              <MenuRadioItem key={item} value={item}>
+                {item}
+              </MenuRadioItem>
+            ))}
+          </MenuRadioGroup>
+        </MenuPopup>
+      </MenuRoot>
+    </SpecimenFrame>
   );
 }
 
 function SpecimenFrame({
   children,
+  code,
   backdrop = false,
 }: {
   children: ReactNode;
+  code: string;
   backdrop?: boolean;
 }) {
   return (
-    <div
-      className="component-specimen-frame"
-      data-backdrop={backdrop || undefined}
-    >
+    <ExamplePreview code={code} backdrop={backdrop}>
       {children}
-    </div>
+    </ExamplePreview>
   );
 }
 
 function SpecimenGroup({
   label,
+  code,
   children,
 }: {
   label: string;
+  code: string;
   children: ReactNode;
 }) {
   return (
     <section className="component-specimen-group">
-      <h2 className="text-body-sm text-tertiary">{label}</h2>
-      <SpecimenFrame>{children}</SpecimenFrame>
+      <h2 className="text-label text-primary">{label}</h2>
+      <ExamplePreview label={label} code={code}>
+        {children}
+      </ExamplePreview>
     </section>
   );
 }
@@ -166,7 +193,17 @@ function Specimen({
 function AvatarSpecimen() {
   return (
     <div className="component-specimen-stack">
-      <SpecimenGroup label="Identity shape: circles for humans, squircles for agents">
+      <SpecimenGroup
+        label="Identity shape: circles for humans, squircles for agents"
+        code={`<div className="flex flex-wrap items-center gap-4">
+
+    <Avatar alt="Alex Lee" fallback="Alex" shape="circle" />
+
+
+    <Avatar alt="Brain" fallback="Brain" shape="squircle" />
+
+</div>`}
+      >
         <div className="component-specimen-row">
           <Specimen prop='shape="circle" · human'>
             <Avatar alt="Alex Lee" fallback="Alex" shape="circle" />
@@ -176,7 +213,30 @@ function AvatarSpecimen() {
           </Specimen>
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Sizes">
+      <SpecimenGroup
+        label="Sizes"
+        code={`<div className="flex flex-wrap items-center gap-4">
+
+    <Avatar
+      src={avatarUrl}
+      alt="Morgan Martin"
+      fallback="Morgan"
+      size="small"
+    />
+
+
+    <Avatar src={avatarUrl} alt="Morgan Martin" fallback="Morgan" />
+
+
+    <Avatar
+      src={avatarUrl}
+      alt="Morgan Martin"
+      fallback="Morgan"
+      size="large"
+    />
+
+</div>`}
+      >
         <div className="component-specimen-row">
           <Specimen prop='size="small"'>
             <Avatar
@@ -199,7 +259,41 @@ function AvatarSpecimen() {
           </Specimen>
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Status badge and rounded cutout">
+      <SpecimenGroup
+        label="Status badge and rounded cutout"
+        code={`<div className="flex flex-wrap items-center gap-4">
+  {(["small", "default", "large"] as const).map((size) => (
+
+      <Avatar
+        src={avatarUrl}
+        alt="Morgan Martin"
+        fallback="Morgan"
+        size={size}
+        statusBadge="online"
+      />
+
+  ))}
+  {(["away", "offline"] as const).map((status) => (
+
+      <Avatar
+        src={avatarUrl}
+        alt="Morgan Martin"
+        fallback="Morgan"
+        size="large"
+        statusBadge={status}
+      />
+
+  ))}
+
+    <Avatar
+      src={avatarUrl}
+      alt="Morgan Martin"
+      fallback="Morgan"
+      size="large"
+    />
+
+</div>`}
+      >
         <div className="component-specimen-row">
           {(["small", "default", "large"] as const).map((size) => (
             <Specimen key={size} prop={`${size} · online`}>
@@ -233,7 +327,46 @@ function AvatarSpecimen() {
           </Specimen>
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Agent shape (proposed)">
+      <SpecimenGroup
+        label="Agent shape (proposed)"
+        code={`<div className="flex flex-wrap items-center gap-4">
+  {(["small", "default", "large"] as const).map((size) => (
+
+      <Avatar
+        src={avatarUrl}
+        alt="Agent artwork"
+        fallback="Agent"
+        shape="squircle"
+        size={size}
+        statusBadge="online"
+      />
+
+  ))}
+  {(["away", "offline"] as const).map((status) => (
+
+      <Avatar
+        src={avatarUrl}
+        alt="Agent artwork"
+        fallback="Agent"
+        shape="squircle"
+        size="large"
+        statusBadge={status}
+      />
+
+  ))}
+
+    <Avatar
+      src={avatarUrl}
+      alt="Agent artwork"
+      fallback="Agent"
+      shape="squircle"
+    />
+
+
+    <Avatar alt="Agent fallback" fallback="Agent" shape="squircle" />
+
+</div>`}
+      >
         <div className="component-specimen-row">
           {(["small", "default", "large"] as const).map((size) => (
             <Specimen key={size} prop={`squircle · ${size} · online`}>
@@ -275,7 +408,20 @@ function AvatarSpecimen() {
       <LiveAvatarStatusSpecimen />
       {/* No `src`, so the fallback initial shows. Same three sizes, because a
           fallback has to hold the ramp as well as an image does. */}
-      <SpecimenGroup label="Fallback, with no src">
+      <SpecimenGroup
+        label="Fallback, with no src"
+        code={`<div className="flex flex-wrap items-center gap-4">
+
+    <Avatar alt="Cynthia Chen" fallback="Cynthia" size="small" />
+
+
+    <Avatar alt="Cynthia Chen" fallback="Cynthia" />
+
+
+    <Avatar alt="Cynthia Chen" fallback="Cynthia" size="large" />
+
+</div>`}
+      >
         <div className="component-specimen-row">
           <Specimen prop='size="small"'>
             <Avatar alt="Cynthia Chen" fallback="Cynthia" size="small" />
@@ -288,7 +434,14 @@ function AvatarSpecimen() {
           </Specimen>
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Fallback, after image failure">
+      <SpecimenGroup
+        label="Fallback, after image failure"
+        code={`<Avatar
+  src="data:image/png;base64,broken"
+  alt="Morgan Martin"
+  fallback="Morgan"
+/>`}
+      >
         <Specimen prop="failed image">
           <Avatar
             src="data:image/png;base64,broken"
@@ -297,7 +450,23 @@ function AvatarSpecimen() {
           />
         </Specimen>
       </SpecimenGroup>
-      <SpecimenGroup label="Profile buttons">
+      <SpecimenGroup
+        label="Profile buttons"
+        code={`<div className="flex flex-wrap items-center gap-4">
+  <IconButton
+    aria-label="View Morgan profile"
+    size="large"
+    icon={
+      <Avatar src={avatarUrl} alt="" fallback="Morgan" size="fill" />
+    }
+  />
+  <IconButton
+    aria-label="View Alex profile"
+    size="large"
+    icon={<Avatar alt="" fallback="Alex" size="fill" />}
+  />
+</div>`}
+      >
         <div className="component-specimen-row">
           <IconButton
             aria-label="View Morgan profile"
@@ -313,7 +482,17 @@ function AvatarSpecimen() {
           />
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Fill an owning layout box">
+      <SpecimenGroup
+        label="Fill an owning layout box"
+        code={`<div className="size-40 overflow-hidden rounded-2xl">
+  <Avatar
+    src={avatarUrl}
+    alt="Morgan Martin"
+    fallback="Morgan"
+    size="fill"
+  />
+</div>`}
+      >
         <div className="size-40 overflow-hidden rounded-2xl">
           <Avatar
             src={avatarUrl}
@@ -332,7 +511,27 @@ function LiveAvatarStatusSpecimen() {
     "online" | "away" | "offline" | undefined
   >();
   return (
-    <SpecimenGroup label="Status transitions">
+    <SpecimenGroup
+      label="Status transitions"
+      code={`<div className="flex flex-wrap items-center gap-4">
+  <Avatar
+    src={avatarUrl}
+    alt="Live agent artwork"
+    fallback="Agent"
+    shape="squircle"
+    size="large"
+    statusBadge={status}
+  />
+  {(["online", "away", "offline"] as const).map((next) => (
+    <Button key={next} size="compact" onClick={() => setStatus(next)}>
+      Set {next}
+    </Button>
+  ))}
+  <Button size="compact" onClick={() => setStatus(undefined)}>
+    Clear status
+  </Button>
+</div>`}
+    >
       <div className="component-specimen-row">
         <Avatar
           src={avatarUrl}
@@ -357,7 +556,12 @@ function LiveAvatarStatusSpecimen() {
 function FullPageSurfaceSpecimen() {
   return (
     <div className="component-specimen-stack">
-      <SpecimenGroup label="Single full-workspace surface">
+      <SpecimenGroup
+        label="Single full-workspace surface"
+        code={`<div className="w-full h-64 p-workspace-inset rounded-panel bg-app">
+  <FullPageSurface aria-label="Full page surface" style={{ height: "100%" }} />
+</div>`}
+      >
         <div className="component-single-surface-demo">
           <FullPageSurface aria-label="Full page surface" />
         </div>
@@ -369,7 +573,12 @@ function FullPageSurfaceSpecimen() {
 function PanelSpecimen() {
   return (
     <div className="component-specimen-stack">
-      <SpecimenGroup label="Panel — the surface by itself">
+      <SpecimenGroup
+        label="Panel — the surface by itself"
+        code={`<div className="w-full h-64 p-workspace-inset rounded-panel bg-app">
+  <Panel aria-label="Panel surface" style={{ height: "100%" }} />
+</div>`}
+      >
         {/* No invented header or copy inside this specimen. Panel owns a surface,
             not what a product chooses to put on it, so an empty Panel is the
             honest live component. The gradient is the surrounding context it is
@@ -458,7 +667,45 @@ function TabsSpecimen() {
   }));
   return (
     <div className="component-specimen-stack">
-      <SpecimenGroup label="Closable navigation tabs — shared sidebar control">
+      <SpecimenGroup
+        label="Closable navigation tabs — shared sidebar control"
+        code={`{closable.length ? (
+  <Tabs
+    value={selectedClosable}
+    label="Open details"
+    variant="navigation"
+    onValueChange={setSelectedClosable}
+    items={closable.map((label) => ({
+      value: label,
+      label,
+      icon:
+        label === "Profile" ? (
+          <Avatar alt="" fallback="Ada" size="fill" />
+        ) : (
+          <ChatCircleIcon size={18} />
+        ),
+      onClose: () => {
+        const next = closable.filter((item) => item !== label);
+        setClosable(next);
+        if (selectedClosable === label)
+          setSelectedClosable(next[0] ?? "");
+      },
+    }))}
+    renderPanel={(value) => (
+      <p className="text-body-sm">{value} content</p>
+    )}
+  />
+) : (
+  <Button
+    onClick={() => {
+      setClosable(["Thread", "Profile", "Harness log"]);
+      setSelectedClosable("Thread");
+    }}
+  >
+    Reset tabs
+  </Button>
+)}`}
+      >
         {closable.length ? (
           <Tabs
             value={selectedClosable}
@@ -496,7 +743,16 @@ function TabsSpecimen() {
           </Button>
         )}
       </SpecimenGroup>
-      <SpecimenGroup label="Workspace — quiet title tabs for a combined pane">
+      <SpecimenGroup
+        label="Workspace — quiet title tabs for a combined pane"
+        code={`<Tabs
+  value={iconDestination}
+  items={DESTINATIONS}
+  label="Workspace panes"
+  onValueChange={setIconDestination}
+  variant="workspace"
+/>`}
+      >
         <Tabs
           value={iconDestination}
           items={DESTINATIONS}
@@ -507,10 +763,20 @@ function TabsSpecimen() {
       </SpecimenGroup>
 
       <section className="component-specimen-group">
-        <h2 className="text-body-sm text-tertiary">
+        <h2 className="text-label text-primary">
           Chrome — a glass pill, for the app backdrop
         </h2>
-        <SpecimenFrame backdrop>
+        <SpecimenFrame
+          backdrop
+          code={`<div data-anatomy="tabs-chrome">
+  <Tabs
+    value={destination}
+    items={DESTINATIONS}
+    label="Prototype destinations"
+    onValueChange={setDestination}
+  />
+</div>`}
+        >
           <div data-anatomy="tabs-chrome">
             <Tabs
               value={destination}
@@ -531,10 +797,23 @@ function TabsSpecimen() {
           on only the gradient is why the panel failure went unnoticed until it
           appeared on a real page. */}
       <section className="component-specimen-group">
-        <h2 className="text-body-sm text-tertiary">
+        <h2 className="text-label text-primary">
           Panel — an underline, for a plain surface
         </h2>
-        <SpecimenFrame>
+        <SpecimenFrame
+          code={`<div data-anatomy="tabs-panel">
+  <Tabs
+    value={panelDestination}
+    items={DESTINATIONS}
+    label="Prototype destinations on a panel"
+    renderPanel={(value) => (
+      <p className="text-body-sm">{value} content</p>
+    )}
+    onValueChange={setPanelDestination}
+    variant="panel"
+  />
+</div>`}
+        >
           <div data-anatomy="tabs-panel">
             <Tabs
               value={panelDestination}
@@ -555,10 +834,25 @@ function TabsSpecimen() {
         />
       </section>
       <section className="component-specimen-group">
-        <h2 className="text-body-sm text-tertiary">
+        <h2 className="text-label text-primary">
           Chrome, with icons and a trailing action outside the selection
         </h2>
-        <SpecimenFrame backdrop>
+        <SpecimenFrame
+          backdrop
+          code={`<Tabs
+  value={iconDestination}
+  items={iconItems}
+  label="Prototype destinations with icons"
+  onValueChange={setIconDestination}
+  trailingAction={
+    <IconButton
+      aria-label="Create"
+      icon={<PlusIcon size={16} aria-hidden="true" />}
+      size="compact"
+    />
+  }
+/>`}
+        >
           <Tabs
             value={iconDestination}
             items={iconItems}
@@ -593,14 +887,34 @@ function PanelHeaderSpecimen() {
           PanelHeader owns neither its container nor the content below it. The end
           control is the existing IconButton component, composed through `actions`
           rather than rebuilt as a raw button. */}
-      <SpecimenGroup label="Default — icon, title, and IconButton action">
+      <SpecimenGroup
+        label="Default — icon, title, and IconButton action"
+        code={`<PanelHeader
+  title="Conversation"
+  icon={<ChatCircleIcon size={16} aria-hidden="true" />}
+  actions={actions}
+/>`}
+      >
         <PanelHeader
           title="Conversation"
           icon={<ChatCircleIcon size={16} aria-hidden="true" />}
           actions={actions}
         />
       </SpecimenGroup>
-      <SpecimenGroup label="Detail — back navigation before the title">
+      <SpecimenGroup
+        label="Detail — back navigation before the title"
+        code={`<PanelHeader
+  title="Profile"
+  navigation={
+    <IconButton
+      size="toolbar"
+      aria-label="Back to thread"
+      icon={<ArrowLeftIcon size={18} aria-hidden="true" />}
+    />
+  }
+  actions={actions}
+/>`}
+      >
         <PanelHeader
           title="Profile"
           navigation={
@@ -613,7 +927,10 @@ function PanelHeaderSpecimen() {
           actions={actions}
         />
       </SpecimenGroup>
-      <SpecimenGroup label="Compact — title and IconButton action">
+      <SpecimenGroup
+        label="Compact — title and IconButton action"
+        code={`<PanelHeader variant="compact" title="Thread" actions={actions} />`}
+      >
         <PanelHeader variant="compact" title="Thread" actions={actions} />
       </SpecimenGroup>
     </div>
@@ -623,7 +940,21 @@ function PanelHeaderSpecimen() {
 function NavigationSectionSpecimen() {
   return (
     <div className="component-specimen-stack">
-      <SpecimenGroup label='label="Pinned", with rows as children'>
+      <SpecimenGroup
+        label='label="Pinned", with rows as children'
+        code={`<div className="w-full max-w-sm">
+  <NavigationSection label="Pinned">
+    <NavigationItem
+      label="buzz-design"
+      icon={<HashIcon size={16} aria-hidden="true" />}
+    />
+    <NavigationItem
+      label="desktop-new"
+      icon={<HashIcon size={16} aria-hidden="true" />}
+    />
+  </NavigationSection>
+</div>`}
+      >
         <div className="component-navigation-section-demo">
           <NavigationSection label="Pinned">
             <NavigationItem
@@ -637,7 +968,17 @@ function NavigationSectionSpecimen() {
           </NavigationSection>
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Two sections adjacent — the gap between them is the grouping">
+      <SpecimenGroup
+        label="Two sections adjacent — the gap between them is the grouping"
+        code={`<div className="w-full max-w-sm">
+  <NavigationSection label="Projects">
+    <NavigationItem label="berd-main" />
+  </NavigationSection>
+  <NavigationSection label="Personal">
+    <NavigationItem label="design-system" />
+  </NavigationSection>
+</div>`}
+      >
         <div className="component-navigation-section-demo">
           <NavigationSection label="Projects">
             <NavigationItem label="berd-main" />
@@ -658,7 +999,24 @@ function NavigationItemSpecimen() {
     <div className="component-specimen-stack">
       {/* Interactive: clicking moves `selected`, so the selected fill and the
           unselected rest state are both visible at once and comparable. */}
-      <SpecimenGroup label="Selected, and trailing for metadata — click to move the selection">
+      <SpecimenGroup
+        label="Selected, and trailing for metadata — click to move the selection"
+        code={`<div className="w-full max-w-sm">
+  <NavigationItem
+    label="buzz-design"
+    icon={<HashIcon size={16} aria-hidden="true" />}
+    selected={selected === "buzz-design"}
+    onClick={() => setSelected("buzz-design")}
+  />
+  <NavigationItem
+    label="desktop-new"
+    icon={<HashIcon size={16} aria-hidden="true" />}
+    trailing={<span className="text-body-sm">3</span>}
+    selected={selected === "desktop-new"}
+    onClick={() => setSelected("desktop-new")}
+  />
+</div>`}
+      >
         <div className="component-navigation-section-demo">
           <NavigationItem
             label="buzz-design"
@@ -675,7 +1033,22 @@ function NavigationItemSpecimen() {
           />
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Picker option — even padding and immediate hover feedback">
+      <SpecimenGroup
+        label="Picker option — even padding and immediate hover feedback"
+        code={`<div className="w-full max-w-sm">
+  <NavigationItem
+    variant="option"
+    label="Alex"
+    icon={<Avatar fallback="Alex" alt="" size="default" />}
+  />
+  <NavigationItem
+    variant="option"
+    label="Unavailable"
+    disabled
+    icon={<Avatar fallback="Unavailable" alt="" size="default" />}
+  />
+</div>`}
+      >
         <div className="component-navigation-section-demo">
           <NavigationItem
             variant="option"
@@ -690,7 +1063,18 @@ function NavigationItemSpecimen() {
           />
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Inset — one level of nesting under a row">
+      <SpecimenGroup
+        label="Inset — one level of nesting under a row"
+        code={`<div className="w-full max-w-sm">
+  <NavigationItem
+    label="Session interaction model"
+    icon={<ChatCircleIcon size={16} aria-hidden="true" />}
+    inset
+    selected={selected === "session"}
+    onClick={() => setSelected("session")}
+  />
+</div>`}
+      >
         <div className="component-navigation-section-demo">
           <NavigationItem
             label="Session interaction model"
@@ -701,7 +1085,20 @@ function NavigationItemSpecimen() {
           />
         </div>
       </SpecimenGroup>
-      <SpecimenGroup label="Pill — click to move the selection">
+      <SpecimenGroup
+        label="Pill — click to move the selection"
+        code={`<div className="flex flex-wrap items-center gap-4">
+  {["Notes", "Activity"].map((label) => (
+    <NavigationItem
+      key={label}
+      label={label}
+      variant="pill"
+      selected={selectedPill === label}
+      onClick={() => setSelectedPill(label)}
+    />
+  ))}
+</div>`}
+      >
         <div className="component-specimen-row">
           {["Notes", "Activity"].map((label) => (
             <NavigationItem
@@ -780,7 +1177,29 @@ function seedChipFaces() {
 function PreviewCardSpecimen() {
   return (
     <div className="component-specimen-stack">
-      <SpecimenGroup label="Default">
+      <SpecimenGroup
+        label="Default"
+        code={`<p className="text-body text-primary">
+  <PreviewCard
+    trigger={
+      <button type="button" className="buzz-preview-card-example">
+        Morgan Martin
+      </button>
+    }
+  >
+    <span className="buzz-preview-card-kind text-body-sm text-tertiary">
+      Person
+    </span>
+    <span className="buzz-preview-card-name text-body text-primary">
+      Morgan Martin
+    </span>
+    <span className="text-body-sm text-secondary">
+      Product designer
+    </span>
+  </PreviewCard>{" "}
+  is reviewing the first Composer composition.
+</p>`}
+      >
         <p className="text-body text-primary">
           <PreviewCard
             trigger={
@@ -812,7 +1231,16 @@ function InlineChipSpecimen() {
 
   return (
     <div className="component-specimen-stack">
-      <SpecimenGroup label="Kinds">
+      <SpecimenGroup
+        label="Kinds"
+        code={`<div className="flex flex-wrap items-center gap-4">
+  {CHIP_KIND_ROWS.map((row) => (
+
+      <InlineChip address={row.address} />
+
+  ))}
+</div>`}
+      >
         {/* Caption under the sample, not in a fixed-width column beside it: a
             label column wide enough for `kind: "channel"` left the link chip
             nowhere to truncate and pushed it off a 380px viewport. */}
@@ -825,7 +1253,16 @@ function InlineChipSpecimen() {
         </div>
       </SpecimenGroup>
 
-      <SpecimenGroup label="In a sentence">
+      <SpecimenGroup
+        label="In a sentence"
+        code={`<p className="text-body text-primary">
+  Asked <InlineChip address={CHIP_PERSON} /> and{" "}
+  <InlineChip address={CHIP_AGENT} /> to look at{" "}
+  <InlineChip address={CHIP_MESSAGE} /> in{" "}
+  <InlineChip address={CHIP_CHANNEL} />, alongside{" "}
+  <InlineChip address={CHIP_LINK} /> before the review.
+</p>`}
+      >
         <p className="text-body text-primary">
           Asked <InlineChip address={CHIP_PERSON} /> and{" "}
           <InlineChip address={CHIP_AGENT} /> to look at{" "}
@@ -835,40 +1272,74 @@ function InlineChipSpecimen() {
         </p>
       </SpecimenGroup>
 
-      <SpecimenGroup label="Resolved preview">
+      <SpecimenGroup
+        label="Resolved preview"
+        code={`<p className="text-body text-primary">
+  Hover or focus <InlineChip address={CHIP_PERSON} /> to reveal its
+  quiet preview. It supplies context without opening another surface.
+</p>`}
+      >
         <p className="text-body text-primary">
           Hover or focus <InlineChip address={CHIP_PERSON} /> to reveal its
           quiet preview. It supplies context without opening another surface.
         </p>
       </SpecimenGroup>
 
-      <SpecimenGroup label="Inert rendering">
+      <SpecimenGroup
+        label="Inert rendering"
+        code={`<p className="text-body text-primary">
+  Use an inert chip when the surface cannot show reference details:{" "}
+  <InlineChip address={CHIP_PERSON} interactive={false} />
+</p>`}
+      >
         <p className="text-body text-primary">
-          A surface that cannot honestly reveal reference detail renders an
-          inert chip: <InlineChip address={CHIP_PERSON} interactive={false} />
+          Use an inert chip when the surface cannot show reference details:{" "}
+          <InlineChip address={CHIP_PERSON} interactive={false} />
         </p>
       </SpecimenGroup>
 
-      <SpecimenGroup label="Unresolved reference">
+      <SpecimenGroup
+        label="Unresolved reference"
+        code={`<div className="flex flex-col gap-3">
+  <div className="flex flex-wrap items-center gap-4">
+    <InlineChip address={CHIP_UNRESOLVED} />
+  </div>
+  <p className="max-w-md text-body-sm text-tertiary">
+    An unresolved chip has no name or destination. It stays inert and
+    announces its unresolved state without reading an identity fragment.
+  </p>
+</div>`}
+      >
         <div className="flex flex-col gap-3">
           <div className="component-specimen-row">
             <InlineChip address={CHIP_UNRESOLVED} />
           </div>
           <p className="max-w-md text-body-sm text-tertiary">
-            No name to show and nothing to open, so it reads as inert and
-            announces itself as unresolved rather than speaking an identity
-            fragment aloud.
+            An unresolved chip has no name or destination. It stays inert and
+            announces its unresolved state without reading an identity fragment.
           </p>
         </div>
       </SpecimenGroup>
 
-      <SpecimenGroup label="Long label truncates">
+      <SpecimenGroup
+        label="Long label truncates"
+        code={`<div className="flex flex-wrap items-center gap-4">
+  <InlineChip address={CHIP_LONG} />
+</div>`}
+      >
         <div className="component-specimen-row">
           <InlineChip address={CHIP_LONG} />
         </div>
       </SpecimenGroup>
 
-      <SpecimenGroup label="Wrapping across lines">
+      <SpecimenGroup
+        label="Wrapping across lines"
+        code={`<p className="max-w-xs text-body text-primary">
+  A chip sits in the text flow, so a line break falls before or after it
+  and never inside it: <InlineChip address={CHIP_PERSON} />{" "}
+  <InlineChip address={CHIP_AGENT} /> <InlineChip address={CHIP_LINK} />
+</p>`}
+      >
         <p className="max-w-xs text-body text-primary">
           A chip sits in the text flow, so a line break falls before or after it
           and never inside it: <InlineChip address={CHIP_PERSON} />{" "}
@@ -876,7 +1347,18 @@ function InlineChipSpecimen() {
         </p>
       </SpecimenGroup>
 
-      <SpecimenGroup label="Activation">
+      <SpecimenGroup
+        label="Activation"
+        code={`<div className="flex flex-wrap items-center gap-4">
+  <InlineChip
+    address={CHIP_PERSON}
+    onActivate={(address) => setActivated(address.id)}
+  />
+  <span className="text-body-sm text-tertiary">
+    {activated ? \`Opened \${activated}\` : "Not activated"}
+  </span>
+</div>`}
+      >
         <div className="component-specimen-row">
           <InlineChip
             address={CHIP_PERSON}
@@ -898,79 +1380,167 @@ function SwitchSpecimen() {
   const [managed, setManaged] = useState(false);
   const checkboxId = useId();
   return (
-    <div className="component-specimen-stack">
-      <div className="divide-y divide-line">
-        <SwitchPreferenceRow
-          icon={<ChatCircleIcon size={20} />}
-          label="Desktop alerts"
-          description="Show notifications for new activity."
+    <SpecimenFrame
+      code={`<div className="flex flex-col gap-8">
+  <div className="divide-y divide-line">
+    <SwitchPreferenceRow
+      icon={<ChatCircleIcon size={20} />}
+      label="Desktop alerts"
+      description="Show notifications for new activity."
+      checked={checked}
+      onCheckedChange={setChecked}
+    />
+    <SwitchPreferenceRow label="Sound" checked />
+    <SwitchPreferenceRow
+      label="Unavailable preference"
+      icon={<ChatCircleIcon size={20} />}
+      disabled
+    />
+    <PreferenceRow
+      icon={<HashIcon size={20} />}
+      title="Include archived channels"
+      subtitle="Include archived channels when browsing your saved conversations. This longer explanation wraps while the control stays aligned."
+      controlId={checkboxId}
+      trailing={(labelProps) => (
+        <Checkbox
+          {...labelProps}
+          id={checkboxId}
+          label={null}
+          checked={selected}
+          onCheckedChange={setSelected}
+        />
+      )}
+    />
+    <PreferenceRow
+      title="Connected accounts"
+      subtitle={
+        managed
+          ? "Account management opened."
+          : "Manage the accounts connected to this workspace."
+      }
+      trailing={
+        <Button size="sm" onClick={() => setManaged(!managed)}>
+          {managed ? "Done" : "Manage"}
+        </Button>
+      }
+    />
+    <PreferenceRow
+      title="Channels"
+      trailing={<span className="text-body-sm text-subtle">Required</span>}
+    />
+  </div>
+  <Switch
+    checked={checked}
+    onCheckedChange={setChecked}
+    label="Show agent activity"
+  />
+  <Switch checked label="Show agent activity" />
+  <Switch disabled label="Show agent activity" />
+  <div className="flex flex-wrap items-center gap-4">
+    <span className="text-body">Plugin enabled (saving)</span>
+    <Switch
+      checked={busyChecked}
+      onCheckedChange={setBusyChecked}
+      readOnly
+      aria-disabled="true"
+      aria-label="Enable busy plugin"
+    />
+  </div>
+</div>`}
+    >
+      <div className="component-specimen-stack">
+        <div className="divide-y divide-line">
+          <SwitchPreferenceRow
+            icon={<ChatCircleIcon size={20} />}
+            label="Desktop alerts"
+            description="Show notifications for new activity."
+            checked={checked}
+            onCheckedChange={setChecked}
+          />
+          <SwitchPreferenceRow label="Sound" checked />
+          <SwitchPreferenceRow
+            label="Unavailable preference"
+            icon={<ChatCircleIcon size={20} />}
+            disabled
+          />
+          <PreferenceRow
+            icon={<HashIcon size={20} />}
+            title="Include archived channels"
+            subtitle="Include archived channels when browsing your saved conversations. This longer explanation wraps while the control stays aligned."
+            controlId={checkboxId}
+            trailing={(labelProps) => (
+              <Checkbox
+                {...labelProps}
+                id={checkboxId}
+                label={null}
+                checked={selected}
+                onCheckedChange={setSelected}
+              />
+            )}
+          />
+          <PreferenceRow
+            title="Connected accounts"
+            subtitle={
+              managed
+                ? "Account management opened."
+                : "Manage the accounts connected to this workspace."
+            }
+            trailing={
+              <Button size="sm" onClick={() => setManaged(!managed)}>
+                {managed ? "Done" : "Manage"}
+              </Button>
+            }
+          />
+          <PreferenceRow
+            title="Channels"
+            trailing={
+              <span className="text-body-sm text-subtle">Required</span>
+            }
+          />
+        </div>
+        <Switch
           checked={checked}
           onCheckedChange={setChecked}
+          label="Show agent activity"
         />
-        <SwitchPreferenceRow label="Sound" checked />
-        <SwitchPreferenceRow
-          label="Unavailable preference"
-          icon={<ChatCircleIcon size={20} />}
-          disabled
-        />
-        <PreferenceRow
-          icon={<HashIcon size={20} />}
-          title="Include archived channels"
-          subtitle="Include archived channels when browsing your saved conversations. This longer explanation wraps while the control stays aligned."
-          controlId={checkboxId}
-          trailing={(labelProps) => (
-            <Checkbox
-              {...labelProps}
-              id={checkboxId}
-              label={null}
-              checked={selected}
-              onCheckedChange={setSelected}
-            />
-          )}
-        />
-        <PreferenceRow
-          title="Connected accounts"
-          subtitle={
-            managed
-              ? "Account management opened."
-              : "Manage the accounts connected to this workspace."
-          }
-          trailing={
-            <Button size="sm" onClick={() => setManaged(!managed)}>
-              {managed ? "Done" : "Manage"}
-            </Button>
-          }
-        />
-        <PreferenceRow
-          title="Channels"
-          trailing={<span className="text-body-sm text-subtle">Required</span>}
-        />
+        <Switch checked label="Show agent activity" />
+        <Switch disabled label="Show agent activity" />
+        <div className="component-specimen-row">
+          <span className="text-body">Plugin enabled (saving)</span>
+          <Switch
+            checked={busyChecked}
+            onCheckedChange={setBusyChecked}
+            readOnly
+            aria-disabled="true"
+            aria-label="Enable busy plugin"
+          />
+        </div>
       </div>
-      <Switch
-        checked={checked}
-        onCheckedChange={setChecked}
-        label="Show agent activity"
-      />
-      <Switch checked label="Show agent activity" />
-      <Switch disabled label="Show agent activity" />
-      <div className="component-specimen-row">
-        <span className="text-body">Plugin enabled (saving)</span>
-        <Switch
-          checked={busyChecked}
-          onCheckedChange={setBusyChecked}
-          readOnly
-          aria-disabled="true"
-          aria-label="Enable busy plugin"
-        />
-      </div>
-    </div>
+    </SpecimenFrame>
   );
 }
 
 function AlertDialogSpecimen() {
   const [open, setOpen] = useState(false);
   return (
-    <SpecimenFrame>
+    <SpecimenFrame
+      code={`<Button onClick={() => setOpen(true)}>Discard example changes</Button>
+{open && (
+  <AlertDialog
+    title="Discard changes?"
+    description="Your unsaved example changes will be lost."
+    onClose={() => setOpen(false)}
+    actions={
+      <>
+        <Button onClick={() => setOpen(false)}>Keep editing</Button>
+        <Button variant="destructive" onClick={() => setOpen(false)}>
+          Discard
+        </Button>
+      </>
+    }
+  />
+)}`}
+    >
       <Button onClick={() => setOpen(true)}>Discard example changes</Button>
       {open && (
         <AlertDialog
@@ -997,69 +1567,117 @@ function RadioGroupSpecimen() {
   const [enabled, setEnabled] = useState(false);
   return (
     <>
-      <SpecimenGroup label="Native form reset">
-        <SpecimenFrame>
-          <form aria-label="Notification preferences">
-            <Field label="Notifications">
-              <RadioGroup name="notifications" defaultValue="all">
-                <Radio value="all" label="All updates" variant="card" />
-                <Radio value="mentions" label="Mentions only" variant="card" />
-                <Radio value="none" label="Unavailable" disabled />
-              </RadioGroup>
-            </Field>
-            <Checkbox
-              name="summary"
-              value="yes"
-              label="Include a summary"
-              defaultChecked
-            />
-            <Button type="reset">Reset preferences</Button>
-          </form>
-        </SpecimenFrame>
+      <SpecimenGroup
+        label="Native form reset"
+        code={`<form aria-label="Notification preferences">
+  <Field label="Notifications">
+    <RadioGroup name="notifications" defaultValue="all">
+      <Radio value="all" label="All updates" variant="card" />
+      <Radio value="mentions" label="Mentions only" variant="card" />
+      <Radio value="none" label="Unavailable" disabled />
+    </RadioGroup>
+  </Field>
+  <Checkbox
+    name="summary"
+    value="yes"
+    label="Include a summary"
+    defaultChecked
+  />
+  <Button type="reset">Reset preferences</Button>
+</form>`}
+      >
+        <form aria-label="Notification preferences">
+          <Field label="Notifications">
+            <RadioGroup name="notifications" defaultValue="all">
+              <Radio value="all" label="All updates" variant="card" />
+              <Radio value="mentions" label="Mentions only" variant="card" />
+              <Radio value="none" label="Unavailable" disabled />
+            </RadioGroup>
+          </Field>
+          <Checkbox
+            name="summary"
+            value="yes"
+            label="Include a summary"
+            defaultChecked
+          />
+          <Button type="reset">Reset preferences</Button>
+        </form>
       </SpecimenGroup>
-      <SpecimenGroup label="Controlled form reset">
-        <SpecimenFrame>
-          <form aria-label="Controlled preferences">
-            <Field label="Delivery">
-              <RadioGroup
-                name="delivery"
-                value={delivery}
-                onValueChange={setDelivery}
-              >
-                <Radio value="all" label="All updates" />
-                <Radio value="mentions" label="Mentions only" />
-              </RadioGroup>
-            </Field>
-            <Checkbox
-              name="summary"
-              value="yes"
-              label="Include a summary"
-              checked={summary}
-              onCheckedChange={setSummary}
-            />
-            <Button type="reset">Reset preferences</Button>
-          </form>
-        </SpecimenFrame>
+      <SpecimenGroup
+        label="Controlled form reset"
+        code={`<form aria-label="Controlled preferences">
+  <Field label="Delivery">
+    <RadioGroup
+      name="delivery"
+      value={delivery}
+      onValueChange={setDelivery}
+    >
+      <Radio value="all" label="All updates" />
+      <Radio value="mentions" label="Mentions only" />
+    </RadioGroup>
+  </Field>
+  <Checkbox
+    name="summary"
+    value="yes"
+    label="Include a summary"
+    checked={summary}
+    onCheckedChange={setSummary}
+  />
+  <Button type="reset">Reset preferences</Button>
+</form>`}
+      >
+        <form aria-label="Controlled preferences">
+          <Field label="Delivery">
+            <RadioGroup
+              name="delivery"
+              value={delivery}
+              onValueChange={setDelivery}
+            >
+              <Radio value="all" label="All updates" />
+              <Radio value="mentions" label="Mentions only" />
+            </RadioGroup>
+          </Field>
+          <Checkbox
+            name="summary"
+            value="yes"
+            label="Include a summary"
+            checked={summary}
+            onCheckedChange={setSummary}
+          />
+          <Button type="reset">Reset preferences</Button>
+        </form>
       </SpecimenGroup>
-      <SpecimenGroup label="Initially disabled choices">
-        <SpecimenFrame>
-          <form aria-label="Deferred preferences">
-            <Button onClick={() => setEnabled(true)} disabled={enabled}>
-              Enable choices
-            </Button>
-            <Field label="Delivery">
-              <RadioGroup
-                name="delivery"
-                defaultValue="all"
-                disabled={!enabled}
-              >
-                <Radio value="all" label="All updates" />
-                <Radio value="mentions" label="Mentions only" />
-              </RadioGroup>
-            </Field>
-            <Button type="reset">Reset preferences</Button>
-          </form>
-        </SpecimenFrame>
+      <SpecimenGroup
+        label="Initially disabled choices"
+        code={`<form aria-label="Deferred preferences">
+  <Button onClick={() => setEnabled(true)} disabled={enabled}>
+    Enable choices
+  </Button>
+  <Field label="Delivery">
+    <RadioGroup
+      name="delivery"
+      defaultValue="all"
+      disabled={!enabled}
+    >
+      <Radio value="all" label="All updates" />
+      <Radio value="mentions" label="Mentions only" />
+    </RadioGroup>
+  </Field>
+  <Button type="reset">Reset preferences</Button>
+</form>`}
+      >
+        <form aria-label="Deferred preferences">
+          <Button onClick={() => setEnabled(true)} disabled={enabled}>
+            Enable choices
+          </Button>
+          <Field label="Delivery">
+            <RadioGroup name="delivery" defaultValue="all" disabled={!enabled}>
+              <Radio value="all" label="All updates" />
+              <Radio value="mentions" label="Mentions only" />
+            </RadioGroup>
+          </Field>
+          <Button type="reset">Reset preferences</Button>
+        </form>
       </SpecimenGroup>
     </>
   );
@@ -1070,14 +1688,29 @@ export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
   dialog: DialogSpecimens,
   toast: ToastSpecimens,
   tooltip: () => (
-    <SpecimenFrame>
+    <SpecimenFrame
+      code={`<Tooltip content="Create a note">
+  <IconButton aria-label="Create note" icon={<PlusIcon size={16} />} />
+</Tooltip>`}
+    >
       <Tooltip content="Create a note">
         <IconButton aria-label="Create note" icon={<PlusIcon size={16} />} />
       </Tooltip>
     </SpecimenFrame>
   ),
   field: () => (
-    <SpecimenFrame>
+    <SpecimenFrame
+      code={`<Field
+  label="Workspace name"
+  description="Choose a name your team will recognize."
+  error="Enter a name."
+>
+  <Input required />
+</Field>
+<Field label="Workspace description" error="Enter a description.">
+  <Textarea id="workspace-description" required rows={3} />
+</Field>`}
+    >
       <Field
         label="Workspace name"
         description="Choose a name your team will recognize."
@@ -1096,7 +1729,11 @@ export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
   textarea: TextareaExamples,
   "radio-group": RadioGroupSpecimen,
   checkbox: () => (
-    <SpecimenFrame>
+    <SpecimenFrame
+      code={`<Checkbox label="Include a summary" />
+<Checkbox label="Some selected" indeterminate />
+<Checkbox label="Unavailable" disabled />`}
+    >
       <Checkbox label="Include a summary" />
       <Checkbox label="Some selected" indeterminate />
       <Checkbox label="Unavailable" disabled />
@@ -1121,7 +1758,58 @@ export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
   switch: SwitchSpecimen,
   "preference-row": SwitchSpecimen,
   accordion: () => (
-    <>
+    <SpecimenFrame
+      code={`<Accordion
+  items={[
+    {
+      value: "purpose",
+      title: "When to use an accordion",
+      content: (
+        <p className="text-body">
+          Use a disclosure for supporting content that does not need to be
+          visible all the time.
+        </p>
+      ),
+    },
+    {
+      value: "behavior",
+      title: "Keyboard behavior",
+      content: (
+        <p className="text-body">
+          Focus a heading and press Enter or Space to expand it.
+        </p>
+      ),
+    },
+  ]}
+/>
+<h3 className="text-label">
+  Form disclosures · spacing owned by the form
+</h3>
+<Accordion
+  variant="form"
+  keepMounted
+  items={[
+    {
+      value: "advanced",
+      title: "Advanced",
+      content: (
+        <Field label="Label">
+          <Input placeholder="Draft stays when collapsed" />
+        </Field>
+      ),
+    },
+    {
+      value: "details",
+      title: "Technical details",
+      content: (
+        <p className="text-body-sm text-subtle">
+          Supporting information shares the same row rhythm.
+        </p>
+      ),
+    },
+  ]}
+/>`}
+    >
       <Accordion
         items={[
           {
@@ -1172,17 +1860,31 @@ export const COMPONENT_SPECIMENS: Record<string, () => ReactNode> = {
           },
         ]}
       />
-    </>
+    </SpecimenFrame>
   ),
   header: () => (
-    <div>
-      <Header
-        title="Profile"
-        eyebrow="Account"
-        subtitle="Your local default for new communities."
-      />
-      <InlineHeader title="Preferences" subtitle="Choose what works for you." />
-    </div>
+    <SpecimenFrame
+      code={`<div>
+  <Header
+    title="Profile"
+    eyebrow="Account"
+    subtitle="Your local default for new communities."
+  />
+  <InlineHeader title="Preferences" subtitle="Choose what works for you." />
+</div>`}
+    >
+      <div>
+        <Header
+          title="Profile"
+          eyebrow="Account"
+          subtitle="Your local default for new communities."
+        />
+        <InlineHeader
+          title="Preferences"
+          subtitle="Choose what works for you."
+        />
+      </div>
+    </SpecimenFrame>
   ),
   "panel-header": PanelHeaderSpecimen,
   "search-field": SearchExamples,

@@ -1,61 +1,71 @@
 # Maintaining the design system
 
-## The point
+The system records shared decisions so you can build a clear, consistent interface.
+Use it as a starting point. When a real design needs something it cannot express,
+improve the system rather than forcing the design into an unsuitable pattern.
 
-The system helps Buzz stay clear and coherent as it grows. It should make the common choice easy, while leaving room for a design to be specific, surprising, or new. It is a shared memory of decisions that have been made—not a gate a designer needs to pass through.
+## Start with a real use
 
-When the system cannot express the right design, change the system. Do not distort the design to satisfy an old rule.
+Build the screen or interaction in front of you. Reuse the existing colors, type,
+surfaces, and components, then inspect them in context.
 
-## Start with the work in front of you
+A new use can reveal a missing state, an unsuitable token, or guidance that no
+longer fits the product. Explain the need where you make the change. Avoid adding
+options for situations no current surface needs.
 
-Build the screen or interaction you are trying to make. Use the existing colors, type, surfaces, and components when they fit. Look at the result in context, not just in a token table.
+## Choose colors by purpose
 
-A repeated need is evidence. One-off work is evidence too: it may reveal that a ramp step is wrong, a component needs another supported state, or a rule no longer reflects the product.
+Use semantic surface, text, border, and affordance roles. The palette supplies
+light and dark values; components should not choose palette steps directly,
+even when a role uses the same step in both modes.
 
-## Color: use semantic roles
+Add only the states the control needs, such as hover, pressed, or disabled.
+Check the paired text and update the registry and viewer in the same change.
+Legacy names support existing callers during migration; use semantic names for
+new work.
 
-Choose a name by what the color does: surface, text, border or affordance.
-The shared palette supplies values to those roles in light and dark mode.
-Components should not choose a palette step directly, even when both modes use
-the same step. A role lets us adjust that job without editing every caller.
+## Share what repeats
 
-Keep roles grounded in real controls. Add the required hover, pressed or disabled
-state beside the base role and check its paired text. Update the registry and
-viewer in the same change. Legacy names exist only to support staged migration.
+A shared component should provide the same appearance and interaction wherever
+it is used. Build the first version with its feature. When a second real use
+appears, decide which part belongs in the system:
 
-## Components grow from real repetition
+- Share generic controls and visual building blocks.
+- Keep Buzz-specific behavior with the product capability that owns it.
+- Share a complete arrangement only when another surface needs that arrangement.
 
-A shared component is a promise: the same interaction and visual language will work the same way wherever it appears.
+Prefer small components with clear responsibilities. Do not add a catalog of
+unused variants or a collection of unrelated boolean options.
 
-Build the first version where it is needed. Once another real use appears, decide what is truly shared:
+## Review states in context
 
-- a generic building block belongs in the design system;
-- Buzz-specific behavior belongs with the product capability that owns it;
-- a complete arrangement should only become reusable when another surface needs that exact arrangement.
+Check default, hover, pressed, selected, disabled, and loading states where they
+apply. Selection must remain clear after the pointer moves away. Preserve
+keyboard operation and focus restoration alongside pointer behavior.
 
-Do not build a catalogue in advance. Small, proven components are more flexible than a large component with a long list of switches.
+The shared global stylesheet currently hides focus outlines by explicit design
+decision. This is a known exception to visible keyboard focus, not an accessibility
+pass. Follow [Temporary focus appearance](DESIGN.md#temporary-focus-appearance)
+and do not add local replacement rings.
 
-## Keep the important states visible
+Inspect narrow, intermediate, and wide layouts in both themes. A specimen alone
+cannot prove that a component works in its product context.
 
-Every interactive piece should have a clear default, hover, pressed, selected state where it applies, and disabled state where it matters. Selection is a lasting statement, not just a stronger hover. Keyboard focus should be visible, and the same action should work with a pointer or keyboard.
+## Use checks as evidence
 
-Check narrow, medium, and wide layouts. Check light and dark mode together. A decision that works only in a component specimen is not finished.
+Automated guards protect shared decisions such as contrast, type roles, and
+paired theme values. Keep deliberate exceptions named and explained in the
+owning guard. If exceptions reveal a repeated need, revisit the rule rather than
+adding more local workarounds.
 
-## What the guards are for
+Passing checks establishes only what those checks measure. Combine them with
+rendered inspection and the affected interaction before calling a change validated.
 
-The automated checks protect decisions that are easy to accidentally undo: readable contrast, the shared type scale, and the color system’s light/dark structure.
+## Leave the decision easy to find
 
-They are guardrails, not judges. Each one has a named exception list with room to explain why a specific design needs to differ. Adding an exception is normal when it reflects a deliberate design choice. If the exceptions start pointing in one direction, improve or remove the rule instead of accumulating workarounds.
+Update the token, component, or guidance that owns the decision. Show useful
+states in the viewer, use the change in its real product context, and explain the
+reason in plain language near the implementation.
 
-A passing check means the system is internally consistent. Looking at the actual interface tells us whether the system is good. We need both.
-
-## A good change leaves a trace
-
-When you change the system, make the decision easy to find:
-
-- update the relevant token, component, or guidance;
-- show the result on the design-system site where useful;
-- use the new thing in real product work, not only in documentation;
-- note the reason in plain language close to the decision.
-
-The goal is not to freeze Buzz into a style. It is to give every future designer and builder a clear starting point—and the confidence to improve it when the work asks for more.
+Follow the root contribution workflow for iteration and validation. Keep proposed
+work marked as proposed until it has the evidence needed for adoption.

@@ -4,9 +4,18 @@ import maintainingSource from "../../../../src/shared/design-system/MAINTAINING_
 import { MarkdownPage } from "./MarkdownPage";
 
 const DOCUMENTS = {
-  maintaining: maintainingSource,
-  design: designSource,
-  agents: agentsSource,
+  maintaining: {
+    source: maintainingSource,
+    documentPath: "src/shared/design-system/MAINTAINING_DESIGN_SYSTEM.md",
+  },
+  design: {
+    source: designSource,
+    documentPath: "src/shared/design-system/DESIGN.md",
+  },
+  agents: {
+    source: agentsSource,
+    documentPath: "src/shared/design-system/AGENTS.md",
+  },
 } as const;
 
 export function SystemDocumentPage({
@@ -14,5 +23,5 @@ export function SystemDocumentPage({
 }: {
   document: keyof typeof DOCUMENTS;
 }) {
-  return <MarkdownPage source={DOCUMENTS[document]} />;
+  return <MarkdownPage {...DOCUMENTS[document]} />;
 }

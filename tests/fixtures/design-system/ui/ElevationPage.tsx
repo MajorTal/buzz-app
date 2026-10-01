@@ -10,7 +10,7 @@ export function ElevationPage() {
     <>
       <PageHeader
         title="Elevation"
-        intro="Two values, taken from the design exploration unchanged. Depth comes from hairline borders and shadows at the threshold of perception rather than from many surface colours — if a shadow is obvious, it is too strong."
+        intro="Use the two shared shadow roles to separate raised controls and floating surfaces. Keep shadows subtle; dark mode also uses lighter surfaces to show depth."
       />
 
       <Section title="The values">
@@ -37,7 +37,7 @@ export function ElevationPage() {
           place. */}
       <Section
         title="Blur"
-        description="Depth behind a translucent surface. The glass materials each carry one of these, so a screen picks a material rather than a blur amount."
+        description="Blur softens content behind a translucent surface. Choose a glass material to apply its fill, blur, and rim together."
       >
         <div className="glass-scene flex flex-wrap gap-3 rounded-xl p-6">
           {BLUR.map((blur) => (
@@ -54,11 +54,10 @@ export function ElevationPage() {
       </Section>
 
       <Note>
-        Elevation is carried by shadow in light mode and by lightness in dark
-        mode. On a near-black background there is nothing darker for a shadow to
-        cast, so a floating surface becomes a step lighter instead — which is
-        why `bg-float` and `bg-panel` share a light value and diverge in dark.
-        Never reach for a stronger shadow to make something float in dark mode.
+        Floating surfaces use shadows in light mode and a lighter fill in dark
+        mode. This is why surface-popover and surface-panel share a light value
+        but differ in dark. Use the shared surface role rather than
+        strengthening the shadow.
       </Note>
     </>
   );

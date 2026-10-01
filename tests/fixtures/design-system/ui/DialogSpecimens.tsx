@@ -1,3 +1,5 @@
+import { ExamplePreview } from "./ExamplePreview";
+import { SectionHeading } from "./primitives";
 import { useId, useState, type ReactNode } from "react";
 import { Accordion } from "../../../../src/shared/design-system/ui/Accordion";
 import { Button } from "../../../../src/shared/design-system/ui/Button";
@@ -14,6 +16,7 @@ import { Textarea } from "../../../../src/shared/design-system/ui/Textarea";
 /** Viewer-only compositions of the shared dialog; no product behavior or new variants. */
 function Example({
   label,
+  code,
   description,
   title,
   intro,
@@ -24,6 +27,7 @@ function Example({
   children,
 }: {
   label: string;
+  code: string;
   description: string;
   title: string;
   intro?: string;
@@ -40,15 +44,37 @@ function Example({
       className="component-specimen-group"
       aria-labelledby={`${id}-label`}
     >
-      <h2 id={`${id}-label`} className="text-label">
-        {label}
-      </h2>
-      <p className="text-body-sm text-subtle">{description}</p>
-      <div className="component-specimen-frame">
+      <SectionHeading
+        id={`${id}-label`}
+        title={label}
+        description={description}
+      />
+      <ExamplePreview
+        label={label}
+        code={`const [open, setOpen] = useState(false);
+const id = useId();
+
+<Button onClick={() => setOpen(true)}>Open dialog</Button>
+<Dialog
+  open={open}
+  onOpenChange={setOpen}
+  title=${JSON.stringify(title)}${height ? `\n  height="${height}"` : ""}${bodyLayout ? `\n  bodyLayout="${bodyLayout}"` : ""}${intro ? `\n  description=${JSON.stringify(intro)}` : ""}
+  actions={${
+    informational
+      ? '<Button variant="prominent" onClick={() => setOpen(false)}>Done</Button>'
+      : `<>\n    <Button onClick={() => setOpen(false)}>Cancel</Button>\n    <Button variant="prominent" type="submit" form={id}>${action}</Button>\n  </>`
+  }}
+>
+${informational ? "" : `  <form id={id} className="space-y-section-gap" onSubmit={(event) => {\n    event.preventDefault();\n    setOpen(false);\n  }}>\n`}${code
+  .split("\n")
+  .map((line) => `${informational ? "  " : "    "}${line}`)
+  .join("\n")}${informational ? "" : "\n  </form>"}
+</Dialog>`}
+      >
         <div className="flex w-full justify-center">
           <Button onClick={() => setOpen(true)}>Open dialog</Button>
         </div>
-      </div>
+      </ExamplePreview>
       <Dialog
         open={open}
         onOpenChange={setOpen}
@@ -92,12 +118,16 @@ function Example({
 
 export function DialogSpecimens() {
   return (
-    <div className="space-y-section-gap">
+    <div className="component-specimen-stack">
       <Example
         label="Simple message"
         description="A short message and a single action when no input is needed."
         title="A place for your team"
         informational
+        code={`<p className="text-body">
+  Keep project notes, conversations, and shared decisions together in
+  one workspace.
+</p>`}
       >
         <p className="text-body">
           Keep project notes, conversations, and shared decisions together in
@@ -110,6 +140,19 @@ export function DialogSpecimens() {
         title="Browse options"
         height="stable"
         informational
+        code={`<Accordion
+  items={[
+    {
+      value: "details",
+      title: "More details",
+      content: (
+        <p className="text-body">
+          Expanding content does not resize this dialog.
+        </p>
+      ),
+    },
+  ]}
+/>`}
       >
         <Accordion
           items={[
@@ -132,6 +175,21 @@ export function DialogSpecimens() {
         height="stable"
         bodyLayout="flex"
         informational
+        code={`<div className="flex min-h-0 flex-1 flex-col gap-4">
+  <div className="shrink-0">
+    <Input aria-label="Search people" placeholder="Search people" />
+  </div>
+  <section className="min-h-0 flex-1 overflow-auto" aria-label="People">
+    {Array.from(
+      { length: 20 },
+      (_, index) => \`Person \${index + 1}\`,
+    ).map((name) => (
+      <p key={name} className="py-2 text-body-sm">
+        {name}
+      </p>
+    ))}
+  </section>
+</div>`}
       >
         <div className="flex min-h-0 flex-1 flex-col gap-4">
           <div className="shrink-0">
@@ -154,6 +212,9 @@ export function DialogSpecimens() {
         description="A focused edit with one field and a clear save action."
         title="Edit workspace"
         intro="Choose a name your team will recognize."
+        code={`<Field label="Workspace name">
+  <Input defaultValue="Project notes" required />
+</Field>`}
       >
         <Field label="Workspace name">
           <Input defaultValue="Project notes" required />
@@ -165,6 +226,25 @@ export function DialogSpecimens() {
         title="Who can join?"
         intro="Choose how people join this workspace."
         action="Apply"
+        code={`<Field label="Workspace access">
+  <RadioGroup defaultValue="invite" name="access">
+    <Radio
+      value="invite"
+      label="Invite only"
+      description="Only people you invite can join."
+    />
+    <Radio
+      value="request"
+      label="Request access"
+      description="People can ask an owner to join."
+    />
+    <Radio
+      value="team"
+      label="Anyone on the team"
+      description="Your whole team can find and join this workspace."
+    />
+  </RadioGroup>
+</Field>`}
       >
         <Field label="Workspace access">
           <RadioGroup defaultValue="invite" name="access">
@@ -192,6 +272,24 @@ export function DialogSpecimens() {
         title="Create a project"
         intro="Give your team a shared place to get started."
         action="Create project"
+        code={`<div className="space-y-4">
+  <Field label="Project name">
+    <Input placeholder="Website refresh" required />
+  </Field>
+  <Field
+    label="Description"
+    description="A sentence or two about what you're working on."
+  >
+    <Textarea
+      rows={3}
+      placeholder="What should this project accomplish?"
+    />
+  </Field>
+  <Checkbox
+    label="Let teammates discover this project"
+    defaultChecked
+  />
+</div>`}
       >
         <div className="space-y-4">
           <Field label="Project name">
@@ -218,6 +316,79 @@ export function DialogSpecimens() {
         title="Workspace settings"
         intro="Manage the details and defaults for your workspace."
         action="Save changes"
+        code={`<fieldset className="min-w-0 space-y-4">
+  <legend className="mb-4 text-label">General</legend>
+  <Field label="Workspace name">
+    <Input defaultValue="Design studio" required />
+  </Field>
+  <Field label="Description">
+    <Textarea
+      rows={3}
+      defaultValue="A shared space for design reviews, experiments, and team decisions."
+    />
+  </Field>
+</fieldset>
+<fieldset className="min-w-0 space-y-4">
+  <legend className="mb-4 text-label">Access</legend>
+  <Field label="Who can join">
+    <RadioGroup defaultValue="invite" name="workspace-access">
+      <Radio
+        value="invite"
+        label="Invite only"
+        description="An owner needs to invite each new member."
+      />
+      <Radio
+        value="team"
+        label="Anyone on the team"
+        description="Teammates can join without an invitation."
+      />
+    </RadioGroup>
+  </Field>
+  <Field
+    label="Contact email"
+    description="Where people can ask for access."
+  >
+    <Input type="email" placeholder="team@example.com" />
+  </Field>
+</fieldset>
+<fieldset className="min-w-0 space-y-4">
+  <legend className="mb-4 text-label">Notifications</legend>
+  <Checkbox label="Notify me when someone joins" defaultChecked />
+  <Checkbox label="Send a weekly activity summary" />
+  <Checkbox
+    label="Include project updates in summaries"
+    defaultChecked
+  />
+</fieldset>
+<div>
+  <h3 className="mb-2 text-label">Advanced</h3>
+  <div className="-mx-2">
+    <Accordion
+      variant="form"
+      keepMounted
+      items={[
+        {
+          value: "defaults",
+          title: "Project defaults",
+          content: (
+            <div className="space-y-4">
+              <Field label="Default project description">
+                <Textarea
+                  rows={3}
+                  placeholder="A starting point for new projects"
+                />
+              </Field>
+              <Checkbox
+                label="Allow members to create projects"
+                defaultChecked
+              />
+            </div>
+          ),
+        },
+      ]}
+    />
+  </div>
+</div>`}
       >
         <fieldset className="min-w-0 space-y-4">
           <legend className="mb-4 text-label">General</legend>

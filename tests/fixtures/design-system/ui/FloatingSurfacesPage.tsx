@@ -12,12 +12,12 @@ export function FloatingSurfacesPage() {
     <>
       <PageHeader
         title="Floating surfaces"
-        intro="One shared outer appearance for a card above the page. The shared Preview Card and Select use the same background, border, corners, and shadow while keeping their own content and interactions."
+        intro="Use floating surfaces for menus, choices, previews, and supporting content above the page. Shared materials keep their fill, border, corners, and shadow consistent."
       />
       <SurfaceInteractionSpecimen />
       <Section
         title="The shared recipe"
-        description="Use floating-surface for the outer material. The consumer supplies its width, padding, placement, and behavior; the recipe supplies these four visual roles."
+        description="Apply floating-surface to the outer container. The component owns width, padding, placement, and interaction; the material supplies these four visual roles."
       >
         <div className="flex flex-wrap gap-6 rounded-xl bg-surface-panel p-6">
           <div className="floating-surface flex min-w-0 max-w-full flex-col gap-3 p-6">
@@ -51,7 +51,7 @@ export function FloatingSurfacesPage() {
       </p>
       <Section
         title="Same surface, different behavior"
-        description="These are the real shared components, not copied card styles. Hover over the preview trigger, or open the dropdown with a click or keyboard. Use the catalog theme control to compare light and dark."
+        description="Hover or focus the preview trigger, then open the Select with a pointer or keyboard. Use the appearance control in the navigation header to compare both modes."
       >
         <div className="flex flex-wrap items-start gap-8 rounded-xl bg-surface-panel p-6">
           <div className="flex min-w-0 flex-col gap-3">
@@ -97,29 +97,24 @@ export function FloatingSurfacesPage() {
         </div>
       </Section>
       <Section
-        title="Where it is used today"
-        description="Preview Card and Select use floating-surface. The agent model combobox also uses the Select popup styling. This is an existing shared recipe, not a new component."
+        title="Shared and product uses"
+        description="PreviewCard, Select, Combobox, Menu, and Popover reuse floating-surface. Product pickers also use popover-surface for their shared outer treatment."
       >
         <Note>
-          Adoption is not yet uniform. Mention pickers and several menus use a
-          separate popover-surface recipe with the same background, border, and
-          shadow but control corners instead of panel corners. It also supplies
-          popup layering and selected-row contrast. Compact emoji suggestions
-          have an explicit corner treatment, and some menus still assemble their
-          own appearance. This page documents the current system; it does not
-          migrate those consumers or add enforcement.
+          Product popover-surface shares the floating fill, border, and shadow,
+          and adds popup layering. Compact menus and emoji suggestions retain
+          their documented corner treatments. Their product owners keep
+          placement, scrolling, and specialized keyboard behavior.
         </Note>
       </Section>
       <Section
         title="Ownership"
-        description="The recipe already lives in the shared design system, in styles/materials.css. Change the shared recipe there rather than copying its declarations into a feature."
+        description="Edit styles/materials.css to change the shared material. Keep component-specific layout and interaction with the component."
       >
-        <p className="max-w-2xl text-body text-subtle">
-          Where a surface uses a Base UI primitive, Base UI owns that
-          interaction; other surfaces retain feature-owned interaction. Buzz
-          owns the appearance. Sharing the outer material does not make those
-          controls interchangeable, and does not prescribe their content spacing
-          or keyboard behavior.
+        <p className="max-w-2xl text-body text-secondary">
+          Base UI owns interaction for components built on its primitives.
+          Product surfaces retain their specialized behavior. Choose a component
+          by its task, then use the shared material for its appearance.
         </p>
         <div className="flex flex-wrap gap-4 text-body text-link underline">
           <Link to="/design/elevation">Elevation</Link>

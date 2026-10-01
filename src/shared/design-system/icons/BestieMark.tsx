@@ -1,4 +1,6 @@
 import { forwardRef, type SVGProps } from "react";
+const bestieUrl = new URL("../../../../public/bestie.png", import.meta.url)
+  .href;
 
 /** Bestie's raster companion mark, framed as an icon so navigation rows and search can size it. */
 export const BestieMarkArtwork = forwardRef<
@@ -24,7 +26,7 @@ export const BestieMarkArtwork = forwardRef<
       {...props}
     >
       <image
-        href="/bestie.png"
+        href={bestieUrl}
         width="256"
         height="256"
         preserveAspectRatio="xMidYMid meet"

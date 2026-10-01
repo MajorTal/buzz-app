@@ -1,18 +1,36 @@
-# Design system handoff
+# Agent guide
 
-This is the app's design system. New UI and surfaces moving off the existing styles should use it.
-This initial port does not migrate existing surfaces; that is a boundary of the PR, not a prohibition on adoption.
-Read DESIGN.md and MAINTAINING_DESIGN_SYSTEM.md before editing.
-Use semantic color roles and complete type roles; keep Base UI behavior and Phosphor icons through ../icons.
-Block UI is the visual target. Palette steps belong in shared token definitions, not new component recipes.
-Preserve keyboard focus behavior and test light/dark and narrow/intermediate/wide views. Focus outlines are temporarily hidden globally; follow DESIGN.md “Temporary focus appearance” and do not add local replacements.
-Components live in ui/, values in styles/, documentation metadata in tokens/ and ui/registry.ts.
-The standalone viewer lives in tests/fixtures/design-system and imports the real shared components.
-Do not import features, plugins, native adapters, or app startup into this system or viewer.
-When wiring it into the app, use the shared components and tokens rather than the viewer's documentation furniture.
-For row lists in dialogs and panels, follow DESIGN.md § Align row content, not state backgrounds: offset the list composition, keep shared row padding, use consistent icon slots, and preserve narrow-screen gutters and keyboard focus outlines.
-Integrate global styles deliberately through the host entry point instead of layering two resets, and keep the host appearance owner.
-The theme helper is viewer-only; app surfaces read appearance through the host.
-Run the root design:typecheck, design:check, design:test, and design:build scripts.
+Use this system for new Buzz UI and for existing surfaces as they migrate.
+Before editing, read [the design guide](DESIGN.md) and
+[Maintaining the design system](MAINTAINING_DESIGN_SYSTEM.md).
 
-Public-key display text uses `src/shared/identity/public-key.ts`, not hand-written slicing or a new visual component. See DESIGN.md “Public identity text”. Never format secret keys with it.
+## Keep decisions with their owner
+
+- Shared components live in `ui/`, values and recipes in `styles/`, and documentation metadata in `tokens/` and `ui/registry.ts`.
+- Use semantic color roles and complete type roles. Block UI is the visual reference; Base UI owns interaction behavior. Import Phosphor icons through `icons/`.
+- Keep palette steps in shared token definitions. Product code uses roles and shared components, not viewer-specific layouts or styles.
+- Keep features, plugins, native adapters, and app startup out of the system and core viewer. The viewer at `tests/fixtures/design-system` renders real shared components.
+- Integrate global styles through the host entry point with one reset. The host owns appearance; `theme/useColorScheme.ts` belongs to the standalone viewer.
+
+## Preserve interaction contracts
+
+Keep keyboard focus, Tab order, selection, dismissal, and focus restoration intact.
+The shared global stylesheet temporarily hides focus outlines; follow
+[Temporary focus appearance](DESIGN.md#temporary-focus-appearance). Do not add local
+replacement rings. Preserve the underlying keyboard-focus recipes and their space.
+
+For rows in dialogs and panels, follow
+[Align row content, not state backgrounds](DESIGN.md#align-row-content-not-state-backgrounds):
+offset the list wrapper, retain shared row padding, align icon slots, and preserve
+narrow-screen gutters and space for keyboard focus.
+
+Public-key labels use `src/shared/identity/public-key.ts`. Do not slice keys by hand
+or add a visual component for this formatting. Follow
+[Public identity text](DESIGN.md#public-identity-text), and never pass secret keys.
+
+## Check the change
+
+Inspect light and dark mode at narrow, intermediate, and wide widths. Exercise the
+changed interaction with a keyboard and pointer. Run the root `design:typecheck`,
+`design:check`, `design:test`, and `design:build` scripts for the completed change,
+following the root contribution workflow’s iteration and validation gates.

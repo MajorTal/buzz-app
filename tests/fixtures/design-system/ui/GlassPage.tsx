@@ -43,12 +43,12 @@ export function GlassPage() {
     <>
       <PageHeader
         title="Glass"
-        intro="Two materials, named by how high they sit. Each one is a fill, a blur, a rim, and sometimes a shadow, applied as a single utility so it cannot arrive in pieces."
+        intro="Use glass where the backdrop should remain visible. Two shared materials combine fill, blur, rim, and elevation: primary sits on the backdrop; secondary sits over glass."
       />
 
       <Section
         title="The materials"
-        description="Over the app backdrop, because translucency can only be judged against what shows through it."
+        description="Compare both materials over the app backdrop, where their transparency is visible."
       >
         <div className="glass-scene grid gap-4 rounded-xl p-6 sm:grid-cols-2">
           {MATERIALS.map((material) => (
@@ -59,7 +59,7 @@ export function GlassPage() {
 
       <Section
         title="Interactive"
-        description="The same materials with a hover, for glass you can click. Hover moves one step up the ramp and never changes blur."
+        description="Use an interactive material for a glass control. Hover increases the fill by one step and keeps blur unchanged."
       >
         <div className="glass-scene flex flex-wrap gap-3 rounded-xl p-6">
           <button
@@ -80,7 +80,7 @@ export function GlassPage() {
       {GLASS ? (
         <Section
           title="The ramp"
-          description="Each step is the mode's own surface colour at an increasing opacity, which is what lets a hover move one step up instead of holding its own literal. Fills only — the rim is separate."
+          description="Each step increases the opacity of the current mode’s surface color. These samples show fills only; materials add the rim."
         >
           {/* One continuous strip rather than five separate swatches: the
               subject is a progression, and gaps between cards let the backdrop
@@ -89,17 +89,17 @@ export function GlassPage() {
               Deliberately not the shared `Swatch` — its hairline border reads
               as the glass rim on a translucent fill. */}
           <div className="glass-scene rounded-xl p-6">
-            <div className="flex overflow-hidden rounded-xl">
+            <div className="glass-ramp overflow-hidden rounded-xl">
               {GLASS.steps.map((step) => (
                 <div
                   key={step.variable}
                   className="blur-chrome flex min-w-0 flex-1 flex-col justify-end gap-1 px-3 py-4"
                   style={{ background: `var(${step.variable})` }}
                 >
-                  <code className="truncate text-mono-sm text-primary">
+                  <code className="break-words text-mono-sm text-primary">
                     glass {step.step}
                   </code>
-                  <span className="truncate text-body-sm text-tertiary">
+                  <span className="break-words text-body-sm text-tertiary">
                     {step.job}
                   </span>
                 </div>
@@ -111,11 +111,11 @@ export function GlassPage() {
 
       <Section
         title="The rim"
-        description="Real glass catches light along one edge and falls away on the opposite one, so the rim is a directional pair sharing one fixed light direction. Two inset shadows rather than a border, because a CSS border cannot hold a gradient and keep its radius."
+        description="Two inset shadows make the lit edge brighter and the opposite edge quieter. Keep their light direction consistent across glass surfaces."
       >
         <div className="glass-scene rounded-xl p-6">
           <div className="glass-primary rounded-xl px-5 py-4">
-            <code className="whitespace-pre text-mono-sm text-primary">
+            <code className="whitespace-pre-wrap break-words text-mono-sm text-primary">
               {`inset 0  1px 0 var(--rim-lit)\ninset 0 -1px 0 var(--rim-shade)`}
             </code>
           </div>

@@ -3,6 +3,7 @@ import { COMPONENTS } from "../../../../src/shared/design-system/ui/registry";
 import { BaseUiBackingLine } from "./BaseUiBackingLine";
 import { COMPONENT_SPECIMENS } from "./componentSpecimens";
 import { MissingPage } from "./MissingPage";
+import { PageHeader } from "./primitives";
 
 export function ComponentDetailPage({ slug }: { slug: string }) {
   const component = COMPONENTS.find((candidate) => candidate.slug === slug);
@@ -11,27 +12,21 @@ export function ComponentDetailPage({ slug }: { slug: string }) {
 
   return (
     <>
-      <header className="component-page-heading">
-        <h1 className="text-title text-primary">{component.name}</h1>
-        <p className="text-body text-tertiary">
-          {component.purpose}
-          <BaseUiBackingLine slug={component.slug} />
-        </p>
-      </header>
-      {[
-        "input",
-        "textarea",
-        "search-field",
-        "select",
-        "combobox",
-        "field",
-      ].includes(component.slug) && (
-        <p className="mb-6 text-body-sm">
-          <Link to="/design/forms">
-            Forms: composition, states, and implementation guidance →
-          </Link>
-        </p>
-      )}
+      <PageHeader title={component.name} intro={component.purpose}>
+        <BaseUiBackingLine slug={component.slug} />
+        {[
+          "input",
+          "textarea",
+          "search-field",
+          "select",
+          "combobox",
+          "field",
+        ].includes(component.slug) && (
+          <p className="text-body-sm text-secondary">
+            <Link to="/design/forms">Read the form composition guide →</Link>
+          </p>
+        )}
+      </PageHeader>
       {Specimen ? <Specimen /> : null}
     </>
   );

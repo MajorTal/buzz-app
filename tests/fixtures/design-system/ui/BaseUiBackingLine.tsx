@@ -1,13 +1,12 @@
 import { Link } from "@tanstack/react-router";
 import { baseUiBackingSentence } from "./baseUiBackingSentence";
 
-/** Inline inheritance note; links point to the actual owning library. */
+/** Supporting inheritance note; links point to the actual owning library. */
 export function BaseUiBackingLine({ slug }: { slug: string }) {
   const segments = baseUiBackingSentence(slug);
   if (!segments.length) return null;
   return (
-    <>
-      {" "}
+    <p className="text-body-sm text-secondary">
       {segments.map((segment, index) =>
         segment.kind === "text" ? (
           // biome-ignore lint/suspicious/noArrayIndexKey: static sentence segments retain their order
@@ -32,6 +31,6 @@ export function BaseUiBackingLine({ slug }: { slug: string }) {
           </Link>
         ),
       )}
-    </>
+    </p>
   );
 }

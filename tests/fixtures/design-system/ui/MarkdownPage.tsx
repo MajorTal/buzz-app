@@ -1,158 +1,248 @@
-import type { ReactNode } from "react";
+import { createElement, type ReactNode } from "react";
+import { PageHeader } from "./primitives";
 
-function inline(text: string): ReactNode[] {
-  let occurrence = 0;
-  return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/).map((part) => {
-    if (part.startsWith("`") && part.endsWith("`")) {
-      occurrence += 1;
-      return <code key={`${part}-${occurrence}`}>{part.slice(1, -1)}</code>;
-    }
-    if (part.startsWith("**") && part.endsWith("**")) {
-      occurrence += 1;
-      return <strong key={`${part}-${occurrence}`}>{part.slice(2, -2)}</strong>;
-    }
-    return part;
-  });
+const DOCUMENT_ROUTES: Record<string, string> = {
+  "src/shared/design-system/DESIGN.md": "/design/design-guide",
+  "src/shared/design-system/MAINTAINING_DESIGN_SYSTEM.md":
+    "/design/maintaining",
+  "src/shared/design-system/AGENTS.md": "/design/agents-guide",
+};
+const REPOSITORY = "https://github.com/block/buzz-app/blob/main/";
+
+function linkDestination(destination: string, documentPath: string) {
+  const resolved = new URL(destination, `${REPOSITORY}${documentPath}`);
+  if (!["https:", "http:", "mailto:"].includes(resolved.protocol))
+    return undefined;
+  const path = resolved.href.startsWith(REPOSITORY)
+    ? resolved.href.slice(REPOSITORY.length).split(/[?#]/)[0]
+    : undefined;
+  const route = path && DOCUMENT_ROUTES[path];
+  return route ? `#${route}${resolved.hash}` : resolved.href;
 }
 
-/** A deliberately small reader for the three maintained, human-facing docs.
- * These documents are prose first; this is not a general Markdown product
- * renderer. Unsupported constructs remain readable text rather than creating a
- * second documentation format that can drift from the source file. */
-export function MarkdownPage({ source }: { source: string }) {
-  const lines = source.split("\n");
+function inline(text: string, documentPath: string): ReactNode[] {
+  let occurrence = 0;
+  return text
+    .split(/(`[^`]+`|\*\*[^*]+\*\*|\[[^\]]+\]\([^\s)]+\))/)
+    .map((part) => {
+      occurrence += 1;
+      if (part.startsWith("`") && part.endsWith("`")) {
+        return <code key={`${occurrence}-${part}`}>{part.slice(1, -1)}</code>;
+      }
+      if (part.startsWith("**") && part.endsWith("**")) {
+        return (
+          <strong key={`${occurrence}-${part}`}>
+            {inline(part.slice(2, -2), documentPath)}
+          </strong>
+        );
+      }
+      const link = /^\[([^\]]+)\]\(([^\s)]+)\)$/.exec(part);
+      if (link) {
+        const href = linkDestination(link[2] ?? "", documentPath);
+        return href ? (
+          <a key={`${occurrence}-${part}`} href={href}>
+            {inline(link[1] ?? "", documentPath)}
+          </a>
+        ) : (
+          link[1]
+        );
+      }
+      return part;
+    });
+}
+
+/** A bounded reader for the maintained system docs, using their existing headings,
+ * links, lists, pipe tables and fenced examples. Raw HTML remains ordinary text. */
+export function MarkdownPage({
+  source,
+  documentPath,
+}: {
+  source: string;
+  documentPath: string;
+}) {
   const content: ReactNode[] = [];
   let paragraph: string[] = [];
   let list: string[] = [];
+  let ordered = false;
   let table: string[][] = [];
+  let code: string[] | undefined;
+  const headingIds = new Map<string, number>();
+  const renderInline = (text: string) => inline(text, documentPath);
 
   const flushParagraph = () => {
-    if (paragraph.length) {
-      content.push(
-        <p
-          className="design-doc-paragraph text-body text-secondary"
-          key={`p-${content.length}`}
-        >
-          {inline(paragraph.join(" "))}
-        </p>,
-      );
-      paragraph = [];
-    }
+    if (!paragraph.length) return;
+    content.push(
+      <p className="design-doc-paragraph" key={`p-${content.length}`}>
+        {renderInline(paragraph.join(" "))}
+      </p>,
+    );
+    paragraph = [];
   };
   const flushList = () => {
-    if (list.length) {
-      content.push(
-        <ul className="design-doc-list" key={`l-${content.length}`}>
-          {list.map((item) => (
-            <li className="text-body text-secondary" key={item}>
-              {inline(item)}
-            </li>
-          ))}
-        </ul>,
-      );
-      list = [];
-    }
+    if (!list.length) return;
+    content.push(
+      createElement(
+        ordered ? "ol" : "ul",
+        { className: "design-doc-list", key: `l-${content.length}` },
+        list.map((item) => <li key={item}>{renderInline(item)}</li>),
+      ),
+    );
+    list = [];
   };
-
-  /**
-   * A pipe table, as the two reference tables in DESIGN.md are written.
-   *
-   * These are the layer contract and the step-to-job map — the material a person
-   * comes to look up. Skipping `|` lines hid them; rendering them as prose
-   * printed the `|---|` separator as text. Both are rows, so both get a row.
-   */
   const flushTable = () => {
-    if (table.length) {
-      const [head, ...body] = table;
-      content.push(
-        <table className="design-doc-table" key={`t-${content.length}`}>
-          <thead>
-            <tr>
-              {(head ?? []).map((cell) => (
-                <th className="text-body-sm text-tertiary" key={cell}>
-                  {inline(cell)}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {body.map((row) => (
-              <tr key={row.join("|")}>
-                {/* A cell can repeat within a row, so its column name keys it. */}
-                {columns(head, row).map(({ column, cell }) => (
-                  <td className="text-body text-secondary" key={column}>
-                    {inline(cell)}
-                  </td>
+    if (!table.length) return;
+    const [head = [], ...body] = table;
+    content.push(
+      <div key={`t-${content.length}`}>
+        <p className="design-doc-table-hint text-body-sm text-tertiary">
+          Wide tables scroll horizontally.
+        </p>
+        <section
+          className="design-doc-table-scroll"
+          // biome-ignore lint/a11y/noNoninteractiveTabindex: Keyboard readers need to scroll wide reference tables.
+          tabIndex={0}
+          aria-label={`${head.join(", ")} table; scroll for more columns`}
+          onKeyDown={(event) => {
+            const region = event.currentTarget;
+            if (
+              event.target !== region ||
+              event.altKey ||
+              event.ctrlKey ||
+              event.metaKey ||
+              event.shiftKey ||
+              region.scrollWidth <= region.clientWidth ||
+              (event.key !== "ArrowLeft" && event.key !== "ArrowRight")
+            )
+              return;
+            // WebKit focuses overflow regions without scrolling them with arrow keys.
+            event.preventDefault();
+            region.scrollBy({
+              left: event.key === "ArrowRight" ? 40 : -40,
+              behavior: "instant",
+            });
+          }}
+        >
+          <table className="design-doc-table">
+            <thead>
+              <tr>
+                {head.map((cell) => (
+                  <th
+                    scope="col"
+                    className="text-label-sm text-tertiary"
+                    key={cell}
+                  >
+                    {renderInline(cell)}
+                  </th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>,
+            </thead>
+            <tbody>
+              {body.map((row) => (
+                <tr key={row.join("|")}>
+                  {row.map((cell, index) => (
+                    <td
+                      className="text-body text-secondary"
+                      key={head[index] ?? index}
+                    >
+                      {renderInline(cell)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+      </div>,
+    );
+    table = [];
+  };
+  const flush = () => {
+    flushParagraph();
+    flushList();
+    flushTable();
+  };
+  const flushCode = () => {
+    if (code)
+      content.push(
+        <pre className="design-doc-code text-mono" key={`c-${content.length}`}>
+          <code>{code.join("\n")}</code>
+        </pre>,
       );
-      table = [];
-    }
+    code = undefined;
   };
 
-  /** `|---|---|` carries no content; it only marks the row above as the header. */
-  const isSeparator = (line: string) => /^\|[\s|:-]+\|$/.test(line.trim());
-
-  /** Pairs each cell with its heading, so a repeated value still keys uniquely. */
-  const columns = (head: string[] | undefined, row: string[]) =>
-    row.map((cell, index) => ({
-      column: head?.[index] ?? `column-${index}`,
-      cell,
-    }));
-
-  const cells = (line: string) =>
-    line
-      .trim()
-      .replace(/^\|/, "")
-      .replace(/\|$/, "")
-      .split("|")
-      .map((cell) => cell.trim());
-
-  for (const line of lines) {
-    if (line.startsWith("# ")) {
-      flushParagraph();
-      flushList();
-      flushTable();
+  for (const line of source.split("\n")) {
+    if (line.startsWith("```")) {
+      if (code) flushCode();
+      else {
+        flush();
+        code = [];
+      }
+      continue;
+    }
+    if (code) {
+      code.push(line);
+      continue;
+    }
+    const heading = /^(#{1,3}) (.+)$/.exec(line);
+    const item = /^(-|\d+\.) (.+)$/.exec(line);
+    if (heading) {
+      flush();
+      const title = heading[2] ?? "";
+      const slug = title
+        .toLowerCase()
+        .replace(/[`*]/g, "")
+        .replace(/[^\p{Letter}\p{Number}\s-]/gu, "")
+        .replace(/\s+/g, "-");
+      const count = headingIds.get(slug) ?? 0;
+      headingIds.set(slug, count + 1);
+      const id = count ? `${slug}-${count}` : slug;
+      const level = heading[1]?.length;
       content.push(
-        <header className="design-doc-title" key={`h1-${content.length}`}>
-          <h1 className="text-title text-primary">{line.slice(2)}</h1>
-        </header>,
+        level === 1 ? (
+          <PageHeader key={id} title={title} />
+        ) : (
+          createElement(
+            level === 2 ? "h2" : "h3",
+            {
+              id,
+              key: id,
+              className: `design-doc-heading ${level === 2 ? "text-label" : "text-label-sm"} text-primary`,
+            },
+            renderInline(title),
+          )
+        ),
       );
-    } else if (line.startsWith("## ")) {
-      flushParagraph();
-      flushList();
-      flushTable();
-      content.push(
-        <h2
-          className="design-doc-heading text-heading text-primary"
-          key={`h2-${content.length}`}
-        >
-          {line.slice(3)}
-        </h2>,
-      );
-    } else if (line.startsWith("- ")) {
+    } else if (item) {
       flushParagraph();
       flushTable();
-      list.push(line.slice(2));
+      const nextOrdered = item[1] !== "-";
+      if (ordered !== nextOrdered) flushList();
+      ordered = nextOrdered;
+      list.push(item[2] ?? "");
     } else if (line.trim().startsWith("|")) {
       flushParagraph();
       flushList();
-      if (!isSeparator(line)) table.push(cells(line));
-    } else if (line.trim() === "") {
-      flushParagraph();
+      if (!/^\|[\s|:-]+\|$/.test(line.trim())) {
+        table.push(
+          line
+            .trim()
+            .replace(/^\||\|$/g, "")
+            .split("|")
+            .map((cell) => cell.trim()),
+        );
+      }
+    } else if (!line.trim()) {
+      flush();
+    } else if (list.length && /^\s+\S/.test(line)) {
+      list[list.length - 1] += ` ${line.trim()}`;
+    } else {
       flushList();
-      flushTable();
-    } else if (!line.startsWith("```")) {
       flushTable();
       paragraph.push(line.trim());
     }
   }
-  flushParagraph();
-  flushList();
-  flushTable();
-
-  return <article className="design-doc">{content}</article>;
+  flush();
+  flushCode();
+  return <article className="design-doc text-body">{content}</article>;
 }

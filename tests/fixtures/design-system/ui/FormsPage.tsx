@@ -1,3 +1,4 @@
+import { PageHeader, Section } from "./primitives";
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Field } from "../../../../src/shared/design-system/ui/Field";
@@ -9,13 +10,9 @@ import { Button } from "../../../../src/shared/design-system/ui/Button";
 import { Dialog } from "../../../../src/shared/design-system/ui/Dialog";
 import {
   FormExample,
-  InputExamples,
-  TextareaExamples,
-  SearchExamples,
-  SelectExamples,
-  ComboboxExamples,
   WorkspaceCombobox,
   workspaceGroups,
+  workspaceComboboxCode,
 } from "./FormSpecimens";
 
 function FormComposition() {
@@ -70,7 +67,7 @@ function FormComposition() {
           Save example
         </Button>
         <p role="status" className="text-body-sm text-subtle">
-          {saved ? "Example saved locally." : "Sample data only."}
+          {saved ? "Example saved for this preview." : "Sample data only."}
         </p>
       </div>
     </form>
@@ -82,23 +79,65 @@ export function FormsPage() {
   const [dialog, setDialog] = useState(false);
   return (
     <>
-      <header className="component-page-heading">
-        <h1 className="text-title">Forms</h1>
-        <p className="text-body text-subtle">
-          Input, Textarea, SearchField, Select, and Combobox. Shared Buzz
-          geometry, field semantics, and real interactive states.
-        </p>
-      </header>
-      <div className="form-doc-toolbar">
-        <Button aria-pressed={narrow} onClick={() => setNarrow(!narrow)}>
-          {narrow ? "Full-width preview" : "Narrow preview"}
-        </Button>
-        <Button onClick={() => setDialog(true)}>Try a form in a dialog</Button>
-      </div>
+      <PageHeader
+        title="Forms"
+        intro="Combine fields into a form with clear labels, helpful validation, and predictable spacing. Try the examples, then use the guidance below in your own form."
+      >
+        <div className="form-doc-toolbar">
+          <Button aria-pressed={narrow} onClick={() => setNarrow(!narrow)}>
+            {narrow ? "Full-width preview" : "Narrow preview"}
+          </Button>
+          <Button onClick={() => setDialog(true)}>
+            Try a form in a dialog
+          </Button>
+        </div>
+      </PageHeader>
       <div className="form-doc-preview" data-narrow={narrow}>
         <FormExample
           title="Controls together"
-          description="14px body text, 40px minimum control size, 16px text inset, 8px icon gap, and 12px control corners. Fields use a subtle inset fill and a perimeter focus stroke (150ms for pointer, immediate for keyboard). Controls can grow with larger text or wrapped values."
+          description="A form groups related fields with room for labels and help. Try the narrow preview to see how controls wrap, or open the same form in a dialog."
+          code={`<Field label="Name">
+  <div className="flex flex-wrap items-start gap-2">
+    <Input placeholder="Design studio" style={{ flex: "1 1 10rem" }} />
+    <Button>Check name</Button>
+  </div>
+</Field>
+<SearchExamplesInline />
+<SelectTogether />
+<WorkspaceCombobox label="Searchable destination" />
+<Field label="Description">
+  <Textarea
+    rows={3}
+    placeholder="A few words about this workspace."
+  />
+</Field>
+
+function SearchExamplesInline() {
+  const [value, setValue] = useState("");
+  return (
+    <SearchField
+      label="Search workspaces"
+      placeholder="Search workspaces"
+      value={value}
+      onValueChange={setValue}
+    />
+  );
+}
+
+function SelectTogether() {
+  const [value, setValue] = useState("studio");
+  return (
+    <Select
+      label="Destination"
+      variant="field"
+      value={value}
+      onValueChange={setValue}
+      groups={workspaceGroups}
+    />
+  );
+}
+
+${workspaceComboboxCode}`}
         >
           <Field label="Name">
             <div className="form-doc-input-action">
@@ -116,35 +155,100 @@ export function FormsPage() {
             />
           </Field>
         </FormExample>
-        <section className="form-doc-guidance">
-          <h2 className="text-heading">Choose by the job</h2>
-          <p className="text-body">
+        <Section title="Choose by the job">
+          <p className="text-body text-secondary">
             Input is for one line; Textarea is for multiple lines. SearchField
             filters an existing view. Select chooses from a finite list.
             Combobox searches a set of choices; custom values are a feature
             decision.
           </p>
-          <p className="text-body-sm text-subtle">
+          <p className="text-body text-secondary">
             Use Field once per control. Select in field mode, SearchField, and
             Combobox.Control already own their label and supporting text—do not
             wrap them in another Field.
           </p>
-        </section>
-        <InputExamples />
-        <TextareaExamples />
-        <SearchExamples />
-        <SelectExamples />
-        <ComboboxExamples />
+          <div className="flex flex-wrap gap-4 text-body text-link underline">
+            {[
+              "input",
+              "textarea",
+              "search-field",
+              "select",
+              "combobox",
+              "field",
+            ].map((slug) => (
+              <Link key={slug} to={`/design/components/${slug}`}>
+                {slug}
+              </Link>
+            ))}
+          </div>
+        </Section>
         <FormExample
           title="Validation in a form"
-          description="Submit empty to see errors, then fill the fields and save. Values stay in place. This fixture saves only local state."
+          description="Save with empty fields to see validation. Then enter a project name, choose a destination, and save again. This example keeps values only while the page is open."
+          code={`function FormComposition() {
+  const [name, setName] = useState("");
+  const [workspace, setWorkspace] = useState("");
+  const [submitted, setSubmitted] = useState(false);
+  const [saved, setSaved] = useState(false);
+  return (
+    <form
+      noValidate
+      className="grid min-w-0 w-full gap-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        setSubmitted(true);
+        setSaved(Boolean(name.trim() && workspace));
+      }}
+    >
+      <Field
+        label="Project name"
+        description="A short name for your team."
+        error={submitted && !name.trim() ? "Enter a project name." : undefined}
+      >
+        <Input
+          name="project"
+          required
+          value={name}
+          onValueChange={(value) => {
+            setName(value);
+            setSaved(false);
+          }}
+        />
+      </Field>
+      <Select
+        label="Destination"
+        variant="field"
+        name="destination"
+        required
+        placeholder="Choose a workspace"
+        value={workspace}
+        onValueChange={(value) => {
+          setWorkspace(value);
+          setSaved(false);
+        }}
+        groups={workspaceGroups}
+        error={submitted && !workspace ? "Choose a destination." : undefined}
+      />
+      <Field label="Notes (optional)">
+        <Textarea rows={3} />
+      </Field>
+      <div className="flex flex-wrap items-center gap-3">
+        <Button type="submit" variant="prominent">
+          Save example
+        </Button>
+        <p role="status" className="text-body-sm text-subtle">
+          {saved ? "Example saved for this preview." : "Sample data only."}
+        </p>
+      </div>
+    </form>
+  );
+}`}
         >
           <FormComposition />
         </FormExample>
       </div>
-      <section className="form-doc-guidance">
-        <h2 className="text-heading">Implementation rules</h2>
-        <ul className="list-disc pl-5 space-y-2 text-body">
+      <Section title="Implementation rules">
+        <ul className="list-disc ps-5 space-y-3 text-body text-secondary">
           <li>
             Use existing Buzz type, color, radius, and spacing roles. Default
             fields use text-body and radius-control; labels use text-label-sm.
@@ -197,63 +301,49 @@ export function FormsPage() {
             existing code variant.
           </li>
         </ul>
-      </section>
-      <section className="form-doc-guidance">
-        <h2 className="text-heading">Usage</h2>
+      </Section>
+      <Section title="Usage">
         <pre className="form-doc-code text-mono">
           <code>{`<Field label="Name" description="A name your team knows." error={error}>\n  <Input name="name" value={name} onValueChange={setName} required />\n</Field>\n\n<Select variant="field" label="Destination" name="destination"\n  placeholder="Choose a workspace" value={destination}\n  onValueChange={setDestination} groups={workspaceGroups} error={error} />\n\n<Combobox.Root items={items} value={selected} onValueChange={setSelected}
   itemToStringLabel={item => item.name}>\n  <Combobox.Control label="Model" triggerLabel="Browse models"\n    description="Choose or enter a model." loading={loading} />\n  <Combobox.Popup empty={loading ? "Loading…" : "No matches."}>\n    <Combobox.List>{item => (\n      <Combobox.Item key={item.id} value={item}>{item.name}</Combobox.Item>\n    )}</Combobox.List>\n  </Combobox.Popup>\n</Combobox.Root>`}</code>
         </pre>
-        <p className="text-body-sm text-subtle">
+        <p className="text-body text-secondary">
           Select field metadata: description, error, name, required, readOnly,
           placeholder; options may be disabled. Combobox.Control accepts
           description and error; set readOnly/disabled on Combobox.Root.
           SearchField accepts description/error and uses the same 12px control
           corners as other fields.
         </p>
-      </section>
-      <section className="form-doc-guidance">
-        <h2 className="text-heading">Review in context</h2>
-        <p className="text-body">
+      </Section>
+      <Section title="Review in context">
+        <p className="text-body text-secondary">
           Try Tab and Shift+Tab, Arrow keys, Enter, Escape, and clearing search.
           Use both themes, the narrow preview, and larger browser text/zoom. In
           the app, review agent import, agent configuration, and workflow
           editing; this page uses generic shared components, not live app data.
         </p>
-        <p className="text-body">
+        <p className="text-body text-secondary">
           Agent import inherits shared field styling. Emoji search mirrors these
           tokens inside its existing picker. Variable-name, URL, and workflow
           field errors use Field; YAML help returns when validation clears.
           Request failures and problems affecting the whole workflow remain
           separate notices.
         </p>
-        <p className="text-body-sm text-subtle">
+        <p className="text-body text-secondary">
           Auto-growing textareas, multi-select chips, and search inside a popup
           are deferred. Block UI’s form references are currently marked
           Unverified; Buzz retains its own foundations and Base UI behavior.
         </p>
-        <div className="flex flex-wrap gap-4 text-body-sm">
-          {[
-            "input",
-            "textarea",
-            "search-field",
-            "select",
-            "combobox",
-            "field",
-          ].map((slug) => (
-            <Link key={slug} to={`/design/components/${slug}`}>
-              {slug}
-            </Link>
-          ))}
-          <a
-            href="https://argos-ci.squareupstaging.com/storybook/blockui-web-main-block/?path=/docs/components-input-group--docs"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Block UI reference ↗
-          </a>
-        </div>
-      </section>
+      </Section>
+      <p className="text-body-sm text-secondary">
+        <a
+          href="https://argos-ci.squareupstaging.com/storybook/blockui-web-main-block/?path=/docs/components-input-group--docs"
+          target="_blank"
+          rel="noreferrer"
+        >
+          Block UI reference ↗
+        </a>
+      </p>
       <Dialog
         open={dialog}
         onOpenChange={setDialog}

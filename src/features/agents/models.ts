@@ -6,7 +6,7 @@ export interface ModelRequest {
   edit?: AgentEdit | undefined;
   host: string;
   filter: string;
-  /** "test" checks the draft provider and model with one small completion. */
+  /** "test" sends one small completion; a blank model uses the runtime's choice within the draft provider. */
   action: "connect" | "refresh" | "disconnect" | "test";
   /** Blank host/filter come from write-only Agent defaults; native supplies them. */
   inheritWorkspace?: boolean;
@@ -16,6 +16,8 @@ export interface ModelCatalog {
   models: { id: string; name: string }[];
   modelOverridden: boolean;
   disconnected: boolean;
+  /** Canonical model that replied to an explicit connection test. */
+  testedModel?: string;
 }
 export interface ModelHost {
   begin(): Promise<number>;

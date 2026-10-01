@@ -8,6 +8,7 @@ import { AgentSettingsFields } from "./AgentSettingsFields";
 import { agentDraft, agentEdit, type AgentDraft } from "./agent-edit";
 import { createAgentControl } from "../../features/agents/control";
 import { controlFixture } from "../../features/agents/control-testing";
+import type { ModelCatalog, ModelRequest } from "../../features/agents/models";
 
 afterEach(cleanup);
 
@@ -797,3 +798,108 @@ it("labels Windows Buzz Agent shell setup as unverified", () => {
     control.dispose();
   }
 });
+
+it.each([
+  ["Pi", "/local/buzz-pi-acp"],
+  ["Goose", "/local/goose"],
+])(
+  "tests a %s provider before choosing a model and can browse again after cancelling lookup",
+  async (label, command) => {
+    const f = controlFixture();
+    f.data.harnessOptions = [
+      {
+        command,
+        label,
+        defaultArgs: label === "Pi" ? ["--"] : ["acp"],
+        providers: [{ value: "openai", label: "OpenAI" }],
+      },
+    ];
+    const catalog: ModelCatalog = {
+      host: "",
+      models: [{ id: "openai/gpt", name: "Test model" }],
+      modelOverridden: false,
+      disconnected: false,
+    };
+    let releaseLookup!: () => void;
+    const lookup = new Promise<ModelCatalog>((resolve) => {
+      releaseLookup = () => resolve(catalog);
+    });
+    const run = vi.fn(async (_ticket: number, request: ModelRequest) =>
+      request.action === "test"
+        ? { ...catalog, testedModel: "openai/gpt" }
+        : lookup,
+    );
+    f.host.models = {
+      begin: async () => 1,
+      run,
+      cancel: async () => releaseLookup(),
+    };
+    const control = createAgentControl(f.host);
+    const onChange = vi.fn();
+    const draft = {
+      ...agentDraft(f.agent),
+      command,
+      provider: "openai",
+      model: "",
+      environment: { OPENAI_API_KEY: "draft-key" },
+    };
+    const view = render(
+      <AgentSettingsFields
+        draft={draft}
+        control={control}
+        state={{ status: "ready", busy: false, error: null, data: f.data }}
+        disabled={false}
+        onChange={onChange}
+      />,
+    );
+    try {
+      const button = screen.getByRole("button", { name: "Test connection" });
+      const key = screen.getByLabelText("OpenAI API key");
+      const model = screen.getByRole("combobox", { name: "Model" });
+      const browse = screen.getByRole("button", { name: "Browse models" });
+      if (label === "Goose") await userEvent.setup().click(browse);
+      await waitFor(() => expect(run).toHaveBeenCalledTimes(1));
+      expect(model).toHaveAttribute("aria-busy", "true");
+      expect(button).toBeEnabled();
+      expect(
+        key.compareDocumentPosition(button) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      expect(
+        button.compareDocumentPosition(model) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy();
+      await userEvent.setup().click(button);
+      expect(
+        await screen.findByText("Connected using openai/gpt."),
+      ).toBeVisible();
+      expect(run).toHaveBeenLastCalledWith(
+        1,
+        expect.objectContaining({
+          action: "test",
+          edit: expect.objectContaining({
+            harness: expect.objectContaining({ provider: "openai", model: "" }),
+            environment: { OPENAI_API_KEY: "draft-key" },
+          }),
+        }),
+      );
+      expect(model).toHaveValue("");
+      expect(model).not.toHaveAttribute("aria-busy", "true");
+      expect(onChange).not.toHaveBeenCalled();
+      await userEvent.setup().click(browse);
+      await waitFor(() => expect(run).toHaveBeenCalledTimes(3));
+      expect(
+        await screen.findByRole("option", { name: /Test model/ }),
+      ).toBeVisible();
+      expect(run).toHaveBeenLastCalledWith(
+        1,
+        expect.objectContaining({ action: "connect" }),
+      );
+      expect(model).toHaveValue("");
+      expect(onChange).not.toHaveBeenCalled();
+    } finally {
+      releaseLookup();
+      view.unmount();
+      control.dispose();
+    }
+  },
+);

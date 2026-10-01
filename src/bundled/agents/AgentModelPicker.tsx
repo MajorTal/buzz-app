@@ -111,6 +111,7 @@ export function AgentModelPicker({
     key: string;
     run: AbortController;
     result: string;
+    model?: string | undefined;
   } | null>(null);
   const testing = useRef<AbortController | null>(null);
   // biome-ignore lint/correctness/useExhaustiveDependencies: editing the tested draft retires its native test.
@@ -122,22 +123,34 @@ export function AgentModelPicker({
     [testKey],
   );
   const testResult = test?.key === testKey ? test.result : null;
+  let testMessage = testResult;
+  if (testResult === "ok") {
+    testMessage = test?.model
+      ? `Connected using ${test.model}.`
+      : "Connected. The model replied.";
+  } else if (testResult === "testing") {
+    testMessage = "Sending a short test message…";
+  }
   const testConnection = async () => {
     if (!control.models || testing.current) return;
+    pending.current?.abort();
+    pending.current = null;
+    attempted.current = null;
+    setBusy(false);
+    setStatus("");
+    setOpen(false);
     const run = new AbortController();
     testing.current = run;
     // Only this run may settle its own result; a retired run clears it.
-    const settle = (result: string) =>
-      setTest((current) =>
-        current?.run !== run
-          ? current
-          : run.signal.aborted
-            ? null
-            : { ...current, result },
-      );
+    const settle = (result: string, model?: string) =>
+      setTest((current) => {
+        if (current?.run !== run) return current;
+        if (run.signal.aborted) return null;
+        return { ...current, result, model };
+      });
     setTest({ key: testKey, run, result: "testing" });
     try {
-      await control.models.request(
+      const result = await control.models.request(
         {
           id,
           expectedRevision: id ? draft.revision : undefined,
@@ -148,7 +161,7 @@ export function AgentModelPicker({
         },
         run.signal,
       );
-      settle("ok");
+      settle("ok", result.testedModel);
     } catch (error) {
       settle((error as Error).message);
     } finally {
@@ -294,6 +307,30 @@ export function AgentModelPicker({
   return (
     <section data-buzz-ui="" className="text-body" aria-label="Model settings">
       <div className="space-y-3">
+        {supported && external && draft.provider && (
+          <div className="space-y-2">
+            <Button
+              disabled={disabled}
+              loading={testResult === "testing"}
+              onClick={() => void testConnection()}
+            >
+              Test connection
+            </Button>
+            {testResult && (
+              <p
+                role="status"
+                className={`flex items-center gap-2 text-body-sm ${testResult === "ok" ? "text-success" : testResult === "testing" ? "text-secondary" : "text-danger"}`}
+              >
+                {testResult === "ok" ? (
+                  <CheckCircleIcon size={16} aria-hidden="true" />
+                ) : testResult !== "testing" ? (
+                  <WarningCircleIcon size={16} aria-hidden="true" />
+                ) : null}
+                {testMessage}
+              </p>
+            )}
+          </div>
+        )}
         <div>
           <Combobox.Root<ModelCatalog["models"][number]>
             disabled={disabled}
@@ -467,34 +504,6 @@ export function AgentModelPicker({
               Retry models
             </Button>
           )
-        )}
-        {supported && external && draft.provider && draft.model && !busy && (
-          <div className="space-y-2">
-            <Button
-              disabled={disabled}
-              loading={testResult === "testing"}
-              onClick={() => void testConnection()}
-            >
-              Test connection
-            </Button>
-            {testResult && (
-              <p
-                role="status"
-                className={`flex items-center gap-2 text-body-sm ${testResult === "ok" ? "text-success" : testResult === "testing" ? "text-secondary" : "text-danger"}`}
-              >
-                {testResult === "ok" ? (
-                  <CheckCircleIcon size={16} aria-hidden="true" />
-                ) : testResult !== "testing" ? (
-                  <WarningCircleIcon size={16} aria-hidden="true" />
-                ) : null}
-                {testResult === "ok"
-                  ? "Connected. The model replied."
-                  : testResult === "testing"
-                    ? "Sending a short test message…"
-                    : testResult}
-              </p>
-            )}
-          </div>
         )}
         {pi && draft.provider && !draft.model && (
           <p className="text-body-sm text-warning">

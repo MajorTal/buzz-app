@@ -507,22 +507,43 @@ Settings says **Shell setup not verified**; Buzz does not check it before Start.
   model browsing. A Goose catalog entry does not establish caller EXECUTE permission
   or successful inference. Advanced arguments remain a literal JSON array. Old native hosts
   without this metadata fall back to custom entry.
-- With a provider and model selected, **Test connection** runs one small Goose
-  request in the agent workspace using the effective draft provider, model, and
-  write-only environment. Buzz requests a ten-token output limit and turns
-  thinking effort off. Bundled `goose-acp` uses a hidden temporary session in
-  chat mode with extensions disabled. Buzz checks its recorded conversation
-  for a nonempty assistant reply and rejects error content: ACP can render
-  provider errors and empty token-limit fallbacks as ordinary text notifications.
-  Buzz then deletes only that temporary session before returning, including on
-  inference failure or timeout. Cancellation schedules bounded cleanup, also
-  handling an in-flight session creation. If deletion fails, Buzz reports that
-  the session may remain in Goose history; a crash or unresponsive sidecar can
-  interrupt cleanup. The test consumes a small amount of provider quota.
-  An external full Goose CLI pin retains `goose run --text --no-session
-  --no-profile` and checks its JSON result without saving a session. Model
-  browsing does not create a session or fall back to the CLI. Neither check
-  verifies Buzz relay readiness, launches the agent, or changes the draft.
+- For Goose and Pi, **Test connection** appears below the provider/API key and
+  above Model, including before a model is chosen. The shared form and native
+  request lane own cancellation and result display; tests never fill Model.
+- For Goose, a blank Model resolves the selected provider's `defaultModel`
+  through Goose ACP provider metadata. Buzz keeps no default-model mapping.
+  A nonblank explicit model or effective `GOOSE_MODEL` override is tested as entered.
+  **Test connection** sends one small request in the agent workspace using the
+  effective draft provider, model, and write-only environment. Goose keeps its
+  own output and thinking defaults.
+  Bundled `goose-acp` uses a hidden temporary session in chat mode with extensions
+  disabled. Buzz checks its recorded conversation for a nonempty assistant reply
+  and rejects error content: ACP can render provider errors and empty token-limit
+  fallbacks as ordinary text notifications. Buzz then deletes only that temporary
+  session before returning, including on inference failure or timeout. Cancellation
+  schedules bounded cleanup, also handling an in-flight session creation. If deletion
+  fails, Buzz reports that the session may remain in Goose history; a crash or
+  unresponsive sidecar can interrupt cleanup. The test consumes a small amount of
+  provider quota.
+  An external full Goose CLI pin retains `goose run --text --no-session --no-profile`
+  without saving a session. Success requires nonempty assistant text and reported
+  token usage in its JSON output; Goose can exit successfully with synthetic text
+  after a provider error. Providers that omit usage cannot confirm success through
+  this CLI check. Model browsing does not create a session or fall back to the CLI.
+  Neither check verifies Buzz relay readiness, launches the agent, or changes the
+  draft. Success reports the canonical provider/model tested, except that write-only
+  overrides keep their values hidden. A provider without a default asks for a model;
+  Buzz never substitutes another provider.
+- For Pi, with Model blank, Pi chooses from
+  the selected provider's `--models provider/*` scope. Buzz checks Pi's actual
+  selection through RPC before sending a short prompt; if Pi falls back to
+  another provider, Buzz stops and asks for credentials. With a model selected,
+  Buzz tests that exact provider/model. Success requires an assistant text reply
+  and reports its canonical model ID without changing the draft. Listing models
+  alone does not verify the API key or inference access. Tests use the agent's
+  effective environment and existing Pi sign-in, create no saved Pi session,
+  and stop on cancellation or timeout.
+
 - Environment values never arrive in snapshots. Inputs are masked write-only
   patches: missing key preserves; string replaces (including empty); null removes.
   Undo omits a patch again. Successful save clears entered values from UI state.

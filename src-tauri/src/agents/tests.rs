@@ -2226,7 +2226,23 @@ fn pi_connection_test_prompts_the_draft_selection() {
     std::fs::create_dir(&tools).unwrap();
     for tool in ["pi", "node", "buzz-pi-acp"] {
         let file = tools.join(tool);
-        std::fs::write(&file, "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '0.99.1\\n'; exit 0; fi\nread request\ncase \"$*\" in *'--model model-a'*) stop=stop;; *) stop=error;; esac\nprintf '{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"stopReason\":\"%s\",\"errorMessage\":\"401\"}}\\n' \"$stop\"\n").unwrap();
+        std::fs::write(
+            &file,
+            r#"#!/bin/sh
+if [ "$1" = --version ]; then printf '0.99.1\n'; exit 0; fi
+case "$*" in
+    *'--model databricks/model-a'*) model=model-a; stop=stop; error='';;
+    *'--model databricks/model-b'*) model=model-b; stop=error; error=401;;
+    *) exit 1;;
+esac
+read request
+case "$request" in *get_state*) ;; *) exit 1;; esac
+printf '{"id":"selection","type":"response","command":"get_state","success":true,"data":{"model":{"provider":"databricks","id":"%s"}}}\n' "$model"
+read request
+case "$request" in *prompt*) ;; *) exit 1;; esac
+printf '{"type":"message_end","message":{"role":"assistant","provider":"databricks","model":"%s","content":[{"type":"text","text":"OK"}],"stopReason":"%s","errorMessage":"%s"}}\n' "$model" "$stop" "$error"
+"#,
+        ).unwrap();
         std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
     let test = |model: &str| {
@@ -2243,7 +2259,9 @@ fn pi_connection_test_prompts_the_draft_selection() {
             }}),
         )
     };
-    assert_eq!(test("model-a").unwrap()["models"], json!([]));
+    let result = test("model-a").unwrap();
+    assert_eq!(result["models"], json!([]));
+    assert_eq!(result["testedModel"], "databricks/model-a");
     let error = test("model-b").unwrap_err();
     assert!(
         error.as_str().unwrap().contains("rejected the API key"),

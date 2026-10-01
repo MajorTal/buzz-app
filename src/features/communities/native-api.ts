@@ -8,14 +8,43 @@ import {
   nativeRelaySigner,
 } from "../relay/native";
 import { leaveRefusal, leaveRequestTemplate } from "./leave-protocol";
+import { readRelayLibrary } from "../agents/relay-library";
+import { eventDto } from "../relay/events";
+import { readApiFailure } from "../relay/http-admission";
+import { admitSignedRequest } from "../relay/transport";
 import type { PersonalProfile } from "./service";
 
 export async function nativeCommunityRequest(
   community: string,
   route: string,
   body?: unknown,
+  caller?: AbortSignal,
 ): Promise<unknown> {
-  const signal = AbortSignal.timeout(25_000);
+  const signal = AbortSignal.any([
+    ...(caller ? [caller] : []),
+    AbortSignal.timeout(25_000),
+  ]);
+  if (route === "query") return nativeSignedQuery(community, body, signal);
+  if (route === "agent-inventory") {
+    if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body) ||
+      Object.keys(body).length !== 0
+    )
+      throw new Error("Explicit owner community resolution required");
+    // Discovery reads the owner's records only; it grants no setup or custody.
+    const owner = await nativeRelaySigner(community).getPublicKey();
+    const inventory = await readRelayLibrary(
+      {
+        read: async (filters) =>
+          (await nativeSignedQuery(community, filters, signal)).map(eventDto),
+      },
+      owner,
+      signal,
+    );
+    return { identities: inventory.identities.map(({ pubkey }) => pubkey) };
+  }
   if (route === "info") {
     // Independent reads: issue both at once rather than paying two round trips.
     const discovery = nativeRelayInfo(community, signal);
@@ -221,6 +250,33 @@ export async function nativeCommunityRequest(
     return result;
   }
   throw new Error("This operation is unavailable on the packaged connection");
+}
+
+/** A signed scoped read for any joined community; it acquires no relay session. */
+async function nativeSignedQuery(
+  community: string,
+  filters: unknown,
+  signal: AbortSignal,
+): Promise<unknown[]> {
+  if (!Array.isArray(filters) || !filters.length)
+    throw new Error("Invalid community query");
+  const origin = communityDestination(community).url;
+  const viewer = await nativeRelaySigner(origin).getPublicKey();
+  const response = await admitSignedRequest(
+    origin,
+    viewer,
+    () => nativeRelayRequest(origin, "/query", filters, signal),
+    signal,
+    "background",
+  );
+  signal.throwIfAborted();
+  if (!response.ok) throw new Error((await readApiFailure(response)).error);
+  const text = await response.text();
+  if (new TextEncoder().encode(text).length > 8 * 1024 * 1024)
+    throw new Error("Community query response is too large");
+  const events: unknown = JSON.parse(text);
+  if (!Array.isArray(events)) throw new Error("Invalid community query");
+  return events;
 }
 
 /** Exact invite admission refusal codes (buzz-relay api/invites.rs). */

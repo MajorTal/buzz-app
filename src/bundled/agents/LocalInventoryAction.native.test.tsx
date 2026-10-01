@@ -131,9 +131,15 @@ it("enables the inventory card's Use here", async () => {
       control={control}
       session={owned.session}
       destination={destination}
-      rows={inventoryIdentities([], f.data, (_key, fallback) => fallback)}
+      rows={inventoryIdentities(
+        [],
+        new Map(),
+        f.data,
+        (_key, fallback) => fallback,
+      )}
       profiles={[]}
       publicProfiles={new Map()}
+      sourceProfiles={new Map()}
       edit={() => {}}
       importedId={null}
       onUseHere={onUseHere}

@@ -22,14 +22,17 @@ export function avatarPreview(
 ): string | undefined {
   const source = avatarSource(value);
   if (!source || !community || source.startsWith("data:")) return source;
+  return communityMedia(community)(source);
+}
+
+/** Relay-hosted media of one community through the host's media adapter. */
+export function communityMedia(community: string) {
   const { id, url } = communityDestination(community);
-  if (nativeIdentityEnabled()) return mediaUrl(source, nativeMediaUrl, url);
-  return mediaUrl(
-    source,
-    (target) =>
-      `/api/relay/${encodeURIComponent(id)}/media?url=${encodeURIComponent(target)}`,
-    url,
-  );
+  const proxy = nativeIdentityEnabled()
+    ? nativeMediaUrl
+    : (target: string) =>
+        `/api/relay/${encodeURIComponent(id)}/media?url=${encodeURIComponent(target)}`;
+  return (source: string, size?: "small") => mediaUrl(source, proxy, url, size);
 }
 
 /** Use the existing host upload/preparation contract, never an agent key in React. */

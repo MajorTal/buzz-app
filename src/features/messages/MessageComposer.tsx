@@ -180,7 +180,8 @@ function Composer({
     !submission &&
     !!session.channels?.get &&
     !list.channels.some(
-      (channel) => channel.id === channelId && !channel.readOnly,
+      (channel) =>
+        channel.id === channelId && !channel.readOnly && !channel.archived,
     );
   const cached = !!list.channels.find((channel) => channel.id === channelId)
     ?.cached;

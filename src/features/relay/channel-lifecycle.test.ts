@@ -81,7 +81,11 @@ function harness(role = "owner", type = "stream", owners = 1) {
   const publish = vi.fn(async (event: RelayEvent) => {
     if (event.kind === 9002)
       events = [
-        metadata(true),
+        metadata(
+          event.tags.some(
+            ([key, value]) => key === "archived" && value === "true",
+          ),
+        ),
         ...events.filter((event) => event.kind !== 39000),
       ];
     if (event.kind === 9008)
@@ -174,6 +178,7 @@ describe("type and role boundaries", () => {
         ]),
       ]);
       expect(await h.owner.capability.load(id)).toMatchObject({
+        canUnarchive: false,
         canArchive: false,
         canDelete: false,
         canLeave: true,
@@ -226,7 +231,7 @@ describe("type and role boundaries", () => {
       lifecycleSettings(h.getEvents(), id, viewer, relayAuthor),
     ).toThrow("Malformed");
   });
-  it.each(["archive", "delete", "leave"] as const)(
+  it.each(["archive", "unarchive", "delete", "leave"] as const)(
     "cannot %s a DM",
     async (action) => {
       const h = harness("owner", "dm");
@@ -269,16 +274,18 @@ describe("type and role boundaries", () => {
   });
 });
 
-it.each(["archive", "delete", "leave", "hide"] as const)(
+it.each(["archive", "unarchive", "delete", "leave", "hide"] as const)(
   "confirms %s without granting it to the message outbox",
   async (action) => {
     const clock = vi.spyOn(Date, "now").mockReturnValue(1_700_000_000_000);
     try {
       const h = harness("owner", action === "hide" ? "dm" : "stream", 2);
+      if (action === "unarchive")
+        h.setEvents([h.metadata(true), ...h.getEvents().slice(1)]);
       await h.owner.capability.run(action, id);
       expect(h.publish).toHaveBeenCalledOnce();
       expect(h.sign.mock.calls[0]?.[0]).toEqual(lifecycleTemplate(action, id));
-      if (action === "archive")
+      if (action === "archive" || action === "unarchive")
         expect(h.acceptDiscovery).toHaveBeenCalledOnce();
       else if (action !== "hide") expect(h.removed).toHaveBeenCalledWith(id);
       else {
@@ -850,6 +857,7 @@ describe("channel owner-agent Delete eligibility", () => {
       await started.promise;
       optional.abort(new DOMException("Timed out", "TimeoutError"));
       expect(await result).toMatchObject({
+        canUnarchive: false,
         canArchive: true,
         canLeave: true,
         canDelete: false,
@@ -1024,6 +1032,7 @@ describe("direct-owner and archived Delete boundaries", () => {
       metadata(true);
       expect(await h.owner.capability.load(id)).toMatchObject({
         canDelete: false,
+        canUnarchive: role !== "member",
         canArchive: false,
         canLeave: true,
       });
@@ -1081,4 +1090,189 @@ describe("direct-owner and archived Delete boundaries", () => {
       h.owner.dispose();
     },
   );
+});
+
+describe("Unarchive", () => {
+  function archived(role = "owner", type = "stream") {
+    const h = harness(role, type);
+    h.setEvents([h.metadata(true), ...h.getEvents().slice(1)]);
+    return h;
+  }
+  it.each(["owner", "admin", "member"])(
+    "uses the viewer's own %s role",
+    async (role) => {
+      const h = archived(role);
+      try {
+        expect(await h.owner.capability.load(id)).toMatchObject({
+          canArchive: false,
+          canUnarchive: role !== "member",
+          canDelete: false,
+        });
+        if (role === "member") {
+          await expect(h.owner.capability.run("unarchive", id)).rejects.toThrow(
+            "no longer permitted",
+          );
+          expect(h.sign).not.toHaveBeenCalled();
+        } else {
+          await h.owner.capability.run("unarchive", id);
+          expect(h.sign.mock.calls[0]?.[0].tags).toEqual([
+            ["h", id],
+            ["archived", "false"],
+          ]);
+          expect(h.acceptDiscovery).toHaveBeenCalledOnce();
+          expect(h.removed).not.toHaveBeenCalled();
+          expect(await h.owner.capability.load(id)).toMatchObject({
+            canArchive: true,
+            canUnarchive: false,
+          });
+        }
+        expect(
+          h.read.mock.calls
+            .flatMap(([filters]) => filters)
+            .some((f) => f.kinds?.includes(0)),
+        ).toBe(false);
+      } finally {
+        h.owner.dispose();
+      }
+    },
+  );
+  it.each(["stream", "forum", "dm"])(
+    "restores only ordinary archived channels (%s)",
+    async (type) => {
+      const h = archived("admin", type);
+      try {
+        expect((await h.owner.capability.load(id)).canUnarchive).toBe(
+          type !== "dm",
+        );
+        if (type === "dm") {
+          await expect(h.owner.capability.run("unarchive", id)).rejects.toThrow(
+            "no longer permitted",
+          );
+          expect(h.sign).not.toHaveBeenCalled();
+        } else {
+          await h.owner.capability.run("unarchive", id);
+          expect(h.acceptDiscovery).toHaveBeenCalledOnce();
+        }
+      } finally {
+        h.owner.dispose();
+      }
+    },
+  );
+  it.each(["role", "archive state", "signer"])(
+    "rechecks %s before publication",
+    async (change) => {
+      const h = archived();
+      try {
+        h.sign.mockImplementationOnce(async (event) => {
+          if (change === "role")
+            h.setEvents([
+              h.metadata(true),
+              h.roles("member"),
+              ...h.getEvents().slice(2),
+            ]);
+          if (change === "archive state")
+            h.setEvents([h.metadata(false), ...h.getEvents().slice(1)]);
+          if (change === "signer") event.tags[1] = ["archived", "true"];
+          return finalizeEvent(event, key);
+        });
+        await expect(h.owner.capability.run("unarchive", id)).rejects.toThrow(
+          change === "signer" ? "Signer changed" : "no longer permitted",
+        );
+        expect(h.publish).not.toHaveBeenCalled();
+      } finally {
+        h.owner.dispose();
+      }
+    },
+  );
+  it("accepts explicit false readback as well as the relay's omitted tag", async () => {
+    const h = archived();
+    try {
+      h.publish.mockImplementationOnce(async () =>
+        h.setEvents([
+          h.record(39000, [
+            ["d", id],
+            ["t", "stream"],
+            ["archived", "false"],
+          ]),
+          ...h.getEvents().slice(1),
+        ]),
+      );
+      await h.owner.capability.run("unarchive", id);
+      expect(h.acceptDiscovery).toHaveBeenCalledOnce();
+      expect(h.removed).not.toHaveBeenCalled();
+    } finally {
+      h.owner.dispose();
+    }
+  });
+  it.each(["missing", "archived", "malformed"])(
+    "does not treat %s readback as restored",
+    async (result) => {
+      vi.useFakeTimers();
+      const h = archived();
+      try {
+        h.publish.mockImplementationOnce(async () => {
+          if (result === "missing") h.setEvents(h.getEvents().slice(1));
+          if (result === "malformed")
+            h.setEvents([
+              h.record(39000, [
+                ["d", id],
+                ["archived", "unknown"],
+              ]),
+              ...h.getEvents().slice(1),
+            ]);
+        });
+        const run = expect(
+          h.owner.capability.run("unarchive", id),
+        ).rejects.toBeInstanceOf(ChannelLifecycleUnconfirmed);
+        await vi.runAllTimersAsync();
+        await run;
+        expect(h.publish).toHaveBeenCalledOnce();
+        expect(h.acceptDiscovery).not.toHaveBeenCalled();
+        expect(h.removed).not.toHaveBeenCalled();
+      } finally {
+        h.owner.dispose();
+        vi.useRealTimers();
+      }
+    },
+  );
+  it("keeps rejection retryable and uncertain delivery non-replayable", async () => {
+    const h = archived();
+    try {
+      h.publish.mockRejectedValueOnce(
+        new PublishRejected("permission revoked"),
+      );
+      await expect(
+        h.owner.capability.run("unarchive", id),
+      ).rejects.toBeInstanceOf(PublishRejected);
+      h.publish.mockRejectedValueOnce(new Error("connection lost"));
+      await expect(
+        h.owner.capability.run("unarchive", id),
+      ).rejects.toBeInstanceOf(ChannelLifecycleUnconfirmed);
+      expect(h.acceptDiscovery).not.toHaveBeenCalled();
+      expect(h.removed).not.toHaveBeenCalled();
+    } finally {
+      h.owner.dispose();
+    }
+  });
+  it.each([
+    [
+      ["archived", "false"],
+      ["name", "rename"],
+    ],
+    [
+      ["archived", "false"],
+      ["archived", "true"],
+    ],
+    [["archived", "false", "extra"]],
+    [["archived", "invalid"]],
+  ])("does not broaden the metadata command: %j", (...tags) => {
+    expect(() =>
+      validateLifecycleTemplate({
+        kind: 9002,
+        content: "",
+        created_at: 1,
+        tags: [["h", id], ...tags],
+      }),
+    ).toThrow();
+  });
 });

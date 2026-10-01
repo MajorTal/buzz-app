@@ -1159,7 +1159,15 @@ export const test = base.extend({
       if (channelLifecycle && [9002, 9008, 9022, 41012].includes(event.kind)) {
         const id = event.tags.find(([key]) => key === "h")?.[1];
         expect(lifecycleRows.some((row) => row.id === id)).toBe(true);
-        if (event.kind === 9002) archivedIds.add(id);
+        if (event.kind === 9002) {
+          if (
+            event.tags.some(
+              ([key, value]) => key === "archived" && value === "false",
+            )
+          )
+            archivedIds.delete(id);
+          else archivedIds.add(id);
+        }
         if (event.kind === 41012) hiddenDmIds.add(id);
         if (event.kind === 9008 || event.kind === 9022)
           rosterIds.splice(rosterIds.indexOf(id), 1);

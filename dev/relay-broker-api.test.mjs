@@ -2490,6 +2490,21 @@ test("lifecycle uses dedicated shape-limited host routes, never the message writ
       400,
     );
     expect(h.publications).toHaveLength(1);
+    const unarchive = {
+      ...template,
+      kind: 9002,
+      tags: [
+        ["h", id],
+        ["archived", "false"],
+      ],
+    };
+    expect((await h.post("sign", unarchive)).status).toBe(400);
+    const restore = await transport.channelLifecycle.sign(unarchive, signal);
+    expect(verifyEvent(restore)).toBe(true);
+    expect(restore).toMatchObject(unarchive);
+    expect((await h.post("publish", restore)).status).toBe(400);
+    await transport.channelLifecycle.publish(restore, signal);
+    expect(h.publications).toHaveLength(2);
   } finally {
     live?.dispose();
     await h.close();

@@ -26,6 +26,7 @@ type State = {
         channel: ChannelSummary;
         action: ChannelLifecycleAction;
         trigger?: HTMLElement;
+        focusFallback?: HTMLElement | undefined;
       }
     | undefined;
 };
@@ -130,6 +131,18 @@ export function ChannelNavigationProvider({
                   channel,
                   action,
                   ...(trigger ? { trigger } : {}),
+                  // Settings actions can remount after an archive-state change;
+                  // the tab header lives outside the settings aside.
+                  focusFallback:
+                    trigger
+                      ?.closest("[data-panel-workspace]")
+                      ?.querySelector<HTMLElement>(
+                        'button[aria-label="Close Channel settings tab"]',
+                      ) ??
+                    trigger
+                      ?.closest("aside")
+                      ?.querySelector<HTMLElement>("button") ??
+                    undefined,
                 },
               },
         );

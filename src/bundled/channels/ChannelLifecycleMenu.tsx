@@ -77,6 +77,7 @@ export function ChannelLifecycleMenu({
     !(
       state.canHide ||
       state.canArchive ||
+      state.canUnarchive ||
       state.canDelete ||
       state.canLeave ||
       state.deleteUnavailable
@@ -95,12 +96,17 @@ export function ChannelLifecycleMenu({
         </MenuItem>
       ) : (
         <>
-          {state.canArchive && (
-            <MenuItem disabled={disabled} onClick={() => choose("archive")}>
+          {(state.canArchive || state.canUnarchive) && (
+            <MenuItem
+              disabled={disabled}
+              onClick={() =>
+                choose(state.canUnarchive ? "unarchive" : "archive")
+              }
+            >
               <MenuIcon>
                 <ArchiveIcon size={14} />
               </MenuIcon>
-              Archive channel
+              {state.canUnarchive ? "Unarchive channel" : "Archive channel"}
             </MenuItem>
           )}
           {state.deleteUnavailable && (

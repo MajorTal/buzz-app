@@ -665,7 +665,7 @@ fn native_write_commands_reach_handlers_through_production_ipc() {
 }
 
 #[test]
-fn channel_commands_reject_malformed_tags_through_ipc() {
+fn channel_commands_sign_archive_and_unarchive_and_reject_malformed_tags_through_ipc() {
     use tauri::test::{get_ipc_response, mock_builder, INVOKE_KEY};
     let app = mock_builder()
         .manage(IdentityHost::fixture())
@@ -694,11 +694,19 @@ fn channel_commands_reject_malformed_tags_through_ipc() {
     };
     let h = vec!["h".into(), uuid::Uuid::nil().to_string()];
     let archived = vec!["archived".into(), "true".into()];
-    assert!(invoke(vec![h.clone(), archived.clone()]).is_ok());
+    for value in ["true", "false"] {
+        let tags = vec![h.clone(), vec!["archived".into(), value.into()]];
+        let event: serde_json::Value = invoke(tags.clone()).unwrap().deserialize().unwrap();
+        verify(&event);
+        assert_eq!(event["tags"], serde_json::json!(tags));
+        assert_eq!(event["kind"], 9002);
+        assert_eq!(event["content"], "");
+    }
     for tags in [
         vec![vec![], archived.clone()],
         vec![vec!["h".into()], archived.clone()],
         vec![h.clone(), vec!["archived".into()]],
+        vec![h.clone(), vec!["archived".into(), "invalid".into()]],
         vec![h.clone(), h.clone()],
         vec![archived.clone(), h.clone()],
     ] {

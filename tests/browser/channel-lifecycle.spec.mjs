@@ -20,7 +20,7 @@ test.use({
 
 // Shared modal focus/escape and real menu -> modal handoff require a browser.
 // Role/type/signing/cancellation matrices remain in domain and mounted tests.
-test("archive confirmation returns focus on cancel and navigates after confirmed removal", async ({
+test("archive confirmation returns focus on cancel and retains the conversation on completion", async ({
   page,
   app,
 }, testInfo) => {
@@ -150,14 +150,25 @@ test("archive confirmation returns focus on cancel and navigates after confirmed
   await menu
     .getByRole("menuitem", { name: "Archive channel", exact: true })
     .click();
+  const conversationUrl = page.url();
   await dialog
     .getByRole("button", { name: "Archive channel", exact: true })
     .click();
   await expect(dialog).toHaveCount(0);
   await expect(row).toHaveCount(0);
+  await expect(page).toHaveURL(conversationUrl);
+  await page
+    .getByRole("button", { name: "Channel settings", exact: true })
+    .click();
   await expect(
-    page.getByRole("textbox", { name: "Message #Alpha", exact: true }),
+    page.getByRole("button", { name: "Unarchive channel", exact: true }),
   ).toBeVisible();
+  await expect(
+    page.getByRole("textbox", {
+      name: "Message #Lifecycle channel",
+      exact: true,
+    }),
+  ).toBeDisabled();
   expect(app.report.lifecyclePublications).toHaveLength(1);
   expect(app.report.lifecyclePublications[0].kind).toBe(9002);
   expect(app.report.unexpected).toEqual([]);
@@ -298,7 +309,7 @@ for (const action of ["archive", "hide"]) {
         hidden: action === "archive" ? [dm] : [],
       },
     });
-    test("completion stays neutral with archived and hidden membership, including reload", async ({
+    test("completion preserves the appropriate destination with no visible rows, including reload", async ({
       page,
       app,
     }) => {
@@ -322,17 +333,27 @@ for (const action of ["archive", "hide"]) {
         .getByRole("button", { name: label, exact: true })
         .click();
       await expect(page.getByRole("dialog")).toHaveCount(0);
-      await expect(
-        page.getByText("Select a channel to read it.", { exact: true }),
-      ).toBeVisible();
+      const destination =
+        action === "archive"
+          ? page.getByRole("button", { name: "Channel settings", exact: true })
+          : page.getByText("Select a channel to read it.", { exact: true });
+      await expect(destination).toBeVisible();
+      if (action === "archive") await expect(page).toHaveURL(exactUrl);
       await expect(rows).toHaveCount(0);
-      await expect(composer).toHaveCount(0);
+      if (action === "archive") await expect(composer).toBeDisabled();
+      else await expect(composer).toHaveCount(0);
       await page.reload();
-      await expect(
-        page.getByText("Select a channel to read it.", { exact: true }),
-      ).toBeVisible();
+      await expect(destination).toBeVisible();
+      if (action === "archive") {
+        await expect(page).toHaveURL(exactUrl);
+        await destination.click();
+        await expect(
+          page.getByRole("button", { name: "Unarchive channel", exact: true }),
+        ).toBeVisible();
+      }
       await expect(rows).toHaveCount(0);
-      await expect(composer).toHaveCount(0);
+      if (action === "archive") await expect(composer).toBeDisabled();
+      else await expect(composer).toHaveCount(0);
       expect(
         app.report.lifecyclePublications.map((event) => event.kind),
       ).toEqual([action === "archive" ? 9002 : 41012]);

@@ -12,6 +12,7 @@ const settings: ChannelLifecycleSettings = {
   channelId: "11111111-1111-4111-8111-111111111111",
   channelType: "stream",
   canLeave: true,
+  canUnarchive: false,
   canArchive: false,
   canDelete: false,
   canHide: false,
@@ -144,7 +145,11 @@ it("fences permissions from a replaced channel, capability, or unmounted pane", 
   );
   expect(signal?.aborted).toBe(true);
   await act(async () =>
-    old.resolve({ ...settings, canArchive: true, canDelete: true }),
+    old.resolve({
+      ...settings,
+      canArchive: true,
+      canDelete: true,
+    }),
   );
   expect(screen.queryByRole("button")).toBeNull();
   await act(async () =>
@@ -173,30 +178,51 @@ it("fences permissions from a replaced channel, capability, or unmounted pane", 
 });
 
 it.each([
-  { role: "last owner", canLeave: false, canArchive: true, canDelete: true },
   {
-    role: "owner with another owner",
-    canLeave: true,
+    role: "last owner",
+    canLeave: false,
+    canUnarchive: false,
     canArchive: true,
     canDelete: true,
   },
-  { role: "admin", canLeave: true, canArchive: true, canDelete: false },
-  { role: "member", canLeave: true, canArchive: false, canDelete: false },
+  {
+    role: "owner with another owner",
+    canLeave: true,
+    canUnarchive: false,
+    canArchive: true,
+    canDelete: true,
+  },
+  {
+    role: "admin",
+    canLeave: true,
+    canUnarchive: false,
+    canArchive: true,
+    canDelete: false,
+  },
+  {
+    role: "member",
+    canLeave: true,
+    canUnarchive: false,
+    canArchive: false,
+    canDelete: false,
+  },
   {
     role: "archived owner",
     canLeave: false,
+    canUnarchive: true,
     canArchive: false,
     canDelete: false,
   },
   {
     role: "no permitted actions",
     canLeave: false,
+    canUnarchive: false,
     canArchive: false,
     canDelete: false,
   },
 ])(
   "uses independent action permissions from one read: $role",
-  async ({ canLeave, canArchive, canDelete }) => {
+  async ({ canLeave, canArchive, canUnarchive, canDelete }) => {
     const lifecycle = capability();
     const gate = deferred<ChannelLifecycleSettings>();
     lifecycle.load.mockReturnValueOnce(gate.promise);
@@ -211,12 +237,19 @@ it.each([
     await waitFor(() => expect(lifecycle.load).toHaveBeenCalledOnce());
     expect(screen.queryByRole("button")).toBeNull();
     await act(async () =>
-      gate.resolve({ ...settings, canLeave, canArchive, canDelete }),
+      gate.resolve({
+        ...settings,
+        canLeave,
+        canArchive,
+        canUnarchive,
+        canDelete,
+      }),
     );
     const user = userEvent.setup();
     for (const [action, label, permitted] of [
       ["leave", "Leave channel", canLeave],
       ["archive", "Archive channel", canArchive],
+      ["unarchive", "Unarchive channel", canUnarchive],
       ["delete", "Delete channel", canDelete],
     ] as const) {
       const button = screen.queryByRole("button", { name: label });
@@ -239,6 +272,7 @@ it("removes previously allowed actions when the replacement permission read fail
   const lifecycle = capability();
   lifecycle.load.mockResolvedValueOnce({
     ...settings,
+    canUnarchive: false,
     canArchive: true,
     canDelete: true,
   });
@@ -268,6 +302,7 @@ it("removes previously allowed actions when the replacement permission read fail
   replacement.load.mockResolvedValueOnce({
     ...settings,
     canLeave: false,
+    canUnarchive: false,
     canArchive: true,
     canDelete: false,
   });
@@ -321,7 +356,11 @@ it.each([true, false])(
   },
 );
 
-const unavailable = { ...settings, canArchive: true, deleteUnavailable: true };
+const unavailable = {
+  ...settings,
+  canArchive: true,
+  deleteUnavailable: true,
+};
 it.each([
   {
     name: "Delete allowed",

@@ -47,16 +47,62 @@ for (const action of ["archive", "delete"]) {
       });
       const row = sidebar.locator(`[data-channel-id="${channelId}"]`);
       await row.click();
-      await expect(
-        page.getByRole("textbox", {
-          name: "Message #Lifecycle channel",
-          exact: true,
-        }),
-      ).toBeVisible();
-      await page
-        .getByRole("button", { name: "Channel settings", exact: true })
-        .click();
+      const composer = page.getByRole("textbox", {
+        name: "Message #Lifecycle channel",
+        exact: true,
+      });
+      await expect(composer).toBeVisible();
+      const draft = "Keep this draft through archive and restore";
+      if (action === "archive") await composer.fill(draft);
+      const conversationUrl = page.url();
       const panel = panelFor(page);
+      // Hold the real permission read to verify #482's loading contract:
+      // a busy region without an action or status row before authority arrives.
+      const permissionSeen = Promise.withResolvers();
+      const permissionRelease = Promise.withResolvers();
+      const holdPermissions = async (route) => {
+        const filters = route.request().postDataJSON();
+        if (
+          filters.some(
+            (filter) =>
+              filter.kinds?.includes(39000) &&
+              filter["#d"]?.includes(channelId) &&
+              filter.limit === 1,
+          )
+        ) {
+          permissionSeen.resolve();
+          await permissionRelease.promise;
+        }
+        return route.continue();
+      };
+      if (action === "archive")
+        await page.route("**/api/relay/**/query", holdPermissions);
+      try {
+        await page
+          .getByRole("button", { name: "Channel settings", exact: true })
+          .click();
+        if (action === "archive") {
+          await permissionSeen.promise;
+          const editor = panel.getByRole("region", {
+            name: "Edit channel details",
+            exact: true,
+            // #482 hides the empty editor so it reserves no grid spacing.
+            includeHidden: true,
+          });
+          await expect(editor).toHaveAttribute("aria-busy", "true");
+          await expect(editor).toBeEmpty();
+          await panel.screenshot({
+            path: testInfo.outputPath("details-permission-loading.png"),
+          });
+        }
+      } finally {
+        permissionRelease.resolve();
+      }
+      await expect(
+        panel.getByRole("button", { name: "Edit details", exact: true }),
+      ).toBeEnabled();
+      if (action === "archive")
+        await page.unroute("**/api/relay/**/query", holdPermissions);
       const trigger = panel.getByRole("button", { name: label, exact: true });
       await expect(trigger).toBeVisible();
       const variant = action === "delete" ? "destructive" : "subtle";
@@ -119,6 +165,16 @@ for (const action of ["archive", "delete"]) {
         await confirm.click();
         await seen;
         await expect(confirm).toBeDisabled();
+        await expect(confirm).toHaveAttribute("aria-busy", "true");
+        await expect(confirm.locator(".buzz-button-spinner")).toBeVisible();
+        await expect(confirm.locator(".buzz-button-label")).toHaveCSS(
+          "opacity",
+          "0",
+        );
+        await expect(dialog.getByRole("status")).toHaveClass("sr-only");
+        await dialog.screenshot({
+          path: testInfo.outputPath(`${action}-pending.png`),
+        });
         await expect(
           dialog.getByRole("button", { name: "Cancel", exact: true }),
         ).toBeDisabled();
@@ -133,18 +189,39 @@ for (const action of ["archive", "delete"]) {
         release();
       }
       await expect(dialog).toHaveCount(0);
-      await expect(panel).toHaveCount(0);
       await expect(row).toHaveCount(0);
       const destination =
         action === "archive"
-          ? page.getByRole("textbox", { name: "Message #Alpha", exact: true })
+          ? page.getByRole("complementary", {
+              name: "Channel settings",
+              exact: true,
+            })
           : page.getByText("Select a channel to read it.", { exact: true });
       await expect(destination).toBeVisible();
-      if (action === "archive")
+      if (action === "archive") {
+        await expect(page).toHaveURL(conversationUrl);
         await expect(
-          sidebar.getByRole("button", { name: "Alpha", exact: true }),
+          panel.getByRole("button", { name: "Unarchive channel", exact: true }),
+        ).toBeVisible();
+        await expect(
+          panel.getByRole("button", { name: "Archive channel", exact: true }),
+        ).toHaveCount(0);
+        await expect(
+          panel.getByRole("button", { name: "Delete channel", exact: true }),
+        ).toHaveCount(0);
+        await expect(
+          page.getByRole("button", {
+            name: "Close Channel settings tab",
+            exact: true,
+          }),
         ).toBeFocused();
-      else {
+        await expect(composer).toBeDisabled();
+        await expect(composer).toHaveJSProperty("value", draft);
+        await expect(
+          page.getByRole("button", { name: "Send message", exact: true }),
+        ).toBeDisabled();
+      } else {
+        await expect(panel).toHaveCount(0);
         await expect(sidebar.locator("button[data-channel-id]")).toHaveCount(0);
         await expect(
           page.getByRole("textbox", { name: /^Message #/ }),
@@ -154,11 +231,146 @@ for (const action of ["archive", "delete"]) {
       // retry until accepted before reloading; visible UI is not that boundary.
       await republished;
       await page.reload();
-      await expect(destination).toBeVisible();
+      if (action === "archive") {
+        await expect(page).toHaveURL(conversationUrl);
+        await page
+          .getByRole("button", { name: "Channel settings", exact: true })
+          .click();
+        await expect(
+          panel.getByRole("button", { name: "Unarchive channel", exact: true }),
+        ).toBeVisible();
+        await expect(composer).toBeDisabled();
+        await expect(composer).toHaveJSProperty("value", draft);
+        await expect(
+          page.getByRole("button", { name: "Send message", exact: true }),
+        ).toBeDisabled();
+        await page
+          .getByRole("button", {
+            name: "Close Channel settings tab",
+            exact: true,
+          })
+          .click();
+        // Leave intentionally, then prove the explicit search return path.
+        await sidebar
+          .getByRole("button", { name: "Alpha", exact: true })
+          .click();
+      } else await expect(destination).toBeVisible();
       await expect(row).toHaveCount(0);
       expect(
         app.report.lifecyclePublications.map((event) => event.kind),
       ).toEqual([action === "archive" ? 9002 : 9008]);
+      if (action === "archive") {
+        // Complete the round trip through real search/navigation, not a synthetic
+        // exact route: the archived row must remain reachable after reload.
+        await page
+          .getByRole("button", { name: "Search Buzz", exact: true })
+          .click();
+        const search = page.getByRole("dialog", {
+          name: "Search Buzz",
+          exact: true,
+        });
+        await expect(
+          search
+            .getByRole("group", { name: "Recent activity" })
+            .getByRole("option", { name: /Lifecycle channel/ }),
+        ).toHaveCount(0);
+        await search.getByRole("combobox").fill("Lifecycle channel");
+        await search
+          .getByRole("option", {
+            name: "Lifecycle channel Archived channel",
+            exact: true,
+          })
+          .click();
+        await page
+          .getByRole("button", { name: "Channel settings", exact: true })
+          .click();
+        const restore = panel.getByRole("button", {
+          name: "Unarchive channel",
+          exact: true,
+        });
+        await expect(restore).toBeVisible();
+        await expect(composer).toBeDisabled();
+        await expect(composer).toHaveJSProperty("value", draft);
+        await expect(
+          panel.getByRole("button", { name: "Archive channel", exact: true }),
+        ).toHaveCount(0);
+        await expect(
+          panel.getByRole("button", { name: "Delete channel", exact: true }),
+        ).toHaveCount(0);
+        await panel.screenshot({
+          path: testInfo.outputPath("unarchive-settings.png"),
+        });
+        await restore.click();
+        const unarchive = page.getByRole("dialog", {
+          name: "Unarchive channel: Lifecycle channel",
+          exact: true,
+        });
+        await expect(
+          unarchive.getByRole("button", {
+            name: "Unarchive channel",
+            exact: true,
+          }),
+        ).toHaveAttribute("data-variant", "prominent");
+        await unarchive.screenshot({
+          path: testInfo.outputPath("unarchive-confirmation.png"),
+        });
+        await page.keyboard.press("Escape");
+        await expect(restore).toBeFocused();
+        await restore.click();
+        await expect(
+          unarchive.getByRole("button", { name: "Cancel", exact: true }),
+        ).toBeFocused();
+        await page.mouse.click(8, 8);
+        await expect(unarchive).toHaveCount(0);
+        await expect(restore).toBeFocused();
+        expect(app.report.lifecyclePublications).toHaveLength(1);
+        await restore.click();
+        await unarchive
+          .getByRole("button", { name: "Unarchive channel", exact: true })
+          .click();
+        await expect(unarchive).toHaveCount(0);
+        await expect(panel).toBeVisible();
+        await expect(
+          panel.getByRole("button", { name: "Archive channel", exact: true }),
+        ).toBeVisible();
+        await expect(
+          panel.getByRole("button", { name: "Delete channel", exact: true }),
+        ).toBeVisible();
+        await expect(restore).toHaveCount(0);
+        await expect(row).toBeVisible();
+        await expect(
+          page.getByRole("button", {
+            name: "Close Channel settings tab",
+            exact: true,
+          }),
+        ).toBeFocused();
+        await expect(composer).toBeVisible();
+        await expect(composer).toBeEditable();
+        await expect(composer).toHaveJSProperty("value", draft);
+        await expect(
+          page.getByRole("button", { name: "Send message", exact: true }),
+        ).toBeEnabled();
+        await page.reload();
+        await expect(row).toBeVisible();
+        await expect(composer).toBeVisible();
+        await expect(composer).toBeEditable();
+        await expect(composer).toHaveJSProperty("value", draft);
+        await expect(
+          page.getByRole("button", { name: "Send message", exact: true }),
+        ).toBeEnabled();
+        expect(
+          app.report.lifecyclePublications.map((event) => event.tags),
+        ).toEqual([
+          [
+            ["h", channelId],
+            ["archived", "true"],
+          ],
+          [
+            ["h", channelId],
+            ["archived", "false"],
+          ],
+        ]);
+      }
       expect(app.report.unexpected).toEqual([]);
     });
   });

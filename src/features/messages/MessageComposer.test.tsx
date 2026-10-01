@@ -35,7 +35,11 @@ import { MessageComposer, type MessageComposerProps } from "./MessageComposer";
 import { createRelaySession, type RelaySession } from "../relay/session";
 import { keypair, metadata, roster, signed } from "../relay/testing";
 import type { EventTemplate } from "nostr-tools";
-import type { ChannelMessage, Profile } from "../relay/contracts";
+import type {
+  ChannelMessage,
+  ChannelSummary,
+  Profile,
+} from "../relay/contracts";
 import { readView, writeView } from "../../shared/view-state";
 import { emojiMatches, type CustomEmoji } from "../relay/emoji";
 import { CustomEmoji as CustomEmojiImage } from "../../bundled/emoji/CustomEmoji";
@@ -2713,6 +2717,51 @@ it("does not reopen a target with an unresolved edit after closing it", () => {
   fireEvent.keyDown(h.input(), { key: "ArrowUp" });
   expect(h.input()).toHaveValue("");
   expect(screen.queryByText("Editing message")).not.toBeInTheDocument();
+});
+
+it("keeps the draft but blocks new messages while archived, then re-enables it on restore", async () => {
+  const h = mount();
+  let channel: ChannelSummary = { id: "channel", name: "General" };
+  let list = { status: "ready" as const, channels: [channel] };
+  const listeners = new Set<() => void>();
+  h.retarget({
+    session: {
+      ...h.session,
+      channels: {
+        ...h.session.channels,
+        get: () => channel,
+        list: () => list,
+        subscribeList: (listener) => {
+          listeners.add(listener);
+          return () => {
+            listeners.delete(listener);
+          };
+        },
+      },
+    },
+  });
+  h.fill("Draft survives archive");
+  const archive = (archived: true | undefined) =>
+    act(() => {
+      channel = {
+        id: "channel",
+        name: "General",
+        ...(archived ? { archived } : {}),
+      };
+      list = { ...list, channels: [channel] };
+      for (const listener of listeners) listener();
+    });
+  archive(true);
+  expect(h.input()).toHaveAttribute("aria-disabled", "true");
+  expect(h.input()).toHaveValue("Draft survives archive");
+  expect(screen.getByRole("button", { name: "Send message" })).toBeDisabled();
+  h.submit();
+  expect(h.messages.send).not.toHaveBeenCalled();
+  archive(undefined);
+  expect(h.input()).not.toHaveAttribute("aria-disabled", "true");
+  expect(h.input()).toHaveValue("Draft survives archive");
+  h.submit();
+  await waitFor(() => expect(h.messages.send).toHaveBeenCalledOnce());
 });
 
 it.each(["archived", "readOnly"] as const)(

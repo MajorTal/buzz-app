@@ -292,7 +292,7 @@ function ChannelWorkspace({
     request: PageNavigation;
     available: boolean;
   }>();
-  const joinedRequest = channels.some(
+  const joinedRequest = list.channels.some(
     (channel) => channel.id === requestedChannel,
   );
   useEffect(() => {
@@ -348,6 +348,8 @@ function ChannelWorkspace({
     ? undefined
     : requestedChannel
       ? (channels.find((channel) => channel.id === requestedChannel) ??
+        // Sidebar visibility is not access: retain a joined archived selection.
+        list.channels.find((channel) => channel.id === requestedChannel) ??
         (resolved?.request === navigation && resolved?.available
           ? queries.channels.get?.(requestedChannel)
           : undefined))
@@ -1303,7 +1305,7 @@ function ChannelWorkspace({
               current.channelType !== "dm" &&
               current.channelType !== "session" && (
                 <ChannelLifecycleActions
-                  key={current.id}
+                  key={`${current.id}:${!!current.archived}`}
                   channelId={current.id}
                   lifecycle={queries.channelLifecycle}
                   choose={(action, trigger) =>

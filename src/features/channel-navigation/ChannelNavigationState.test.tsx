@@ -1,9 +1,10 @@
 // @vitest-environment jsdom
 import { StrictMode, type ReactNode } from "react";
-import { act, cleanup, renderHook } from "@testing-library/react";
+import { act, cleanup, render, renderHook } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import type { RelayData, RelaySnapshot } from "../relay/service";
 import type { RelaySession } from "../relay/session";
+import { PanelWorkspace } from "../panels/PanelWorkspace";
 import {
   ChannelNavigationProvider,
   useChannelNavigation,
@@ -155,4 +156,45 @@ it("hands both entrances to one confirmation and preserves its origin until clos
     channel,
     action: "archive",
   });
+});
+
+it("retains the settings tab close control when an archive action remounts", () => {
+  const view = mount(fixture().relay);
+  const content = (archived: boolean) => (
+    <PanelWorkspace
+      value="settings"
+      select={() => {}}
+      items={[
+        {
+          id: "settings",
+          label: "Channel settings",
+          close: () => {},
+          content: (
+            <aside aria-label="Channel settings">
+              <button type="button">Canvas</button>
+              <button key={String(archived)} type="button">
+                {archived ? "Unarchive channel" : "Archive channel"}
+              </button>
+            </aside>
+          ),
+        },
+      ]}
+    />
+  );
+  const panel = render(content(false));
+  const trigger = panel.getByRole("button", { name: "Archive channel" });
+  const close = panel.getByRole("button", {
+    name: "Close Channel settings tab",
+  });
+  act(() =>
+    view.result.current.openLifecycle(
+      { id: "channel", name: "Channel" },
+      "archive",
+      trigger,
+    ),
+  );
+  panel.rerender(content(true));
+  expect(trigger.isConnected).toBe(false);
+  expect(view.result.current.lifecycleDialog?.focusFallback).toBe(close);
+  expect(close.isConnected).toBe(true);
 });

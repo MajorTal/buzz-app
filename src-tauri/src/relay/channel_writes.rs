@@ -65,7 +65,7 @@ fn lifecycle(event: &EventTemplate) -> bool {
         return false;
     }
     tag(event, 0, "h").is_some_and(uuid)
-        && (event.kind != 9002 || tag(event, 1, "archived") == Some("true"))
+        && (event.kind != 9002 || matches!(tag(event, 1, "archived"), Some("true" | "false")))
 }
 fn archive(event: &EventTemplate) -> bool {
     if !matches!(event.kind, 9035 | 9036)
@@ -359,24 +359,81 @@ pub(super) fn creation(event: &EventTemplate) -> bool {
 mod boundary_tests {
     use super::*;
     #[test]
+    fn lifecycle_accepts_only_exact_archive_values() {
+        let event = serde_json::json!({
+            "kind": 9002,
+            "created_at": 1700000010,
+            "content": "",
+            "tags": [["h", uuid::Uuid::nil().to_string()], ["archived", "false"]]
+        });
+        for value in ["true", "false"] {
+            let mut command = event.clone();
+            command["tags"][1][1] = serde_json::json!(value);
+            assert!(validate("channel-lifecycle", &command, None).is_ok());
+            assert!(validate("channel-details", &command, None).is_err());
+        }
+        for value in [
+            serde_json::json!(""),
+            serde_json::json!("False"),
+            serde_json::json!("TRUE"),
+            serde_json::json!("false "),
+            serde_json::json!("0"),
+            serde_json::json!("anything"),
+            serde_json::json!(false),
+            serde_json::json!(0),
+            Value::Null,
+        ] {
+            let mut command = event.clone();
+            command["tags"][1][1] = value;
+            assert!(validate("channel-lifecycle", &command, None).is_err());
+        }
+        for tags in [
+            serde_json::json!([["h", uuid::Uuid::nil().to_string()]]),
+            serde_json::json!([["h", uuid::Uuid::nil().to_string()], ["archived"]]),
+            serde_json::json!([
+                ["h", uuid::Uuid::nil().to_string()],
+                ["archived", "false", "extra"]
+            ]),
+            serde_json::json!([
+                ["h", uuid::Uuid::nil().to_string()],
+                ["archived", "false"],
+                ["archived", "true"]
+            ]),
+            serde_json::json!([
+                ["h", uuid::Uuid::nil().to_string()],
+                ["archived", "false"],
+                ["name", "injected"]
+            ]),
+            serde_json::json!([["archived", "false"], ["h", uuid::Uuid::nil().to_string()]]),
+            serde_json::json!([["h", "not-a-channel"], ["archived", "false"]]),
+        ] {
+            let mut command = event.clone();
+            command["tags"] = tags;
+            assert!(validate("channel-lifecycle", &command, None).is_err());
+        }
+    }
+
+    #[test]
     fn commands_reject_cross_route_and_foreign_signatures() {
         let host = IdentityHost::fixture();
-        let template = EventTemplate {
-            kind: 9002,
-            created_at: 1700000010,
-            content: String::new(),
-            tags: vec![
-                vec!["h".into(), uuid::Uuid::new_v4().to_string()],
-                vec!["archived".into(), "true".into()],
-            ],
-        };
-        let event = tauri::async_runtime::block_on(host.sign(template)).unwrap();
-        assert!(validate("channel-lifecycle", &event, event["pubkey"].as_str()).is_ok());
-        assert!(validate("channel-details", &event, event["pubkey"].as_str()).is_err());
-        assert!(validate("channel-lifecycle", &event, Some(&"f".repeat(64))).is_err());
-        let mut altered = event.clone();
-        altered["tags"][1][1] = Value::String("false".into());
-        assert!(validate("channel-lifecycle", &altered, event["pubkey"].as_str()).is_err());
+        for (value, tampered) in [("true", "false"), ("false", "true")] {
+            let template = EventTemplate {
+                kind: 9002,
+                created_at: 1700000010,
+                content: String::new(),
+                tags: vec![
+                    vec!["h".into(), uuid::Uuid::new_v4().to_string()],
+                    vec!["archived".into(), value.into()],
+                ],
+            };
+            let event = tauri::async_runtime::block_on(host.sign(template)).unwrap();
+            assert!(validate("channel-lifecycle", &event, event["pubkey"].as_str()).is_ok());
+            assert!(validate("channel-details", &event, event["pubkey"].as_str()).is_err());
+            assert!(validate("channel-lifecycle", &event, Some(&"f".repeat(64))).is_err());
+            let mut altered = event.clone();
+            altered["tags"][1][1] = Value::String(tampered.into());
+            assert!(validate("channel-lifecycle", &altered, event["pubkey"].as_str()).is_err());
+        }
     }
     fn details_event(extra: Vec<Vec<String>>) -> EventTemplate {
         EventTemplate {

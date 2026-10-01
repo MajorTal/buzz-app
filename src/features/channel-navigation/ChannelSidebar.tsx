@@ -895,13 +895,25 @@ function ReadySidebar({
           lifecycle={lifecycle}
           close={() => {
             lifecycleFocus.current = lifecycleDialog.channel.id;
-            lifecycleTrigger.current = lifecycleDialog.trigger;
+            lifecycleTrigger.current = lifecycleDialog.trigger?.isConnected
+              ? lifecycleDialog.trigger
+              : lifecycleDialog.focusFallback;
             handoff?.closeLifecycle();
           }}
           completed={() => {
             const id = lifecycleDialog.channel.id;
             lifecycleFocus.current = id;
             handoff?.closeLifecycle();
+            // Archive changes visibility, not access or the current destination.
+            if (
+              lifecycleDialog.action === "archive" ||
+              lifecycleDialog.action === "unarchive"
+            ) {
+              lifecycleTrigger.current = lifecycleDialog.trigger?.isConnected
+                ? lifecycleDialog.trigger
+                : lifecycleDialog.focusFallback;
+              return;
+            }
             // Confirmed access loss can already have removed current from the roster.
             if (
               (target.kind === "conversation"

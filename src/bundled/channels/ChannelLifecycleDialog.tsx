@@ -5,7 +5,7 @@ import {
   type ChannelLifecycleCapability,
 } from "../../features/relay/channel-lifecycle";
 import type { ChannelLifecycleAction } from "../../features/relay/channel-lifecycle-protocol";
-import styles from "./ChannelLifecycleDialog.module.css";
+import { Dialog } from "../../shared/design-system/ui/Dialog";
 
 const copy = {
   archive: {
@@ -45,13 +45,12 @@ export function ChannelLifecycleDialog({
   close(): void;
   completed(): void;
 }) {
-  const dialog = useRef<HTMLDialogElement>(null);
+  const cancel = useRef<HTMLButtonElement>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [refreshRequired, setRefreshRequired] = useState(false);
   const operation = useRef<AbortController | undefined>(undefined);
   useEffect(() => {
-    dialog.current?.showModal();
     return () => {
       operation.current?.abort();
     };
@@ -76,44 +75,40 @@ export function ChannelLifecycleDialog({
     }
   };
   return (
-    <dialog
-      ref={dialog}
-      data-buzz-ui=""
-      className={`${styles.dialog} interaction-floating`}
-      aria-labelledby="channel-lifecycle-title"
-      aria-describedby="channel-lifecycle-description"
-      onKeyDown={(event) => {
-        // Keep the navigation disclosure open; native cancel still owns Escape.
-        if (event.key === "Escape") event.stopPropagation();
+    <Dialog
+      open
+      dismissOnOutsideClick
+      preventClose={busy}
+      initialFocus={cancel}
+      // The sidebar owns both cancellation and completed-navigation focus.
+      finalFocus={false}
+      onOpenChange={(open) => {
+        if (!open) close();
       }}
-      onCancel={(event) => {
-        event.preventDefault();
-        if (!busy) close();
-      }}
+      title={`${copy[action].title}: ${channelName}`}
+      description={copy[action].detail}
+      actions={
+        <>
+          <Button ref={cancel} type="button" disabled={busy} onClick={close}>
+            Cancel
+          </Button>
+          <Button
+            type="button"
+            variant={action === "delete" ? "destructive" : "prominent"}
+            disabled={busy || refreshRequired}
+            onClick={() => void submit()}
+          >
+            {copy[action].title}
+          </Button>
+        </>
+      }
     >
-      <h2 id="channel-lifecycle-title">
-        {copy[action].title}: {channelName}
-      </h2>
-      <p id="channel-lifecycle-description">{copy[action].detail}</p>
       {error && <p role="alert">{error}</p>}
       {busy && (
         <p role="status">
           Checking permissions and waiting for relay confirmation…
         </p>
       )}
-      <div className={styles.actions}>
-        <Button type="button" disabled={busy} onClick={close}>
-          Cancel
-        </Button>
-        <Button
-          type="button"
-          variant={action === "delete" ? "destructive" : "prominent"}
-          disabled={busy || refreshRequired}
-          onClick={() => void submit()}
-        >
-          {copy[action].title}
-        </Button>
-      </div>
-    </dialog>
+    </Dialog>
   );
 }

@@ -12,7 +12,7 @@ test.use({
 });
 
 // Two distinct browser boundaries: archive changes visibility while retaining
-// membership; delete purges access while the pane unmounts. Both reuse the native
+// membership; delete purges access while the pane unmounts. Both reuse the shared
 // modal/focus handoff. Permission and recovery matrices stay below the browser.
 for (const action of ["archive", "delete"]) {
   test.describe(`management ${action}`, () => {
@@ -115,7 +115,9 @@ for (const action of ["archive", "delete"]) {
         await page.keyboard.press("Escape");
         await expect(page.getByRole("dialog")).toHaveCount(1);
         await expect(dialog).toBeVisible();
-        await expect(row).toBeVisible();
+        await expect(
+          page.locator(`[data-channel-id="${channelId}"]`),
+        ).toBeVisible();
         expect(app.report.lifecyclePublications ?? []).toHaveLength(0);
       } finally {
         release();
@@ -243,7 +245,9 @@ test.describe("owner-role agent without direct ownership", () => {
     await expect(dialog.getByRole("alert")).toHaveText(
       "Only the channel owner can delete",
     );
-    await expect(row).toBeVisible();
+    await expect(
+      page.locator(`[data-channel-id="${channelId}"]`),
+    ).toBeVisible();
     await expect(
       dialog.getByRole("button", { name: "Delete channel", exact: true }),
     ).toBeEnabled();

@@ -440,6 +440,9 @@ it.each(["save", "check"] as const)(
       ).toBeDisabled();
       expect(screen.getByRole("button", { name: "Close" })).toBeDisabled();
       await user.click(screen.getByRole("button", { name: "Close" }));
+      await user.click(
+        document.querySelector(".buzz-dialog-backdrop") as Element,
+      );
       await user.keyboard("{Escape}");
       expect(screen.getByRole("dialog")).toBeVisible();
       expect(close).not.toHaveBeenCalled();

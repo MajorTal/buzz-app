@@ -82,9 +82,10 @@
       transform: translate(-50%, -50%);
     }
   }
-  /* A nested sheet needs a backdrop above its parent popup, not below it.
-     Matching the popup layer preserves DOM ordering: parent, backdrop, sheet. */
-  .buzz-dialog-backdrop[data-placement="right"] {
+  /* Nested sheets and pointer-dismissible dialogs need a backdrop above the
+     parent popup. Matching its layer preserves parent, backdrop, child order. */
+  .buzz-dialog-backdrop[data-placement="right"],
+  .buzz-dialog-backdrop[data-outside-dismissal] {
     z-index: var(--layer-dialog);
   }
   .buzz-dialog[data-placement="right"] {

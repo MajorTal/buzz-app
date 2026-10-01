@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   emptyLineup,
   resolveLineup,
@@ -9,6 +9,7 @@ import type {
   GroupDefaultProps,
 } from "../../features/channel-templates/provider";
 import { Button } from "../../shared/design-system/ui/Button";
+import { Dialog } from "../../shared/design-system/ui/Dialog";
 import { Select } from "../../shared/design-system/ui/Select";
 import { useTemplateCatalog } from "./useTemplateCatalog";
 
@@ -22,6 +23,10 @@ export function TemplateEditor({
 }: TemplateEditorProps) {
   const catalog = useTemplateCatalog(session);
   const automatic = useRef(initialDefault);
+  const [replacement, setReplacement] = useState<string>();
+  const cancelReplace = useRef<HTMLButtonElement>(null);
+  const templateControl = useRef<HTMLDivElement>(null);
+  const replacementTrigger = useRef<HTMLElement | null>(null);
   const templates = catalog.kit.entries.flatMap((e) =>
     !e.record.deleted && e.record.value.type === "template"
       ? [e.record.value]
@@ -50,17 +55,8 @@ export function TemplateEditor({
     }
     onChange({ templateId, lineup, agents, problem });
   };
-  const choose = (id: string, automaticChoice = false) => {
+  const apply = (id: string) => {
     if (!active()) return;
-    if (
-      !automaticChoice &&
-      value &&
-      (value.lineup.canvas ||
-        value.lineup.agents.length ||
-        value.lineup.teamIds.length) &&
-      !window.confirm("Replace the current teams, agents and starting Canvas?")
-    )
-      return;
     automatic.current = "";
     if (!id) {
       onChange({ templateId: "", lineup: emptyLineup(), agents: [] });
@@ -81,6 +77,18 @@ export function TemplateEditor({
       agents: [...template.agents],
       canvas: template.canvas,
     });
+  };
+  const choose = (id: string, automaticChoice = false) => {
+    if (!active()) return;
+    if (
+      !automaticChoice &&
+      value &&
+      (value.lineup.canvas ||
+        value.lineup.agents.length ||
+        value.lineup.teamIds.length)
+    ) {
+      setReplacement(id);
+    } else apply(id);
   };
   useEffect(() => {
     if (
@@ -109,25 +117,33 @@ export function TemplateEditor({
   });
   return (
     <>
-      <Select
-        variant="field"
-        label="Template"
-        value={value?.templateId ?? ""}
-        groups={[
-          {
-            label: "",
-            options: [
-              { value: "", label: "None — blank channel" },
-              ...templates.map((t) => ({ value: t.id, label: t.name })),
-              ...(value?.templateId &&
-              !templates.some((t) => t.id === value.templateId)
-                ? [{ value: value.templateId, label: "Unavailable template" }]
-                : []),
-            ],
-          },
-        ]}
-        onValueChange={(id) => choose(id)}
-      />
+      <div ref={templateControl}>
+        <Select
+          variant="field"
+          label="Template"
+          value={value?.templateId ?? ""}
+          groups={[
+            {
+              label: "",
+              options: [
+                { value: "", label: "None — blank channel" },
+                ...templates.map((t) => ({ value: t.id, label: t.name })),
+                ...(value?.templateId &&
+                !templates.some((t) => t.id === value.templateId)
+                  ? [{ value: value.templateId, label: "Unavailable template" }]
+                  : []),
+              ],
+            },
+          ]}
+          onValueChange={(id) => {
+            replacementTrigger.current =
+              templateControl.current?.querySelector<HTMLElement>(
+                "[role=combobox]",
+              ) ?? null;
+            choose(id);
+          }}
+        />
+      </div>
       {group?.defaultTemplateId &&
         group.defaultTemplateId === value?.templateId && (
           <p className="text-secondary">Default for {group.name}</p>
@@ -137,7 +153,10 @@ export function TemplateEditor({
           <Button
             type="button"
             variant="ghost"
-            onClick={() => choose(group.defaultTemplateId)}
+            onClick={(event) => {
+              replacementTrigger.current = event.currentTarget;
+              choose(group.defaultTemplateId);
+            }}
           >
             Use this group’s default (replace setup)
           </Button>
@@ -173,6 +192,38 @@ export function TemplateEditor({
             : "Refresh selected team membership"}
         </Button>
       )}
+      <Dialog
+        open={replacement !== undefined}
+        onOpenChange={(open) => {
+          if (!open) setReplacement(undefined);
+        }}
+        dismissOnOutsideClick
+        initialFocus={cancelReplace}
+        finalFocus={replacementTrigger}
+        title="Replace channel setup?"
+        actions={
+          <>
+            <Button
+              ref={cancelReplace}
+              onClick={() => setReplacement(undefined)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="prominent"
+              onClick={() => {
+                if (replacement === undefined) return;
+                setReplacement(undefined);
+                apply(replacement);
+              }}
+            >
+              Replace setup
+            </Button>
+          </>
+        }
+      >
+        Replace the current teams, agents and starting Canvas?
+      </Dialog>
     </>
   );
 }

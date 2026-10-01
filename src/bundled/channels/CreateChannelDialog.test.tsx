@@ -195,7 +195,15 @@ it("blocks edits during creation without applying disabled control styles", asyn
   expect(privateSwitch).toHaveAttribute("aria-disabled", "true");
   await user.click(privateSwitch);
   expect(privateSwitch).not.toBeChecked();
-  finishCreation();
+  try {
+    await user.click(
+      document.querySelector(".buzz-dialog-backdrop") as Element,
+    );
+    await user.keyboard("{Escape}");
+    expect(onOpenChange).not.toHaveBeenCalled();
+  } finally {
+    finishCreation();
+  }
   await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false));
 });
 
@@ -287,4 +295,26 @@ it("resumes frozen setup with the plugin off and unavailable catalogs without re
   ).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Retry channel" }));
   await waitFor(() => expect(onCreate).toHaveBeenCalledWith(pending));
+});
+
+it("outside dismissal cancels an ordinary create draft without creating", async () => {
+  const user = userEvent.setup();
+  const onCreate = vi.fn(async () => {});
+  const onOpenChange = vi.fn();
+  render(
+    <CreateChannelDialog
+      {...setupProps()}
+      open
+      onCreate={onCreate}
+      onOpenChange={onOpenChange}
+    />,
+  );
+  await user.type(
+    screen.getByRole("textbox", { name: "Name" }),
+    "Unsent draft",
+  );
+  expect(onOpenChange).not.toHaveBeenCalled();
+  await user.click(document.querySelector(".buzz-dialog-backdrop") as Element);
+  expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false);
+  expect(onCreate).not.toHaveBeenCalled();
 });

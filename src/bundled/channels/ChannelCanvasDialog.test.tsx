@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { StrictMode, useRef, useState } from "react";
 import userEvent from "@testing-library/user-event";
@@ -75,12 +76,48 @@ it("keeps a restored conflict draft until explicit confirmed reload", async () =
   const text = screen.getByRole("textbox", { name: "Canvas Markdown" });
   expect(text).toHaveValue("My unsaved work");
   expect(screen.getByRole("button", { name: "Save Canvas" })).toBeDisabled();
-  const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
-  await user.click(screen.getByRole("button", { name: "Reload saved Canvas" }));
-  expect(text).toHaveValue("My unsaved work");
-  expect(canvas.read).toHaveBeenCalledTimes(1);
-  confirm.mockReturnValue(true);
-  await user.click(screen.getByRole("button", { name: "Reload saved Canvas" }));
+  const reload = screen.getByRole("button", { name: "Reload saved Canvas" });
+  for (const dismissal of ["backdrop", "escape", "close", "cancel"]) {
+    await user.click(reload);
+    const confirmation = screen.getByRole("dialog", {
+      name: "Reload saved Canvas?",
+    });
+    await waitFor(() =>
+      expect(
+        within(confirmation).getByRole("button", { name: "Cancel" }),
+      ).toHaveFocus(),
+    );
+    await user.click(
+      within(confirmation).getByText(
+        "Discard your draft and reload the saved Canvas?",
+      ),
+    );
+    expect(confirmation).toBeInTheDocument();
+    if (dismissal === "backdrop")
+      await user.click(
+        confirmation.parentElement?.querySelector(
+          ".buzz-dialog-backdrop",
+        ) as Element,
+      );
+    else if (dismissal === "escape") await user.keyboard("{Escape}");
+    else
+      await user.click(
+        within(confirmation).getByRole("button", {
+          name: dismissal === "close" ? "Close" : "Cancel",
+        }),
+      );
+    await waitFor(() => expect(confirmation).not.toBeInTheDocument());
+    expect(
+      screen.getByRole("dialog", { name: "Channel Canvas" }),
+    ).toBeInTheDocument();
+    // jsdom lacks focus({ preventScroll }) detection; browser coverage checks pointer return.
+    if (dismissal !== "backdrop")
+      await waitFor(() => expect(reload).toHaveFocus());
+    expect(text).toHaveValue("My unsaved work");
+    expect(canvas.read).toHaveBeenCalledTimes(1);
+  }
+  await user.click(reload);
+  await user.click(screen.getByRole("button", { name: "Discard and reload" }));
   await waitFor(() => expect(text).toHaveValue("Saved"));
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   expect(

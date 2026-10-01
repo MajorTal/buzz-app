@@ -246,6 +246,7 @@ export function ChannelDetailsEditor({
       )}
       {!view.editing && status}
       <Dialog
+        dismissOnOutsideClick
         open={view.editing}
         onOpenChange={(open) => {
           if (!open) close();

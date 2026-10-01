@@ -44,6 +44,7 @@ import type {
 import type { Contribution } from "../../plugins/contributions";
 import { CreateChannelDialog } from "../channels/CreateChannelDialog";
 import { TemplateEditor } from "./TemplateEditor";
+import { Dialog } from "../../shared/design-system/ui/Dialog";
 import { SaveAsTemplate } from "./TemplateSettings";
 import { MentionPicker } from "../mentions/MentionPicker";
 import { MentionCompletion } from "../mentions/MentionCompletion";
@@ -1684,4 +1685,79 @@ beforeEach(() => {
 });
 afterEach(() => {
   Reflect.deleteProperty(HTMLElement.prototype, "showPopover");
+});
+
+it("template replacement dismisses only its confirmation and preserves setup until accepted", async () => {
+  const user = userEvent.setup();
+  const test = harness(async () => ({ definitions: [], identities: [] }));
+  test.setRecord(savedTemplate([]));
+  const chosen = vi.fn();
+  const close = vi.fn();
+  render(
+    <Dialog
+      open
+      onOpenChange={close}
+      title="Create a channel"
+      dismissOnOutsideClick
+    >
+      <Editor
+        test={test}
+        initial={{
+          templateId: "",
+          lineup: { ...emptyLineup(), canvas: "Unsaved plan" },
+          agents: [],
+        }}
+        chosen={chosen}
+      />
+    </Dialog>,
+  );
+  try {
+    await waitFor(() =>
+      expect(test.owner.session.channelKit.snapshot().status).toBe("ready"),
+    );
+    const template = screen.getByRole("combobox", { name: "Template" });
+    for (const dismissal of ["backdrop", "escape", "close", "cancel"]) {
+      await chooseSaved();
+      const confirmation = screen.getByRole("dialog", {
+        name: "Replace channel setup?",
+      });
+      await waitFor(() =>
+        expect(
+          within(confirmation).getByRole("button", { name: "Cancel" }),
+        ).toHaveFocus(),
+      );
+      if (dismissal === "backdrop")
+        await user.click(
+          confirmation.parentElement?.querySelector(
+            ".buzz-dialog-backdrop",
+          ) as Element,
+        );
+      else if (dismissal === "escape") await user.keyboard("{Escape}");
+      else
+        await user.click(
+          within(confirmation).getByRole("button", {
+            name: dismissal === "close" ? "Close" : "Cancel",
+          }),
+        );
+      await waitFor(() => expect(confirmation).not.toBeInTheDocument());
+      // jsdom lacks focus({ preventScroll }) detection; browser coverage checks pointer return.
+      if (dismissal !== "backdrop")
+        await waitFor(() => expect(template).toHaveFocus());
+      expect(template).toHaveTextContent("None — blank channel");
+      expect(chosen).not.toHaveBeenCalled();
+      expect(close).not.toHaveBeenCalled();
+    }
+    await chooseSaved();
+    await user.click(screen.getByRole("button", { name: "Replace setup" }));
+    expect(chosen).toHaveBeenCalledExactlyOnceWith({
+      templateId: "saved",
+      lineup: { ...emptyLineup(), canvas: "# Plan" },
+      agents: [],
+      problem: undefined,
+    });
+    expect(close).not.toHaveBeenCalled();
+    expect(test.published).toEqual([]);
+  } finally {
+    test.dispose();
+  }
 });

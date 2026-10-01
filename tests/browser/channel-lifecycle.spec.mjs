@@ -18,7 +18,7 @@ test.use({
   historyCounts: { alpha: 2, beta: 1 },
 });
 
-// Native modal focus/escape and real menu -> modal handoff require a browser.
+// Shared modal focus/escape and real menu -> modal handoff require a browser.
 // Role/type/signing/cancellation matrices remain in domain and mounted tests.
 test("archive confirmation returns focus on cancel and navigates after confirmed removal", async ({
   page,
@@ -127,7 +127,9 @@ test("archive confirmation returns focus on cancel and navigates after confirmed
   await dialog.screenshot({
     path: testInfo.outputPath("lifecycle-confirmation.png"),
   });
-  await page.keyboard.press("Escape");
+  await dialog.getByRole("heading").click();
+  await expect(dialog).toBeVisible();
+  await page.mouse.click(8, 8);
   await expect(dialog).toHaveCount(0);
   await expect(row).toBeFocused();
   expect(app.report.lifecyclePublications ?? []).toHaveLength(0);
@@ -347,7 +349,7 @@ for (const action of ["archive", "hide"]) {
   });
 }
 
-// Native Escape dispatch precedes cancel and bubbles through the navigation
+// Escape must not bubble through the navigation
 // disclosure. A DOM emulator cannot prove visibility or modal inertness here.
 test("pending modal Escape in narrow navigation preserves visible recovery after uncertainty", async ({
   page,
@@ -405,9 +407,13 @@ test("pending modal Escape in narrow navigation preserves visible recovery after
       "data-expanded",
       "true",
     );
-    expect(await dialog.evaluate((element) => element.matches(":modal"))).toBe(
-      true,
-    );
+    await expect(dialog).toHaveAttribute("aria-modal", "true");
+    await page.keyboard.press("Tab");
+    expect(
+      await dialog.evaluate((element) =>
+        element.contains(document.activeElement),
+      ),
+    ).toBe(true);
   } finally {
     release();
   }

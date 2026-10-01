@@ -219,6 +219,7 @@ function OpenCreateChannelDialog({
 
   return (
     <Dialog
+      dismissOnOutsideClick
       open={open}
       onOpenChange={onOpenChange}
       preventClose={busy}

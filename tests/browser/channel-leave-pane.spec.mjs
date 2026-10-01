@@ -107,7 +107,7 @@ test("management Leave restores focus on cancel, holds pending, and completes th
     await page.keyboard.press("Escape");
     await expect(dialog).toBeVisible();
     await expect(
-      sidebar.locator(`[data-channel-id="${channelId}"]`),
+      page.locator(`[data-channel-id="${channelId}"]`),
     ).toBeVisible();
     expect(app.report.lifecyclePublications ?? []).toHaveLength(0);
   } finally {

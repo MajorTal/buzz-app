@@ -83,7 +83,8 @@ export function Dialog({
     >
       <BaseDialog.Portal>
         <BaseDialog.Backdrop
-          forceRender={placement === "right"}
+          forceRender={placement === "right" || dismissOnOutsideClick}
+          data-outside-dismissal={dismissOnOutsideClick || undefined}
           data-placement={placement}
           data-buzz-ui=""
           data-motion={transition}

@@ -437,3 +437,34 @@ test("navigation tabs retain keyboard selection and separate close buttons", asy
   await user.keyboard("{Delete}");
   expect(close).toHaveBeenCalledTimes(2);
 });
+
+test("centered nested pointer-dismissal owns a backdrop and leaves the parent open", async () => {
+  const user = userEvent.setup();
+  const parent = vi.fn();
+  const child = vi.fn();
+  render(
+    <Dialog open title="Editor" onOpenChange={parent} dismissOnOutsideClick>
+      <Dialog open title="Confirm" onOpenChange={child} dismissOnOutsideClick>
+        <Button>Cancel</Button>
+      </Dialog>
+    </Dialog>,
+  );
+  const popup = screen.getByRole("dialog", { name: "Confirm" });
+  const backdrop = popup.parentElement?.querySelector(".buzz-dialog-backdrop");
+  expect(backdrop).toHaveAttribute("data-outside-dismissal", "true");
+  await user.click(backdrop as Element);
+  expect(child).toHaveBeenCalledExactlyOnceWith(false);
+  expect(parent).not.toHaveBeenCalled();
+});
+
+test("outside dismissal remains opt-in", async () => {
+  const user = userEvent.setup();
+  const change = vi.fn();
+  render(
+    <Dialog open title="Editor" onOpenChange={change}>
+      <Button>Save</Button>
+    </Dialog>,
+  );
+  await user.click(document.querySelector(".buzz-dialog-backdrop") as Element);
+  expect(change).not.toHaveBeenCalled();
+});

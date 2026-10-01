@@ -398,6 +398,25 @@ saved/default conversation selection, including after reload. Retained archived 
 hidden membership cannot reopen itself through that destination; intentional exact
 navigation to a hidden DM remains supported.
 
+## Channel-management modal dismissal
+
+Channel-management modals explicitly opt into the shared Dialog's backdrop-click
+cancellation. Create, Edit details, Canvas, Members, lifecycle confirmations,
+new sections, personal groups and templates/teams use the same Close/Cancel path
+for outside clicks. Clicks inside or in portaled controls do not dismiss them.
+The non-modal Settings panel is unchanged; the shared Dialog default stays opt-in.
+
+Canvas reload, template/team deletion and template replacement use nested shared
+Dialogs rather than host-owned confirmation prompts. Cancel, Close, Escape or a
+backdrop click dismisses only that confirmation, keeps the parent draft/library,
+and never executes the action. Confirmations initially focus Cancel and return
+focus to their initiating control; lifecycle focus remains sidebar-owned.
+
+Existing pending operations continue to block dismissal. Members remains closable
+while session-owned invitations/recovery continue. Canvas keeps its local draft;
+uncertain Create/Edit and lifecycle outcomes retain their existing recovery rules.
+No dismissal saves, retries, replaces setup or confirms a destructive action.
+
 ## Editing channel details
 
 Channel Settings shows the signed name, description and explicit visibility for

@@ -40,6 +40,8 @@ export function ChannelCanvasDialog({
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const operation = useRef(0);
+  const [confirmReload, setConfirmReload] = useState(false);
+  const cancelReload = useRef<HTMLButtonElement>(null);
   useEffect(
     () => () => {
       operation.current++;
@@ -99,6 +101,7 @@ export function ChannelCanvasDialog({
   };
   return (
     <Dialog
+      dismissOnOutsideClick
       open={open}
       onOpenChange={onOpenChange}
       finalFocus={finalFocus}
@@ -112,12 +115,7 @@ export function ChannelCanvasDialog({
               disabled={busy}
               onClick={() => {
                 if (!loaded) void load();
-                else if (
-                  window.confirm(
-                    "Discard your draft and reload the saved Canvas?",
-                  )
-                )
-                  void load(true);
+                else setConfirmReload(true);
               }}
             >
               {loaded ? "Reload saved Canvas" : "Retry loading"}
@@ -158,6 +156,31 @@ export function ChannelCanvasDialog({
           </p>
         )}
       </div>
+      <Dialog
+        open={open && confirmReload}
+        onOpenChange={setConfirmReload}
+        dismissOnOutsideClick
+        initialFocus={cancelReload}
+        title="Reload saved Canvas?"
+        actions={
+          <>
+            <Button ref={cancelReload} onClick={() => setConfirmReload(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                setConfirmReload(false);
+                void load(true);
+              }}
+            >
+              Discard and reload
+            </Button>
+          </>
+        }
+      >
+        Discard your draft and reload the saved Canvas?
+      </Dialog>
     </Dialog>
   );
 }

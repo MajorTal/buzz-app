@@ -53,6 +53,11 @@ export function ChannelTemplatesDialog({
   const [base, setBase] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [deleting, setDeleting] = useState<{
+    value: Team | Template;
+    eventId: string;
+  }>();
+  const cancelDelete = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     if (open) {
       kit.ensure();
@@ -88,6 +93,7 @@ export function ChannelTemplatesDialog({
   };
   return (
     <Dialog
+      dismissOnOutsideClick
       open={open}
       onOpenChange={onOpenChange}
       preventClose={busy}
@@ -234,14 +240,9 @@ export function ChannelTemplatesDialog({
                         </Button>
                         <Button
                           variant="ghost"
-                          onClick={() => {
-                            if (
-                              window.confirm(
-                                `Delete “${value.name}”? Existing channels stay unchanged. References in templates and group defaults will need replacement.`,
-                              )
-                            )
-                              void save(value, entry.eventId, true);
-                          }}
+                          onClick={() =>
+                            setDeleting({ value, eventId: entry.eventId })
+                          }
                         >
                           Delete
                         </Button>
@@ -253,6 +254,35 @@ export function ChannelTemplatesDialog({
           </>
         )}
       </div>
+      <Dialog
+        open={open && !!deleting}
+        onOpenChange={(open) => {
+          if (!open) setDeleting(undefined);
+        }}
+        dismissOnOutsideClick
+        initialFocus={cancelDelete}
+        title={`Delete “${deleting?.value.name ?? ""}”?`}
+        actions={
+          <>
+            <Button ref={cancelDelete} onClick={() => setDeleting(undefined)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (!deleting) return;
+                setDeleting(undefined);
+                void save(deleting.value, deleting.eventId, true);
+              }}
+            >
+              Delete
+            </Button>
+          </>
+        }
+      >
+        Existing channels stay unchanged. References in templates and group
+        defaults will need replacement.
+      </Dialog>
     </Dialog>
   );
 }

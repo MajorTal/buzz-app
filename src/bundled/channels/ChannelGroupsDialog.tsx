@@ -65,6 +65,7 @@ export function ChannelGroupsDialog({
   };
   return (
     <Dialog
+      dismissOnOutsideClick
       open={open}
       onOpenChange={onOpenChange}
       preventClose={busy}

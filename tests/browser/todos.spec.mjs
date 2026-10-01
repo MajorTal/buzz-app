@@ -220,9 +220,7 @@ test("opt-in Todos saves ordinary Canvas and disabling leaves it editable", asyn
     .click();
   const workspace = page.locator("[data-panel-workspace]");
   const picker = workspace.getByRole("region", { name: "Choose a tab" });
-  await picker
-    .getByRole("button", { name: "Channel tools", exact: true })
-    .click();
+  await picker.getByRole("tab", { name: "Tools", exact: true }).click();
   await expect(
     picker.getByRole("button", { name: "Terminal", exact: true }),
   ).toHaveCount(0);

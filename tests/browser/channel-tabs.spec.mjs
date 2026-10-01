@@ -41,7 +41,11 @@ test("channel tab sets restore conversations and keep replies and sends scoped",
     .poll(async () => (await main.boundingBox()).width)
     .toBeCloseTo(fullWidth, 0);
   await split.click();
-  await expect(workspace.getByRole("tab")).toHaveCount(1);
+  await expect(
+    workspace
+      .getByRole("tablist", { name: "Panel tabs", exact: true })
+      .getByRole("tab"),
+  ).toHaveCount(1);
   await expect(
     workspace.getByRole("searchbox", { name: "Find a channel or person" }),
   ).toHaveValue("Beta");
@@ -98,9 +102,7 @@ test("channel tab sets restore conversations and keep replies and sends scoped",
     });
     await expect(search).toBeFocused();
     if (name === "Alice Fixture")
-      await picker
-        .getByRole("button", { name: "Direct messages", exact: true })
-        .click();
+      await picker.getByRole("tab", { name: "DMs", exact: true }).click();
     await search.fill(name);
     await picker.getByRole("button", { name, exact: true }).click();
     await expect(
@@ -137,7 +139,11 @@ test("channel tab sets restore conversations and keep replies and sends scoped",
     .toBeCloseTo(fullWidth, 0);
   await expect(workspace).toBeHidden();
   await split.click();
-  await expect(workspace.getByRole("tab")).toHaveCount(2);
+  await expect(
+    workspace
+      .getByRole("tablist", { name: "Panel tabs", exact: true })
+      .getByRole("tab"),
+  ).toHaveCount(2);
   await expect(
     workspace.getByRole("tab", { name: "Beta", exact: true }),
   ).toHaveAttribute("aria-selected", "true");

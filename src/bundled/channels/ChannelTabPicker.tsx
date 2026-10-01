@@ -1,14 +1,12 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import type { ChannelSummary } from "../../features/relay/contracts";
 import type { RegisteredPanel } from "../../features/panels/service";
 import {
-  ChatCircleIcon,
-  HashIcon,
-  WrenchIcon,
   TerminalWindowIcon,
   ListChecksIcon,
 } from "../../shared/design-system/icons";
 import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
+import { Tabs } from "../../shared/design-system/ui/Tabs";
 import { SearchField } from "../../shared/design-system/ui/SearchField";
 import styles from "./ChannelTabs.module.css";
 
@@ -29,9 +27,9 @@ export function isChannelTabTool(panel: RegisteredPanel) {
   );
 }
 const categories = [
-  { id: "channels", label: "Channels", Icon: HashIcon },
-  { id: "dm", label: "Direct messages", Icon: ChatCircleIcon },
-  { id: "tools", label: "Channel tools", Icon: WrenchIcon },
+  { id: "channels", label: "Channels" },
+  { id: "dm", label: "DMs" },
+  { id: "tools", label: "Tools" },
 ] as const;
 
 export function ChannelTabPicker({
@@ -47,6 +45,7 @@ export function ChannelTabPicker({
   choose(channelId: string): void;
   chooseTool(panel: RegisteredPanel): void;
 }) {
+  const panelId = useId();
   const input = useRef<HTMLElement>(null);
   useEffect(() => {
     input.current?.focus();
@@ -68,23 +67,26 @@ export function ChannelTabPicker({
   return (
     <section className={styles.picker} aria-label="Choose a tab">
       <div className={styles.pickerLayout}>
-        <nav className={styles.categories} aria-label="Tab categories">
-          {categories.map(({ id, label, Icon }) => (
-            <NavigationItem
-              key={id}
-              label={label}
-              icon={<Icon size="1rem" />}
-              selected={category === id}
-              aria-current={false}
-              aria-pressed={category === id}
-              onClick={() => {
-                setCategory(id);
-                setQuery("");
-              }}
-            />
-          ))}
-        </nav>
-        <div className={styles.choices}>
+        <Tabs
+          variant="panel"
+          label="Tab categories"
+          value={category}
+          onValueChange={(value) => {
+            setCategory(value);
+            setQuery("");
+          }}
+          items={categories.map(({ id, label }) => ({
+            value: id,
+            label,
+            panelId: `${panelId}-${id}`,
+          }))}
+        />
+        <div
+          className={styles.choices}
+          role="tabpanel"
+          id={`${panelId}-${category}`}
+          aria-labelledby={`${panelId}-${category}-tab`}
+        >
           <SearchField
             inputRef={input}
             label={

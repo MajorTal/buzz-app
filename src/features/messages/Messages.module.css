@@ -579,6 +579,8 @@ html[data-keyboard-navigation] .attachmentImage:focus-visible {
   overflow: auto;
   padding: 0 var(--space-panel-inset);
   padding-bottom: var(--space-panel-inset);
+  /* Older-history corrections hide overflow for a task (scroll-correction.ts). */
+  scrollbar-gutter: stable;
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--text) 20%, transparent) transparent;
 }

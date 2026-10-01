@@ -62,6 +62,8 @@
 }
 .calendarPopup {
   @apply floating-surface;
+  border-radius: var(--radius-profile-popover);
+  padding: var(--space-2);
 }
 .timeOptions {
   max-height: min(18rem, calc(var(--available-height) - var(--space-4)));
@@ -69,6 +71,7 @@
 }
 .choices {
   display: grid;
+  padding-block: var(--space-2);
   border: 1px solid var(--border-standard);
   border-radius: var(--radius-control);
   overflow: hidden;
@@ -101,4 +104,24 @@
 .status[data-compact] {
   max-width: 6rem;
   flex-shrink: 0;
+}
+
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Status-owned popup portals keep their own scoped geometry. */
+:global(.buzz-menu-popup[data-status-menu]) {
+  --interaction-row-hover: var(--affordance-subtle-hover);
+  border-radius: var(--radius-profile-popover);
+  padding: var(--space-2);
+}
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Hover rows fit the popup's inset curve. */
+:global(.buzz-menu-popup[data-status-menu] .buzz-menu-item) {
+  border-radius: var(--radius-control);
+}
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Identify the status dialog by its owned form. */
+:global(.buzz-dialog):has(.fields) {
+  border-radius: var(--radius-profile-popover);
+}
+
+/* biome-ignore lint/correctness/noUnknownPseudoClass: The status editor supplies this ID to its emoji portal. */
+:global(.buzz-popover-popup[id^="status-emoji-"]) {
+  border-radius: var(--radius-profile-popover);
 }

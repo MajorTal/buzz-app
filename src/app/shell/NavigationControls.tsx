@@ -9,12 +9,12 @@ export function NavigationControls({ navigation }: { navigation: Navigation }) {
   const state = useSyncExternalStore(navigation.subscribe, navigation.snapshot);
   return (
     <nav
-      className="flex shrink-0 items-center gap-1"
+      className="flex shrink-0 items-center gap-2"
       aria-label="Navigation history"
     >
       <IconButton
         type="button"
-        variant="chrome"
+        variant="ghost"
         shape="round"
         aria-label="Go back"
         title="Go back"
@@ -24,7 +24,7 @@ export function NavigationControls({ navigation }: { navigation: Navigation }) {
       />
       <IconButton
         type="button"
-        variant="chrome"
+        variant="ghost"
         shape="round"
         aria-label="Go forward"
         title="Go forward"

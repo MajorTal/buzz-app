@@ -93,7 +93,7 @@ export function StatusExpiration({
                 minute: "2-digit",
               })}
           </MenuTrigger>
-          <MenuPopup align="end">
+          <MenuPopup align="end" data-status-menu>
             <div className={styles.timeOptions}>
               <MenuRadioGroup
                 value={time}

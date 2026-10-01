@@ -10,7 +10,10 @@ const root = fileURLToPath(new URL("../../", import.meta.url));
 
 // Playwright owns this worker-scoped build. Only compiled assets are shared;
 // each test still owns its server, identities, relay state and browser storage.
-export async function buildApp({ developmentReact, pluginFixtures }, use) {
+export async function buildApp(
+  { developmentReact, pluginFixtures, companionFixture },
+  use,
+) {
   const directory = await mkdtemp(join(tmpdir(), "buzz-browser-build-"));
   try {
     const config = {
@@ -21,13 +24,24 @@ export async function buildApp({ developmentReact, pluginFixtures }, use) {
       logLevel: "error",
       plugins: [
         react(),
-        ...(pluginFixtures
+        ...(pluginFixtures || companionFixture
           ? [
               {
                 name: "fixture-installed-plugins",
                 transform(code, id) {
                   if (id !== join(root, "src/bundled/index.ts")) return;
-                  return `import { fixturePlugins } from ${JSON.stringify(join(root, "tests/browser/plugin-fixtures.tsx"))};\n${code.replace("= [", "= [ ...fixturePlugins,")}`;
+                  const source = pluginFixtures
+                    ? "plugin-fixtures"
+                    : "companion-fixture";
+                  const exported = pluginFixtures
+                    ? "fixturePlugins"
+                    : "companionPlugins";
+                  // Keep the companion after the built-ins so catalog scrolling
+                  // remains part of its focus-restoration journey.
+                  const injected = pluginFixtures
+                    ? code.replace("= [", `= [ ...${exported},`)
+                    : code.replace(/\];\s*$/, `].concat(${exported});`);
+                  return `import { ${exported} } from ${JSON.stringify(join(root, `tests/browser/${source}.tsx`))};\n${injected}`;
                 },
               },
             ]

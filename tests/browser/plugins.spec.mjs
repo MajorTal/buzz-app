@@ -31,12 +31,12 @@ test("a second plugin uses the same launcher slot without remounting a legacy pa
   await expect(draft).toHaveValue("Keep the page instance");
   await button(page, "Notes").click();
   await expect(note).toHaveValue("");
-  await companionLauncher(page, "Bestie").click();
+  await companionLauncher(page, "Companion fixture").click();
   await expect(card(page, "Notes")).toHaveCount(0);
-  await expect(card(page, "Bestie")).toHaveCount(1);
+  await expect(card(page, "Companion fixture")).toHaveCount(1);
   await page.evaluate(() => window.stalePanelClose());
-  await expect(card(page, "Bestie")).toHaveCount(1);
-  await button(page, "Close Bestie panel").click();
+  await expect(card(page, "Companion fixture")).toHaveCount(1);
+  await button(page, "Close Companion fixture panel").click();
   await expect(draft).toHaveValue("Keep the page instance");
   await button(page, "Notes").click();
   await button(page, "Your profile").click();
@@ -48,9 +48,9 @@ test("a second plugin uses the same launcher slot without remounting a legacy pa
   await page.getByRole("switch", { name: "Enable Notes fixture" }).click();
   await expect(button(page, "Notes")).toBeVisible();
   await expect(card(page, "Notes")).toHaveCount(0);
-  await companionLauncher(page, "Bestie").click();
+  await companionLauncher(page, "Companion fixture").click();
   await page.evaluate(() => window.stalePanelClose());
-  await expect(card(page, "Bestie")).toHaveCount(1);
+  await expect(card(page, "Companion fixture")).toHaveCount(1);
 });
 
 test("the launched card works with an empty Channels roster", async ({
@@ -83,11 +83,11 @@ test("the launched card works with an empty Channels roster", async ({
   await expect(
     page.getByText("No channels yet.", { exact: true }),
   ).toBeVisible();
-  await companionLauncher(page, "Bestie").click();
-  await expect(card(page, "Bestie")).toHaveCount(1);
+  await companionLauncher(page, "Companion fixture").click();
+  await expect(card(page, "Companion fixture")).toHaveCount(1);
   await button(page, "Notes").click();
   await expect(card(page, "Notes")).toHaveCount(1);
-  await expect(card(page, "Bestie")).toHaveCount(0);
+  await expect(card(page, "Companion fixture")).toHaveCount(0);
   await button(page, "Close Notes panel").click();
   await expect(card(page, "Notes")).toHaveCount(0);
   await expect(button(page, "Notes")).toBeFocused();
@@ -104,7 +104,7 @@ test("old close cannot dismiss a later opening of the same contribution", async 
   await page.evaluate(() => {
     window.firstNotesClose = window.stalePanelClose;
   });
-  await companionLauncher(page, "Bestie").click();
+  await companionLauncher(page, "Companion fixture").click();
   await expect(card(page, "Notes")).toHaveCount(0);
   await button(page, "Notes").click();
   await page.getByRole("textbox", { name: "Panel note" }).fill("A new opening");
@@ -137,12 +137,12 @@ test("companion remains usable while Channels connection is pending", async ({
     await expect(card(page, "Notes")).toHaveCount(1);
     await button(page, "Close Notes panel").click();
     await expect(button(page, "Notes")).toBeFocused();
-    await companionLauncher(page, "Bestie").click();
+    await companionLauncher(page, "Companion fixture").click();
     release();
     await expect(
       page.getByRole("textbox", { name: "Message #Alpha", exact: true }),
     ).toBeVisible();
-    await expect(card(page, "Bestie")).toHaveCount(1);
+    await expect(card(page, "Companion fixture")).toHaveCount(1);
   } finally {
     release();
   }

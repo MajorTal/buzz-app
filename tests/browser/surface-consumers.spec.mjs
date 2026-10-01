@@ -59,7 +59,13 @@ for (const mode of ["light", "dark"]) {
             ? "--status-away"
             : "--text-subtle";
       const backdrop =
-        status === "Away" ? "transparent" : "var(--surface-inset)";
+        status === "Online"
+          ? "var(--surface-popover)"
+          : status === "Away"
+            ? "transparent"
+            : "var(--surface-inset)";
+      const [rest, hover, pressed] =
+        status === "Online" ? [6, 10, 14] : [12, 18, 24];
       const expected = async (percent) =>
         resolvedColor(
           account,
@@ -67,24 +73,24 @@ for (const mode of ["light", "dark"]) {
         );
       const text = await resolvedColor(
         account,
-        `var(${status === "Away" ? "--text-warning" : tint})`,
+        `var(${status === "Online" ? "--text-success" : status === "Away" ? "--text-warning" : tint})`,
       );
       await page.mouse.move(1, 1);
       await expect(availability).toHaveCSS(
         "background-color",
-        await expected(12),
+        await expected(rest),
       );
       await expect(availability).toHaveCSS("color", text);
       await availability.hover();
       await expect(availability).toHaveCSS(
         "background-color",
-        await expected(18),
+        await expected(hover),
       );
       await page.mouse.down();
       try {
         await expect(availability).toHaveCSS(
           "background-color",
-          await expected(24),
+          await expected(pressed),
         );
       } finally {
         await page.mouse.up();
@@ -99,14 +105,14 @@ for (const mode of ["light", "dark"]) {
       await page.mouse.move(1, 1);
       await expect(availability).toHaveCSS(
         "background-color",
-        await expected(24),
+        await expected(pressed),
       );
       await page.keyboard.press("Escape");
       await expect(availability).toHaveAttribute("aria-expanded", "false");
       await expect(availability).toBeFocused();
       await expect(availability).toHaveCSS(
         "background-color",
-        await expected(12),
+        await expected(rest),
       );
     }
   });

@@ -257,7 +257,7 @@ test("section disclosure toggles content and honors reduced motion", async ({
 });
 
 // Browser layout verifies the header contract, including inline icon sizing.
-test("top bar keeps 28px controls, 16px icons and an 18px Bestie image", async ({
+test("top bar keeps unboxed 28px controls, 16px icons and no Bestie launcher", async ({
   page,
   app,
 }, info) => {
@@ -279,9 +279,50 @@ test("top bar keeps 28px controls, 16px icons and an 18px Bestie image", async (
     const box = await icon.boundingBox();
     expect([box.width, box.height]).toEqual([16, 16]);
   }
-  const bestie = await header.locator('img[src="/bestie.png"]').boundingBox();
-  expect([bestie.width, bestie.height]).toEqual([18, 18]);
-  await page.screenshot({ path: info.outputPath("top-bar.png") });
+  await expect(header.locator('img[src="/bestie.png"]')).toHaveCount(0);
+  await page.mouse.move(700, 500);
+  for (const control of await header
+    .locator('[data-icon-variant="ghost"]')
+    .all())
+    await expect(control).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 950 });
+    for (const group of [".shell-communities", ".shell-actions"]) {
+      const boxes = await header
+        .locator(`${group} .buzz-button[data-icon-variant]`)
+        .evaluateAll((nodes) =>
+          nodes.map((node) => {
+            const { x, width } = node.getBoundingClientRect();
+            return { x, width };
+          }),
+        );
+      for (let i = 1; i < boxes.length; i++)
+        expect(boxes[i].x - boxes[i - 1].x - boxes[i - 1].width).toBe(8);
+    }
+    const avatar = await header
+      .getByRole("button", { name: "Your profile" })
+      .boundingBox();
+    for (const control of await controls.all()) {
+      if (await control.isDisabled()) continue;
+      await control.hover();
+      const box = await control.boundingBox();
+      expect([box.width, box.height]).toEqual([avatar.width, avatar.height]);
+      await expect(control).toHaveCSS(
+        "border-radius",
+        await header
+          .getByRole("button", { name: "Your profile" })
+          .evaluate((node) => getComputedStyle(node).borderRadius),
+      );
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 950 });
+  await header
+    .getByRole("button", { name: "Search Buzz", exact: true })
+    .hover();
+  await page.screenshot({
+    path: info.outputPath("top-bar.png"),
+    clip: { x: 0, y: 0, width: 1440, height: 100 },
+  });
 });
 
 // Real responsive layout owns the Settings overlay and the desktop sidebar.
@@ -592,77 +633,81 @@ test("shell toggle restores the shared sidebar for Channels and Agents", async (
 
 // A real grid/overlay measurement is needed: DOM presence misses implicit columns.
 // Inbox and Bestie leave companion placement to the shell frame, unlike Messages.
-test("Inbox and Bestie pages retain companion layout across navigation and resize", async ({
-  page,
-  app,
-}) => {
-  await open(page, app);
-  const sidebar = page.getByRole("navigation", { name: "Subscribed channels" });
-  const pages = page
-    .getByRole("complementary", { name: "Channel sidebar", exact: true })
-    .getByRole("navigation", { name: "Pages" });
-  const launcher = page.locator('.shell-header button[aria-label="Bestie"]');
-  const companion = page.getByRole("complementary", {
-    name: "Bestie",
-    exact: true,
-  });
-  const checkGeometry = async (body, overlay) => {
-    await expect(companion).toBeVisible();
-    await expect
-      .poll(async () => {
-        const card = await companion.boundingBox();
-        const bounds = await body.boundingBox();
-        if (!card || !bounds) return false;
-        return overlay
-          ? Math.abs(card.x + card.width - bounds.x - bounds.width) < 2 &&
-              card.x < bounds.x + bounds.width
-          : card.x >= bounds.x + bounds.width;
-      })
-      .toBe(true);
-    await expect
-      .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
-      .toBe(page.viewportSize().width);
-  };
-  const showNavigation = async () => {
-    if (page.viewportSize().width <= 650)
-      await expect(
-        page.locator("[data-shell-sidebar-toggle]"),
-      ).toHaveAccessibleName(/^(Show|Hide) navigation$/);
-    const show = page.getByRole("button", {
-      name: "Show navigation",
+test.extend({ companionFixture: true })(
+  "Inbox and Bestie pages retain companion layout across navigation and resize",
+  async ({ page, app }) => {
+    await open(page, app);
+    const sidebar = page.getByRole("navigation", {
+      name: "Subscribed channels",
+    });
+    const pages = page
+      .getByRole("complementary", { name: "Channel sidebar", exact: true })
+      .getByRole("navigation", { name: "Pages" });
+    const launcher = page.locator(
+      '.shell-header button[aria-label="Companion fixture"]',
+    );
+    const companion = page.getByRole("complementary", {
+      name: "Companion fixture",
       exact: true,
     });
-    if (await show.isVisible()) await show.click();
-  };
-  const selectChannel = async (name) => {
-    await showNavigation();
-    await sidebar.getByRole("button", { name, exact: true }).click();
-  };
-  const openPage = async (name) => {
-    await showNavigation();
-    await pages.getByRole("button", { name, exact: true }).click();
-    const body = page.getByRole("region", { name, exact: true });
-    await expect(
-      body.getByRole("heading", { name, exact: true }),
-    ).toBeVisible();
-    return body;
-  };
-  for (const width of [1440, 900, 600]) {
-    await page.setViewportSize({ width, height: 950 });
-    let body = await openPage("Inbox");
-    await launcher.click();
-    await checkGeometry(body, width <= 1000);
-    body = await openPage("Bestie");
-    await checkGeometry(body, width <= 1000);
-    await launcher.click();
-    await expect(companion).not.toBeVisible();
-    await selectChannel("Alpha");
-    await launcher.click();
-    body = await openPage("Inbox");
-    await checkGeometry(body, width <= 1000);
-    await launcher.click();
-  }
-});
+    const checkGeometry = async (body, overlay) => {
+      await expect(companion).toBeVisible();
+      await expect
+        .poll(async () => {
+          const card = await companion.boundingBox();
+          const bounds = await body.boundingBox();
+          if (!card || !bounds) return false;
+          return overlay
+            ? Math.abs(card.x + card.width - bounds.x - bounds.width) < 2 &&
+                card.x < bounds.x + bounds.width
+            : card.x >= bounds.x + bounds.width;
+        })
+        .toBe(true);
+      await expect
+        .poll(() => page.evaluate(() => document.documentElement.scrollWidth))
+        .toBe(page.viewportSize().width);
+    };
+    const showNavigation = async () => {
+      if (page.viewportSize().width <= 650)
+        await expect(
+          page.locator("[data-shell-sidebar-toggle]"),
+        ).toHaveAccessibleName(/^(Show|Hide) navigation$/);
+      const show = page.getByRole("button", {
+        name: "Show navigation",
+        exact: true,
+      });
+      if (await show.isVisible()) await show.click();
+    };
+    const selectChannel = async (name) => {
+      await showNavigation();
+      await sidebar.getByRole("button", { name, exact: true }).click();
+    };
+    const openPage = async (name) => {
+      await showNavigation();
+      await pages.getByRole("button", { name, exact: true }).click();
+      const body = page.getByRole("region", { name, exact: true });
+      await expect(
+        body.getByRole("heading", { name, exact: true }),
+      ).toBeVisible();
+      return body;
+    };
+    for (const width of [1440, 900, 600]) {
+      await page.setViewportSize({ width, height: 950 });
+      let body = await openPage("Inbox");
+      await launcher.click();
+      await checkGeometry(body, width <= 1000);
+      body = await openPage("Bestie");
+      await checkGeometry(body, width <= 1000);
+      await launcher.click();
+      await expect(companion).not.toBeVisible();
+      await selectChannel("Alpha");
+      await launcher.click();
+      body = await openPage("Inbox");
+      await checkGeometry(body, width <= 1000);
+      await launcher.click();
+    }
+  },
+);
 
 // Real text layout: a rename changes scrollWidth without resizing the label box.
 test("channel name fades follow renames without resizing the sidebar", async ({

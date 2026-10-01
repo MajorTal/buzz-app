@@ -303,6 +303,7 @@
   --neutral-7: #959595; /* no readers                              */
   --neutral-8: #808080; /* text-disabled                           */
   --neutral-9: #5f5f5f; /* metadata also clears AA on pressed fills */
+  --neutral-avatar-on-white: #525252; /* Fixed foreground for a fixed white avatar. */
   --neutral-10: #525252; /* text-secondary                         */
   --neutral-11: #191919; /* inverse fill, paired with neutral-1    */
   --neutral-action-pressed: #525252;
@@ -713,6 +714,10 @@
   /* A chip reads as a chip in running text, so it takes a tighter corner than
      a control and gets its own role rather than borrowing one. */
   --radius-chip: 0.375rem;
+  /* Profile refinements: compact popovers and emphasized availability. */
+  --radius-profile-popover: 1.25rem;
+  --weight-profile-status: 600;
+  --text-avatar-fallback: var(--neutral-avatar-on-white);
   --duration-fast: var(--time-fast);
   --duration-state: var(--time-state);
   --duration-panel-enter: var(--time-panel-enter);

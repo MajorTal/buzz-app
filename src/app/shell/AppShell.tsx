@@ -163,8 +163,9 @@ export function AppShell({
             <IconButton
               ref={navigationToggle}
               data-shell-sidebar-toggle=""
+              data-highlight-expanded="false"
               type="button"
-              variant="chrome"
+              variant="ghost"
               shape="round"
               aria-label={toggleLabel}
               aria-expanded={visibleSidebar}

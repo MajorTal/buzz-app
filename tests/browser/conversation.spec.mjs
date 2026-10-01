@@ -206,7 +206,11 @@ test("independent packed author consumer and native-installed contribution survi
     await expect
       .poll(() => draft.evaluate((element) => element.value))
       .toMatch(/T.*Z/);
-    await draft.fill("base");
+    // Select through the editor after plugin insertion; WebKit fill can retain
+    // the inserted content when its DOM selection has been lost.
+    await draft.press("ControlOrMeta+A");
+    await draft.pressSequentially("base");
+    await expect(draft).toHaveJSProperty("value", "base");
     await draft.evaluate((el) => el.setSelectionRange(1, 3));
     await page
       .getByRole("button", { name: "Insert twice", exact: true })

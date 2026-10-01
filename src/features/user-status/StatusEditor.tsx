@@ -62,7 +62,7 @@ export function StatusEditor({
   const [error, setError] = useState("");
   const message = useRef<HTMLInputElement>(null);
   const emojiTrigger = useRef<HTMLButtonElement>(null);
-  const pickerId = useId();
+  const pickerId = `status-emoji-${useId()}`;
   const formId = useId();
   const working = useRef(false);
   const mounted = useRef(false);
@@ -203,7 +203,7 @@ export function StatusEditor({
               >
                 {durationLabel}
               </MenuTrigger>
-              <MenuPopup align="end">
+              <MenuPopup align="end" data-status-menu>
                 <MenuRadioGroup
                   value={duration}
                   onValueChange={(value) => {

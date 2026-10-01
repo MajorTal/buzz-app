@@ -210,3 +210,12 @@
 @utility interaction-navigation {
   --interaction-selected: var(--affordance-selected);
 }
+
+/* The profile's compact availability badge retains the shared status colors. */
+@utility interaction-profile-availability {
+  @apply interaction-availability;
+  &[data-status="online"] .buzz-button {
+    min-height: var(--space-5);
+    padding: var(--space-half) var(--space-2);
+  }
+}

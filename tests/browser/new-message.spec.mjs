@@ -14,6 +14,7 @@ import { watchPageErrors } from "./page-errors.mjs";
 const test = base.extend({
   developmentReact: [false, { scope: "worker" }],
   pluginFixtures: [false, { scope: "worker" }],
+  companionFixture: [false, { scope: "worker" }],
   compiledApp: [buildApp, { scope: "worker" }],
   app: async ({ compiledApp, page, context }, use) => {
     const key = generateSecretKey(),

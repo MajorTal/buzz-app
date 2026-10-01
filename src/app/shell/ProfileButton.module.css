@@ -15,21 +15,26 @@
 .triggerAvatar :global(.buzz-avatar) {
   background: transparent;
 }
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Give only the top-bar fallback a visible circular fill. */
+.triggerAvatar :global(.buzz-avatar):not(:has(img[data-loaded="true"])) {
+  background: white;
+  color: var(--text-avatar-fallback);
+}
 
 .profileHeader {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
-  min-width: 15rem;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-1);
+  min-width: 0;
   max-width: min(20rem, calc(100vw - 3rem));
 }
 .profileAvatar {
   position: relative;
   display: flex;
-  width: 2.75rem;
-  height: 2.75rem;
-  flex: 0 0 2.75rem;
+  width: calc(var(--space-5) * 2);
+  height: calc(var(--space-5) * 2);
+  flex: 0 0 calc(var(--space-5) * 2);
 }
 /* biome-ignore lint/correctness/noUnknownPseudoClass: CSS Modules global selector sizes the shared avatar button to this header. */
 .profileAvatar :global(.buzz-button) {
@@ -38,6 +43,7 @@
 }
 .profileDetails {
   display: grid;
+  gap: var(--space-1);
   justify-items: start;
   min-width: 0;
 }
@@ -45,11 +51,71 @@
   max-width: 100%;
 }
 .availability {
-  @apply interaction-availability;
+  @apply interaction-profile-availability;
+  --radius-capsule: var(--radius-chip);
+  --text-caption: var(--type-size-12);
+  --text-caption--font-weight: var(--weight-profile-status);
+}
+.availability[data-status="online"] {
+  --text-standard: var(--text-success);
+  --interaction-fill: color-mix(
+    in srgb,
+    var(--availability-color) 6%,
+    var(--surface-popover)
+  );
+  --interaction-hover: color-mix(
+    in srgb,
+    var(--availability-color) 10%,
+    var(--surface-popover)
+  );
+  --interaction-pressed: color-mix(
+    in srgb,
+    var(--availability-color) 14%,
+    var(--surface-popover)
+  );
 }
 .statusCard {
   --user-status-emoji-offset: -2px;
-  margin: var(--space-2);
+  margin: var(--space-3) 0;
+  background: var(--surface-inset);
   border: 1px solid var(--border-standard);
   border-radius: var(--radius-control);
+}
+
+/* biome-ignore lint/correctness/noUnknownPseudoClass: CSS Modules scopes the profile menu without changing shared menus. */
+:global(.buzz-menu-popup[data-profile-menu]) {
+  --interaction-row-hover: var(--affordance-subtle-hover);
+  width: 18rem;
+  padding: var(--space-3);
+  border-radius: var(--radius-profile-popover);
+}
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Direct profile actions match the compact sidenav rows. */
+:global(.buzz-menu-popup[data-profile-menu] > .buzz-menu-item) {
+  min-height: calc(var(--space-6) + var(--space-1));
+  gap: var(--space-3);
+  font-size: var(--text-body);
+}
+/* biome-ignore lint/correctness/noUnknownPseudoClass: The existing status menu item keeps its keyboard behavior. */
+.statusCard :global(.buzz-menu-item) {
+  min-height: calc(var(--space-5) * 2);
+  padding-inline: var(--space-3);
+  border-radius: inherit;
+  color: var(--text-subtle);
+  font-size: var(--text-body);
+}
+
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Scope the portaled availability menu to the profile flow. */
+:global(.buzz-menu-popup[data-profile-submenu]) {
+  --interaction-row-hover: var(--affordance-subtle-hover);
+  border-radius: var(--radius-profile-popover);
+  padding: var(--space-2);
+}
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Inset row curves follow the popup corners. */
+:global(.buzz-menu-popup[data-profile-submenu] .buzz-menu-item) {
+  border-radius: var(--radius-control);
+  padding: var(--space-2) var(--space-3);
+}
+/* biome-ignore lint/correctness/noUnknownPseudoClass: Direct profile rows sit inside the menu's 12px inset. */
+:global(.buzz-menu-popup[data-profile-menu] > .buzz-menu-item) {
+  border-radius: var(--space-2);
 }

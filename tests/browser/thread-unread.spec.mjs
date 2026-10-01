@@ -1,5 +1,5 @@
 import { test, expect } from "./fixture.mjs";
-import { open } from "./timeline.mjs";
+import { open, virtuaIdle } from "./timeline.mjs";
 import { holdReadingFocus, releaseReadingFocus } from "./reading.mjs";
 
 test.use({
@@ -340,7 +340,7 @@ test("same-thread sidebar activity replaces timeline focus return", async ({
     const trigger = page
       .locator(`[data-channel-timeline] [data-message-id="${root.id}"]`)
       .getByRole("button", { name: /^View thread:/ });
-    await expect(trigger).toHaveCSS("pointer-events", "auto");
+    await virtuaIdle(page);
     await releaseReadingFocus(page);
     await trigger.click();
     await expect.poll(() => requested).toBe(true);

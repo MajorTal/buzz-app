@@ -1,3 +1,4 @@
+import { settleShellToggle } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
@@ -668,10 +669,8 @@ test.extend({ companionFixture: true })(
         .toBe(page.viewportSize().width);
     };
     const showNavigation = async () => {
-      if (page.viewportSize().width <= 650)
-        await expect(
-          page.locator("[data-shell-sidebar-toggle]"),
-        ).toHaveAccessibleName(/^(Show|Hide) navigation$/);
+      // Inbox/Bestie have no collapsible sidebar toggle at wide widths.
+      if (page.viewportSize().width <= 650) await settleShellToggle(page);
       const show = page.getByRole("button", {
         name: "Show navigation",
         exact: true,

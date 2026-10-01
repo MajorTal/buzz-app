@@ -1,5 +1,5 @@
 import { test, expect } from "./fixture.mjs";
-import { open, end } from "./timeline.mjs";
+import { open, end, edge } from "./timeline.mjs";
 
 test.use({
   productionBroker: true,
@@ -114,8 +114,10 @@ for (const scope of ["channel", "thread"]) {
       // Opening can race the final signed fixture replies under parallel load.
       // Establish the bottom-reading precondition with real browser input before
       // capturing geometry; the assertions below verify typing keeps it there.
-      await history.hover();
-      await page.mouse.wheel(0, Math.max(1, await gap()));
+      // ThreadPanel re-pins only on a snapshot change, so a wheel that stopped
+      // short would have no other way down: edge() waits for the gesture's
+      // scrollend and asserts the bottom before the exact poll below.
+      await edge(page, 1, history);
     }
     await expect.poll(gap).toBeLessThan(2);
     expect(

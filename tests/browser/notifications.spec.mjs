@@ -193,7 +193,6 @@ test("a fully visible incoming row stays quiet without publishing read intent", 
   page,
   app,
 }) => {
-  await page.clock.install();
   const following = finalizeEvent(
     {
       kind: 9,
@@ -238,12 +237,11 @@ test("a fully visible incoming row stays quiet without publishing read intent", 
     .toBe(true);
   // Controlled policy/dwell ordering, not evidence about native frame scheduling.
   // Exact-row navigation and reflow journeys below retain native rAF.
-  await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+  const base = Date.now();
+  await page.clock.install({ time: base });
+  await page.clock.pauseAt(base + 30_000);
   const row = liveMessage(app, "Visible mention");
   await observed(page, row.id);
-  await expect(history.locator(`[data-message-id="${row.id}"]`)).toBeInViewport(
-    { ratio: 1 },
-  );
   expect(await systemCount(page)).toBe(0);
   expect(
     await page.evaluate(
@@ -254,6 +252,12 @@ test("a fully visible incoming row stays quiet without publishing read intent", 
     ),
   ).toBe(true);
   await page.clock.resume();
+  // The paused clock also owned requestAnimationFrame, so the frames that
+  // re-pin the bottom after an append only ran inside observed()'s runFor.
+  // Check the row's full visibility on the running clock, while it is mounted.
+  await expect(history.locator(`[data-message-id="${row.id}"]`)).toBeInViewport(
+    { ratio: 1 },
+  );
   await settings(page);
   await page
     .getByRole("switch", { name: "Notify while viewing", exact: true })

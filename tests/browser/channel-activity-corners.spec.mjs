@@ -1,3 +1,4 @@
+import { settleShellToggle } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
 
@@ -35,15 +36,6 @@ for (const multiple of [false, true]) {
       const rows = popup.getByRole("button", {
         name: /Open unread thread from/,
       });
-      const settleNavigation = async () => {
-        await expect(
-          page.locator("[data-shell-sidebar-toggle]"),
-        ).toHaveAccessibleName(
-          page.viewportSize().width <= 650
-            ? /^(Show|Hide) navigation$/
-            : /^(Show|Hide) Channel sidebar$/,
-        );
-      };
       // Discover the narrowest viewport that keeps the trigger hoverable, so
       // the geometry matrix follows the responsive drawer breakpoint wherever
       // it moves, instead of hardcoding a width just above it.
@@ -52,7 +44,7 @@ for (const multiple of [false, true]) {
       for (let high = wide; narrow < high; ) {
         const mid = (narrow + high) >> 1;
         await page.setViewportSize({ width: mid, height: 950 });
-        await settleNavigation();
+        await settleShellToggle(page);
         if (
           await alpha.evaluate((element) => element.getClientRects().length > 0)
         )
@@ -83,7 +75,7 @@ for (const multiple of [false, true]) {
         // drawer and the channel trigger stops being hoverable.
         for (const width of [wide, narrow]) {
           await page.setViewportSize({ width, height: 950 });
-          await settleNavigation();
+          await settleShellToggle(page);
           const enlarged = width === narrow;
           await page.evaluate((enlarged) => {
             document.documentElement.style.setProperty(

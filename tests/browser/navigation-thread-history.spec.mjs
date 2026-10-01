@@ -1,5 +1,7 @@
 import { test, expect } from "./fixture.mjs";
-import { open } from "./timeline.mjs";
+import { open, virtuaIdle } from "./timeline.mjs";
+
+import { wheel } from "./timeline.mjs";
 
 test.use({
   productionBroker: true,
@@ -141,7 +143,7 @@ for (const reading of [false, true]) {
         .getByRole("button", { name: /^View thread:/ });
       // Virtua can retain its pointer lock after geometry stops moving. Wait
       // for input readiness before Playwright tries alternate scroll alignments.
-      await expect(trigger).toHaveCSS("pointer-events", "auto");
+      await virtuaIdle(page);
       await trigger.click();
       await expect.poll(() => requested).toBe(true);
       // One of the 50 loaded replies is a collapsed descendant.
@@ -170,11 +172,14 @@ for (const reading of [false, true]) {
       if (reading) {
         const bottom = await region.evaluate((node) => node.scrollTop);
         await region.hover();
-        await page.mouse.wheel(0, -500);
-        await expect
-          .poll(() => region.evaluate((node) => node.scrollTop))
-          .toBe(bottom - 500);
+        // A wheel request is not an exact displacement (Linux WebKit can stop
+        // short), so the reading position is wherever the completed gesture
+        // came to rest; the checks below then hold that value exactly.
+        await wheel(page, -500, region);
         position = await region.evaluate((node) => node.scrollTop);
+        expect(position, "reading gesture leaves the bottom").toBeLessThan(
+          bottom,
+        );
       }
       release();
       await expect(region.locator("[data-message-id]")).toHaveCount(123);
@@ -221,7 +226,7 @@ for (const reading of [false, true]) {
         ).toBeInViewport();
         await expect(jumpToLatest).toHaveCount(0);
         await region.hover();
-        await page.mouse.wheel(0, -500);
+        await wheel(page, -500, region);
         await expect
           .poll(() =>
             region.evaluate(

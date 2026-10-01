@@ -1,8 +1,9 @@
 # Virtua 0.51.0 scroll correction boundaries
 
 The application imports the React ESM entry (`virtua` → `lib/index.js`) from
-`src/features/messages/ChannelTimeline.tsx`. Only that entry's element scroller is
-patched; CommonJS, window scrolling, and other-framework exports are untouched.
+`src/features/messages/ChannelTimeline.tsx`. Only that entry's element scroller
+and store are patched; CommonJS, window scrolling, and other-framework exports
+are untouched.
 Keep the dependency pinned to 0.51.0 and review the patch plus version-coupled
 installed-bundle tests before upgrading or adding a different import.
 
@@ -112,6 +113,53 @@ including a replay already queued as a microtask, and verify a fresh navigation
 still responds to measurements. The browser navigation case exercises real wheel
 input and late row growth, asserting position as well as arrival count. These are
 not native momentum/compositor acceptance, and do not change the limits above.
+
+Cancellation stays owned by those native capture listeners; the timeline does not
+need a second imperative cancellation API. The installed-driver controls cover
+all four input events plus already-queued replays and disposal/remount.
+
+## Corrections after a browser clamp
+
+When rows above the viewport shrink, the automatic correction moves the offset
+by the same amount. Stock Virtua applies it relatively unless the target reaches
+the end, but the layout that `scrollBy` forces clamps an offset beyond the new
+end first, so the shrink lands twice: once from the clamp, once from the
+correction. WebKit reports an integer `scrollTop`, which reads up to 1px short
+of a fractional end, so a reader at the bottom missed the end test there while
+Chromium's fractional offset met it.
+
+The element driver takes the absolute path when the target lies within 1px of
+the end, rounding outward as before, and when the last observed offset lies
+more than 1px beyond the new end, scrolling to the exact target. Interior
+corrections, growth and prepend shifts stay relative. The installed-driver
+regressions clamp the fake viewport like a browser and cover an integer offset
+at a fractional end and a shrink larger than the reader's gap to the end.
+`ChannelTimeline` treats an upward offset that arrives with a shrink as reader
+input only after a gesture; while following, it re-pins the bottom instead of
+demoting to Jump-to-latest.
+
+## A shift outlives a late measurement frame
+
+While older rows are being prepended (`shift`), the store compensates every
+resize so the reader keeps their distance from the end, and it ends the shift
+from its scroll-end timer, 150 ms after the shift jump's own scroll event. The
+prepended rows are measured in the frame after that jump, together with the
+former first row, which the same render re-laid out as a continuation without
+its day divider and author header. When that frame runs late, the timer fires
+first and the batch meets native policy, which keeps the viewport start: the
+former first row sits at that start, so its shrink is dropped, and so is the
+growth of a prepended row whose estimated bottom WebKit's integer `scrollTop`
+reads short of. A reader at the top of history who loaded older messages saw
+their content move about 76 px on Linux WebKit.
+
+The store counts the rows a shift prepends and, at scroll-end, keeps shift
+policy while any of them inside the rendered range is still unmeasured; the
+resize batch that measures them ends the shift. A shift whose prepended rows
+are not mounted ends at scroll-end as before, a batch inside the window is
+unchanged, and a visible row that grows after the shift (an image loading)
+keeps the viewport start as before. Installed-store regressions cover the late
+batch, unrelated/partial batches before completion, the stock window and an
+unmounted prepend.
 
 ## Automated checks
 

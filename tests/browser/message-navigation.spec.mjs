@@ -810,14 +810,17 @@ readTest(
 readTest(
   "settings blocks reading and focus in a retained thread",
   async ({ page, app }) => {
-    await page.clock.install();
+    // Keep reveal frames controlled while startup cannot earn reading dwell.
+    // Pause at a fixed offset, not the page's already-ticking clock.
+    const base = Date.now();
+    await page.clock.install({ time: base });
     await holdReadingFocus(page);
     await open(page, app);
     await page.evaluate(() =>
       window.fixtureRelay.snapshot().session.unread.ensure(),
     );
 
-    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    await page.clock.pauseAt(base + 20_000);
     await releaseReadingFocus(page);
     const opening = openTarget(page, target(app));
     // Exact reveal requires real focus for two animation frames. Advance one

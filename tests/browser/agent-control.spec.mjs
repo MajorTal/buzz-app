@@ -322,10 +322,6 @@ for (const previouslyStopped of [false, true]) {
   test(`unreadable status allows only explicit Stop from a retained ${previouslyStopped ? "stopped" : "running"} snapshot`, async ({
     page,
   }) => {
-    // Own the five-second status poll so it cannot replace the operation error
-    // before assertions observe it on slower runners.
-    const now = new Date("2026-01-01T00:00:00Z");
-    await page.clock.install({ time: now });
     const server = await createServer({
       ...config,
       configFile: false,
@@ -357,7 +353,9 @@ for (const previouslyStopped of [false, true]) {
         .fill("wss://chosen.example");
       await panel.getByRole("button", { name: "Load agents" }).click();
       await openEditor(page);
-      await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+      // Pending here: the status poll, the card's bounded refresh and Vite's
+      // HMR ping. Each ticks once at this instant against the still-healthy host.
+      await page.clock.pauseAt(new Date("2026-01-01T00:30:00Z"));
       await page.evaluate(() => {
         const fixture = window.agentControlFixture;
         const { snapshot, action } = fixture.host;

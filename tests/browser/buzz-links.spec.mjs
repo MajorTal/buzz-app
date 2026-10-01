@@ -1,6 +1,6 @@
 import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
-import { open } from "./timeline.mjs";
+import { open, virtuaIdle } from "./timeline.mjs";
 
 test.use({
   productionBroker: true,
@@ -140,6 +140,10 @@ test("activating a panel from a linked thread retires the navigation-owned threa
   );
   const link = row.getByRole("link", { name: "Alpha", exact: true });
   await expect(link).toBeVisible();
+  // The append scrolls the timeline to re-pin the bottom. Virtua holds the
+  // list's pointer events off for 150ms after each scroll event and the row can
+  // still move, so a click issued now can miss its target. Wait for idle first.
+  await virtuaIdle(page);
   await link.click();
   const thread = page.getByRole("complementary", {
     name: "Thread",
@@ -330,6 +334,8 @@ test("a mixed-case Buzz scheme activates in-app instead of falling through to an
   );
   const link = row.getByRole("link", { name: "#Beta", exact: true });
   await expect(link).toBeVisible();
+  // Same post-append click as above: wait out Virtua's re-pin first.
+  await virtuaIdle(page);
   await link.click();
   await expect(
     page.getByRole("textbox", { name: "Message #Beta", exact: true }),

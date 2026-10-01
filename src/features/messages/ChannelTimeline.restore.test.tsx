@@ -558,6 +558,42 @@ it.each([
     });
   },
 );
+it.each(["keyboard", "wheel", "scrollbar"])(
+  "%s movement survives a frame and shrink during the same gesture",
+  async (input) => {
+    const h = mount(true);
+    await frame();
+    const region = screen.getByRole("region", {
+      name: "Channel message history",
+    });
+    region.scrollTop = 1400;
+    fireEvent.scroll(region);
+    if (input === "keyboard") fireEvent.keyDown(region, { key: "PageUp" });
+    if (input === "wheel") fireEvent.wheel(region, { deltaY: -300 });
+    if (input === "scrollbar") fireEvent.pointerDown(region);
+    // The first event has not yet crossed the near-bottom threshold. A native
+    // smooth scroll / drag continues after this rendering opportunity.
+    region.scrollTop -= 40;
+    fireEvent.scroll(region);
+    await frame();
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(
+      1920,
+    );
+    region.scrollTop -= 340; // 80px shrink plus 260px continued reader movement.
+    fireEvent.scroll(region);
+    scroll.toIndex.mockClear();
+    h.promote();
+    await frame();
+    await h.measured();
+    await frame();
+    expect(scroll.toIndex).not.toHaveBeenCalled();
+    h.unmount();
+    expect(readView("scope", "scroll:c", null)).toMatchObject({
+      bottom: false,
+    });
+  },
+);
+
 it.each(["auto", "contain", "none"])(
   "retires an unconsumed %s inner-top PageUp before a later layout-only shrink",
   async (containment) => {

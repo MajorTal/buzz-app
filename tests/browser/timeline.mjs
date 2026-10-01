@@ -33,8 +33,10 @@ export async function settle(page, scroller = history(page)) {
 }
 // Use for gestures that must move before capturing a reading baseline. Geometry
 // can pause mid-gesture in Linux WebKit; only scrollend closes native input.
-export async function wheel(page, deltaY, scroller = history(page)) {
-  const completion = await scroller.evaluateHandle((element) => {
+// `input` is the event the gesture raises on the scroller before it moves, so a
+// scrollend left over from earlier movement cannot stand in for this one.
+async function gesture(page, scroller, input, act) {
+  const completion = await scroller.evaluateHandle((element, input) => {
     const state = { started: false, done: false };
     const started = () => {
       state.started = true;
@@ -42,24 +44,24 @@ export async function wheel(page, deltaY, scroller = history(page)) {
     const ended = (event) => {
       if (event.target === element && state.started) state.done = true;
     };
-    element.addEventListener("wheel", started, { once: true, passive: true });
+    element.addEventListener(input, started, { once: true, passive: true });
     element.addEventListener("scrollend", ended);
     return {
       state,
       dispose() {
-        element.removeEventListener("wheel", started);
+        element.removeEventListener(input, started);
         element.removeEventListener("scrollend", ended);
       },
     };
-  });
+  }, input);
   let pendingRead;
   try {
-    await page.mouse.wheel(0, deltaY);
+    await act();
     await expect
       .poll(
         () => (pendingRead = completion.evaluate(({ state }) => state.done)),
         {
-          message: "timeline wheel gesture completes",
+          message: `timeline ${input} gesture completes`,
         },
       )
       .toBe(true);
@@ -70,6 +72,15 @@ export async function wheel(page, deltaY, scroller = history(page)) {
     await completion.evaluate((observer) => observer.dispose());
     await completion.dispose();
   }
+}
+export async function wheel(page, deltaY, scroller = history(page)) {
+  await gesture(page, scroller, "wheel", () => page.mouse.wheel(0, deltaY));
+}
+// Keyboard scrolling (PageUp, PageDown, arrows, Home, End, Space) animates like
+// a wheel and ends the same way. Focus must be on or inside the scroller so its
+// keydown marks the gesture's start.
+export async function keyScroll(page, key, scroller = history(page)) {
+  await gesture(page, scroller, "keydown", () => page.keyboard.press(key));
 }
 
 export async function anchor(page) {
@@ -115,25 +126,25 @@ export async function expectAnchor(page, expected) {
     )
     .toBeLessThan(4);
 }
-export async function edge(page, direction) {
+export async function edge(page, direction, scroller = history(page)) {
   const distance = () =>
-    history(page).evaluate(
+    scroller.evaluate(
       (element, direction) =>
         direction < 0
           ? element.scrollTop
           : element.scrollHeight - element.scrollTop - element.clientHeight,
       direction,
     );
-  await history(page).hover();
+  await scroller.hover();
   // Send one real gesture for the actual distance, not an arbitrary 100,000px
   // overshoot. At the boundary, retain input so production can initiate paging.
   const remaining = await distance();
-  if (remaining >= 4) await wheel(page, direction * remaining);
+  if (remaining >= 4) await wheel(page, direction * remaining, scroller);
   else await page.mouse.wheel(0, direction * Math.max(1, remaining));
   await expect
     .poll(distance, { message: "wheel reaches timeline edge" })
     .toBeLessThan(4);
-  await settle(page);
+  await settle(page, scroller);
   expect(await distance(), "timeline stays at the requested edge").toBeLessThan(
     4,
   );
@@ -177,4 +188,15 @@ export async function upper(page) {
     400,
   );
   return anchor(page);
+}
+// Virtua expires an imperative scroll 150ms after its last size update and
+// restores the list's pointer events 150ms after the last scroll event. Wait
+// for that observable state plus settled geometry before raw pointer input
+// (page.mouse.move has no hit-target retry) or a click Playwright would
+// otherwise retry through alternate scroll alignments. A fake clock is not a
+// substitute: it also reorders requestAnimationFrame against the rendering
+// update.
+export async function virtuaIdle(page, scroller = history(page)) {
+  await expect(scroller.locator("ol")).toHaveCSS("pointer-events", "auto");
+  await settle(page, scroller);
 }

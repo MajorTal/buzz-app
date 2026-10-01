@@ -432,8 +432,19 @@ test("older page reparents a visible reply under its late parent", async ({
     await expect(history.locator("ol [data-message-id]")).toHaveCount(10);
     await page.evaluate(() => window.messagesFixture.holdOlderPage());
     await history.hover();
-    // The wheel may demand history at the top without moving the scroller.
+    // The wheel may demand history at the top without moving the scroller, so
+    // scrollend is not its completion signal. The demand fires from the wheel
+    // event itself when the panel is already inside its top zone, or from the
+    // first scroll event that brings it there, either way possibly before the
+    // gesture has finished. Wait for the top itself before revealing the child,
+    // or a gesture Linux WebKit has paused resumes after the reveal and carries
+    // the child away again.
     await page.mouse.wheel(0, -4000);
+    await expect
+      .poll(() => history.evaluate((el) => el.scrollTop), {
+        message: "wheel reaches the top of the thread",
+      })
+      .toBe(0);
     await expect
       .poll(() =>
         page.evaluate(() => window.messagesFixture.report.filters.length),

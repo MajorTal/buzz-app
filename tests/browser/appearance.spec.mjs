@@ -1,4 +1,4 @@
-import { selectSettingsSection } from "./navigation.mjs";
+import { selectSettingsSection, settleShellToggle } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open, anchor, expectAnchor } from "./timeline.mjs";
 
@@ -27,6 +27,7 @@ async function expectMode(page, mode, inSettings = false) {
     "background-image",
     /linear-gradient/,
   );
+  await settleShellToggle(page);
   const disclosure = button(page, "Show navigation");
   const collapsed = await disclosure.isVisible();
   if (collapsed) await disclosure.click();

@@ -1,6 +1,14 @@
 import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
-import { open, settle, upper, expectAnchor, end, anchor } from "./timeline.mjs";
+import {
+  open,
+  settle,
+  upper,
+  expectAnchor,
+  end,
+  edge,
+  anchor,
+} from "./timeline.mjs";
 
 test.use({
   productionBroker: true,
@@ -27,8 +35,28 @@ async function crossCooldown(page, app) {
   await page.clock.runFor(app.relay.rejected[0].retryAfterMs);
   await expect.poll(() => app.relay.brokerCooldownOver()).toBe(true);
 }
+/** Cross a quota cooldown in real time, for a page whose timeline must keep
+ * the browser's own clock. The app arms its deadline when it consumes the
+ * refusal, after the broker paused its lane and the fixture stamped the
+ * response, so the broker's reopening is the earliest useful moment and only
+ * the page knows the last one. Clicks before it are ignored, as asserted
+ * before the crossing, so click Retry until the catch-up reaches the relay.
+ * The button leaves only once a request already counted there has answered,
+ * so a click that finds it is one the app can still act on, and a click
+ * while that request is in flight only promotes it. */
+async function retryAfterCooldown(page, app, sent) {
+  await expect.poll(() => app.relay.brokerCooldownOver()).toBe(true);
+  await expect
+    .poll(
+      async () => {
+        if (!sent()) await retry(page).click();
+        return sent();
+      },
+      { message: "Retry after the quota cooldown sends the catch-up" },
+    )
+    .toBe(true);
+}
 async function ready(page, app) {
-  await page.clock.install();
   await open(page, app);
   await expect.poll(() => app.relay.hasRoute("primary", "alpha")).toBe(true);
   // The first head may already start after stream establishment; a duplicate
@@ -145,8 +173,7 @@ test("production WS → broker → mounted UI delivers messages and retries a pa
     ),
   ).toHaveLength(globalRequests);
   await expectAnchor(page, reading);
-  await crossCooldown(page, app);
-  await retry(page).click();
+  await retryAfterCooldown(page, app, () => heads(app, "alpha").length > calls);
   await expect(retry(page)).toHaveCount(0);
   await expect.poll(() => heads(app, "alpha").length).toBe(calls + 1);
   await settle(page);
@@ -169,8 +196,7 @@ test("post-reconnect finite catch-up keeps paged history, cursor and reading pos
   app,
 }) => {
   await ready(page, app);
-  await history(page).hover();
-  await page.mouse.wheel(0, -100000);
+  await edge(page, -1);
   await expect.poll(() => app.pending.length).toBe(1);
   await settle(page);
   const before = await anchor(page);
@@ -194,8 +220,7 @@ test("post-reconnect finite catch-up keeps paged history, cursor and reading pos
   await expect(retry(page)).toHaveCount(0);
   await settle(page);
   await expectAnchor(page, reading);
-  await history(page).hover();
-  await page.mouse.wheel(0, -100000);
+  await edge(page, -1);
   await expect.poll(() => app.pending.length).toBe(1);
   const pageTwo = app.pending.shift();
   expect(pageTwo.filter.until).toBeLessThan(pageOne.filter.until);

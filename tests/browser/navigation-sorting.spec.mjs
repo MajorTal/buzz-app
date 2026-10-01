@@ -365,8 +365,12 @@ test.describe("cold sidebar presentation", () => {
     const ordering = new Promise((resolve) => {
       activityStarted = resolve;
     });
-    await page.clock.install();
-    await page.clock.pauseAt(new Date());
+    // The installed clock ticks from injection, so pausing at runner "now"
+    // races its first sync. Pause at a fixed instant from the install base;
+    // nothing is pending in about:blank for the jump to fire.
+    const base = Date.now();
+    await page.clock.install({ time: base });
+    await page.clock.pauseAt(base + 20_000);
     await page.addInitScript(() =>
       localStorage.setItem("buzz-appearance.v1", "dark"),
     );

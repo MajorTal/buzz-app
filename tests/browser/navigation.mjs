@@ -51,7 +51,15 @@ export async function selectPage(page, name, { connected = true } = {}) {
   await expect(dialog).not.toBeVisible();
 }
 
-export async function selectSettingsSection(page, name) {
+// The shell toggle's label follows a matchMedia change listener in AppShell,
+// which renders in a rendering update after page.setViewportSize() has
+// resolved. A non-waiting isVisible() guard on "Show navigation" read before
+// that render sees the previous width's label: it skips the click a narrow
+// layout needs, or clicks a button a wide layout is about to relabel. Wait for
+// the label that belongs to the current width before guarding. Pages without a
+// collapsible sidebar render no toggle at wide widths; callers there settle
+// only when narrow.
+export async function settleShellToggle(page) {
   await expect(
     page.locator("[data-shell-sidebar-toggle]"),
   ).toHaveAccessibleName(
@@ -59,6 +67,10 @@ export async function selectSettingsSection(page, name) {
       ? /^(Show|Hide) navigation$/
       : /^(Show|Hide) Channel sidebar$/,
   );
+}
+
+export async function selectSettingsSection(page, name) {
+  await settleShellToggle(page);
   const show = page.getByRole("button", {
     name: "Show navigation",
     exact: true,

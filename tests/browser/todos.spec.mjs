@@ -1,4 +1,8 @@
-import { openPage, selectSettingsSection } from "./navigation.mjs";
+import {
+  openPage,
+  selectSettingsSection,
+  settleShellToggle,
+} from "./navigation.mjs";
 import { npubEncode } from "nostr-tools/nip19";
 import { verifyEvent } from "nostr-tools";
 import { test, expect } from "./fixture.mjs";
@@ -53,6 +57,7 @@ test("opt-in Todos saves ordinary Canvas and disabling leaves it editable", asyn
     await selectSettingsSection(page, "Plugins");
   };
   const messages = async () => {
+    await settleShellToggle(page);
     const disclosure = button("Show navigation");
     if (await disclosure.isVisible()) await disclosure.click();
     await openPage(page, "Messages");

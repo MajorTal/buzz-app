@@ -1,3 +1,4 @@
+import { settleShellToggle } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 
 test.use({ historyCounts: { alpha: 1, beta: 0 } });
@@ -330,6 +331,9 @@ confirmedPresence(
       name: "Settings sidebar",
       includeHidden: true,
     });
+    // The toggle keeps the 390 px label until the resize's media-query change
+    // renders; guard only once it reads the 1280 px one.
+    await settleShellToggle(page);
     if (await button(page, "Show navigation").isVisible())
       await button(page, "Show navigation").click();
     await expect(settingsSidebar).toBeVisible();
@@ -397,7 +401,13 @@ confirmedPresence(
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 844 });
       // The narrow toggle appears only after the resize's media-query change renders.
-      if (width === 390) await button(page, "Show navigation").click();
+      if (width === 390) {
+        await button(page, "Show navigation").click();
+        // A mis-toggle fails here, at the toggle, not at the sidebar below.
+        await expect(
+          page.locator("[data-shell-sidebar-toggle]"),
+        ).toHaveAccessibleName("Hide navigation");
+      }
       await expect(settingsSidebar).toBeVisible();
       await profile.focus();
       await tab();

@@ -1,5 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
-index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b429ab081 100644
+index a183cc7b1669aab25467840540ce3bd1c025fb47..3a27c9b6c4967e5330569b6be492d43bd5184a84 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -6,6 +6,10 @@ import { jsx as c } from "react/jsx-runtime";
@@ -15,7 +15,22 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b
  var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v = e => [ ...e ].sort((e, t) => e - t), p = setTimeout, S = clearTimeout, m = "function" == typeof queueMicrotask ? queueMicrotask : e => {
      Promise.resolve().then(e);
  }, $ = () => {
-@@ -31,7 +35,9 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -21,6 +25,14 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+     const T = /* @__PURE__ */ new Set, M = () => $ - m, O = () => M() + _ + w, E = e => n(e) - _, L = e => {
+         e && (b() && 0 !== I || x && 1 === y ? _ += e : w += e);
+     };
++    // A shift compensates every resize until scroll-end, a 150ms timer from
++    // its jump's scroll event, but the rows it prepends measure in the frame
++    // after that jump. Count the rows it awaits so a late frame cannot lose them.
++    let shiftEnd = 0, shiftIdle = !1;
++    const itemCount = l, shiftPending = () => {
++        for (let e = u(k[0], 0), t = a(k[1], shiftEnd - 1, l() - 1); e <= t; e++) if (i(e)) return !0;
++        return !1;
++    };
+     return {
+         _: () => {
+             T.clear();
+@@ -31,7 +43,9 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
              let n, o;
              if (z) [n, o] = k; else {
                  let r = u(0, O()), i = r + S;
@@ -26,7 +41,21 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b
                  x && (n = a(n, x[0]), o = u(o, x[1]));
              }
              return [ u(n, 0), a(o, l() - 1) ];
-@@ -78,7 +84,9 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -69,7 +83,10 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+                 }
+-
++
+               case 2:
+-                h = 8, 0 !== I && (a = !0, h += 1), I = 0, y = 0, x = null;
++                h = 8, 0 !== I && (a = !0, h += 1), I = 0, x = null;
++                // Keep shift policy while mounted rows the shift prepended are
++                // unmeasured; the batch that measures them ends it below.
++                2 === y && shiftPending() ? shiftIdle = !0 : (y = 0, shiftEnd = 0, shiftIdle = !1);
+                 break;
+-
++
+               case 3:
+@@ -78,7 +95,9 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
                      if (!e.length) break;
                      L(e.reduce((e, [t, n]) => {
                          let r;
@@ -37,7 +66,34 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b
                              const e = M(), n = E(t), i = o(t);
                              r = 1 !== I && 0 === y ? n + i <= e : n < e && n + i < e + S;
                          }
-@@ -173,15 +181,37 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -89,6 +108,9 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+                         g && (R += i ? n : n - e);
+                     }
+                     g && S && R > S && (L(f(t(O()))), g = !1), h = 3, u = !0;
++                    // A scroll-end deferred above lands once the shift's
++                    // measurements are in.
++                    shiftIdle && 2 === y && !shiftPending() && (y = 0, shiftEnd = 0, shiftIdle = !1);
+                     break;
+                 }
+-
++
+@@ -97,7 +119,12 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+                 break;
+-
++
+               case 5:
+-                l[1] ? (L(c(l[0], !0)), y = 2, h = 1) : (c(l[0]), h = 1);
++                if (l[1]) {
++                    // Rows a shift prepends measure after its jump; remember
++                    // how many so scroll-end can tell whether it awaits them.
++                    shiftEnd = (2 === y ? shiftEnd : 0) + Math.max(l[0] - itemCount(), 0), shiftIdle = !1;
++                    L(c(l[0], !0)), y = 2, h = 1;
++                } else c(l[0]), h = 1;
+                 break;
+-
++
+               case 6:
+@@ -173,15 +200,37 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
          q: () => [ l.slice(), o ]
      };
  }, C = e => {
@@ -77,7 +133,7 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b
              t && t.disconnect();
          }
      };
-@@ -249,10 +279,28 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -249,10 +298,28 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
          o && o();
      } ];
  }, E = (e, t) => {
@@ -108,7 +164,7 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b
              behavior: t ? "smooth" : "instant"
          });
      }), u = t ? "width" : "height", d = /* @__PURE__ */ new WeakMap, h = C(t => {
-@@ -263,10 +311,15 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -263,18 +330,27 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
          }
          o.length && e.W(3, o);
      });
@@ -125,16 +181,22 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b
                      const e = u.style, t = e[c];
                      e[c] = "hidden", p(() => {
                          e[c] = t;
-@@ -274,7 +327,7 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+                     });
                  }
-                 const r = e.T() + t;
-                 r <= 0 || r >= e.O() + e.t() - e.o() ? u.scrollTo({
+-                const r = e.T() + t;
+-                r <= 0 || r >= e.O() + e.t() - e.o() ? u.scrollTo({
 -                    [l]: T(r, i),
-+                    [l]: T(edgeOffset(r), i),
++                const r = e.T() + t, end = e.O() + e.t() - e.o();
++                // Layout clamps an offset beyond a shrunken end before scrollBy
++                // reads it, so a relative correction would apply the shrink twice.
++                // WebKit's integer scrollTop also reads up to 1px short of a
++                // fractional end. Both cases take the absolute path.
++                r <= 0 || r >= end - 1 || e.T() > end + 1 ? u.scrollTo({
++                    [l]: T(r >= end - 1 ? edgeOffset(Math.max(r, end)) : r, i),
                      behavior: "instant"
                  }) : u.scrollBy({
                      [l]: T(t, i),
-@@ -283,7 +336,9 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -283,7 +359,9 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
              }), r[1](!0);
          },
          _() {
@@ -145,10 +207,9 @@ index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b
          },
          P: (e, t) => (d.set(e, t), h.A(e), () => {
              d.delete(e), h.B(e);
-@@ -797,4 +852,3 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -797,4 +875,3 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
  });
 -
 +
  export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
-\ No newline at end of file
 -//# sourceMappingURL=index.js.map

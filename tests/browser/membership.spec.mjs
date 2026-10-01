@@ -1,6 +1,6 @@
 import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
-import { anchor, expectAnchor, settle } from "./timeline.mjs";
+import { anchor, expectAnchor, keyScroll, settle } from "./timeline.mjs";
 
 test.use({
   membershipActivity: true,
@@ -138,7 +138,10 @@ keyboardTest(
         window.keyboardScrolls.push(el.scrollTop),
       );
     });
-    await page.keyboard.press("PageUp");
+    // PageUp animates (the scroll-event count below asserts as much), and
+    // settled geometry is not completion: Linux WebKit can pause a gesture and
+    // resume it after the anchor is captured. Wait for its scrollend.
+    await keyScroll(page, "PageUp");
     await expect.poll(distance).toBeGreaterThan(200);
     await settle(page);
     const saved = await anchor(page);

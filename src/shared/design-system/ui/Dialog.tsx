@@ -1,4 +1,10 @@
 import { Dialog as BaseDialog } from "@base-ui/react/dialog";
+import {
+  AnimatePresence,
+  motion,
+  useIsPresent,
+  useReducedMotion,
+} from "motion/react";
 import { XIcon } from "../icons";
 import { useState, type ComponentProps, type ReactNode } from "react";
 import { IconButton } from "./IconButton";
@@ -15,6 +21,12 @@ export type DialogProps = {
   description?: ReactNode;
   children: ReactNode;
   actions?: ReactNode;
+  /** Tighter heading-to-body spacing for compact forms. */
+  headerGap?: "default" | "compact";
+  /** Keep a final body control close to its confirmation actions. */
+  footerGap?: "default" | "compact";
+  /** Replace a step inside this modal; scale defines its recessed/raised position. */
+  step?: { key: string; scale: number };
   leadingActions?: ReactNode;
   headerActions?: ReactNode;
   /** Return true when an inner editor layer consumed Escape. */
@@ -45,6 +57,9 @@ export function Dialog({
   description,
   children,
   actions,
+  headerGap = "default",
+  footerGap = "default",
+  step,
   leadingActions,
   headerActions,
   onEscape,
@@ -63,6 +78,60 @@ export function Dialog({
   const focus = useFinalFocusUnlessMoved(finalFocus, undefined);
   const transition =
     motion === "none" || (!open && instantClose) ? "none" : "default";
+  const contents = (
+    <>
+      <header className="buzz-dialog-header">
+        <div className="buzz-dialog-heading">
+          {step ? (
+            <div className="text-label" aria-hidden="true">
+              {title}
+            </div>
+          ) : (
+            <BaseDialog.Title className="text-label">{title}</BaseDialog.Title>
+          )}
+          {description &&
+            (step ? (
+              <p className="buzz-dialog-description" aria-hidden="true">
+                {description}
+              </p>
+            ) : (
+              <BaseDialog.Description className="buzz-dialog-description">
+                {description}
+              </BaseDialog.Description>
+            ))}
+        </div>
+        <div className="buzz-dialog-header-actions">
+          {headerActions}
+          <BaseDialog.Close
+            disabled={preventClose}
+            render={
+              <IconButton
+                aria-label={closeLabel}
+                disabled={preventClose}
+                size="compact"
+                icon={<XIcon size={16} aria-hidden="true" />}
+              />
+            }
+          />
+        </div>
+      </header>
+      <div
+        className="buzz-dialog-body buzz-dialog-content"
+        data-header-gap={headerGap}
+        data-footer-gap={footerGap}
+      >
+        {children}
+      </div>
+      {(actions || leadingActions) && (
+        <footer className="buzz-dialog-actions">
+          {leadingActions && (
+            <div className="buzz-dialog-leading-actions">{leadingActions}</div>
+          )}
+          {actions}
+        </footer>
+      )}
+    </>
+  );
   return (
     <BaseDialog.Root
       open={open}
@@ -96,6 +165,7 @@ export function Dialog({
           data-placement={placement}
           data-height={height}
           data-body-layout={bodyLayout}
+          data-stepped={step ? "" : undefined}
           data-size={size}
           data-motion={transition}
           aria-modal="true"
@@ -103,45 +173,67 @@ export function Dialog({
           ref={focus.ref}
           finalFocus={focus.finalFocus}
         >
-          <header className="buzz-dialog-header">
-            <div className="buzz-dialog-heading">
-              <BaseDialog.Title className="text-label">
-                {title}
-              </BaseDialog.Title>
+          {step ? (
+            <>
+              {/* One stable accessible label, even while two visual steps crossfade. */}
+              <BaseDialog.Title className="sr-only">{title}</BaseDialog.Title>
               {description && (
-                <BaseDialog.Description className="buzz-dialog-description">
+                <BaseDialog.Description className="sr-only">
                   {description}
                 </BaseDialog.Description>
               )}
-            </div>
-            <div className="buzz-dialog-header-actions">
-              {headerActions}
-              <BaseDialog.Close
-                disabled={preventClose}
-                render={
-                  <IconButton
-                    aria-label={closeLabel}
-                    disabled={preventClose}
-                    size="compact"
-                    icon={<XIcon size={16} aria-hidden="true" />}
-                  />
-                }
-              />
-            </div>
-          </header>
-          <div className="buzz-dialog-body buzz-dialog-content">{children}</div>
-          {(actions || leadingActions) && (
-            <footer className="buzz-dialog-actions">
-              {leadingActions && (
-                <div className="buzz-dialog-leading-actions">
-                  {leadingActions}
-                </div>
-              )}
-              {actions}
-            </footer>
+              <AnimatePresence initial={false}>
+                <DialogStep
+                  key={step.key}
+                  scale={step.scale}
+                  instant={motion === "none"}
+                >
+                  {contents}
+                </DialogStep>
+              </AnimatePresence>
+            </>
+          ) : (
+            contents
           )}
         </BaseDialog.Popup>
       </BaseDialog.Portal>
     </BaseDialog.Root>
+  );
+}
+
+/** Exiting content is visual only; Base UI still owns the single focus trap. */
+function DialogStep({
+  scale,
+  instant: noMotion,
+  children,
+}: {
+  scale: number;
+  instant: boolean;
+  children: ReactNode;
+}) {
+  const present = useIsPresent();
+  const reduceMotion = useReducedMotion();
+  const instant =
+    noMotion ||
+    reduceMotion ||
+    (typeof document !== "undefined" &&
+      document.documentElement.hasAttribute("data-keyboard-navigation"));
+  const away = {
+    opacity: 0,
+    scale: instant ? 1 : scale,
+    filter: instant ? "blur(0px)" : "blur(4px)",
+  };
+  return (
+    <motion.div
+      className="buzz-dialog-step"
+      inert={!present}
+      aria-hidden={!present || undefined}
+      initial={away}
+      animate={{ opacity: 1, scale: 1, filter: "blur(0px)" }}
+      exit={away}
+      transition={{ duration: instant ? 0 : 0.2, ease: [0.2, 0.8, 0.2, 1] }}
+    >
+      {children}
+    </motion.div>
   );
 }

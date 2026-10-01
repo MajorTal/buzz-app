@@ -601,6 +601,15 @@ it("retains exact accepted team expansion and Canvas through provider replacemen
       expect(test.owner.session.archives.snapshot().status).toBe("ready"),
     );
     await chooseSaved();
+    // Privacy steps remount the form, but must retain the accepted setup.
+    for (const action of ["Cancel", "Continue"]) {
+      await user.click(screen.getByRole("switch", { name: "Private" }));
+      await user.click(screen.getByRole("button", { name: action }));
+      expect(
+        screen.getByRole("combobox", { name: "Template" }),
+      ).toHaveTextContent("Saved");
+      expect(created).not.toHaveBeenCalled();
+    }
     expect(
       screen.queryByLabelText("Channel setup summary"),
     ).not.toBeInTheDocument();

@@ -978,9 +978,18 @@
   display: none;
 }
 
-.detailsLabel {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
+.detailsPrivate {
+  display: inline-flex;
+  align-items: center;
   gap: var(--space-3);
+  margin-inline-end: auto;
+}
+
+.detailsPrivate label {
+  cursor: pointer;
+}
+
+.detailsPrivate:has([data-disabled]) label {
+  color: var(--text-unavailable);
+  cursor: not-allowed;
 }

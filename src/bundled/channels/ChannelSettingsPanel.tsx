@@ -19,6 +19,7 @@ import { ChannelDetailsEditor } from "./ChannelDetailsEditor";
 
 export function ChannelSettingsPanel({
   channel,
+  scope,
   close,
   children,
   setupTools,
@@ -28,6 +29,7 @@ export function ChannelSettingsPanel({
   canvasOpen = false,
 }: {
   channel: ChannelSummary | undefined;
+  scope: string;
   close(): void;
   children: ReactNode;
   setupTools?: ReactNode;
@@ -216,7 +218,11 @@ export function ChannelSettingsPanel({
             !channel.cached &&
             !channel.archived &&
             (details?.available ? (
-              <ChannelDetailsEditor channel={channel} capability={details} />
+              <ChannelDetailsEditor
+                channel={channel}
+                capability={details}
+                scope={scope}
+              />
             ) : (
               <p>Editing is unavailable on this connection.</p>
             ))}

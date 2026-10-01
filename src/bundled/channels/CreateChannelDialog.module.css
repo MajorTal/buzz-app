@@ -1,23 +1,10 @@
+.title {
+  overflow-wrap: anywhere;
+}
+
 .form {
   display: grid;
-  gap: var(--space-5);
-}
-
-.descriptionAction {
-  justify-self: start;
-  margin-block-start: calc(-1 * var(--space-3));
-}
-
-.descriptionAction [data-buzz-ui] {
-  min-height: auto;
-  border-radius: 0;
-  padding: 0;
-  color: var(--text-standard);
-}
-
-.descriptionAction [data-buzz-ui]:hover:not([data-disabled]) {
-  background: transparent;
-  text-decoration: underline;
+  gap: var(--space-4);
 }
 
 .form [data-create-channel-name]::placeholder {
@@ -25,6 +12,7 @@
 }
 
 .privateAction {
+  margin-inline-end: auto;
   display: inline-flex;
   align-items: center;
   gap: var(--space-3);

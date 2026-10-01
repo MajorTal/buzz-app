@@ -1,3 +1,4 @@
+import { canonicalDetailsName } from "./channel-details-protocol";
 import { sessionDescription } from "../sessions/metadata";
 import type { Outbox } from "./outbox";
 import type { ChannelQueries } from "./contracts";
@@ -463,7 +464,7 @@ export function createWorkSessions(
     ) {
       writer();
       identifier(id);
-      const name = title.trim();
+      const name = canonicalDetailsName(title);
       const about = description?.trim();
       if (!name || [...name].length > 120)
         throw new Error("Use a channel name between 1 and 120 characters.");

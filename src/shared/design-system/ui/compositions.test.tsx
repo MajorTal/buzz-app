@@ -468,3 +468,106 @@ test("outside dismissal remains opt-in", async () => {
   await user.click(document.querySelector(".buzz-dialog-backdrop") as Element);
   expect(change).not.toHaveBeenCalled();
 });
+
+test("dialog steps keep one labelled modal and make outgoing controls inert", async () => {
+  const content = (confirm: boolean) => (
+    <Dialog
+      open
+      onOpenChange={() => {}}
+      title={confirm ? "Confirm change" : "Edit notes"}
+      description={confirm ? "Applies only after Save." : undefined}
+      step={
+        confirm ? { key: "confirm", scale: 1.05 } : { key: "edit", scale: 0.95 }
+      }
+      actions={<Button>{confirm ? "Continue" : "Save"}</Button>}
+    >
+      {confirm ? <p>Review this change.</p> : <Input aria-label="Note" />}
+    </Dialog>
+  );
+  const view = render(content(false));
+  const popup = screen.getByRole("dialog", { name: "Edit notes" });
+  const outgoing = screen
+    .getByRole("textbox", { name: "Note" })
+    .closest(".buzz-dialog-step");
+  view.rerender(content(true));
+  expect(screen.getByRole("dialog", { name: "Confirm change" })).toBe(popup);
+  expect(screen.getAllByRole("dialog")).toHaveLength(1);
+  expect(document.querySelectorAll(".buzz-dialog-backdrop")).toHaveLength(1);
+  expect(popup).toHaveAccessibleDescription("Applies only after Save.");
+  expect(outgoing).toHaveAttribute("inert");
+  expect(outgoing).toHaveAttribute("aria-hidden", "true");
+  expect(
+    screen.queryByRole("textbox", { name: "Note" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
+  // Reverse before the outgoing step has finished; presence must revive it.
+  view.rerender(content(false));
+  expect(screen.getByRole("dialog", { name: "Edit notes" })).toBe(popup);
+  expect(screen.getByRole("textbox", { name: "Note" })).toBeEnabled();
+  expect(outgoing).not.toHaveAttribute("inert");
+  expect(popup).not.toHaveAccessibleDescription();
+  await waitFor(() =>
+    expect(popup.querySelectorAll(".buzz-dialog-step")).toHaveLength(1),
+  );
+  expect(
+    screen.queryByRole("button", { name: "Continue" }),
+  ).not.toBeInTheDocument();
+});
+
+test("compact header spacing is opt-in and follows stepped content", () => {
+  const view = (compact: boolean, step = "form") => (
+    <Dialog
+      open
+      title="Channel"
+      onOpenChange={() => {}}
+      headerGap={compact ? "compact" : "default"}
+      step={{ key: step, scale: 0.95 }}
+    >
+      <p>{step}</p>
+    </Dialog>
+  );
+  const { rerender } = render(view(false));
+  expect(screen.getByText("form").parentElement).toHaveAttribute(
+    "data-header-gap",
+    "default",
+  );
+  rerender(view(true));
+  expect(screen.getByText("form").parentElement).toHaveAttribute(
+    "data-header-gap",
+    "compact",
+  );
+  rerender(view(true, "confirmation"));
+  expect(screen.getByText("confirmation").parentElement).toHaveAttribute(
+    "data-header-gap",
+    "compact",
+  );
+});
+
+test("compact footer spacing is opt-in and resets when leaving confirmation", () => {
+  const view = (confirm = false) => (
+    <Dialog
+      open
+      title="Channel"
+      onOpenChange={() => {}}
+      {...(confirm ? { footerGap: "compact" as const } : {})}
+      step={{ key: confirm ? "confirmation" : "form", scale: 0.95 }}
+    >
+      <p>{confirm ? "confirmation" : "form"}</p>
+    </Dialog>
+  );
+  const { rerender } = render(view());
+  expect(screen.getByText("form").parentElement).toHaveAttribute(
+    "data-footer-gap",
+    "default",
+  );
+  rerender(view(true));
+  expect(screen.getByText("confirmation").parentElement).toHaveAttribute(
+    "data-footer-gap",
+    "compact",
+  );
+  rerender(view());
+  expect(screen.getByText("form").parentElement).toHaveAttribute(
+    "data-footer-gap",
+    "default",
+  );
+});

@@ -53,12 +53,12 @@ async function options(page) {
     // The details and lifecycle readers finish independently. Observe both before
     // checking diagnostics so a late details alert cannot escape the assertion.
     await expect(
-      page
-        .getByRole("region", { name: "Edit channel details", exact: true })
-        .getByText(
-          "Only current channel owners and admins can edit these details.",
-        ),
-    ).toBeVisible();
+      page.getByRole("region", {
+        name: "Edit channel details",
+        exact: true,
+        includeHidden: true,
+      }),
+    ).toHaveAttribute("aria-busy", "false");
     await expect(
       page.getByRole("button", { name: "Leave channel", exact: true }),
     ).toBeVisible();

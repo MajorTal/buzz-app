@@ -352,70 +352,90 @@ it.each(["ready", "connecting", "error"] as const)(
   },
 );
 
-it("opens creation from a legacy subgroup + with that destination selected and retained in the create input", async () => {
-  const preferences = createSidebarPreferencesStore(
-    async () => ({
-      sections: [{ id: "laptop", name: "Laptop", order: 0 }],
-      assignments: { beta: "laptop" },
-      starred: [],
-      muted: [],
-    }),
-    true,
-    async () => ({
-      sections: [{ id: "laptop", name: "Laptop", order: 0 }],
-      assignments: {},
-    }),
-    async () => [],
-  );
-  await preferences.queries.ensure();
-  const h = fixture(preferences.queries);
-  const create = vi.fn(async () => "new-channel");
-  h.session.channelKit = {
-    ...h.session.channelKit,
-    available: true,
-    ensure() {},
-  };
-  h.session.channelCreation = {
-    ...h.session.channelCreation,
-    available: true,
-    create,
-  };
-  try {
-    render(h.view("alpha"));
-    await screen.findByRole("button", { name: /Laptop/ });
-    // Scope to the section header rather than the Channels +.
-    const header = screen.getByRole("button", { name: /Laptop/ }).parentElement;
-    assert.exists(header);
-    fireEvent.click(
-      within(header).getByRole("button", { name: "Create channel" }),
-    );
-    expect(
-      screen.getByRole("combobox", { name: "Destination group" }),
-    ).toHaveTextContent("Laptop");
-    fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
-      target: { value: "New laptop channel" },
-    });
-    fireEvent.click(
-      within(
-        screen.getByRole("dialog", { name: "Create a channel" }),
-      ).getByRole("button", {
-        name: "Create channel",
+it.each([true, false])(
+  "uses only the invoking section for placement (group: %s)",
+  async (fromGroup) => {
+    const preferences = createSidebarPreferencesStore(
+      async () => ({
+        sections: [{ id: "laptop", name: "Laptop", icon: "💻", order: 0 }],
+        assignments: { beta: "laptop" },
+        starred: [],
+        muted: [],
       }),
-    );
-    await waitFor(() =>
-      expect(create).toHaveBeenCalledWith({
-        name: "New laptop channel",
-        visibility: "open",
-        setup: {
-          agents: [],
-          canvas: "",
-          templateId: "",
-          groupId: "laptop",
-          groupSource: "legacy",
-        },
+      true,
+      async () => ({
+        sections: [{ id: "laptop", name: "Laptop", icon: "💻", order: 0 }],
+        assignments: {},
       }),
+      async () => [],
     );
-  } finally {
-    preferences.dispose();
-  }
-});
+    await preferences.queries.ensure();
+    const h = fixture(preferences.queries);
+    const create = vi.fn(async () => "new-channel");
+    h.session.channelKit = {
+      ...h.session.channelKit,
+      available: true,
+      ensure() {},
+    };
+    h.session.channelCreation = {
+      ...h.session.channelCreation,
+      available: true,
+      create,
+    };
+    try {
+      render(h.view("beta"));
+      await screen.findByRole("button", { name: /Laptop/ });
+      // An active grouped channel must not make the general Channels + inherit it.
+      const header = screen.getByRole("button", {
+        name: fromGroup ? /Laptop/ : "More actions for Channels",
+      }).parentElement;
+      assert.exists(header);
+      fireEvent.click(
+        within(header).getByRole("button", { name: "Create channel" }),
+      );
+      expect(
+        screen.queryByRole("combobox", { name: "Destination group" }),
+      ).not.toBeInTheDocument();
+      const title = fromGroup
+        ? "Create a channel in Laptop"
+        : "Create a channel";
+      expect(screen.getByRole("dialog")).toHaveAccessibleName(title);
+      if (fromGroup)
+        expect(
+          screen
+            .getByRole("dialog")
+            .querySelector(".buzz-dialog-step [data-sidebar-group-icon]"),
+        ).toHaveTextContent("💻");
+      fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+        target: { value: "New laptop channel" },
+      });
+      fireEvent.click(
+        within(screen.getByRole("dialog", { name: title })).getByRole(
+          "button",
+          {
+            name: "Create channel",
+          },
+        ),
+      );
+      await waitFor(() =>
+        expect(create).toHaveBeenCalledWith({
+          name: "New laptop channel",
+          visibility: "open",
+          ...(fromGroup
+            ? {
+                setup: {
+                  agents: [],
+                  canvas: "",
+                  templateId: "",
+                  groupId: "laptop",
+                  groupSource: "legacy",
+                },
+              }
+            : {}),
+        }),
+      );
+    } finally {
+      preferences.dispose();
+    }
+  },
+);

@@ -19,12 +19,34 @@
     width: min(31rem, calc(100vw - 2rem));
     max-height: calc(100dvh - 3rem);
     overflow: auto;
+  }
+  .buzz-dialog,
+  .buzz-dialog-step {
     border: 1px solid var(--border-standard);
     border-radius: var(--radius-panel);
     padding: var(--dialog-padding);
     background: var(--surface-popover);
     color: var(--text-standard);
     box-shadow: var(--shadow-sm);
+  }
+  /* Steps share one centered popup/backdrop; overlap only for the crossfade. */
+  .buzz-dialog[data-stepped] {
+    display: grid;
+    padding: 0;
+    border: 0;
+    overflow: visible;
+    background: none;
+    box-shadow: none;
+  }
+  .buzz-dialog-step {
+    grid-area: 1 / 1;
+    align-self: center;
+    min-width: 0;
+    max-height: inherit;
+    overflow: auto;
+  }
+  .buzz-dialog-step[inert] {
+    pointer-events: none;
   }
   .buzz-dialog[data-size="expanded"] {
     width: calc(100vw - 3rem);
@@ -132,6 +154,12 @@
 
   .buzz-dialog-content {
     padding-block: var(--dialog-padding);
+  }
+  .buzz-dialog-content[data-header-gap="compact"] {
+    padding-block-start: var(--space-3);
+  }
+  .buzz-dialog-content[data-footer-gap="compact"] {
+    padding-block-end: var(--space-2);
   }
   .buzz-dialog-actions {
     min-width: 0;

@@ -19,7 +19,7 @@ fn common(event: &EventTemplate) -> bool {
     event.content.is_empty() && event.created_at <= i64::MAX as u64
 }
 fn details(event: &EventTemplate) -> bool {
-    if event.kind != 9002 || !common(event) || !(3..=4).contains(&event.tags.len()) {
+    if event.kind != 9002 || !common(event) || !(3..=5).contains(&event.tags.len()) {
         return false;
     }
     let (Some(id), Some(name), Some(about)) = (
@@ -29,6 +29,23 @@ fn details(event: &EventTemplate) -> bool {
     ) else {
         return false;
     };
+    let mut index = 3;
+    if let Some(visibility) = tag(event, index, "visibility") {
+        if !matches!(visibility, "private" | "open") {
+            return false;
+        }
+        index += 1;
+    }
+    if let Some(ttl) = tag(event, index, "ttl") {
+        if !ttl.is_empty()
+            && (ttl.starts_with('0')
+                || !ttl.bytes().all(|b| b.is_ascii_digit())
+                || !ttl.parse::<i32>().is_ok_and(|n| n > 0))
+        {
+            return false;
+        }
+        index += 1;
+    }
     uuid(id)
         && !name.is_empty()
         && name.chars().count() <= 120
@@ -38,7 +55,7 @@ fn details(event: &EventTemplate) -> bool {
             == name
         && about.chars().count() <= 1000
         && !about.contains("Buzz session (")
-        && (event.tags.len() == 3 || tag(event, 3, "visibility") == Some("private"))
+        && index == event.tags.len()
 }
 fn lifecycle(event: &EventTemplate) -> bool {
     if !matches!(event.kind, 9002 | 9008 | 9022 | 41012)
@@ -361,6 +378,87 @@ mod boundary_tests {
         altered["tags"][1][1] = Value::String("false".into());
         assert!(validate("channel-lifecycle", &altered, event["pubkey"].as_str()).is_err());
     }
+    fn details_event(extra: Vec<Vec<String>>) -> EventTemplate {
+        EventTemplate {
+            kind: 9002,
+            created_at: 1700000010,
+            content: String::new(),
+            tags: vec![
+                vec!["h".into(), uuid::Uuid::nil().to_string()],
+                vec!["name".into(), "Team".into()],
+                vec!["about".into(), "Description".into()],
+            ]
+            .into_iter()
+            .chain(extra)
+            .collect(),
+        }
+    }
+
+    #[test]
+    fn details_admit_visibility_and_duration_at_sign_and_publish_boundaries() {
+        let host = IdentityHost::fixture();
+        for visibility in [None, Some("private"), Some("open")] {
+            for ttl in [None, Some(""), Some("1"), Some("86400"), Some("2147483647")] {
+                let extra = [("visibility", visibility), ("ttl", ttl)]
+                    .into_iter()
+                    .filter_map(|(key, value)| value.map(|value| vec![key.into(), value.into()]))
+                    .collect();
+                let event = serde_json::to_value(details_event(extra)).unwrap();
+                let parsed = validate("channel-details", &event, None)
+                    .unwrap_or_else(|error| panic!("{visibility:?}/{ttl:?}: {error}"));
+                assert!(validate("channel-lifecycle", &event, None).is_err());
+                let signed = tauri::async_runtime::block_on(host.sign(parsed)).unwrap();
+                assert!(validate("channel-details", &signed, signed["pubkey"].as_str()).is_ok());
+                assert!(validate("channel-details", &signed, Some(&"f".repeat(64))).is_err());
+                let mut altered = signed;
+                altered["tags"][1][1] = Value::String("Tampered".into());
+                assert!(validate("channel-details", &altered, altered["pubkey"].as_str()).is_err());
+            }
+        }
+    }
+
+    #[test]
+    fn details_reject_malformed_optional_tags() {
+        for extra in [
+            vec![vec![]],
+            vec![vec!["ttl"]],
+            vec![vec!["ttl", "1", "extra"]],
+            vec![vec!["visibility"]],
+            vec![vec!["visibility", "open", "extra"]],
+            vec![vec!["visibility", "public"]],
+            vec![vec!["visibility", ""]],
+            vec![vec!["archived", "true"]],
+            vec![vec!["p", "injected"]],
+            vec![vec!["ttl", "0"]],
+            vec![vec!["ttl", "01"]],
+            vec![vec!["ttl", "-1"]],
+            vec![vec!["ttl", "+1"]],
+            vec![vec!["ttl", " 1"]],
+            vec![vec!["ttl", "1\n"]],
+            vec![vec!["ttl", "1.5"]],
+            vec![vec!["ttl", "1e3"]],
+            vec![vec!["ttl", "2147483648"]],
+            vec![vec!["ttl", "18446744073709551616"]],
+            vec![vec!["ttl", "86400"], vec!["visibility", "open"]],
+            vec![vec!["visibility", "private"], vec!["visibility", "open"]],
+            vec![vec!["ttl", "1"], vec!["ttl", ""]],
+            vec![vec!["visibility", "open"], vec!["ttl", "0"]],
+            vec![
+                vec!["visibility", "open"],
+                vec!["ttl", "1"],
+                vec!["ttl", ""],
+            ],
+        ] {
+            let event = details_event(
+                extra
+                    .iter()
+                    .map(|tag| tag.iter().map(|s| (*s).into()).collect())
+                    .collect(),
+            );
+            assert!(!valid("channel-details", &event), "{extra:?}");
+        }
+    }
+
     #[test]
     fn creation_requires_the_exact_stream_command() {
         let mut event = EventTemplate {

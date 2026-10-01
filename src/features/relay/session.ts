@@ -21,6 +21,7 @@ import { sessionMetadata } from "../sessions/metadata";
 import { createMemberAdministration } from "../channel-members/administration";
 import { createChannelLifecycle } from "./channel-lifecycle";
 import { createChannelDetails } from "./channel-details";
+import { canonicalDetailsName } from "./channel-details-protocol";
 import { createWorkflows } from "../workflows/capability";
 import { isWorkflowOperation } from "../workflows/protocol";
 import {
@@ -146,7 +147,7 @@ function parseChannelCreation(
     name?.length !== 2 ||
     name[0] !== "name" ||
     channelName === undefined ||
-    !channelName.trim() ||
+    !canonicalDetailsName(channelName) ||
     visibility?.length !== 2 ||
     visibility[0] !== "visibility" ||
     channelVisibility === undefined ||
@@ -170,7 +171,7 @@ function parseChannelCreation(
   )
     return;
   const input: ChannelCreationInput = Object.freeze({
-    name: channelName.trim(),
+    name: canonicalDetailsName(channelName),
     visibility: channelVisibility as "open" | "private",
     ...(description ? { description } : {}),
     ...(ttlSeconds !== undefined ? { ttlSeconds } : {}),
@@ -1193,8 +1194,8 @@ export function createRelaySession(
           canvasHead: async (id) => (await channelKit.canvas.read(id))?.id,
           async preflight(input) {
             if (
-              !input.name.trim() ||
-              [...input.name.trim()].length > 120 ||
+              !canonicalDetailsName(input.name) ||
+              [...canonicalDetailsName(input.name)].length > 120 ||
               (input.description &&
                 ([...input.description].length > 1000 ||
                   input.description.includes("Buzz session ("))) ||
@@ -1331,6 +1332,7 @@ export function createRelaySession(
       notifySetup();
     },
     async create(input: ChannelCreationInput) {
+      input = { ...input, name: canonicalDetailsName(input.name) };
       if (!transport) throw new Error("The community connection changed.");
       await writes?.ready;
       if (channelSetup && !pendingCreation()) {
@@ -1350,7 +1352,7 @@ export function createRelaySession(
       if (input.setup)
         throw new Error("Template setup is unavailable on this host");
       const normalized: ChannelCreationInput = {
-        name: input.name.trim(),
+        name: input.name,
         visibility: input.visibility,
         ...(input.description?.trim()
           ? { description: input.description.trim() }

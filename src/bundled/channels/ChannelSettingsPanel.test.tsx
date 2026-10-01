@@ -13,6 +13,7 @@ it("shows known channel details with diagnostics collapsed until requested", asy
   const user = userEvent.setup();
   render(
     <ChannelSettingsPanel
+      scope="community:viewer"
       channel={{
         id: "alpha",
         name: "Alpha",
@@ -42,7 +43,11 @@ it("closes with Escape or its close button without swallowing other keys", async
   const user = userEvent.setup();
   const close = vi.fn();
   render(
-    <ChannelSettingsPanel channel={undefined} close={close}>
+    <ChannelSettingsPanel
+      scope="community:viewer"
+      channel={undefined}
+      close={close}
+    >
       Diagnostics content
     </ChannelSettingsPanel>,
   );
@@ -63,6 +68,7 @@ it("does not invent unknown metadata and still exposes diagnostics without a cha
   const user = userEvent.setup();
   const { rerender } = render(
     <ChannelSettingsPanel
+      scope="community:viewer"
       channel={{ id: "dm", name: "Someone", channelType: "dm" }}
       close={() => {}}
     >
@@ -72,7 +78,11 @@ it("does not invent unknown metadata and still exposes diagnostics without a cha
   expect(screen.getByText("Direct message")).toBeVisible();
   expect(screen.queryByText("Members")).not.toBeInTheDocument();
   rerender(
-    <ChannelSettingsPanel channel={undefined} close={() => {}}>
+    <ChannelSettingsPanel
+      scope="community:viewer"
+      channel={undefined}
+      close={() => {}}
+    >
       Diagnostics content
     </ChannelSettingsPanel>,
   );
@@ -86,6 +96,7 @@ it("opens Canvas from its own keyboard-accessible row before setup actions", asy
   const openCanvas = vi.fn();
   render(
     <ChannelSettingsPanel
+      scope="community:viewer"
       channel={{ id: "alpha", name: "Alpha", channelType: "stream" }}
       close={() => {}}
       openCanvas={openCanvas}
@@ -117,7 +128,11 @@ it("opens Canvas from its own keyboard-accessible row before setup actions", asy
 it("omits Canvas without a writable channel or an opener", () => {
   const channel = { id: "alpha", name: "Alpha" };
   const { rerender } = render(
-    <ChannelSettingsPanel channel={channel} close={() => {}}>
+    <ChannelSettingsPanel
+      scope="community:viewer"
+      channel={channel}
+      close={() => {}}
+    >
       Diagnostics content
     </ChannelSettingsPanel>,
   );
@@ -130,6 +145,7 @@ it("omits Canvas without a writable channel or an opener", () => {
   ]) {
     rerender(
       <ChannelSettingsPanel
+        scope="community:viewer"
         channel={unavailable}
         close={() => {}}
         openCanvas={() => {}}
@@ -163,6 +179,7 @@ function panel(
 ) {
   return (
     <ChannelSettingsPanel
+      scope="community:viewer"
       canvas={canvas}
       channel={{ id, name: id, ...(readOnly ? { readOnly } : {}) }}
       canvasOpen={canvasOpen}

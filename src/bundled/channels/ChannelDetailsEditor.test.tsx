@@ -7,6 +7,7 @@ import {
   screen,
   waitFor,
   fireEvent,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
@@ -18,7 +19,11 @@ import type {
 } from "../../features/relay/channel-details";
 import type { ChannelDetails } from "../../features/relay/channel-details-protocol";
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+  localStorage.clear();
+});
 const channel = {
   id: "alpha",
   name: "Alpha",
@@ -69,16 +74,23 @@ function harness() {
 it("edits deliberately, cancels every field, and sends all fields only on Save", async () => {
   const h = harness();
   const user = userEvent.setup();
-  render(<ChannelDetailsEditor capability={h.capability} channel={channel} />);
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
   await user.click(await screen.findByRole("button", { name: "Edit details" }));
   await user.clear(screen.getByRole("textbox", { name: "Name" }));
   await user.type(screen.getByRole("textbox", { name: "Name" }), "Renamed");
   await user.clear(screen.getByRole("textbox", { name: "Description" }));
-  await user.click(screen.getByRole("combobox", { name: "Visibility" }));
-  await user.click(await screen.findByRole("option", { name: "Private" }));
-  expect(
-    screen.getByText(/Saving makes this channel invite-only/),
-  ).toBeVisible();
+  await user.click(screen.getByRole("switch", { name: "Private" }));
+  expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+    "Only channel members will have access.",
+  );
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
   expect(h.save).not.toHaveBeenCalled();
   await user.click(screen.getByRole("button", { name: "Cancel" }));
   expect(screen.getByRole("button", { name: "Edit details" })).toHaveFocus();
@@ -87,9 +99,8 @@ it("edits deliberately, cancels every field, and sends all fields only on Save",
   expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
     channel.description,
   );
-  expect(
-    screen.getByRole("combobox", { name: "Visibility" }),
-  ).toHaveTextContent("Public");
+  expect(screen.getByRole("switch", { name: "Private" })).not.toBeChecked();
+  expect(screen.getByRole("radio", { name: "Ongoing" })).toBeChecked();
   await user.clear(screen.getByRole("textbox", { name: "Description" }));
   await user.click(screen.getByRole("button", { name: "Save changes" }));
   expect(h.save).toHaveBeenCalledWith(
@@ -105,7 +116,13 @@ it("retains rejected edits and preserves them through an explicit authority relo
   const h = harness();
   const user = userEvent.setup();
   h.save.mockRejectedValueOnce(new Error("Permission changed"));
-  render(<ChannelDetailsEditor capability={h.capability} channel={channel} />);
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
   await user.click(await screen.findByRole("button", { name: "Edit details" }));
   await user.type(
     screen.getByRole("textbox", { name: "Description" }),
@@ -131,7 +148,13 @@ it("reloads authoritative privacy after a conflict and saves retained text edits
   const h = harness();
   const user = userEvent.setup();
   h.save.mockRejectedValueOnce(new Error("Channel details changed"));
-  render(<ChannelDetailsEditor capability={h.capability} channel={channel} />);
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
   await user.click(await screen.findByRole("button", { name: "Edit details" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
     target: { value: "My renamed channel" },
@@ -150,12 +173,13 @@ it("reloads authoritative privacy after a conflict and saves retained text edits
   };
   h.load.mockResolvedValue(privateBase);
   await user.click(screen.getByRole("button", { name: "Reload details" }));
-  expect(
-    await screen.findByText(
-      "Private · This channel cannot be made public here.",
-    ),
-  ).toBeVisible();
-  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  await waitFor(() =>
+    expect(screen.getByRole("switch", { name: "Private" })).toBeChecked(),
+  );
+  expect(screen.getByRole("switch", { name: "Private" })).not.toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
   expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
     "My renamed channel",
   );
@@ -175,6 +199,37 @@ it("reloads authoritative privacy after a conflict and saves retained text edits
   );
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
+it("keeps Edit details disabled and loading for a save that outlives the editor", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  const draft = { ...base, name: "Pending name" };
+  h.setAttempt({ draft, status: "saving" });
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  const edit = await screen.findByRole("button", { name: "Edit details" });
+  expect(edit).toBeDisabled();
+  expect(edit).toHaveAttribute("aria-busy", "true");
+  expect(edit.querySelector(".buzz-button-spinner")).toBeInTheDocument();
+  await user.click(edit);
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+  act(() => h.setAttempt({ draft, status: "unconfirmed" }));
+  expect(edit).toBeEnabled();
+  expect(edit).not.toHaveAttribute("aria-busy", "true");
+  expect(edit.querySelector(".buzz-button-spinner")).not.toBeInTheDocument();
+  await user.click(edit);
+  expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(draft.name);
+  expect(screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
+  expect(
+    screen.getByRole("button", { name: "Check save status" }),
+  ).toBeEnabled();
+  expect(h.save).not.toHaveBeenCalled();
+});
 it("unknown outcomes survive remount and checking never invokes Save", async () => {
   const h = harness();
   const user = userEvent.setup();
@@ -183,25 +238,39 @@ it("unknown outcomes survive remount and checking never invokes Save", async () 
     status: "unconfirmed",
   });
   const first = render(
-    <ChannelDetailsEditor capability={h.capability} channel={channel} />,
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
   );
-  await user.click(
-    await screen.findByRole("button", { name: "Review pending changes" }),
-  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
   expect(screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
+  expect(screen.getByRole("radio", { name: "Temporary" })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
+  expect(screen.getByRole("radio", { name: "Ongoing" })).toBeChecked();
+  expect(screen.getByRole("switch", { name: "Private" })).toHaveAttribute(
+    "aria-disabled",
+    "true",
+  );
   expect(
     screen.queryByRole("button", { name: "Save changes" }),
   ).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  expect(
-    screen.getByRole("button", { name: "Review pending changes" }),
-  ).toHaveFocus();
+  expect(screen.getByRole("button", { name: "Edit details" })).toHaveFocus();
   first.unmount();
-  render(<ChannelDetailsEditor capability={h.capability} channel={channel} />);
-  await user.click(
-    await screen.findByRole("button", { name: "Review pending changes" }),
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
   );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
   await waitFor(() =>
     expect(
       screen.getByRole("button", { name: "Check save status" }),
@@ -224,7 +293,11 @@ it.each(["channel", "session"])(
       next = harness();
     const user = userEvent.setup();
     const { rerender } = render(
-      <ChannelDetailsEditor capability={h.capability} channel={channel} />,
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
     );
     await user.click(
       await screen.findByRole("button", { name: "Edit details" }),
@@ -239,6 +312,7 @@ it.each(["channel", "session"])(
       change === "channel" ? { ...channel, id: "beta", name: "Beta" } : channel;
     rerender(
       <ChannelDetailsEditor
+        scope="community:viewer"
         capability={next.capability}
         channel={changedChannel}
       />,
@@ -247,7 +321,11 @@ it.each(["channel", "session"])(
       screen.queryByRole("textbox", { name: "Name" }),
     ).not.toBeInTheDocument();
     rerender(
-      <ChannelDetailsEditor capability={h.capability} channel={channel} />,
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
     );
     await act(async () => {
       gate.resolve({ ...base, name: "Wrong late name" });
@@ -260,9 +338,11 @@ it.each(["channel", "session"])(
 );
 it("keeps details readable without editing authority or host support", async () => {
   const h = harness();
-  h.load.mockResolvedValueOnce({ ...base, canEdit: false });
+  const loaded = deferred<ChannelDetails>();
+  h.load.mockReturnValueOnce(loaded.promise);
   const { rerender } = render(
     <ChannelSettingsPanel
+      scope="community:viewer"
       channel={channel}
       details={h.capability}
       close={() => {}}
@@ -272,12 +352,23 @@ it("keeps details readable without editing authority or host support", async () 
   );
   expect(screen.getByText(channel.description)).toBeVisible();
   expect(screen.getByText("Public")).toBeVisible();
-  await screen.findByText(/Only current channel owners/);
+  const editor = screen.getByRole("region", {
+    name: "Edit channel details",
+    hidden: true,
+  });
+  expect(editor).toHaveAttribute("aria-busy", "true");
+  await act(async () => loaded.resolve({ ...base, canEdit: false }));
+  expect(editor).toHaveAttribute("aria-busy", "false");
+  expect(editor).toBeEmptyDOMElement();
+  expect(
+    screen.queryByText(/Only current channel owners/),
+  ).not.toBeInTheDocument();
   expect(
     screen.queryByRole("button", { name: "Edit details" }),
   ).not.toBeInTheDocument();
   rerender(
     <ChannelSettingsPanel
+      scope="community:viewer"
       channel={{ ...channel, readOnly: true }}
       details={h.capability}
       close={() => {}}
@@ -290,7 +381,11 @@ it("keeps details readable without editing authority or host support", async () 
     screen.queryByRole("region", { name: "Edit channel details" }),
   ).not.toBeInTheDocument();
   rerender(
-    <ChannelSettingsPanel channel={channel} close={() => {}}>
+    <ChannelSettingsPanel
+      scope="community:viewer"
+      channel={channel}
+      close={() => {}}
+    >
       Diagnostics
     </ChannelSettingsPanel>,
   );
@@ -305,6 +400,7 @@ it("orders metadata, Canvas, and actions and dismisses each edit layer with Esca
   const close = vi.fn();
   render(
     <ChannelSettingsPanel
+      scope="community:viewer"
       channel={channel}
       details={h.capability}
       openCanvas={() => {}}
@@ -338,14 +434,6 @@ it("orders metadata, Canvas, and actions and dismisses each edit layer with Esca
   await waitFor(() =>
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveFocus(),
   );
-  await user.click(screen.getByRole("combobox", { name: "Visibility" }));
-  await waitFor(() =>
-    expect(screen.getByRole("option", { name: "Public" })).toHaveFocus(),
-  );
-  await user.keyboard("{Escape}");
-  expect(screen.queryByRole("listbox")).not.toBeInTheDocument();
-  expect(screen.getByRole("dialog")).toBeVisible();
-  expect(close).not.toHaveBeenCalled();
   await user.keyboard("{Escape}");
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(close).not.toHaveBeenCalled();
@@ -356,7 +444,13 @@ it("orders metadata, Canvas, and actions and dismisses each edit layer with Esca
 it("only enables Save for normalized, changed, valid fields with connected errors", async () => {
   const h = harness();
   const user = userEvent.setup();
-  render(<ChannelDetailsEditor capability={h.capability} channel={channel} />);
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
   await user.click(await screen.findByRole("button", { name: "Edit details" }));
   const name = screen.getByRole("textbox", { name: "Name" });
   const description = screen.getByRole("textbox", { name: "Description" });
@@ -410,6 +504,7 @@ it.each(["save", "check"] as const)(
     });
     render(
       <ChannelSettingsPanel
+        scope="community:viewer"
         channel={channel}
         details={h.capability}
         close={close}
@@ -417,11 +512,10 @@ it.each(["save", "check"] as const)(
         Diagnostics
       </ChannelSettingsPanel>,
     );
-    await user.click(
-      await screen.findByRole("button", {
-        name: operation === "check" ? "Review pending changes" : "Edit details",
-      }),
-    );
+    const edit = await screen.findByRole("button", { name: "Edit details" });
+    expect(edit).toBeEnabled();
+    expect(edit).not.toHaveAttribute("aria-busy", "true");
+    await user.click(edit);
     const action = await screen.findByRole("button", {
       name: operation === "check" ? "Check save status" : "Save changes",
     });
@@ -434,7 +528,21 @@ it.each(["save", "check"] as const)(
     await user.click(action);
     try {
       expect(h[operation]).toHaveBeenCalledOnce();
+      expect(edit).toHaveAccessibleName("Edit details");
+      expect(edit).toBeDisabled();
+      expect(edit).toHaveAttribute("aria-busy", "true");
+      expect(edit.querySelector(".buzz-button-spinner")).toBeInTheDocument();
       expect(action).toHaveAttribute("aria-busy", "true");
+      expect(
+        screen.queryByText(/Saving channel details/),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByText(/Checking channel permissions/),
+      ).not.toBeInTheDocument();
+      if (operation === "save")
+        expect(
+          screen.getByRole("dialog").querySelector("form"),
+        ).not.toHaveAttribute("aria-describedby");
       expect(
         screen.getByRole("button", { name: "Close edit channel details" }),
       ).toBeDisabled();
@@ -444,7 +552,12 @@ it.each(["save", "check"] as const)(
         document.querySelector(".buzz-dialog-backdrop") as Element,
       );
       await user.keyboard("{Escape}");
-      expect(screen.getByRole("dialog")).toBeVisible();
+      await user.click(
+        document.querySelector(".buzz-dialog-backdrop") as Element,
+      );
+      expect(screen.getByRole("dialog")).toHaveAccessibleName(
+        "Edit channel details",
+      );
       expect(close).not.toHaveBeenCalled();
     } finally {
       await act(async () => gate.resolve());
@@ -452,7 +565,10 @@ it.each(["save", "check"] as const)(
     await waitFor(() =>
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
     );
-    expect(screen.getByRole("button", { name: "Edit details" })).toHaveFocus();
+    expect(edit).toHaveFocus();
+    expect(edit).toBeEnabled();
+    expect(edit).not.toHaveAttribute("aria-busy", "true");
+    expect(edit.querySelector(".buzz-button-spinner")).not.toBeInTheDocument();
     expect(h[operation]).toHaveBeenCalledOnce();
     if (operation === "check") expect(h.save).not.toHaveBeenCalled();
   },
@@ -465,7 +581,13 @@ it("a save that becomes uncertain reopens in check-only recovery", async () => {
     h.setAttempt({ draft, status: "unconfirmed" });
     throw new Error("The change may have been saved.");
   });
-  render(<ChannelDetailsEditor capability={h.capability} channel={channel} />);
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
   await user.click(await screen.findByRole("button", { name: "Edit details" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
     target: { value: draft.name },
@@ -477,9 +599,7 @@ it("a save that becomes uncertain reopens in check-only recovery", async () => {
   await user.click(
     screen.getByRole("button", { name: "Close edit channel details" }),
   );
-  await user.click(
-    screen.getByRole("button", { name: "Review pending changes" }),
-  );
+  await user.click(screen.getByRole("button", { name: "Edit details" }));
   expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(draft.name);
   expect(
     screen.queryByRole("button", { name: "Save changes" }),
@@ -489,21 +609,127 @@ it("a save that becomes uncertain reopens in check-only recovery", async () => {
   ).toBeEnabled();
   expect(h.save).toHaveBeenCalledOnce();
 });
-it("never offers public visibility for a private channel", async () => {
+it("warns before reopening a private channel, discards on Cancel, and changes visibility only on Save", async () => {
   const h = harness();
   const user = userEvent.setup();
-  h.load.mockResolvedValue({ ...base, visibility: "private" });
+  const privateBase = { ...base, visibility: "private" as const };
+  h.load.mockResolvedValue(privateBase);
   render(
     <ChannelDetailsEditor
+      scope="community:viewer"
       capability={h.capability}
       channel={{ ...channel, visibility: "private" }}
     />,
   );
   await user.click(await screen.findByRole("button", { name: "Edit details" }));
-  expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
+  const privacy = screen.getByRole("switch", { name: "Private" });
+  expect(privacy).toBeChecked();
+  await user.click(privacy);
   expect(
-    screen.getByText("Private · This channel cannot be made public here."),
-  ).toBeVisible();
+    screen.queryByRole("switch", { name: "Private" }),
+  ).not.toBeInTheDocument();
+  expect(screen.getByRole("dialog")).toHaveAccessibleDescription(
+    "Everyone in this community will be able to view this channel’s full history.",
+  );
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(screen.getByRole("switch", { name: "Private" })).not.toBeChecked();
+  expect(h.save).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.getByRole("button", { name: "Edit details" })).toHaveFocus();
+  await user.click(screen.getByRole("button", { name: "Edit details" }));
+  expect(screen.getByRole("switch", { name: "Private" })).toBeChecked();
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await user.click(screen.getByRole("switch", { name: "Private" }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(h.save).toHaveBeenCalledWith(
+    privateBase,
+    { ...privateBase, visibility: "public" },
+    expect.any(AbortSignal),
+  );
+});
+
+it.each([false, true])(
+  "reload keeps explicit reopening but adopts untouched visibility (edited=%s)",
+  async (edited) => {
+    const h = harness();
+    const user = userEvent.setup();
+    const privateBase = { ...base, visibility: "private" as const };
+    h.load.mockResolvedValue(privateBase);
+    h.save.mockRejectedValueOnce(new Error("Channel details changed"));
+    render(
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Edit details" }),
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), " edited");
+    if (edited) {
+      await user.click(screen.getByRole("switch", { name: "Private" }));
+      await user.click(screen.getByRole("button", { name: "Continue" }));
+    }
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await screen.findByRole("alert");
+    const reloaded = { ...privateBase, version: "v2" };
+    h.load.mockResolvedValue(reloaded);
+    await user.click(screen.getByRole("button", { name: "Reload details" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Save changes" }),
+      ).toBeEnabled(),
+    );
+    expect(screen.getByRole("switch", { name: "Private" })).toHaveAttribute(
+      "aria-checked",
+      String(!edited),
+    );
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(h.save).toHaveBeenLastCalledWith(
+      reloaded,
+      {
+        ...privateBase,
+        name: "Alpha edited",
+        visibility: edited ? "public" : "private",
+      },
+      expect.any(AbortSignal),
+    );
+  },
+);
+
+it("failed reload never turns a stale public text draft into intent to reopen", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  h.save.mockRejectedValueOnce(new Error("Channel details changed"));
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  await user.type(screen.getByRole("textbox", { name: "Name" }), " edited");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await screen.findByRole("alert");
+  h.load.mockRejectedValueOnce(new Error("Offline"));
+  await user.click(screen.getByRole("button", { name: "Reload details" }));
+  expect(await screen.findByRole("alert")).toHaveTextContent("Offline");
+  const reloaded = { ...base, version: "v2", visibility: "private" as const };
+  h.load.mockResolvedValue(reloaded);
+  await user.click(screen.getByRole("button", { name: "Reload details" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled(),
+  );
+  expect(screen.getByRole("switch", { name: "Private" })).toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(h.save).toHaveBeenLastCalledWith(
+    reloaded,
+    { ...base, name: "Alpha edited", visibility: "private" },
+    expect.any(AbortSignal),
+  );
 });
 
 it.each([
@@ -515,7 +741,11 @@ it.each([
     const h = harness();
     const user = userEvent.setup();
     render(
-      <ChannelDetailsEditor capability={h.capability} channel={channel} />,
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
     );
     await user.click(
       await screen.findByRole("button", { name: "Edit details" }),
@@ -593,7 +823,11 @@ it.each([
     const original = `AB${"😀".repeat(limit + 1)}YZ`;
     h.load.mockResolvedValue({ ...base, [key]: original });
     render(
-      <ChannelDetailsEditor capability={h.capability} channel={channel} />,
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
     );
     await user.click(
       await screen.findByRole("button", { name: "Edit details" }),
@@ -642,7 +876,13 @@ it.each([
 ])("submits %j with the relay's canonical name", async (input, expected) => {
   const h = harness();
   const user = userEvent.setup();
-  render(<ChannelDetailsEditor capability={h.capability} channel={channel} />);
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
   await user.click(await screen.findByRole("button", { name: "Edit details" }));
   fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
     target: { value: input },
@@ -652,5 +892,658 @@ it.each([
     base,
     { ...base, name: expected },
     expect.any(AbortSignal),
+  );
+});
+
+it("stages lifetime and privacy together until Save", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  const save = screen.getByRole("button", { name: "Save changes" });
+  expect(save).toBeDisabled();
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
+  expect(save).toBeEnabled();
+  await user.click(screen.getByRole("radio", { name: "Ongoing" }));
+  expect(save).toBeDisabled();
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
+  await user.click(screen.getByRole("switch", { name: "Private" }));
+  await user.click(screen.getByRole("button", { name: "Continue" }));
+  expect(h.save).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(h.save).toHaveBeenCalledWith(
+    base,
+    { ...base, ttlSeconds: 604800, visibility: "private" },
+    expect.any(AbortSignal),
+  );
+});
+it("preserves a custom temporary duration through text editing and deliberate lifetime reversal", async () => {
+  const h = harness();
+  const custom = { ...base, ttlSeconds: 3600 };
+  h.load.mockResolvedValue(custom);
+  const user = userEvent.setup();
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  expect(screen.getByRole("radio", { name: "Temporary" })).toBeChecked();
+  expect(
+    screen.getByRole("radio", { name: "Temporary" }),
+  ).toHaveAccessibleDescription("Cleans up after 1 hour without activity.");
+  await user.click(screen.getByRole("radio", { name: "Ongoing" }));
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await user.type(
+    screen.getByRole("textbox", { name: "Description" }),
+    " edited",
+  );
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(h.save).toHaveBeenLastCalledWith(
+    custom,
+    { ...custom, description: `${base.description} edited` },
+    expect.any(AbortSignal),
+  );
+  await user.click(screen.getByRole("button", { name: "Edit details" }));
+  await user.click(screen.getByRole("radio", { name: "Ongoing" }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(h.save).toHaveBeenLastCalledWith(
+    custom,
+    { ...custom, ttlSeconds: undefined },
+    expect.any(AbortSignal),
+  );
+});
+it.each([false, true])(
+  "reload preserves edited lifetime but adopts untouched remote duration (edited=%s)",
+  async (edited) => {
+    const h = harness();
+    const user = userEvent.setup();
+    h.save.mockRejectedValueOnce(new Error("Channel details changed"));
+    render(
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Edit details" }),
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), " edited");
+    if (edited)
+      await user.click(screen.getByRole("radio", { name: "Temporary" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await screen.findByRole("alert");
+    const reloaded = { ...base, version: "v2", ttlSeconds: 3600 };
+    h.load.mockResolvedValue(reloaded);
+    await user.click(screen.getByRole("button", { name: "Reload details" }));
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Save changes" }),
+      ).toBeEnabled(),
+    );
+    expect(screen.getByRole("radio", { name: "Temporary" })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(h.save).toHaveBeenLastCalledWith(
+      reloaded,
+      { ...base, name: "Alpha edited", ttlSeconds: edited ? 604800 : 3600 },
+      expect.any(AbortSignal),
+    );
+  },
+);
+
+it.each([
+  [3600, 7200],
+  [undefined, 7200],
+  [3600, undefined],
+] as const)(
+  "adopts untouched remote duration after a failed reload (%s → %s)",
+  async (originalTtl, remoteTtl) => {
+    const h = harness();
+    const user = userEvent.setup();
+    const original = { ...base, ttlSeconds: originalTtl };
+    h.load.mockResolvedValue(original);
+    h.save.mockRejectedValueOnce(new Error("Channel details changed"));
+    render(
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Edit details" }),
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), " edited");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    await screen.findByRole("alert");
+    h.load.mockRejectedValueOnce(new Error("Offline"));
+    await user.click(screen.getByRole("button", { name: "Reload details" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Offline");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
+    const reloaded = { ...base, version: "v2", ttlSeconds: remoteTtl };
+    const reload = deferred<ChannelDetails>();
+    h.load.mockReturnValueOnce(reload.promise);
+    await user.click(screen.getByRole("button", { name: "Reload details" }));
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await act(async () => reload.resolve(reloaded));
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+      "Alpha edited",
+    );
+    expect(
+      screen.getByRole("radio", {
+        name: remoteTtl === undefined ? "Ongoing" : "Temporary",
+      }),
+    ).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(h.save).toHaveBeenLastCalledWith(
+      reloaded,
+      { ...original, name: "Alpha edited", ttlSeconds: remoteTtl },
+      expect.any(AbortSignal),
+    );
+  },
+);
+
+it("retains an explicit change to Ongoing through a failed conflict reload", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  h.load.mockResolvedValue({ ...base, ttlSeconds: 3600 });
+  h.save.mockRejectedValueOnce(new Error("Channel details changed"));
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  await user.click(screen.getByRole("radio", { name: "Ongoing" }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await screen.findByRole("alert");
+  h.load.mockRejectedValueOnce(new Error("Offline"));
+  await user.click(screen.getByRole("button", { name: "Reload details" }));
+  await waitFor(() =>
+    expect(screen.getByRole("alert")).toHaveTextContent("Offline"),
+  );
+  const reloaded = { ...base, version: "v2", ttlSeconds: 7200 };
+  h.load.mockResolvedValue(reloaded);
+  await user.click(screen.getByRole("button", { name: "Reload details" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled(),
+  );
+  expect(screen.getByRole("radio", { name: "Ongoing" })).toBeChecked();
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(h.save).toHaveBeenLastCalledWith(
+    reloaded,
+    { ...base, ttlSeconds: undefined },
+    expect.any(AbortSignal),
+  );
+});
+
+it.each(["public", "private"] as const)(
+  "replaces Edit for every Private toggle from %s without losing the draft",
+  async (visibility) => {
+    const h = harness();
+    const user = userEvent.setup();
+    h.load.mockResolvedValue({ ...base, visibility });
+    render(
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Edit details" }),
+    );
+    await user.type(screen.getByRole("textbox", { name: "Name" }), " draft");
+    await user.type(
+      screen.getByRole("textbox", { name: "Description" }),
+      " draft",
+    );
+    await user.click(screen.getByRole("radio", { name: "Temporary" }));
+    const initialPrivate = visibility === "private";
+    const dialog = screen.getByRole("dialog");
+    for (const dismissal of ["Cancel", "Escape", "Close"]) {
+      await user.click(screen.getByRole("switch", { name: "Private" }));
+      const confirmation = screen.getByRole("dialog");
+      expect(confirmation).toBe(dialog);
+      expect(screen.getAllByRole("dialog")).toHaveLength(1);
+      expect(confirmation).toHaveAccessibleName(
+        initialPrivate ? "Make channel public?" : "Make channel private?",
+      );
+      expect(
+        screen.queryByRole("textbox", { name: "Name" }),
+      ).not.toBeInTheDocument();
+      expect(
+        screen.queryByRole("button", { name: "Save changes" }),
+      ).not.toBeInTheDocument();
+      expect(
+        within(confirmation).getByRole("button", { name: "Cancel" }),
+      ).toHaveFocus();
+      const consequence = initialPrivate
+        ? "Everyone in this community will be able to view this channel’s full history."
+        : "Only channel members will have access.";
+      expect(confirmation).toHaveAccessibleDescription(consequence);
+      await waitFor(() => expect(screen.getByText(consequence)).toBeVisible());
+      expect(
+        screen.getByText(consequence).closest(".buzz-dialog-body"),
+      ).toHaveAttribute("data-footer-gap", "compact");
+      expect(
+        screen.queryByText(/This change takes effect/),
+      ).not.toBeInTheDocument();
+      const remember = screen.getByRole("checkbox", {
+        name: "Don’t show me this again",
+      });
+      expect(remember).not.toBeChecked();
+      await user.click(remember);
+      if (dismissal === "Escape") await user.keyboard("{Escape}");
+      else
+        await user.click(
+          within(confirmation).getByRole("button", {
+            name:
+              dismissal === "Close" ? "Back to edit channel details" : "Cancel",
+          }),
+        );
+      expect(
+        screen.queryByRole("dialog", { name: /Make channel/ }),
+      ).not.toBeInTheDocument();
+      expect(screen.getByRole("dialog", { name: "Edit channel details" })).toBe(
+        dialog,
+      );
+      expect(screen.getByRole("switch", { name: "Private" })).toHaveFocus();
+      expect(screen.getByRole("switch", { name: "Private" })).toHaveAttribute(
+        "aria-checked",
+        String(initialPrivate),
+      );
+      expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+        "Alpha draft",
+      );
+      expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+        `${base.description} draft`,
+      );
+      expect(screen.getByRole("radio", { name: "Temporary" })).toBeChecked();
+    }
+    await user.click(screen.getByRole("switch", { name: "Private" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByRole("switch", { name: "Private" })).toHaveAttribute(
+      "aria-checked",
+      String(!initialPrivate),
+    );
+    expect(screen.getByRole("switch", { name: "Private" })).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+    // Toggling back also confirms, even though it returns to the saved state.
+    await user.click(screen.getByRole("switch", { name: "Private" }));
+    expect(screen.getByRole("dialog")).toHaveAccessibleName(
+      initialPrivate ? "Make channel private?" : "Make channel public?",
+    );
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByRole("switch", { name: "Private" })).toHaveAttribute(
+      "aria-checked",
+      String(initialPrivate),
+    );
+    expect(h.save).not.toHaveBeenCalled();
+    // Escape in the form asks before discarding the entire draft.
+    await user.keyboard("{Escape}");
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    await user.click(screen.getByRole("button", { name: "Edit details" }));
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Alpha");
+    expect(screen.getByRole("radio", { name: "Ongoing" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  },
+);
+
+it("drops an open privacy confirmation when the destination changes", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  const view = render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  await user.click(screen.getByRole("switch", { name: "Private" }));
+  expect(screen.getByRole("dialog")).toBeVisible();
+  h.load.mockResolvedValue({ ...base, channelId: "other" });
+  view.rerender(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={{ ...channel, id: "other" }}
+    />,
+  );
+  await screen.findByRole("button", { name: "Edit details" });
+  expect(
+    screen.queryByRole("dialog", { name: /Make channel/ }),
+  ).not.toBeInTheDocument();
+  expect(h.save).not.toHaveBeenCalled();
+});
+
+it("renders status rows only when they have content, not an empty grid row beside Edit", async () => {
+  const h = harness();
+  const loading = deferred<ChannelDetails>();
+  h.load.mockReturnValueOnce(loading.promise);
+  const user = userEvent.setup();
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  const editor = screen.getByRole("region", { name: "Edit channel details" });
+  try {
+    expect(editor).toBeEmptyDOMElement();
+    expect(
+      screen.queryByText(/Checking channel permissions/),
+    ).not.toBeInTheDocument();
+  } finally {
+    await act(async () => loading.resolve(base));
+  }
+  const edit = await screen.findByRole("button", { name: "Edit details" });
+  expect([...editor.children]).toEqual([edit]);
+  await user.click(edit);
+  const form = screen.getByRole("dialog").querySelector("form");
+  expect(form).not.toHaveAttribute("aria-describedby");
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect([...editor.children]).toEqual([edit]);
+  act(() => h.setAttempt({ draft: base, status: "saving" }));
+  expect([...editor.children]).toEqual([edit]);
+  expect(edit).toBeDisabled();
+  expect(edit).toHaveAttribute("aria-busy", "true");
+  expect(screen.queryByText(/Saving channel details/)).not.toBeInTheDocument();
+  act(() => h.setAttempt({ draft: base, status: "unconfirmed" }));
+  expect(within(editor).getByRole("status")).toHaveTextContent(
+    "The change may have been saved",
+  );
+});
+
+it("stages duration steps, preserves the choice across Ongoing, and discards it on Cancel", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  expect(
+    screen.queryByRole("button", { name: "Increase duration" }),
+  ).not.toBeInTheDocument();
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
+  const shorter = screen.getByRole("button", { name: "Decrease duration" });
+  const longer = screen.getByRole("button", { name: "Increase duration" });
+  await waitFor(() =>
+    expect(
+      screen.getByText("after 7 days", { selector: "strong" }),
+    ).toBeVisible(),
+  );
+  await user.click(longer);
+  await waitFor(() =>
+    expect(
+      screen.getByText("after 2 weeks", { selector: "strong" }),
+    ).toBeVisible(),
+  );
+  expect(longer).toBeDisabled();
+  await user.click(shorter);
+  await waitFor(() =>
+    expect(
+      screen.getByText("after 7 days", { selector: "strong" }),
+    ).toBeVisible(),
+  );
+  await user.click(shorter);
+  await waitFor(() =>
+    expect(
+      screen.getByText("after 1 day", { selector: "strong" }),
+    ).toBeVisible(),
+  );
+  expect(shorter).toBeDisabled();
+  await user.click(screen.getByRole("radio", { name: "Ongoing" }));
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
+  await waitFor(() =>
+    expect(
+      screen.getByText("after 1 day", { selector: "strong" }),
+    ).toBeVisible(),
+  );
+  expect(h.save).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  await user.click(screen.getByRole("button", { name: "Edit details" }));
+  expect(screen.getByRole("radio", { name: "Ongoing" })).toBeChecked();
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
+  await waitFor(() =>
+    expect(
+      screen.getByText("after 7 days", { selector: "strong" }),
+    ).toBeVisible(),
+  );
+  await user.click(screen.getByRole("button", { name: "Increase duration" }));
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  expect(h.save).toHaveBeenCalledExactlyOnceWith(
+    base,
+    { ...base, ttlSeconds: 1209600 },
+    expect.any(AbortSignal),
+  );
+});
+
+it.each([
+  [3600, "1 hour", "Increase duration", 86400],
+  [259200, "3 days", "Decrease duration", 86400],
+  [259200, "3 days", "Increase duration", 604800],
+  [2592000, "30 days", "Decrease duration", 1209600],
+] as const)(
+  "preserves custom %s seconds until an explicit step",
+  async (ttlSeconds, label, action, expected) => {
+    const h = harness();
+    const custom = { ...base, ttlSeconds };
+    h.load.mockResolvedValue(custom);
+    const user = userEvent.setup();
+    render(
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Edit details" }),
+    );
+    await waitFor(() =>
+      expect(
+        screen.getByText(`after ${label}`, { selector: "strong" }),
+      ).toBeVisible(),
+    );
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: action }));
+    expect(h.save).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(h.save).toHaveBeenCalledExactlyOnceWith(
+      custom,
+      { ...custom, ttlSeconds: expected },
+      expect.any(AbortSignal),
+    );
+  },
+);
+
+it("locks duration adjustment for uncertain saves", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  h.setAttempt({
+    draft: { ...base, ttlSeconds: 604800 },
+    status: "unconfirmed",
+  });
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  expect(
+    screen.getByRole("button", { name: "Decrease duration" }),
+  ).toBeDisabled();
+  const longer = screen.getByRole("button", { name: "Increase duration" });
+  expect(longer).toBeDisabled();
+  await user.click(longer);
+  await waitFor(() =>
+    expect(
+      screen.getByText("after 7 days", { selector: "strong" }),
+    ).toBeVisible(),
+  );
+  expect(h.save).not.toHaveBeenCalled();
+});
+
+it.each(["backdrop", "Escape", "Close"])(
+  "guards dirty Edit dismissal via %s and returns intact from confirmation",
+  async (dismissal) => {
+    // jsdom does not read focus options. Base UI feature-detects preventScroll
+    // after outside presses and otherwise suppresses eventual focus return.
+    const focus = HTMLElement.prototype.focus;
+    vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (
+      this: HTMLElement,
+      options?: FocusOptions,
+    ) {
+      void options?.preventScroll;
+      focus.call(this, options);
+    });
+    const h = harness();
+    const user = userEvent.setup();
+    render(
+      <ChannelDetailsEditor
+        scope="community:viewer"
+        capability={h.capability}
+        channel={channel}
+      />,
+    );
+    await user.click(
+      await screen.findByRole("button", { name: "Edit details" }),
+    );
+    const dismiss = async () => {
+      if (dismissal === "backdrop")
+        await user.click(
+          document.querySelector(".buzz-dialog-backdrop") as Element,
+        );
+      else if (dismissal === "Escape") await user.keyboard("{Escape}");
+      else
+        await user.click(
+          screen.getByRole("button", {
+            name: "Close edit channel details",
+          }),
+        );
+    };
+    await dismiss();
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Edit details" }));
+    await user.type(
+      screen.getByRole("textbox", { name: "Description" }),
+      " draft",
+    );
+    const dialog = screen.getByRole("dialog");
+    for (const back of ["Keep editing", "Escape", "backdrop", "Close"]) {
+      await dismiss();
+      expect(screen.getAllByRole("dialog")).toEqual([dialog]);
+      expect(dialog).toHaveAccessibleName("Discard changes?");
+      expect(
+        screen.getByRole("button", { name: "Keep editing" }),
+      ).toHaveFocus();
+      if (back === "Escape") await user.keyboard("{Escape}");
+      else if (back === "backdrop")
+        await user.click(
+          document.querySelector(".buzz-dialog-backdrop") as Element,
+        );
+      else
+        await user.click(
+          screen.getByRole("button", {
+            name: back === "Close" ? "Back to edit channel details" : back,
+          }),
+        );
+      expect(dialog).toHaveAccessibleName("Edit channel details");
+      expect(screen.getByRole("textbox", { name: "Name" })).toHaveFocus();
+      expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+        `${base.description} draft`,
+      );
+      expect(h.save).not.toHaveBeenCalled();
+    }
+    await dismiss();
+    await user.click(screen.getByRole("button", { name: "Discard changes" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Edit details" }),
+      ).toHaveFocus(),
+    );
+    await user.click(screen.getByRole("button", { name: "Edit details" }));
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue(
+      base.description,
+    );
+  },
+);
+
+it("closes reverted edits without confirmation, but guards raw text even when Save is a no-op", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  await user.type(screen.getByRole("textbox", { name: "Name" }), " draft");
+  fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+    target: { value: base.name },
+  });
+  await user.click(screen.getByRole("radio", { name: "Temporary" }));
+  await user.click(screen.getByRole("radio", { name: "Ongoing" }));
+  await user.keyboard("{Escape}");
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Edit details" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Name" }), {
+    target: { value: " ## Alpha " },
+  });
+  expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("dialog")).toHaveAccessibleName("Discard changes?");
+});
+
+it("protects retained text after a failed authority reload", async () => {
+  const h = harness();
+  const user = userEvent.setup();
+  h.save.mockRejectedValueOnce(new Error("Conflict"));
+  render(
+    <ChannelDetailsEditor
+      scope="community:viewer"
+      capability={h.capability}
+      channel={channel}
+    />,
+  );
+  await user.click(await screen.findByRole("button", { name: "Edit details" }));
+  await user.type(screen.getByRole("textbox", { name: "Name" }), " draft");
+  await user.click(screen.getByRole("button", { name: "Save changes" }));
+  await screen.findByRole("alert");
+  h.load.mockRejectedValueOnce(new Error("Offline"));
+  await user.click(screen.getByRole("button", { name: "Reload details" }));
+  await waitFor(() =>
+    expect(screen.getByRole("alert")).toHaveTextContent("Offline"),
+  );
+  await user.keyboard("{Escape}");
+  expect(screen.getByRole("dialog")).toHaveAccessibleName("Discard changes?");
+  await user.click(screen.getByRole("button", { name: "Keep editing" }));
+  expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(
+    "Alpha draft",
   );
 });

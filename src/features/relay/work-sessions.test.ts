@@ -78,9 +78,19 @@ it("keeps verified session roster reads available for sends without member-add c
   }
 });
 
-it.each([false, true])(
-  "retries the identical saved creation after it never reached the relay (channel kit: %s)",
-  async (kit) => {
+it.each([
+  [false, "Release notes"],
+  [true, "Release notes"],
+  [false, "\ufeffRelease notes\ufeff"],
+  [true, "\ufeffRelease notes\ufeff"],
+  [false, "\u0085# Release notes\u0085"],
+  [true, "\u0085# Release notes\u0085"],
+] as const)(
+  "retries the identical saved creation after it never reached the relay (channel kit: %s, signed name: %j)",
+  async (kit, signedName) => {
+    const canonicalName = signedName.includes("\ufeff")
+      ? signedName
+      : "Release notes";
     const viewer = keypair(),
       relay = keypair();
     const id = "11111111-1111-4111-8111-111111111111";
@@ -89,7 +99,7 @@ it.each([false, true])(
       content: "",
       tags: [
         ["h", id],
-        ["name", "Release notes"],
+        ["name", signedName],
         ["visibility", "private"],
         ["channel_type", "stream"],
         ["about", "Updates for the team"],
@@ -135,7 +145,7 @@ it.each([false, true])(
                 signed(relay, {
                   kind: 39000,
                   content: "",
-                  tags: [["d", id], ["name", "Release notes"], ["private"]],
+                  tags: [["d", id], ["name", canonicalName], ["private"]],
                 }),
               ]
             : [],
@@ -156,7 +166,7 @@ it.each([false, true])(
     try {
       await vi.waitFor(() =>
         expect(owner.session.channelCreation.snapshot()).toEqual({
-          name: "Release notes",
+          name: canonicalName,
           description: "Updates for the team",
           visibility: "private",
           ttlSeconds: 604800,
@@ -170,7 +180,7 @@ it.each([false, true])(
       ).rejects.toThrow(/still awaiting confirmation/);
       await expect(
         owner.session.channelCreation.create({
-          name: "Release notes",
+          name: canonicalName,
           description: "Updates for the team",
           visibility: "private",
           ttlSeconds: 604800,
@@ -187,7 +197,7 @@ it.each([false, true])(
       dropping = false;
       await expect(
         owner.session.channelCreation.create({
-          name: "Release notes",
+          name: canonicalName,
           description: "Updates for the team",
           visibility: "private",
           ttlSeconds: 604800,

@@ -319,13 +319,13 @@ sessionSidebar(
     ).not.toBeChecked();
     await expect(
       dialog.getByRole("textbox", { name: "Description" }),
+    ).toBeVisible();
+    await expect(
+      dialog.getByRole("button", { name: "Add a description" }),
     ).toHaveCount(0);
-    const addDescription = dialog.getByRole("button", {
-      name: "Add a description",
-    });
     const formTypography = await Promise.all(
       [
-        addDescription,
+        dialog.getByText("Description", { exact: true }),
         dialog.getByText("Name", { exact: true }),
         dialog.getByText("Private", { exact: true }),
         dialog.getByText("Ongoing", { exact: true }),
@@ -350,14 +350,7 @@ sessionSidebar(
     expect(formTypography[0].color).toBe(formTypography[1].color);
     expect(placeholderColor).toBe(tertiaryColor);
     expect(formTypography[2].fontSize).toBe(formTypography[3].fontSize);
-    await expect(addDescription).toHaveCSS("border-radius", "0px");
-    await addDescription.hover();
-    await expect(addDescription).toHaveCSS("text-decoration-line", "underline");
-    await expect(addDescription).toHaveCSS(
-      "background-color",
-      "rgba(0, 0, 0, 0)",
-    );
-    await addDescription.click();
+    await page.keyboard.press("Tab");
     await expect(
       dialog.getByRole("textbox", { name: "Description" }),
     ).toBeFocused();
@@ -366,12 +359,29 @@ sessionSidebar(
       dialog.getByRole("radio", { name: /Temporary/ }),
     ).toBeChecked();
     await dialog.getByRole("switch", { name: "Private" }).click();
+    await page
+      .getByRole("dialog", { name: "Make channel private?" })
+      .getByRole("button", { name: "Continue" })
+      .click();
     await expect(dialog.getByRole("switch", { name: "Private" })).toBeChecked();
     await expect(dialog.getByRole("button", { name: "Cancel" })).toHaveCount(0);
+    await page
+      .locator(".buzz-dialog-backdrop")
+      .click({ position: { x: 8, y: 8 } });
+    const discard = page.getByRole("dialog", { name: "Discard changes?" });
+    await expect(
+      discard.getByRole("button", { name: "Keep editing" }),
+    ).toBeFocused();
+    await discard.getByRole("button", { name: "Keep editing" }).click();
+    await expect(dialog.getByRole("switch", { name: "Private" })).toBeChecked();
+    await expect(
+      dialog.getByRole("radio", { name: /Temporary/ }),
+    ).toBeChecked();
     await dialog
       .getByRole("button", { name: "Close channel creation" })
       .click();
-    await expect(dialog).toHaveCount(0);
+    await discard.getByRole("button", { name: "Discard changes" }).click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await expect(create).toBeFocused();
     await expect(
       page.getByRole("heading", { name: "Projects", exact: true }),

@@ -460,7 +460,11 @@ title. Group the title and optional description with `--space-2` (8px), beside
 the close button so its hit area does not enlarge the text gap. The body owns
 vertical padding matching the dialog's horizontal padding: `--space-6` (24px),
 or `--space-4` (16px) at the compact breakpoint. Do not add an outer flex gap
-on top of that body padding.
+on top of that body padding. Create/Edit channel forms opt into
+`headerGap="compact"` for a 12px heading-to-body gap at every breakpoint;
+other dialog compositions retain their default spacing. Their privacy confirmation
+steps also opt into `footerGap="compact"` for 8px between the final checkbox row
+and the actions; returning to the form restores the normal body-bottom padding.
 For a bounded dialog with fixed controls above a list, use `height="stable"`
 with `bodyLayout="flex"`. The body becomes a non-scrolling flex column; the
 feature supplies a `flex: 1; min-height: 0` composition with fixed controls and
@@ -473,6 +477,17 @@ The shared Dialog uses state opacity and settling transform tokens for a centere
 keep the controlled component mounted while setting `open={false}` for an exit.
 Reduced motion, keyboard navigation, and Escape dismissal are immediate. Pass
 `motion="none"` for frequently used surfaces such as the search palette.
+Channel Create/Edit privacy confirmation opts into a keyed `step` inside that same
+modal. The complete surface crossfades over 200ms with 4px blur: the form grows to
+1.05 while confirmation grows from 0.95 to 1; returning reverses those positions.
+This explicitly requested, bounded dialog transition is an exception to the
+no-blur rule below, not a new default for dialogs. One stable Base UI title and
+description label the modal; outgoing content is inert and hidden from assistive
+technology. Reduced motion, keyboard navigation and `motion="none"` swap steps
+immediately. The caller still owns draft state and focus between steps; no second
+modal, backdrop or write owner is introduced. This opt-in is for content-sized,
+centered dialogs; expanded, stable-height and side-sheet compositions are unchanged.
+
 
 Use Accordion for collapsible sections. Form sections pass `keepMounted` so
 collapsing them preserves local input state; leave the default for static content.

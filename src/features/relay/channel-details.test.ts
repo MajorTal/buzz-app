@@ -151,17 +151,78 @@ it("revoked authority while signing prevents publication", async () => {
   );
   expect(h.publish).not.toHaveBeenCalled();
 });
-it("stale edit base and private-to-public requests fail before signing", async () => {
+it("stale edit bases fail before signing", async () => {
   const h = harness();
   const base = await h.owner.capability.load(id);
-  h.set([h.metadata("changed"), ...h.events().slice(1)]);
-  await expect(h.owner.capability.save(base, draft)).rejects.toThrow("changed");
   h.set([h.metadata("changed", "", "private"), ...h.events().slice(1)]);
-  const privateBase = await h.owner.capability.load(id);
   await expect(
-    h.owner.capability.save(privateBase, { ...draft, visibility: "public" }),
-  ).rejects.toThrow("cannot be made public");
+    h.owner.capability.save(base, { ...draft, visibility: "public" }),
+  ).rejects.toThrow("changed");
   expect(h.sign).not.toHaveBeenCalled();
+});
+it.each([
+  ["public", "private", "private"],
+  ["private", "public", "open"],
+  ["public", "public", undefined],
+  ["private", "private", undefined],
+] as const)(
+  "saves %s → %s with only intentional visibility changes",
+  async (before, after, tag) => {
+    const h = harness();
+    h.set([h.metadata("original", "", before), ...h.events().slice(1)]);
+    const base = await h.owner.capability.load(id);
+    h.publish.mockImplementationOnce(async () => {
+      h.set([
+        h.metadata(draft.name, draft.description, after),
+        ...h.events().slice(1),
+      ]);
+    });
+    await h.owner.capability.save(base, { ...draft, visibility: after });
+    const command = h.sign.mock.calls[0]?.[0];
+    assert(command);
+    expect(command.tags.find(([key]) => key === "visibility")).toEqual(
+      tag ? ["visibility", tag] : undefined,
+    );
+    expect(() => validateDetailsTemplate(command)).not.toThrow();
+    expect(h.owner.capability.snapshot(id)).toBeUndefined();
+  },
+);
+it("a metadata change while signing a reopening prevents publication", async () => {
+  const h = harness();
+  h.set([h.metadata("original", "", "private"), ...h.events().slice(1)]);
+  const base = await h.owner.capability.load(id);
+  h.sign.mockImplementationOnce(async (event) => {
+    h.set([h.metadata("changed", "", "private"), ...h.events().slice(1)]);
+    return finalizeEvent(event, key);
+  });
+  await expect(
+    h.owner.capability.save(base, { ...draft, visibility: "public" }),
+  ).rejects.toThrow("Reload details");
+  expect(h.publish).not.toHaveBeenCalled();
+});
+it("unconfirmed reopening retains the public draft and checks without resending", async () => {
+  const h = harness();
+  h.set([h.metadata("original", "", "private"), ...h.events().slice(1)]);
+  const base = await h.owner.capability.load(id);
+  const reopening = { ...draft, visibility: "public" as const };
+  h.publish.mockRejectedValueOnce(new Error("lost response"));
+  await expect(h.owner.capability.save(base, reopening)).rejects.toThrow(
+    "may have been saved",
+  );
+  expect(h.owner.capability.snapshot(id)).toEqual({
+    draft: reopening,
+    status: "unconfirmed",
+  });
+  await expect(h.owner.capability.check(id)).rejects.toThrow(
+    "may have been saved",
+  );
+  h.set([
+    h.metadata(draft.name, draft.description, "public"),
+    ...h.events().slice(1),
+  ]);
+  await h.owner.capability.check(id);
+  expect(h.publish).toHaveBeenCalledOnce();
+  expect(h.owner.capability.snapshot(id)).toBeUndefined();
 });
 it("saves retained edits after reloading a channel made private by another editor", async () => {
   const h = harness();
@@ -344,15 +405,15 @@ it("access loss and an aborted late load cannot update discovery", async () => {
   await result;
   expect(h.acceptDiscovery).not.toHaveBeenCalled();
 });
-it("admits only bounded name/about/private metadata and preserves explicit description clearing", () => {
-  const template = detailsTemplate(id, { ...draft, description: "" });
+it("admits only bounded name/about/visibility/lifetime metadata and preserves explicit description clearing", () => {
+  const template = detailsTemplate(id, { ...draft, description: "" }, draft);
   expect(template.tags).toContainEqual(["about", ""]);
   expect(() => validateDetailsTemplate(template)).not.toThrow();
   const invalid = [
     { ...template, kind: 9000 },
     { ...template, content: "extra" },
-    { ...template, tags: [...template.tags, ["ttl", "10"]] },
-    ...["open", "public", ""].map((value) => ({
+    { ...template, tags: [...template.tags, ["ttl", "0"]] },
+    ...["public", "", "hidden"].map((value) => ({
       ...template,
       tags: [...template.tags.slice(0, 3), ["visibility", value]],
     })),
@@ -444,7 +505,7 @@ it.each([
       ).rejects.toThrow("Enter a channel name");
       expect(h.sign).not.toHaveBeenCalled();
       expect(h.owner.capability.snapshot(id)).toBeUndefined();
-      const command = detailsTemplate(id, draft);
+      const command = detailsTemplate(id, draft, draft);
       command.tags[1] = ["name", input];
       expect(() => validateDetailsTemplate(command)).toThrow(
         "Enter a channel name",
@@ -462,3 +523,142 @@ it.each([
     expect(h.publish).toHaveBeenCalledOnce();
   },
 );
+
+it.each([undefined, 3600, 604800, 2147483647])(
+  "reads exact duration %s from signed metadata",
+  async (ttlSeconds) => {
+    const h = harness();
+    h.set([
+      h.record(39000, [
+        ...h.entry(0).tags.slice(1),
+        ...(ttlSeconds === undefined ? [] : [["ttl", String(ttlSeconds)]]),
+      ]),
+      ...h.events().slice(1),
+    ]);
+    expect((await h.owner.capability.load(id)).ttlSeconds).toBe(ttlSeconds);
+  },
+);
+it.each([
+  [["ttl"]],
+  [["ttl", ""]],
+  [["ttl", "0"]],
+  [["ttl", "-1"]],
+  [["ttl", "1.5"]],
+  [["ttl", "2147483648"]],
+  [["ttl", "60", "extra"]],
+  [
+    ["ttl", "60"],
+    ["ttl", "60"],
+  ],
+])("rejects ambiguous or invalid metadata duration %j", async (...tags) => {
+  const h = harness();
+  h.set([
+    h.record(39000, [...h.entry(0).tags.slice(1), ...tags]),
+    ...h.events().slice(1),
+  ]);
+  await expect(h.owner.capability.load(id)).rejects.toThrow();
+});
+it.each([
+  [undefined, 604800, "604800"],
+  [3600, undefined, ""],
+  [3600, 3600, undefined],
+])(
+  "saves duration %s → %s without resetting unchanged cleanup deadlines",
+  async (before, after, tag) => {
+    const h = harness();
+    const metadata = (ttl: number | undefined) =>
+      h.record(39000, [
+        ["name", draft.name],
+        ["about", draft.description],
+        ["private"],
+        ["t", "stream"],
+        ...(ttl === undefined ? [] : [["ttl", String(ttl)]]),
+      ]);
+    h.set([metadata(before), ...h.events().slice(1)]);
+    const base = await h.owner.capability.load(id);
+    h.publish.mockImplementationOnce(async () => {
+      h.set([metadata(after), ...h.events().slice(1)]);
+    });
+    await h.owner.capability.save(base, { ...draft, ttlSeconds: after });
+    const command = h.sign.mock.calls[0]?.[0];
+    expect(command?.tags.filter(([key]) => key === "ttl")).toEqual(
+      tag === undefined ? [] : [["ttl", tag]],
+    );
+    expect(() =>
+      validateDetailsTemplate(command as EventTemplate),
+    ).not.toThrow();
+    expect((await h.owner.capability.load(id)).ttlSeconds).toBe(after);
+  },
+);
+it("locks a mismatched lifetime readback and only clears it after matching read-only confirmation", async () => {
+  const h = harness();
+  const base = await h.owner.capability.load(id);
+  const temporary = { ...draft, ttlSeconds: 604800 };
+  await expect(h.owner.capability.save(base, temporary)).rejects.toThrow(
+    "may have been saved",
+  );
+  expect(h.owner.capability.snapshot(id)).toEqual({
+    draft: temporary,
+    status: "unconfirmed",
+  });
+  h.set([
+    h.record(39000, [...h.entry(0).tags.slice(1), ["ttl", "604800"]]),
+    ...h.events().slice(1),
+  ]);
+  await h.owner.capability.check(id);
+  expect(h.owner.capability.snapshot(id)).toBeUndefined();
+  expect(h.publish).toHaveBeenCalledOnce();
+});
+it.each([0, -1, 1.5, 2147483648, NaN, Infinity, "60", null])(
+  "rejects invalid draft duration %j before signing",
+  async (ttlSeconds) => {
+    const h = harness();
+    const base = await h.owner.capability.load(id);
+    await expect(
+      h.owner.capability.save(base, {
+        ...draft,
+        ttlSeconds: ttlSeconds as number,
+      }),
+    ).rejects.toThrow("duration");
+    expect(h.sign).not.toHaveBeenCalled();
+  },
+);
+it("allows only a single canonical TTL command tag without widening other fields", () => {
+  const template = detailsTemplate(id, draft, draft);
+  for (const tail of [
+    [["ttl"]],
+    [["ttl", "0"]],
+    [["ttl", "-1"]],
+    [["ttl", "1.5"]],
+    [["ttl", "01"]],
+    [["ttl", "2147483648"]],
+    [["ttl", "60", "extra"]],
+    [
+      ["ttl", "60"],
+      ["ttl", "60"],
+    ],
+    [
+      ["ttl", "60"],
+      ["visibility", "private"],
+    ],
+    [["visibility,ttl", "private"]],
+    [["", ""]],
+    [["archived", "true"]],
+  ])
+    expect(() =>
+      validateDetailsTemplate({
+        ...template,
+        tags: [...template.tags.slice(0, 3), ...tail],
+      }),
+    ).toThrow();
+  for (const ttl of ["", "1", "604800", "2147483647"]) {
+    for (const tags of [
+      template.tags,
+      [...template.tags, ["visibility", "private"]],
+      [...template.tags, ["visibility", "open"]],
+    ])
+      expect(() =>
+        validateDetailsTemplate({ ...template, tags: [...tags, ["ttl", ttl]] }),
+      ).not.toThrow();
+  }
+});

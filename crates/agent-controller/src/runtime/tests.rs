@@ -2537,3 +2537,25 @@ fn use_here_exhausted_revision_preserves_the_saved_import() {
     assert_eq!(fs::read(path).unwrap(), before);
     assert!(!store.snapshot().unwrap().agents[0].configured);
 }
+#[test]
+fn only_the_bundled_worker_gets_the_mcp_hub_and_only_when_it_is_present() {
+    let dir = tempfile::tempdir().unwrap();
+    let defaults = crate::build_defaults();
+    let mut saved = agent(dir.path());
+    assert_eq!(mcp_hub_in(dir.path(), &saved, &defaults), None);
+    let hub = dir.path().join(if cfg!(windows) {
+        "buzz-mcp-hub.exe"
+    } else {
+        "buzz-mcp-hub"
+    });
+    fs::write(&hub, b"").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        assert_eq!(mcp_hub_in(dir.path(), &saved, &defaults), None);
+        fs::set_permissions(&hub, fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    assert_eq!(mcp_hub_in(dir.path(), &saved, &defaults), Some(hub));
+    saved.harness.command = "/usr/local/bin/goose".into();
+    assert_eq!(mcp_hub_in(dir.path(), &saved, &defaults), None);
+}

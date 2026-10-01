@@ -78,6 +78,30 @@ impl Secret {
             ],
         )
     }
+    /// NIP-98 event authorizing one POST of `body` to a connected app's `url`,
+    /// carrying the owner's NIP-OA attestation (a JSON tag) when supplied.
+    pub fn app_request_auth(
+        &self,
+        url: &str,
+        body: &[u8],
+        attestation: Option<&str>,
+    ) -> Result<serde_json::Value> {
+        use sha2::{Digest, Sha256};
+        let mut tags = vec![
+            vec!["u".into(), url.into()],
+            vec!["method".into(), "POST".into()],
+            vec!["payload".into(), format!("{:x}", Sha256::digest(body))],
+        ];
+        if let Some(raw) = attestation {
+            let tag: Vec<String> =
+                serde_json::from_str(raw).map_err(|_| "Invalid owner authorization")?;
+            if tag.len() != 4 || tag[0] != "auth" {
+                return Err("Invalid owner authorization".into());
+            }
+            tags.push(tag);
+        }
+        self.sign_event(27235, String::new(), tags)
+    }
     fn sign_event(
         &self,
         kind: u16,

@@ -379,6 +379,37 @@ are macOS's only entries. On Windows the shell tool needs Git Bash from Git for
 Windows, or a `BUZZ_SHELL`/`GIT_BASH` override under Advanced → Environment.
 Settings says **Shell setup not verified**; Buzz does not check it before Start.
 
+## Connected apps (MCP hub)
+
+An agent on the bundled Buzz Agent worker can use web apps as tools. The app's
+`buzz-mcp-hub` (built beside the app binary by `just desktop`; crate
+`crates/mcp-hub`) is then the one stdio MCP server the agent gets. It runs the
+verified `buzz-dev-mcp` as a child and passes its traffic through unchanged,
+adds four tools (`connect_app`, `list_apps`, `call_app_tool`,
+`disconnect_app`), and exposes each connected app's tools as `<app>_<tool>`.
+Start writes a launch file into the run's private `TMPDIR` naming the verified
+`buzz-dev-mcp` and the agent's apps file,
+`agent-controller/apps/<pubkey>.json`. Other harnesses, and builds without the
+hub binary, get `buzz-dev-mcp` directly, as before; the Runtime tab's MCP
+command shows which one the next start uses.
+
+Only run402 tenant hosts are accepted (`https://<app>.run402.com/…` or
+`.run402.app`, no port, query or credentials), at most eight apps per agent.
+Every request is MCP over streamable HTTP and carries a fresh NIP-98 event
+signed with the agent's key, bound to the URL, method and body hash. When the
+agent has an owner attestation, the event carries it as its NIP-OA `auth` tag,
+so an app can treat the agent as acting for its owner. The hub never follows
+redirects and keeps no app credential: the signature is the authentication.
+
+The agent connects an app itself with `connect_app`, for example right after
+deploying one; the hub first proves the app accepts its signature, then saves
+it. The owner sees, adds and disconnects apps under **Edit → Connected apps**;
+an owner-added app is first contacted on the agent's next use. A session's tool
+list is fixed when it starts, so a newly connected app is reachable at once
+through `call_app_tool` and appears as `<app>_<tool>` tools from the agent's
+next conversation. Writers serialize through a short-lived lock file beside the
+apps file. Packaged builds do not include the hub yet.
+
 ## Ownership and handoff
 
 - `features/agents/control.ts`: camelCase DTOs and app-owned observable projection.

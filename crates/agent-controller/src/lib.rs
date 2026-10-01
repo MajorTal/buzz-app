@@ -1,6 +1,7 @@
 //! Local configuration and process ownership; never tied to a page or relay session.
 //! No legacy desktop dependency, implicit identity creation, or credential projection.
 mod agent_defaults;
+pub mod apps;
 mod bundle;
 mod community;
 mod config;

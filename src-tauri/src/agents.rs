@@ -874,6 +874,36 @@ pub(crate) async fn agent_control_start_on_app_launch(
     .await
 }
 #[tauri::command]
+pub(crate) async fn agent_apps_list(
+    state: tauri::State<'_, AgentHost>,
+    id: String,
+) -> Result<Vec<buzz_agent_controller::apps::App>, String> {
+    run(state.inner().clone(), move |host| host.controller.apps(&id)).await
+}
+#[tauri::command]
+pub(crate) async fn agent_apps_connect(
+    state: tauri::State<'_, AgentHost>,
+    id: String,
+    name: Option<String>,
+    url: String,
+) -> Result<Vec<buzz_agent_controller::apps::App>, String> {
+    run(state.inner().clone(), move |host| {
+        host.controller.connect_app(&id, name.as_deref(), &url)
+    })
+    .await
+}
+#[tauri::command]
+pub(crate) async fn agent_apps_disconnect(
+    state: tauri::State<'_, AgentHost>,
+    id: String,
+    name: String,
+) -> Result<Vec<buzz_agent_controller::apps::App>, String> {
+    run(state.inner().clone(), move |host| {
+        host.controller.disconnect_app(&id, &name)
+    })
+    .await
+}
+#[tauri::command]
 pub(crate) async fn agent_control_delete(
     state: tauri::State<'_, AgentHost>,
     id: String,

@@ -325,6 +325,26 @@ pub fn installed(name: &str) -> Option<PathBuf> {
         .find(|p| executable(p).is_ok())
 }
 
+/// The app's MCP hub beside its own executable, for agents on the bundled
+/// worker. A build without the hub keeps giving agents `buzz-dev-mcp` directly.
+fn mcp_hub(agent: &Agent, defaults: &crate::BuildDefaults) -> Option<PathBuf> {
+    let exe = std::env::current_exe().ok()?;
+    mcp_hub_in(exe.parent()?, agent, defaults)
+}
+fn mcp_hub_in(dir: &Path, agent: &Agent, defaults: &crate::BuildDefaults) -> Option<PathBuf> {
+    if defaults.resolve(&agent.harness, &agent.environment).command != "buzz-agent" {
+        return None;
+    }
+    let name = crate::apps::HUB;
+    let path = dir.join(if cfg!(windows) {
+        format!("{name}.exe")
+    } else {
+        name.to_owned()
+    });
+    executable(&path).ok()?;
+    Some(path)
+}
+
 pub(crate) fn executable(path: &Path) -> Result<()> {
     let metadata = path
         .metadata()
@@ -418,7 +438,15 @@ impl Controller {
         };
         for (saved, agent) in saved.iter().zip(&mut snapshot.agents) {
             agent.acp_command.clone_from(&acp_command);
-            agent.mcp_command.clone_from(&mcp_command);
+            // What the next start runs: the hub when present, else the dev tools.
+            let hub = mcp_hub(
+                &crate::agent_defaults::effective(saved, &defaults),
+                &crate::build_defaults(),
+            );
+            agent.mcp_command = match (&mcp_command, hub) {
+                (Some(_), Some(hub)) => Some(hub.to_string_lossy().into_owned()),
+                _ => mcp_command.clone(),
+            };
             if let Some(run) = self.running.get_mut(&agent.id) {
                 match run.process.alive() {
                     Ok(true) => {
@@ -710,6 +738,38 @@ impl Controller {
         }
         self.snapshot()
     }
+    fn apps_file(&self, id: &str) -> Result<PathBuf> {
+        let agent = self
+            .store
+            .agents()?
+            .into_iter()
+            .find(|a| a.id == id)
+            .ok_or("Agent no longer exists")?;
+        crate::apps::apps_path(self.store.root(), &agent.pubkey)
+    }
+    /// Apps this agent reaches through the MCP hub. Changes apply to its next conversation.
+    pub fn apps(&self, id: &str) -> Result<Vec<crate::apps::App>> {
+        crate::apps::read(&self.apps_file(id)?)
+    }
+    /// Owner-added app; the agent's own signature is first checked on its next use.
+    pub fn connect_app(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        url: &str,
+    ) -> Result<Vec<crate::apps::App>> {
+        let url = crate::apps::validate_url(url)?;
+        let name = name.map_or_else(|| crate::apps::default_name(&url), str::to_owned);
+        crate::apps::add(
+            &self.apps_file(id)?,
+            &name,
+            &url,
+            crate::apps::AddedBy::Owner,
+        )
+    }
+    pub fn disconnect_app(&self, id: &str, name: &str) -> Result<Vec<crate::apps::App>> {
+        crate::apps::remove(&self.apps_file(id)?, name)
+    }
     /// Persists the launch preference only; the running process is unchanged.
     pub fn set_start_on_app_launch(&mut self, id: &str, value: bool) -> Result<ControlSnapshot> {
         self.store.start_on_app_launch(id, value)?;
@@ -840,6 +900,19 @@ impl Controller {
             .tempdir_in(&runs)
             .map_err(|_| "Could not create private runtime directory")?;
         let mut command = bundle.command(&agent, key)?;
+        // The hub finds the verified dev tools and this agent's apps through the
+        // run's private TMPDIR, the only location every MCP child inherits.
+        if let Some(hub) = mcp_hub(&agent, &crate::build_defaults()) {
+            crate::apps::write_launch(
+                temporary.path(),
+                &crate::apps::Launch {
+                    dev_mcp: bundle.executable("buzz-dev-mcp")?,
+                    apps: crate::apps::apps_path(config, &agent.pubkey)?,
+                    pubkey: agent.pubkey.clone(),
+                },
+            )?;
+            command.env("BUZZ_ACP_MCP_COMMAND", hub);
+        }
         // Per-send startup input, never saved configuration or inherited environment.
         if let Some(floor) = replay_floor {
             command.env("BUZZ_ACP_REPLAY_FLOOR", floor.to_string());

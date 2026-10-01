@@ -28,6 +28,14 @@ if (!help) {
   if (prepared.error) console.error(prepared.error.message);
   if (prepared.signal) process.kill(process.pid, prepared.signal);
   if (prepared.status !== 0) process.exit(prepared.status ?? 1);
+  // The MCP hub runs beside the app binary (target/debug); agents on the
+  // bundled worker reach their connected apps through it.
+  const hub = spawnSync("cargo", ["build", "-p", "buzz-mcp-hub"], {
+    stdio: "inherit",
+  });
+  if (hub.error) console.error(hub.error.message);
+  if (hub.signal) process.kill(process.pid, hub.signal);
+  if (hub.status !== 0) process.exit(hub.status ?? 1);
 }
 const root = fileURLToPath(new URL("../", import.meta.url));
 const config = desktopOverlay(root);

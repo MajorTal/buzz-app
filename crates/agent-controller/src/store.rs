@@ -462,7 +462,7 @@ fn validate(doc: &Document) -> Result<()> {
     }
     Ok(())
 }
-fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
+pub(crate) fn atomic_write(path: &Path, bytes: &[u8]) -> Result<()> {
     let parent = path.parent().ok_or("Missing agent storage directory")?;
     let mut temp = tempfile::NamedTempFile::new_in(parent)
         .map_err(|_| "Could not prepare agent settings write")?;

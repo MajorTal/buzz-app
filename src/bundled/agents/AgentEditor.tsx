@@ -4,7 +4,7 @@ import { useAvatarPreview } from "../../features/profiles/use-avatar-preview";
 import { avatarPictureError } from "../../features/profiles/avatar-upload";
 import { XIcon } from "../../shared/design-system/icons";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog } from "@base-ui/react/dialog";
 import { Accordion } from "../../shared/design-system/ui/Accordion";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
@@ -18,6 +18,11 @@ import {
 } from "../../features/agents/control";
 import { Button } from "../../shared/design-system/ui/Button";
 import { AgentSettingsFields } from "./AgentSettingsFields";
+import { ConnectedApps } from "./ConnectedApps";
+import {
+  nativeAgentAppsHost,
+  type AgentAppsHost,
+} from "../../features/agents/apps";
 import {
   agentDraft,
   agentEdit,
@@ -33,8 +38,11 @@ export function AgentEditor({
   avatar,
   onClose,
   onOpenHarnesses,
+  apps,
 }: {
   agent: AgentView;
+  /** Connected apps live beside the native controller; absent in browser builds. */
+  apps?: AgentAppsHost | null;
   onOpenHarnesses?: (() => void) | undefined;
   displayName?: string;
   control: AgentControl;
@@ -43,6 +51,11 @@ export function AgentEditor({
   onClose(): void;
 }) {
   const [uploading, setUploading] = useState(false);
+  // One host per editor: ConnectedApps reloads whenever its host changes.
+  const appsHost = useMemo(
+    () => (apps === undefined ? nativeAgentAppsHost() : apps),
+    [apps],
+  );
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -255,6 +268,20 @@ export function AgentEditor({
                         </div>
                       ),
                     },
+                    ...(appsHost
+                      ? [
+                          {
+                            value: "apps",
+                            title: "Connected apps",
+                            content: (
+                              <ConnectedApps
+                                agentId={agent.id}
+                                host={appsHost}
+                              />
+                            ),
+                          },
+                        ]
+                      : []),
                     {
                       value: "technical",
                       title: "Technical details",

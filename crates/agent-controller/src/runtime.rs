@@ -325,16 +325,14 @@ pub fn installed(name: &str) -> Option<PathBuf> {
         .find(|p| executable(p).is_ok())
 }
 
-/// The app's MCP hub beside its own executable, for agents on the bundled
-/// worker. A build without the hub keeps giving agents `buzz-dev-mcp` directly.
-fn mcp_hub(agent: &Agent, defaults: &crate::BuildDefaults) -> Option<PathBuf> {
+/// The app's MCP hub beside its own executable. Every harness runs under the
+/// bundled `buzz-acp` worker, which hands its MCP command to the agent, so any
+/// local agent can use it. A build without the hub keeps giving `buzz-dev-mcp`.
+fn mcp_hub() -> Option<PathBuf> {
     let exe = std::env::current_exe().ok()?;
-    mcp_hub_in(exe.parent()?, agent, defaults)
+    mcp_hub_in(exe.parent()?)
 }
-fn mcp_hub_in(dir: &Path, agent: &Agent, defaults: &crate::BuildDefaults) -> Option<PathBuf> {
-    if defaults.resolve(&agent.harness, &agent.environment).command != "buzz-agent" {
-        return None;
-    }
+fn mcp_hub_in(dir: &Path) -> Option<PathBuf> {
     let name = crate::apps::HUB;
     let path = dir.join(if cfg!(windows) {
         format!("{name}.exe")
@@ -439,11 +437,7 @@ impl Controller {
         for (saved, agent) in saved.iter().zip(&mut snapshot.agents) {
             agent.acp_command.clone_from(&acp_command);
             // What the next start runs: the hub when present, else the dev tools.
-            let hub = mcp_hub(
-                &crate::agent_defaults::effective(saved, &defaults),
-                &crate::build_defaults(),
-            );
-            agent.mcp_command = match (&mcp_command, hub) {
+            agent.mcp_command = match (&mcp_command, mcp_hub()) {
                 (Some(_), Some(hub)) => Some(hub.to_string_lossy().into_owned()),
                 _ => mcp_command.clone(),
             };
@@ -902,7 +896,7 @@ impl Controller {
         let mut command = bundle.command(&agent, key)?;
         // The hub finds the verified dev tools and this agent's apps through the
         // run's private TMPDIR, the only location every MCP child inherits.
-        if let Some(hub) = mcp_hub(&agent, &crate::build_defaults()) {
+        if let Some(hub) = mcp_hub() {
             crate::apps::write_launch(
                 temporary.path(),
                 &crate::apps::Launch {

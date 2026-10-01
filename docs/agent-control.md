@@ -381,7 +381,8 @@ Settings says **Shell setup not verified**; Buzz does not check it before Start.
 
 ## Connected apps (MCP hub)
 
-An agent on the bundled Buzz Agent worker can use web apps as tools. The app's
+Any local agent can use web apps as tools: every harness runs under the bundled
+`buzz-acp` worker, which hands the agent its MCP server. The app's
 `buzz-mcp-hub` (built beside the app binary by `just desktop`; crate
 `crates/mcp-hub`) is then the one stdio MCP server the agent gets. It runs the
 verified `buzz-dev-mcp` as a child and passes its traffic through unchanged,
@@ -389,9 +390,9 @@ adds four tools (`connect_app`, `list_apps`, `call_app_tool`,
 `disconnect_app`), and exposes each connected app's tools as `<app>_<tool>`.
 Start writes a launch file into the run's private `TMPDIR` naming the verified
 `buzz-dev-mcp` and the agent's apps file,
-`agent-controller/apps/<pubkey>.json`. Other harnesses, and builds without the
-hub binary, get `buzz-dev-mcp` directly, as before; the Runtime tab's MCP
-command shows which one the next start uses.
+`agent-controller/apps/<pubkey>.json`. Builds without the hub binary give
+`buzz-dev-mcp` directly, as before; the Runtime tab's MCP command shows which
+one the next start uses.
 
 Only run402 tenant hosts are accepted (`https://<app>.run402.com/…` or
 `.run402.app`, no port, query or credentials), at most eight apps per agent.

@@ -12,7 +12,7 @@ async function settings(page) {
 }
 
 // Real font metrics, wrapping and parent layout need a browser, not jsdom.
-test("Notifications keeps settings separated and button labels contained at supported text sizes", async ({
+test("Notifications keeps settings separated and button labels contained at supported interface sizes", async ({
   page,
   app,
 }, info) => {
@@ -34,12 +34,14 @@ test("Notifications keeps settings separated and button labels contained at supp
     await selectSettingsSection(page, "Appearance");
     if (scale === 200) {
       for (let i = 0; i < 10; i++) {
-        await page.getByRole("button", { name: "Increase text size" }).click();
+        await page
+          .getByRole("button", { name: "Increase interface size" })
+          .click();
       }
     }
-    await expect(page.getByRole("status", { name: "Text size" })).toHaveText(
-      `${scale}%`,
-    );
+    await expect(
+      page.getByRole("status", { name: "Interface size" }),
+    ).toHaveText(`${scale}%`);
     await selectSettingsSection(page, "Notifications");
     await expect(
       section.getByRole("button", { name: "Allow notifications" }),
@@ -106,7 +108,7 @@ test("Notifications keeps settings separated and button labels contained at supp
         });
       await expect
         .poll(geometryIssues, {
-          message: `Notifications layout at ${scale}% text and ${width}px width`,
+          message: `Notifications layout at ${scale}% interface and ${width}px width`,
         })
         .toEqual([]);
       await page.screenshot({

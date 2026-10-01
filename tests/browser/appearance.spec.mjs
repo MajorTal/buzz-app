@@ -114,7 +114,7 @@ test("Appearance changes and restores both modes, shared keyboard controls, dial
     await expect(dialog).toBeVisible();
     await expect(dialog).toHaveCSS(
       "background-color",
-      mode === "dark" ? "rgb(51, 51, 51)" : "rgb(255, 255, 255)",
+      mode === "dark" ? "rgb(40, 40, 40)" : "rgb(255, 255, 255)",
     );
     await page.keyboard.press("Escape");
   }

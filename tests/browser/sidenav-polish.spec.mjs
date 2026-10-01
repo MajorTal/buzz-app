@@ -799,7 +799,21 @@ test("non-ready sidebar keeps page rows and Retry reachable by pointer scrolling
       .poll(async () => {
         const bounds = await sidebar.boundingBox();
         const row = await target.boundingBox();
+        // A visible row is not the end of WebKit's asynchronous wheel gesture.
+        // Focusing early can stop it before the bottom padding clears the ring.
+        const atEnd = await target.evaluate((element) => {
+          let scroll = element.parentElement;
+          while (scroll && getComputedStyle(scroll).overflowY !== "auto")
+            scroll = scroll.parentElement;
+          return (
+            !!scroll &&
+            Math.abs(
+              scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop,
+            ) <= 1
+          );
+        });
         return (
+          atEnd &&
           !!bounds &&
           !!row &&
           row.y >= bounds.y &&

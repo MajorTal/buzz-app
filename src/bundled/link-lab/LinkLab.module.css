@@ -1,5 +1,5 @@
 .page {
-  max-width: 760px;
+  max-width: 47.5rem;
   margin: 0 auto;
   padding: calc(var(--space-6) * 2) var(--space-6);
   font-family: var(--font-sans);

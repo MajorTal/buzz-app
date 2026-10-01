@@ -20,7 +20,7 @@
 .controls {
   position: absolute;
   z-index: 3;
-  inset: auto 16px 78px;
+  inset: auto 1rem 4.875rem;
   display: flex;
   align-items: center;
   gap: var(--space-2);
@@ -48,8 +48,8 @@
   transition:
     background-color 120ms ease-out,
     scale 100ms ease-out;
-  min-width: 28px;
-  height: 28px;
+  min-width: 1.75rem;
+  height: 1.75rem;
   border-radius: var(--radius-chip);
   font: inherit;
   font-size: var(--text-caption);
@@ -60,7 +60,7 @@
   outline-offset: 3px;
 }
 .play {
-  flex: 0 0 32px;
+  flex: 0 0 2rem;
 }
 .time {
   flex-shrink: 0;
@@ -74,8 +74,8 @@
 .timeline {
   position: relative;
   flex: 1;
-  min-width: 20px;
-  height: 32px;
+  min-width: 1.25rem;
+  height: 2rem;
   display: flex;
   align-items: center;
 }
@@ -87,7 +87,7 @@
   -webkit-appearance: none;
   padding: 0;
   margin: 0;
-  height: 4px;
+  height: 0.25rem;
   border: 0;
   border-radius: calc(var(--radius-row) * 0.8);
   background: linear-gradient(
@@ -100,13 +100,13 @@
 .controls input::-webkit-slider-thumb {
   appearance: none;
   width: 2px;
-  height: 16px;
+  height: 1rem;
   border-radius: calc(var(--radius-chip) / 3);
   background: var(--text-standard);
 }
 .controls input::-moz-range-thumb {
   width: 2px;
-  height: 16px;
+  height: 1rem;
   border: 0;
   border-radius: calc(var(--radius-chip) / 3);
   background: var(--text-standard);
@@ -116,22 +116,22 @@
   z-index: 2;
   top: 50%;
   translate: -50% -50%;
-  width: 20px;
-  min-width: 20px;
-  height: 20px;
+  width: 1.25rem;
+  min-width: 1.25rem;
+  height: 1.25rem;
   padding: calc(var(--space-half) / 2);
   border: 1px solid var(--border-prominent);
   border-radius: 50%;
   background: var(--affordance-navigation-quiet);
 }
 .marker > span {
-  width: 16px;
-  height: 16px;
+  width: 1rem;
+  height: 1rem;
   font-size: var(--text-caption);
 }
 .hoverTime {
   position: absolute;
-  bottom: 36px;
+  bottom: 2.25rem;
   transform: translateX(-50%);
   white-space: nowrap;
   font-size: var(--text-caption);
@@ -151,16 +151,16 @@
   gap: var(--space-1);
 }
 .volume input {
-  width: 64px;
+  width: 4rem;
 }
 .volume input::-webkit-slider-thumb {
-  width: 12px;
-  height: 12px;
+  width: 0.75rem;
+  height: 0.75rem;
   border-radius: 50%;
 }
 .volume input::-moz-range-thumb {
-  width: 12px;
-  height: 12px;
+  width: 0.75rem;
+  height: 0.75rem;
   border-radius: 50%;
 }
 .center {
@@ -170,8 +170,8 @@
   top: 50%;
   left: 50%;
   translate: -50% -50%;
-  width: 56px;
-  height: 56px;
+  width: 3.5rem;
+  height: 3.5rem;
   border: 0;
   border-radius: 50%;
   background: transparent;
@@ -224,15 +224,15 @@
 }
 .controls[data-inline] .volume:hover input,
 .controls[data-inline] .volume:focus-within input {
-  width: 48px;
+  width: 3rem;
   opacity: 1;
 }
 .notice {
   position: absolute;
   z-index: 4;
-  top: 12px;
-  left: 12px;
-  right: 12px;
+  top: 0.75rem;
+  left: 0.75rem;
+  right: 0.75rem;
   padding: var(--space-2);
   border-radius: calc(var(--radius-row) * 0.8);
   background: var(--surface-inset);
@@ -262,9 +262,16 @@
     pointer-events: none;
   }
 }
-@container video-player (max-width: 400px) {
+@container video-player (max-width: 25rem) {
+  .controls:not([data-inline]) {
+    flex-wrap: wrap;
+  }
+  .controls:not([data-inline]) .timeline {
+    order: 1;
+    flex-basis: 100%;
+  }
   .controls:not([data-inline]) .volume input {
-    width: 40px;
+    width: 2.5rem;
   }
 }
 @media (prefers-reduced-motion: reduce) {
@@ -276,7 +283,7 @@
 }
 .reactions {
   position: absolute;
-  bottom: 16px;
+  bottom: 1rem;
   left: 50%;
   transform: translateX(-50%);
   z-index: 4;
@@ -304,9 +311,9 @@
   border-radius: 50%;
   background: transparent;
   padding: 0;
-  width: 32px;
-  min-width: 32px;
-  height: 32px;
+  width: 2rem;
+  min-width: 2rem;
+  height: 2rem;
   font-size: var(--size-emoji-inline);
   cursor: pointer;
 }

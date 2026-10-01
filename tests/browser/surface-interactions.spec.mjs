@@ -15,26 +15,26 @@ for (const mode of ["light", "dark"]) {
     const color =
       mode === "dark"
         ? {
-            panel: "rgb(51, 51, 51)",
+            panel: "rgb(35, 35, 35)",
             fill: "rgb(64, 64, 64)",
             hover: "rgb(89, 89, 89)",
             pressed: "rgb(115, 115, 115)",
             selected: "rgb(64, 64, 64)",
-            row: "rgb(89, 89, 89)",
+            row: "rgb(51, 51, 51)",
             border: "rgb(128, 128, 128)",
             inset: "rgb(16, 16, 16)",
-            ordinaryHover: "rgb(64, 64, 64)",
+            ordinaryHover: "rgb(46, 46, 46)",
           }
         : {
             panel: "rgb(245, 245, 246)",
             fill: "rgb(245, 245, 246)",
-            hover: "rgb(239, 239, 240)",
+            hover: "rgb(241, 241, 242)",
             pressed: "rgb(218, 218, 218)",
             selected: "rgb(218, 218, 218)",
-            row: "rgb(232, 232, 232)",
+            row: "rgb(245, 245, 246)",
             border: "rgb(128, 128, 128)",
             inset: "rgb(245, 245, 246)",
-            ordinaryHover: "rgb(239, 239, 240)",
+            ordinaryHover: "rgb(241, 241, 242)",
           };
     const panel = page.getByRole("region", {
       name: "Interaction panel",

@@ -1,8 +1,8 @@
 /**
  * APCA 0.1.9 — the perceptual contrast algorithm in the WCAG 3 draft.
  *
- * Buzz judges contrast with this rather than the WCAG 2 ratio; see
- * DESIGN.md § Contrast for why, with the measured evidence.
+ * Buzz checks this alongside the WCAG 2 ratio; see DESIGN.md § Contrast
+ * for the perceptual targets and the normal-text AA floor.
  *
  * Validated against the published reference values:
  *   black on white  ->  Lc  106.04
@@ -82,7 +82,7 @@ export function apcaContrast(textHex, backgroundHex) {
   return c > -DELTA_Y_MIN ? 0 : (c + LO_OFFSET) * 100;
 }
 
-/** WCAG 2 relative luminance — reported alongside APCA, never used to decide. */
+/** WCAG 2 relative luminance, used for the AA ratio floor. */
 function relativeLuminance(hex) {
   const [r, g, b] = parseHex(hex).map((c) => {
     const v = c / 255;
@@ -91,7 +91,7 @@ function relativeLuminance(hex) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b;
 }
 
-/** WCAG 2 contrast ratio, for the number an audit will ask about. */
+/** WCAG 2 contrast ratio, checked alongside the perceptual target. */
 export function wcagRatio(a, b) {
   const la = relativeLuminance(a);
   const lb = relativeLuminance(b);

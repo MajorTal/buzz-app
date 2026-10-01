@@ -124,7 +124,7 @@
   --blue-8: #5eb1ef;
   --blue-9: #0090ff;
   --blue-10: #0588f0;
-  --blue-11: #0d74ce;
+  --blue-11: #0b5fa8;
   --blue-12: #113264;
 
   /* cyan */
@@ -170,7 +170,7 @@
   --purple-7: #664282;
   --purple-8: #8457aa;
   --purple-9: #8e4ec6;
-  --purple-10: #9a5cd0;
+  --purple-10: #975acc;
   --purple-11: #d19dff;
   --purple-12: #ecd9fa;
 
@@ -227,7 +227,7 @@
   --blue-8: #2870bd;
   --blue-9: #0090ff;
   --blue-10: #3b9eff;
-  --blue-11: #70b8ff;
+  --blue-11: #83c4ff;
   --blue-12: #c2e6ff;
 
   /* cyan */
@@ -294,7 +294,7 @@
      is a deliberately cool near-neutral, not a warm tint; use it directly
      rather than preserve an exploratory #f9f9f9 stop or recreate it with
      alpha. */
-  --neutral-quiet-hover: #efeff0; /* hover between quiet fill and selection */
+  --neutral-quiet-hover: #f1f1f2; /* hover between quiet fill and selection */
   --neutral-2: #f5f5f6; /* quiet compact controls, callouts, and grouping */
   --neutral-3: #e8e8e8; /* available for a future, genuinely recessed region; bg-panel in dark */
   --neutral-4: #dadada; /* border-primary in light mode            */
@@ -302,7 +302,7 @@
   --neutral-6: #b3b3b3; /* border-primary in dark mode             */
   --neutral-7: #959595; /* no readers                              */
   --neutral-8: #808080; /* text-disabled                           */
-  --neutral-9: #666666; /* text-tertiary                           */
+  --neutral-9: #5f5f5f; /* metadata also clears AA on pressed fills */
   --neutral-10: #525252; /* text-secondary                         */
   --neutral-11: #191919; /* inverse fill, paired with neutral-1    */
   --neutral-action-pressed: #525252;
@@ -393,6 +393,8 @@
      if these ever want to be palette steps, the palette's gray ramp is what
      should change. */
   --neutral-navigation-quiet: #232323;
+  --neutral-raised: #282828;
+  --neutral-quiet-hover: #2e2e2e;
   --neutral-1: #000000;
   --neutral-2: #101010;
   --neutral-3: #1a1a1a;
@@ -534,7 +536,7 @@
   --affordance-subtle-pressed: var(--neutral-4);
   --affordance-navigation-quiet: var(--neutral-navigation-quiet);
   --affordance-panel-hover: var(--neutral-2);
-  --affordance-floating-hover: var(--neutral-3);
+  --affordance-floating-hover: var(--neutral-2);
   --affordance-popover-selected: var(--neutral-2);
   --affordance-floating-control: var(--affordance-subtle);
   --affordance-floating-control-hover: var(--affordance-subtle-hover);
@@ -559,7 +561,7 @@
 .dark {
   --surface-base: var(--neutral-1);
   --surface-panel: var(--neutral-3);
-  --surface-popover: var(--neutral-5);
+  --surface-popover: var(--neutral-raised);
   --surface-inset: var(--neutral-2);
   --surface-inverse: var(--neutral-11);
   --text-navigation: var(--neutral-11);
@@ -590,11 +592,11 @@
   --affordance-prominent: var(--neutral-12);
   --affordance-prominent-hover: var(--neutral-11);
   --affordance-prominent-pressed: var(--neutral-action-pressed);
-  --affordance-subtle: var(--neutral-5);
-  --affordance-subtle-hover: var(--neutral-6);
-  --affordance-subtle-pressed: var(--neutral-7);
+  --affordance-subtle: var(--neutral-4);
+  --affordance-subtle-hover: var(--neutral-quiet-hover);
+  --affordance-subtle-pressed: var(--neutral-5);
   --affordance-panel-hover: var(--neutral-4);
-  --affordance-floating-hover: var(--neutral-7);
+  --affordance-floating-hover: var(--neutral-5);
   --affordance-popover-selected: var(--neutral-6);
   --affordance-floating-control: var(--neutral-6);
   --affordance-floating-control-hover: var(--neutral-7);

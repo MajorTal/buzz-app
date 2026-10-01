@@ -1,10 +1,10 @@
 .agent-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(min(100%, 180px), 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 11.25rem), 1fr));
   gap: var(--space-4);
 }
 .agent-dialog {
-  width: min(860px, calc(100vw - 2rem));
+  width: min(53.75rem, calc(100vw - 2rem));
 }
 .agent-editor {
   width: min(40rem, calc(100vw - 2rem));

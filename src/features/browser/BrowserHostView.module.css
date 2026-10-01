@@ -54,7 +54,7 @@
   overflow: hidden;
 }
 
-@media (max-width: 420px) {
+@media (max-width: 26.25rem) {
   .toolbar {
     gap: var(--space-half);
     padding-inline: var(--space-1);

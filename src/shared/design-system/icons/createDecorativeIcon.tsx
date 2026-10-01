@@ -45,10 +45,19 @@ export function defineIcon(
   detail?: Omit<Extract<IconDefinition, { source: "custom" }>, "source">,
 ): DefinedIcon {
   const Defined = forwardRef<SVGSVGElement, IconProps>(function DefinedIcon(
-    { "aria-hidden": ariaHidden = true, ...props },
+    { "aria-hidden": ariaHidden = true, size, ...props },
     ref,
   ) {
-    return <IconComponent ref={ref} aria-hidden={ariaHidden} {...props} />;
+    return (
+      <IconComponent
+        ref={ref}
+        aria-hidden={ariaHidden}
+        {...(size === undefined
+          ? {}
+          : { size: typeof size === "number" ? `${size / 16}rem` : size })}
+        {...props}
+      />
+    );
   }) as DefinedIcon;
 
   Object.defineProperty(Defined, ICON_DEFINITION, {

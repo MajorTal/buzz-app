@@ -84,7 +84,7 @@
 .projects-page .buzz-tabs {
   overflow-x: auto;
 }
-@media (max-width: 640px) {
+@media (max-width: 40rem) {
   .projects-page {
     padding: var(--space-4);
   }

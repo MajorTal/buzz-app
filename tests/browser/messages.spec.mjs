@@ -143,13 +143,13 @@ test("dark media review controls keep local colors when opened from light mode",
     await page.mouse.move(0, 0);
     for (const button of [close, comments]) {
       await expect(button).toHaveCSS("color", "rgb(255, 255, 255)");
-      await expect(button).toHaveCSS("background-color", "rgb(51, 51, 51)");
+      await expect(button).toHaveCSS("background-color", "rgb(35, 35, 35)");
     }
     await comments.hover();
-    await expect(comments).toHaveCSS("background-color", "rgb(64, 64, 64)");
+    await expect(comments).toHaveCSS("background-color", "rgb(46, 46, 46)");
     await page.mouse.down();
     try {
-      await expect(comments).toHaveCSS("background-color", "rgb(89, 89, 89)");
+      await expect(comments).toHaveCSS("background-color", "rgb(51, 51, 51)");
     } finally {
       // Inspect :active without also starting the separate sidebar animation.
       await page.mouse.move(0, 0);
@@ -160,7 +160,7 @@ test("dark media review controls keep local colors when opened from light mode",
       await page.evaluate((mode) => {
         document.documentElement.dataset.colorMode = mode;
       }, mode);
-      await expect(close).toHaveCSS("background-color", "rgb(51, 51, 51)");
+      await expect(close).toHaveCSS("background-color", "rgb(35, 35, 35)");
     }
     await close.click();
     await expect(dialog).toBeHidden();

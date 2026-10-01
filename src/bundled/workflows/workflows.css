@@ -224,7 +224,7 @@
   display: grid;
   gap: var(--space-1);
   min-width: 0;
-  flex: 1 1 240px;
+  flex: 1 1 15rem;
 }
 .workflow-steps {
   list-style: none;
@@ -248,7 +248,7 @@
 }
 .workflow-trace {
   white-space: pre-wrap;
-  max-height: 400px;
+  max-height: 25rem;
   overflow: auto;
   background: var(--surface-inset);
   padding: var(--space-3);
@@ -383,7 +383,7 @@ html[data-keyboard-navigation]
   text-align: center;
   font-family: var(--font-mono);
 }
-@media (max-width: 640px) {
+@media (max-width: 40rem) {
   .workflows-page {
     padding: var(--space-4);
   }
@@ -506,7 +506,7 @@ html[data-keyboard-navigation]
   align-items: center;
   gap: var(--space-1);
 }
-@media (max-width: 760px) {
+@media (max-width: 47.5rem) {
   .workflow-builder[data-inspector] {
     grid-template-columns: minmax(0, 1fr);
   }

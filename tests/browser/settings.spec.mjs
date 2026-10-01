@@ -54,7 +54,7 @@ test("Settings replaces the channel sidenav and Back restores the prior view", a
   await expect(communityRail).toBeVisible();
 });
 
-test("short narrow Settings keeps full plugin rows usable at 200% text size", async ({
+test("short narrow Settings keeps full plugin rows usable at 200% interface size", async ({
   page,
   app,
 }, testInfo) => {

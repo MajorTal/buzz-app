@@ -41,15 +41,15 @@
   --font-mono: var(--font-system-mono);
   --font-weight-semibold: 500; /* Legacy emphasis resolves to the shared medium weight. */
   --text-display: var(--type-size-56);
-  --text-display--line-height: 1;
+  --text-display--line-height: 1.1;
   --text-display--letter-spacing: -0.04em;
   --text-display--font-weight: var(--type-weight-normal);
   --text-title: var(--type-size-32);
-  --text-title--line-height: 1;
+  --text-title--line-height: 1.1;
   --text-title--letter-spacing: -0.015em;
   --text-title--font-weight: var(--type-weight-medium);
   --text-heading: var(--type-size-24);
-  --text-heading--line-height: 1;
+  --text-heading--line-height: 1.1;
   --text-heading--letter-spacing: -0.0075em;
   --text-heading--font-weight: var(--type-weight-medium);
   --text-body-lg: var(--type-size-20);

@@ -56,6 +56,13 @@ for (const path of files(root)) {
   );
   for (const [rule, pattern] of rules) {
     for (const match of source.matchAll(pattern)) {
+      // The host root applies the saved interface scale once to every rem role.
+      if (
+        rule === "custom text size" &&
+        relative(root, path) === "shared/styles/globals.css" &&
+        match[0] === "font-size: calc(100% * var(--buzz-text-scale, 1))"
+      )
+        continue;
       // Non-CSS strings can contain event IDs, channel hashtags or selector IDs.
       if (
         rule === "literal color" &&

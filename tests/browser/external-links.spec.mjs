@@ -118,8 +118,8 @@ test("GitHub object identities have comparable visible artwork at one size", asy
       .getByText(new RegExp(`^${kind} `))
       .locator("xpath=../..");
     const svg = identity.locator("svg");
-    await expect(svg).toHaveAttribute("width", "22");
-    await expect(svg).toHaveAttribute("height", "22");
+    await expect(svg).toHaveCSS("width", "22px");
+    await expect(svg).toHaveCSS("height", "22px");
     icons.push(await svg.evaluate((node) => node.outerHTML));
     dimensions.push(
       await svg.evaluate((node) => {

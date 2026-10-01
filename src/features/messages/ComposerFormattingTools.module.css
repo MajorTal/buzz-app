@@ -28,7 +28,7 @@
 }
 .divider {
   width: 1px;
-  height: 20px;
+  height: 1.25rem;
   flex-shrink: 0;
   margin-inline: var(--space-1);
   background: var(--border-standard);

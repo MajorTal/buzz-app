@@ -20,7 +20,7 @@
   align-items: center;
   flex-wrap: wrap;
   gap: var(--space-2);
-  min-height: 32px;
+  min-height: 2rem;
   cursor: text;
 }
 .toField > label {
@@ -31,8 +31,8 @@
 .toInput {
   @apply text-body-sm;
   flex: 1;
-  min-width: 140px;
-  width: 140px;
+  min-width: 8.75rem;
+  width: 8.75rem;
   padding: var(--space-1) 0;
   border: 0;
   outline: none;
@@ -52,7 +52,7 @@
   gap: var(--space-1);
   padding: var(--space-chip-inset) var(--space-2) var(--space-chip-inset)
     var(--space-chip-inset);
-  max-width: 240px;
+  max-width: 15rem;
   border-radius: var(--radius-pill);
   background: var(--surface-inset);
 }
@@ -65,8 +65,8 @@
   position: relative;
   display: grid;
   place-items: center;
-  width: 22px;
-  height: 22px;
+  width: 1.375rem;
+  height: 1.375rem;
   border: 0;
   padding: 0;
   border-radius: var(--radius-pill);
@@ -108,12 +108,12 @@
 }
 .picker {
   @apply popover-surface;
-  width: min(380px, var(--available-width));
+  width: min(23.75rem, var(--available-width));
   padding: var(--space-1);
 }
 .people {
   --radius-row: max(0px, calc(var(--radius-control) - var(--space-1)));
-  max-height: min(400px, 50vh, calc(var(--available-height) - 10px));
+  max-height: min(25rem, 50vh, calc(var(--available-height) - 0.625rem));
   overflow-y: auto;
   overscroll-behavior: contain;
 }
@@ -143,7 +143,7 @@
 }
 .loadingName {
   width: 42%;
-  height: 12px;
+  height: 0.75rem;
 }
 .loadingRow:nth-child(2n) .loadingName {
   width: 56%;
@@ -272,7 +272,7 @@
     opacity: 0;
   }
 }
-@media (max-width: 640px) {
+@media (max-width: 40rem) {
   .recipientHeader {
     margin: 0;
     min-width: 0;
@@ -280,6 +280,6 @@
     padding-inline: var(--space-3);
   }
   .chip {
-    max-width: 190px;
+    max-width: 11.875rem;
   }
 }

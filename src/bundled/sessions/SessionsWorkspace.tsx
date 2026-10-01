@@ -31,54 +31,57 @@ export function SessionsWorkspace({
   children: ReactNode;
 }) {
   return (
-    <section className={styles.workspace} aria-label="Sessions">
-      <Panel as="aside" aria-label="Session history">
-        <div className={styles.sidebar}>
-          <Button variant="prominent" type="button" onClick={onNew}>
-            <PlusIcon size={18} aria-hidden="true" />
-            New session
-          </Button>
-          <h2 className={styles.historyHeading}>Previous sessions</h2>
-          <nav className={styles.history} aria-label="Previous sessions">
-            {sessions.map((session) => {
-              const ParentChannelIcon = channelIcon({
-                private: session.parentPrivate,
-              });
-              return (
-                <NavigationItem
-                  type="button"
-                  key={session.id}
-                  aria-current={session.id === selected ? "page" : undefined}
-                  selected={session.id === selected}
-                  onClick={() => onSelect(session.id)}
-                  label={
-                    <span className={styles.historyLabel}>
-                      {session.parentName && (
-                        <small className={styles.parentChannel}>
-                          <ParentChannelIcon size={12} aria-hidden="true" />
-                          <span>{session.parentName}</span>
-                        </small>
-                      )}
-                      <span className={styles.sessionRow}>
-                        {session.content ?? <span>{session.title}</span>}
+    <section className={styles.container} aria-label="Sessions">
+      <div className={styles.workspace}>
+        <Panel as="aside" aria-label="Session history">
+          <div className={styles.sidebar}>
+            <Button variant="prominent" type="button" onClick={onNew}>
+              <PlusIcon size={18} aria-hidden="true" />
+              New session
+            </Button>
+            <h2 className={styles.historyHeading}>Previous sessions</h2>
+            <nav className={styles.history} aria-label="Previous sessions">
+              {sessions.map((session) => {
+                const ParentChannelIcon = channelIcon({
+                  private: session.parentPrivate,
+                });
+                return (
+                  <NavigationItem
+                    type="button"
+                    key={session.id}
+                    aria-current={session.id === selected ? "page" : undefined}
+                    selected={session.id === selected}
+                    onClick={() => onSelect(session.id)}
+                    label={
+                      <span className={styles.historyLabel}>
+                        {session.parentName && (
+                          <small className={styles.parentChannel}>
+                            <ParentChannelIcon size={12} aria-hidden="true" />
+                            <span>{session.parentName}</span>
+                          </small>
+                        )}
+                        <span className={styles.sessionRow}>
+                          {session.content ?? <span>{session.title}</span>}
+                        </span>
                       </span>
-                    </span>
-                  }
-                />
-              );
-            })}
-            {listStatus ??
-              (!sessions.length && (
-                <p className={styles.listMessage}>
-                  Your conversations will appear here after your first message.
-                </p>
-              ))}
-          </nav>
-        </div>
-      </Panel>
-      <Panel as="div">
-        <div className={styles.content}>{children}</div>
-      </Panel>
+                    }
+                  />
+                );
+              })}
+              {listStatus ??
+                (!sessions.length && (
+                  <p className={styles.listMessage}>
+                    Your conversations will appear here after your first
+                    message.
+                  </p>
+                ))}
+            </nav>
+          </div>
+        </Panel>
+        <Panel as="div">
+          <div className={styles.content}>{children}</div>
+        </Panel>
+      </div>
     </section>
   );
 }

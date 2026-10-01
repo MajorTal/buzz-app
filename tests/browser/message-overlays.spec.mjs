@@ -69,9 +69,9 @@ test("video speed options escape the thread and restore focus after selection an
   const menu = page.getByRole("menu", { name: /^Playback speed:/ });
   await expect(menu).toBeVisible();
   // The scoped dark owner must keep the explicit floating recipe, not the
-  // ordinary dark control fill (#333333), even though the host stays light.
+  // ordinary dark control fill (#232323), even though the host stays light.
   await expect(menu).toHaveCSS("--interaction-fill", "#404040");
-  await expect(menu).toHaveCSS("background-color", "rgb(51, 51, 51)");
+  await expect(menu).toHaveCSS("background-color", "rgb(40, 40, 40)");
   const fast = menu.getByRole("menuitemradio", { name: "2x", exact: true });
   await expect
     .poll(() =>
@@ -126,7 +126,7 @@ test("video speed options escape the thread and restore focus after selection an
   await expect(menu).toHaveCSS("--interaction-fill", "#404040");
   await expect(
     menu.getByRole("menuitemradio", { name: "2x", exact: true }),
-  ).toHaveCSS("background-color", "rgb(64, 64, 64)");
+  ).toHaveCSS("background-color", "rgb(46, 46, 46)");
   await expect(
     menu.getByRole("menuitemradio", { name: "2x", exact: true }),
   ).toBeFocused();
@@ -167,9 +167,9 @@ test("unavailable dark media review keeps Retry readable in a light host", async
     "Original message unavailable.",
   );
   await expect(retry).toHaveCSS("color", "rgb(255, 255, 255)");
-  await expect(retry).toHaveCSS("background-color", "rgb(51, 51, 51)");
+  await expect(retry).toHaveCSS("background-color", "rgb(35, 35, 35)");
   await retry.hover();
-  await expect(retry).toHaveCSS("background-color", "rgb(64, 64, 64)");
+  await expect(retry).toHaveCSS("background-color", "rgb(46, 46, 46)");
 });
 
 // Shared preview callers must retain viewport placement and non-stealing focus.
@@ -379,4 +379,87 @@ test("destination previews yield to modals they are outside", async ({
   await page.getByRole("link", { name: "Open Background" }).hover();
   await expect(background).toBeVisible();
   await expect.poll(() => clickable(background)).toBe(true);
+});
+
+// Browser-only: enlarged geometry, clipping and actual control hit targets.
+test("enlarged media review reflows comments and keeps playback controls reachable", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1024, height: 768 });
+  await page.goto("/tests/fixtures/media-review.html?review");
+  const review = page.getByRole("dialog", {
+    name: "Video review",
+    exact: true,
+  });
+  const video = review.locator("video");
+  await expect(video).toHaveJSProperty("readyState", 4);
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "2"),
+  );
+  const stage = review.locator("[data-review-stage]");
+  await expect
+    .poll(() => stage.evaluate((el) => el.getBoundingClientRect().width))
+    .toBeGreaterThan(700);
+  const speed = review.getByRole("button", { name: "Playback speed: 1x" });
+  const mute = review.getByRole("button", { name: /^(Unmute|Mute) video$/ });
+  const reaction = review.getByRole("button", {
+    name: "React 😂 at current frame",
+    exact: true,
+  });
+  for (const width of [1024, 800]) {
+    await page.setViewportSize({ width, height: 768 });
+    await stage.hover();
+    for (const control of [
+      speed,
+      mute,
+      reaction,
+      review.getByRole("slider", { name: "Video volume", exact: true }),
+      review.getByRole("slider", { name: "Video timeline", exact: true }),
+    ]) {
+      await expect(control).toBeInViewport();
+      await expect
+        .poll(() =>
+          control.evaluate((el) => {
+            const r = el.getBoundingClientRect();
+            return (
+              r.left >= 0 &&
+              r.right <= innerWidth &&
+              el.contains(
+                document.elementFromPoint(
+                  r.x + r.width / 2,
+                  r.y + r.height / 2,
+                ),
+              )
+            );
+          }),
+        )
+        .toBe(true);
+    }
+  }
+  await speed.click();
+  await page.getByRole("menuitemradio", { name: "2x", exact: true }).click();
+  await expect(video).toHaveJSProperty("playbackRate", 2);
+  const wasMuted = await video.evaluate((el) => el.muted);
+  await stage.hover();
+  await mute.click();
+  await expect(video).toHaveJSProperty("muted", !wasMuted);
+  await reaction.click();
+  const comments = review.getByRole("complementary", {
+    name: "Media comments",
+  });
+  await comments.scrollIntoViewIfNeeded();
+  const postedReaction = comments.locator("p[data-single-emoji]", {
+    hasText: "😂",
+  });
+  await expect(postedReaction).toBeVisible();
+  await postedReaction.scrollIntoViewIfNeeded();
+  await expect(postedReaction).toBeInViewport();
+  await review
+    .getByRole("button", { name: "Hide comments", exact: true })
+    .click();
+  await expect(comments).toBeHidden();
+  await review
+    .getByRole("button", { name: "Show comments", exact: true })
+    .click();
+  await expect(comments).toBeVisible();
 });

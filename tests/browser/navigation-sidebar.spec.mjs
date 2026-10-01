@@ -47,6 +47,9 @@ test("channel sidebar resizes from the full gutter and persists", async ({
       throw new Error("Missing sidebar gutter");
     const contentStyle = getComputedStyle(content);
     const rowStyle = getComputedStyle(row);
+    const rootSize = Number.parseFloat(
+      getComputedStyle(document.documentElement).fontSize,
+    );
     return {
       panelGap:
         Number.parseFloat(getComputedStyle(handle).width) +
@@ -58,9 +61,10 @@ test("channel sidebar resizes from the full gutter and persists", async ({
         Number.parseFloat,
       ),
       rowRadius: Number.parseFloat(rowStyle.borderTopLeftRadius),
-      rowRadiusToken: Number.parseFloat(
-        contentStyle.getPropertyValue("--radius-row"),
-      ),
+      // Custom properties retain rem units; computed corner values are pixels.
+      rowRadiusToken:
+        Number.parseFloat(contentStyle.getPropertyValue("--radius-row")) *
+        rootSize,
     };
   });
   expect(new Set(geometry.padding).size).toBe(1);

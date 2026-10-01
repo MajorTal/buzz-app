@@ -3,7 +3,7 @@ import type { Appearance } from "../shared/theme/service";
 
 /** Host actions use the same binding/dispatch rules as plugins, without fake plugin ownership. */
 // Settings presents the host category in functional sections: navigation,
-// text sizing, search/settings, then app reload.
+// interface sizing, search/settings, then app reload.
 export const HOST_SHORTCUT_ORDER = {
   home: 10,
   navigationBack: 20,
@@ -36,7 +36,7 @@ export function registerAppShortcuts(
       [
         [
           "font-increase",
-          "Increase text size",
+          "Increase interface size",
           HOST_SHORTCUT_ORDER.textSizeIncrease,
           [
             { key: "=", mod: true },
@@ -48,14 +48,14 @@ export function registerAppShortcuts(
         ],
         [
           "font-decrease",
-          "Decrease text size",
+          "Decrease interface size",
           HOST_SHORTCUT_ORDER.textSizeDecrease,
           { key: "-", mod: true },
           () => appearance.setFontScale(appearance.snapshot().fontScale - 0.1),
         ],
         [
           "font-reset",
-          "Reset text size",
+          "Reset interface size",
           HOST_SHORTCUT_ORDER.textSizeReset,
           { key: "0", mod: true },
           () => appearance.setFontScale(1),

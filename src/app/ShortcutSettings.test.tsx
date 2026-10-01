@@ -98,7 +98,7 @@ async function harness() {
   });
   shortcuts.registerHost({
     id: "font-increase",
-    title: "Increase text size",
+    title: "Increase interface size",
     binding: [
       { key: "=", mod: true },
       { key: "+", mod: true },
@@ -192,7 +192,7 @@ it("lists live host and plugin shortcuts without search or intro text and follow
             within(article).getByRole("heading", { level: 3 }).textContent,
         ),
     ).toEqual([
-      "Increase text size",
+      "Increase interface size",
       "Search Buzz",
       "Open Settings",
       "First action",
@@ -200,7 +200,7 @@ it("lists live host and plugin shortcuts without search or intro text and follow
       "Toggle channel terminal",
     ]);
     // Chips show the first alias with glyphs; the label reads as words.
-    const grow = row("Increase text size");
+    const grow = row("Increase interface size");
     expect(within(grow).getByText("Command =")).toHaveClass("sr-only");
     const chips = grow.querySelectorAll("kbd kbd");
     expect([...chips].map((chip) => chip.textContent)).toEqual(["⌘", "="]);
@@ -236,7 +236,7 @@ it("lists live host and plugin shortcuts without search or intro text and follow
   }
 });
 
-it("presents actual host registrations in navigation, text sizing, search/settings, then development order", async () => {
+it("presents actual host registrations in navigation, interface sizing, search/settings, then development order", async () => {
   const root = new Context();
   root.provide("pluginStatus", {
     isActive: () => true,
@@ -283,9 +283,9 @@ it("presents actual host registrations in navigation, text sizing, search/settin
       "Home",
       "Go back",
       "Go forward",
-      "Increase text size",
-      "Decrease text size",
-      "Reset text size",
+      "Increase interface size",
+      "Decrease interface size",
+      "Reset interface size",
       "Search Buzz",
       "Search this conversation",
       "Open Settings",
@@ -334,7 +334,7 @@ it("orders plugin rows by metadata then contribution key without merging duplica
             within(article).getByRole("heading", { level: 3 }).textContent,
         ),
     ).toEqual([
-      "Increase text size",
+      "Increase interface size",
       "Search Buzz",
       "Open Settings",
       "First action",
@@ -522,14 +522,14 @@ it("captures a chord, refuses conflicts and bare keys, applies overrides to the 
     expect(h.bindings.resolve("buzz.terminal/toggle")).toBeUndefined();
 
     // Rebinding an alias set replaces the whole set; reset restores it.
-    await user.click(change("Increase text size"));
-    fireEvent.keyDown(capture("Increase text size"), {
+    await user.click(change("Increase interface size"));
+    fireEvent.keyDown(capture("Increase interface size"), {
       key: "=",
       ctrlKey: true,
       altKey: true,
     });
     expect(
-      within(row("Increase text size")).getByText("Control Alt ="),
+      within(row("Increase interface size")).getByText("Control Alt ="),
     ).toBeInTheDocument();
     h.press("=");
     h.press("+", { shiftKey: true });

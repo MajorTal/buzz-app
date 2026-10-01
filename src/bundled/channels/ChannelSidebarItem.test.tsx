@@ -268,8 +268,8 @@ it("keeps live unread updates and uses replacement session callbacks across row 
   );
   const activeRow = screen.getByRole("button", { name: /^Alpha/ });
   expect(activeRow).toHaveAttribute("aria-current", "page");
-  expect(activeRow.querySelector("svg")).toHaveAttribute("width", "16");
-  expect(activeRow.querySelector("svg")).toHaveAttribute("height", "16");
+  expect(activeRow.querySelector("svg")).toHaveAttribute("width", "1rem");
+  expect(activeRow.querySelector("svg")).toHaveAttribute("height", "1rem");
   expect(
     screen.getByRole("img", { name: /working in Alpha/ }),
   ).toBeInTheDocument();

@@ -128,7 +128,7 @@ for (const mode of ["light", "dark"]) {
     );
     await child.click();
     await page.mouse.move(1, 1);
-    const selected = mode === "dark" ? "rgb(51, 51, 51)" : "rgb(245, 245, 246)";
+    const selected = mode === "dark" ? "rgb(51, 51, 51)" : "rgb(232, 232, 232)";
     await expect(child).toHaveAttribute("aria-current", "page");
     await expect(child).toHaveCSS("background-color", selected);
     await child.hover();

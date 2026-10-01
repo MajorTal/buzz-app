@@ -114,7 +114,13 @@ test("opt-in Todos saves ordinary Canvas and disabling leaves it editable", asyn
   const bounds = await drawer.boundingBox();
   expect(bounds.x).toBeGreaterThanOrEqual(conversation.x + conversation.width);
   expect(Math.abs(bounds.y - conversation.y)).toBeLessThan(2);
+  const dock = page
+    .getByRole("region", { name: "Channels", exact: true })
+    .locator("[data-panel-dock]:not([hidden])");
   await drawer.getByRole("button", { name: "Hide todos" }).click();
+  // The closing dock still owns a grid column. Wait for its removal before
+  // clicking the launcher, which moves when the conversation expands.
+  await expect(dock).toHaveCount(0);
   await launcher.click();
   await expect(assignee).toContainText("Fixture Reader");
   await assignee.click();
@@ -126,6 +132,7 @@ test("opt-in Todos saves ordinary Canvas and disabling leaves it editable", asyn
   await assignee.press("Escape");
   await expect(drawer).toHaveCount(0);
   await expect(launcher).toBeFocused();
+  await expect(dock).toHaveCount(0);
   await launcher.click();
   await expect(assignee).toContainText("Fixture Reader");
   const expectCompactRow = async () => {

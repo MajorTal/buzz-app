@@ -58,9 +58,9 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
+  width: 1.25rem;
   height: var(--space-6);
-  flex: 0 0 20px;
+  flex: 0 0 1.25rem;
 }
 .iconSpace[data-dm-cue] {
   margin-inline-end: var(--space-half);
@@ -122,7 +122,7 @@
 }
 .row .disclosure {
   position: absolute;
-  left: calc(var(--space-2) - ((var(--space-6) - 15px) / 2) - 1.5px);
+  left: calc(var(--space-2) - ((var(--space-6) - 0.9375rem) / 2) - 1.5px);
   z-index: 2;
 }
 .hashIcon {

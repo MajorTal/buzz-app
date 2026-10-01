@@ -12,6 +12,7 @@ import { Input } from "../../shared/design-system/ui/Input";
 import { Tabs } from "../../shared/design-system/ui/Tabs";
 import { avatarPictureError, emojiAvatar, uploadAvatar } from "./avatar-upload";
 import { useAvatarPreview } from "./use-avatar-preview";
+import type { EmojiSearchSelection } from "../../bundled/emoji/emoji-mart";
 
 type Props = {
   value: string;
@@ -79,7 +80,7 @@ export function AvatarEditor(props: Props) {
         >
           <Popover.Popup
             data-buzz-ui=""
-            className="popover-surface w-[360px] max-w-[calc(100vw-24px)] max-h-[min(760px,var(--available-height))] overflow-auto p-4 text-body"
+            className="popover-surface w-[22.5rem] max-w-[calc(100vw-1.5rem)] max-h-[min(47.5rem,var(--available-height))] overflow-auto p-4 text-body"
           >
             <Popover.Title className="sr-only">Edit avatar</Popover.Title>
             {open && (
@@ -325,6 +326,10 @@ function AvatarDraft({
   );
 }
 
+const rootScale = () =>
+  (Number.parseFloat(getComputedStyle(document.documentElement).fontSize) ||
+    16) / 16;
+
 function AvatarEmojiPicker({
   onSelect,
   disabled,
@@ -338,6 +343,18 @@ function AvatarEmojiPicker({
     if (!disabled) onSelect(value);
   };
   const [error, setError] = useState(false);
+  const [scale, setScale] = useState(rootScale);
+  const search = useRef("");
+  const focusPicker = useRef(true);
+  const searchSelection = useRef<EmojiSearchSelection | undefined>(undefined);
+  useEffect(() => {
+    const observer = new MutationObserver(() => setScale(rootScale()));
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["style"],
+    });
+    return () => observer.disconnect();
+  }, []);
   useEffect(() => {
     const element = host.current;
     if (!element) return;
@@ -349,11 +366,15 @@ function AvatarEmojiPicker({
         dispose = mountEmojiMart({
           host: element,
           scope: "avatar",
+          autoFocus: focusPicker.current,
           perLine: 6,
-          emojiSize: 28,
-          emojiButtonSize: 36,
-          search: "",
-          searchChange() {},
+          emojiSize: 28 * scale,
+          emojiButtonSize: 36 * scale,
+          search: search.current,
+          searchSelection,
+          searchChange(value) {
+            search.current = value;
+          },
           entries: [],
           media: () => undefined,
           select: (value) => callback.current(value),
@@ -365,15 +386,21 @@ function AvatarEmojiPicker({
       });
     return () => {
       retired = true;
+      // Shadow focus is retargeted to the picker host. Geometry changes must
+      // not reclaim focus from the manual emoji field or another avatar control.
+      if (dispose)
+        focusPicker.current = element.contains(
+          element.ownerDocument.activeElement,
+        );
       dispose?.();
     };
-  }, []);
+  }, [scale]);
   return (
     <div
       inert={disabled}
-      className="max-w-full overflow-auto [&_em-emoji-picker]:w-full [&_em-emoji-picker]:h-[min(280px,35dvh)]"
+      className="max-w-full overflow-auto [&_em-emoji-picker]:w-full [&_em-emoji-picker]:h-[min(17.5rem,35dvh)]"
     >
-      <div ref={host} />
+      <div ref={host} tabIndex={-1} />
       {error && (
         <p role="alert">
           Could not load the emoji picker. Reopen it to retry, or paste an emoji

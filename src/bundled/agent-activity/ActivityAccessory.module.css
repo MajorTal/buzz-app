@@ -8,7 +8,7 @@
 .agents {
   display: flex;
   flex-direction: column;
-  max-height: 132px;
+  max-height: 8.25rem;
   overflow-y: auto;
   scrollbar-width: thin;
 }
@@ -49,7 +49,7 @@
   }
 }
 
-@media (max-width: 650px) {
+@media (max-width: 40.625rem) {
   .root {
     /* The narrow composer has an 8px top margin. */
     margin: var(--space-2) var(--space-3) calc(-1 * var(--space-1));

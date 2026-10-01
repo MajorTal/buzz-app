@@ -1,6 +1,12 @@
+.container {
+  container: sessions-workspace / inline-size;
+  height: 100%;
+  min-height: 0;
+}
+
 .workspace {
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 15.5rem minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   color: var(--text-standard);
@@ -81,16 +87,16 @@
   overflow: hidden;
 }
 
-@media (max-width: 760px) {
+@container sessions-workspace (max-width: 40rem) {
   .workspace {
-    grid-template-columns: 200px minmax(0, 1fr);
+    grid-template-columns: 12.5rem minmax(0, 1fr);
   }
 }
 
-@media (max-width: 560px) {
+@container sessions-workspace (max-width: 28rem) {
   .workspace {
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: minmax(120px, 30%) minmax(0, 1fr);
+    grid-template-rows: minmax(7.5rem, 30%) minmax(0, 1fr);
   }
 
   .sidebar {

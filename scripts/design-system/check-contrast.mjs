@@ -10,7 +10,7 @@
  * drift from the system it audits: resolve each role through its `var()` chain
  * to a literal, per mode, then measure every pairing the roles allow.
  *
- * Text uses APCA, per DESIGN.md § Contrast. Control/state boundaries use the
+ * Text clears APCA and WCAG AA, per DESIGN.md § Contrast. Control/state boundaries use the
  * separate WCAG 3:1 non-text target on their supported opaque surfaces.
  */
 
@@ -25,7 +25,7 @@ const TOKENS = join(ROOT, "src/shared/design-system/styles/tokens.css");
 
 /** Body text. Anything a person must read to use the product. */
 const TARGET_BODY = 60;
-/** Large or non-essential text: timestamps, counts, meta. */
+/** Metadata keeps its APCA target and still clears WCAG AA at its small size. */
 const TARGET_META = 45;
 
 /**
@@ -46,21 +46,6 @@ const EXCEPTIONS = new Map([
   ],
 ]);
 
-// Explicitly approved Blue 11 design tradeoff; see DESIGN.md § Link contrast.
-// Pin mode, both roles and both resolved colors. A different low-contrast color
-// must fail again; every unlisted role/surface keeps its normal target.
-const ACCEPTED_LINK_PAIRS = new Set([
-  "light --text-link #0d74ce on --affordance-selected #e8e8e8",
-  "light --text-link #0d74ce on --neutral-4 #dadada",
-  "dark --text-link #70b8ff on --surface-panel #1a1a1a",
-  "dark --text-link #70b8ff on --surface-popover #333333",
-  "dark --text-link #70b8ff on --affordance-subtle #333333",
-  "dark --text-link #70b8ff on --affordance-selected #333333",
-  "dark --text-link #70b8ff on --neutral-4 #232323",
-  "dark --text-link #70b8ff on --affordance-link-hover #0d2847",
-]);
-const acceptedLinkMeasurements = new Map();
-
 // Designer-approved removal of the Away outline; see DESIGN.md § Identity shapes.
 // Bind each exception to the exact mode, role, fill and surface color.
 const ACCEPTED_AWAY_PAIRS = new Set([
@@ -70,8 +55,8 @@ const ACCEPTED_AWAY_PAIRS = new Set([
   "light --status-away #ffba18 on --surface-popover #ffffff",
   "light --status-away #ffba18 on --affordance-selected #e8e8e8",
   "light --status-away #ffba18 on --affordance-panel-hover #f5f5f6",
-  "light --status-away #ffba18 on --affordance-subtle-hover #efeff0",
-  "light --status-away #ffba18 on --affordance-floating-hover #e8e8e8",
+  "light --status-away #ffba18 on --affordance-subtle-hover #f1f1f2",
+  "light --status-away #ffba18 on --affordance-floating-hover #f5f5f6",
   "light --status-away #ffba18 on --neutral-4 #dadada",
 ]);
 const acceptedAwayMeasurements = new Map();
@@ -93,6 +78,9 @@ const SURFACES = [
   "--surface-inset",
   "--affordance-subtle",
   "--affordance-selected",
+  "--affordance-panel-hover",
+  "--affordance-subtle-hover",
+  "--affordance-floating-hover",
   "--neutral-4",
 ];
 
@@ -265,15 +253,8 @@ for (const [mode, map] of Object.entries(modes)) {
     }
     const lc = Math.abs(apcaContrast(text, surface));
     const target = META_ROLES.has(textRole) ? TARGET_META : TARGET_BODY;
-    if (lc >= target) return;
-    const linkPair = `${mode} ${textRole} ${text} on ${surfaceRole} ${surface}`;
-    if (ACCEPTED_LINK_PAIRS.has(linkPair)) {
-      acceptedLinkMeasurements.set(linkPair, {
-        lc,
-        wcag: wcagRatio(text, surface),
-      });
-      return;
-    }
+    const wcag = wcagRatio(text, surface);
+    if (lc >= target && wcag >= 4.5) return;
     // Role-wide first, then the narrow `role on surface` form.
     if (EXCEPTIONS.has(textRole)) return;
     if (EXCEPTIONS.has(`${textRole} on ${surfaceRole}`)) {
@@ -362,19 +343,6 @@ if (skipped.length > 0) {
   for (const s of skipped) console.log(`    ${s}`);
 }
 
-for (const [pair, { lc, wcag }] of acceptedLinkMeasurements) {
-  console.log(
-    `  (accepted link contrast) ${pair}: Lc ${lc.toFixed(3)} < ${TARGET_BODY}; WCAG ${wcag.toFixed(3)}:1 — approved Blue 11 tradeoff, not a contrast pass`,
-  );
-}
-const staleLinkPairs = [...ACCEPTED_LINK_PAIRS].filter(
-  (pair) => !acceptedLinkMeasurements.has(pair),
-);
-if (staleLinkPairs.length) {
-  console.log("ℹ Accepted link pairs no longer used — review and remove:");
-  for (const pair of staleLinkPairs) console.log(`  ${pair}`);
-}
-
 for (const [pair, ratio] of acceptedAwayMeasurements) {
   console.log(
     `  (accepted Away contrast) ${pair}: ${ratio.toFixed(3)}:1 < 3:1 — approved unoutlined badge, not a contrast pass`,
@@ -396,14 +364,14 @@ if (boundaryFailures.length > 0) {
 
 if (failures.length > 0) {
   console.error(
-    `\n✗ Contrast: ${failures.length} pairing(s) below their APCA target\n`,
+    `\n✗ Contrast: ${failures.length} pairing(s) below their APCA or WCAG AA target\n`,
   );
   for (const f of failures) {
     console.error(
       `  ${f.mode.padEnd(5)} ${f.textRole} (${f.text}) on ${f.surfaceRole} (${f.surface})`,
     );
     console.error(
-      `        Lc ${f.lc.toFixed(1)} — needs ${f.target}   [WCAG ${f.wcag.toFixed(2)}:1]`,
+      `        Lc ${f.lc.toFixed(1)} — needs ${f.target}   [WCAG ${f.wcag.toFixed(2)}:1 — needs 4.5:1]`,
     );
   }
   console.error(

@@ -1,8 +1,8 @@
 .popup {
   /* Content layout; the shared PreviewCard owns surface, border and elevation. */
-  width: min(340px, calc(100vw - 24px));
-  max-width: calc(100vw - 24px);
-  max-height: min(320px, var(--available-height));
+  width: min(21.25rem, calc(100vw - 1.5rem));
+  max-width: calc(100vw - 1.5rem);
+  max-height: min(20rem, var(--available-height));
   overflow: auto;
   padding: var(--space-3);
   gap: var(--space-2);

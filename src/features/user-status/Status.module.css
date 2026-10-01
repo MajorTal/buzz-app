@@ -19,15 +19,15 @@
   gap: var(--space-1);
 }
 .emoji {
-  width: var(--user-status-emoji-size, 20px);
-  height: var(--user-status-emoji-size, 20px);
-  flex: 0 0 var(--user-status-emoji-size, 20px);
+  width: var(--user-status-emoji-size, 1.25rem);
+  height: var(--user-status-emoji-size, 1.25rem);
+  flex: 0 0 var(--user-status-emoji-size, 1.25rem);
   object-fit: contain;
   vertical-align: middle;
 }
 .emojiFallback {
   white-space: nowrap;
-  font-size: var(--user-status-emoji-size, 20px);
+  font-size: var(--user-status-emoji-size, 1.25rem);
   line-height: 1;
   transform: translateY(var(--user-status-emoji-offset, 0px));
 }

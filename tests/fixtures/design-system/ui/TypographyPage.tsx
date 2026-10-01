@@ -98,7 +98,7 @@ export function TypographyPage() {
       <Note>
         Values are shown at 100% text size and scale with the text-size
         preference. A role supplies its own line height; section titles use 24px
-        type on a 24px line. Reference:{" "}
+        type with a 1.1 line height. Reference:{" "}
         <a href={TYPE_SOURCE}>Typography source specification</a>.
       </Note>
     </>

@@ -51,7 +51,7 @@ it("hidden settings do not portal errors; returning retains both save recovery a
     screen.getByRole("button", { name: "Retry saving appearance" }),
   );
   fireEvent.click(
-    screen.getByRole("button", { name: "Retry saving text size" }),
+    screen.getByRole("button", { name: "Retry saving interface size" }),
   );
   await waitFor(() =>
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
@@ -91,17 +91,23 @@ it("shows reset only away from the default size and hides it after reset", () =>
     </ToastProvider>,
   );
   expect(
-    screen.queryByRole("button", { name: "Reset text size" }),
+    screen.queryByRole("button", { name: "Reset interface size" }),
   ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Increase text size" }));
-  expect(screen.getByLabelText("Text size")).toHaveTextContent("110%");
-  fireEvent.click(screen.getByRole("button", { name: "Reset text size" }));
-  expect(screen.getByLabelText("Text size")).toHaveTextContent("100%");
+  fireEvent.click(
+    screen.getByRole("button", { name: "Increase interface size" }),
+  );
+  expect(screen.getByLabelText("Interface size")).toHaveTextContent("110%");
+  fireEvent.click(screen.getByRole("button", { name: "Reset interface size" }));
+  expect(screen.getByLabelText("Interface size")).toHaveTextContent("100%");
   expect(
-    screen.queryByRole("button", { name: "Reset text size" }),
+    screen.queryByRole("button", { name: "Reset interface size" }),
   ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("button", { name: "Decrease text size" }));
-  expect(screen.getByRole("button", { name: "Reset text size" })).toBeVisible();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Decrease interface size" }),
+  );
+  expect(
+    screen.getByRole("button", { name: "Reset interface size" }),
+  ).toBeVisible();
   appearance.dispose();
 });
 
@@ -115,19 +121,21 @@ it.each([1.1, 2])(
         <AppearanceSettings appearance={appearance} />
       </ToastProvider>,
     );
-    const increase = screen.getByRole("button", { name: "Increase text size" });
+    const increase = screen.getByRole("button", {
+      name: "Increase interface size",
+    });
     act(() => appearance.setFontScale(scale));
-    screen.getByRole("button", { name: "Reset text size" }).focus();
+    screen.getByRole("button", { name: "Reset interface size" }).focus();
     vi.spyOn(Storage.prototype, "setItem").mockImplementationOnce(() => {
       throw new Error("denied");
     });
     await user.keyboard("{Enter}");
     expect(
-      screen.queryByRole("button", { name: "Reset text size" }),
+      screen.queryByRole("button", { name: "Reset interface size" }),
     ).not.toBeInTheDocument();
     expect(increase).toHaveFocus();
     expect(
-      screen.getByRole("button", { name: "Retry saving text size" }),
+      screen.getByRole("button", { name: "Retry saving interface size" }),
     ).toBeVisible();
     appearance.dispose();
   },
@@ -145,13 +153,13 @@ it.each([false, true])(
     );
     const light = screen.getByRole("radio", { name: "Light" });
     (focusReset
-      ? screen.getByRole("button", { name: "Reset text size" })
+      ? screen.getByRole("button", { name: "Reset interface size" })
       : light
     ).focus();
     act(() => appearance.setFontScale(1.3));
     expect(
       focusReset
-        ? screen.getByRole("button", { name: "Reset text size" })
+        ? screen.getByRole("button", { name: "Reset interface size" })
         : light,
     ).toHaveFocus();
     act(() => {
@@ -165,11 +173,11 @@ it.each([false, true])(
       );
     });
     expect(
-      screen.queryByRole("button", { name: "Reset text size" }),
+      screen.queryByRole("button", { name: "Reset interface size" }),
     ).not.toBeInTheDocument();
     expect(
       focusReset
-        ? screen.getByRole("button", { name: "Increase text size" })
+        ? screen.getByRole("button", { name: "Increase interface size" })
         : light,
     ).toHaveFocus();
     appearance.dispose();
@@ -184,8 +192,10 @@ it("does not hand off Reset focus when the settings form unmounts", () => {
       <AppearanceSettings appearance={appearance} />
     </ToastProvider>,
   );
-  const increase = screen.getByRole("button", { name: "Increase text size" });
-  screen.getByRole("button", { name: "Reset text size" }).focus();
+  const increase = screen.getByRole("button", {
+    name: "Increase interface size",
+  });
+  screen.getByRole("button", { name: "Reset interface size" }).focus();
   const focus = vi.spyOn(increase, "focus");
   view.unmount();
   expect(focus).not.toHaveBeenCalled();

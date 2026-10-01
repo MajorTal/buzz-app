@@ -96,7 +96,7 @@ styling. Keep full batch validation separate from an interactive preview.
 
 
 
-## Text size and shortcuts
+## Interface size and shortcuts
 
 The host owns a separate device-local `buzz-font-scale.v1` preference (80–200%,
 10% steps; default/reset 100%). Color-mode storage is unchanged. Settings →
@@ -104,24 +104,29 @@ Appearance supplies visible decrease/increase/reset controls and save-failure re
 The bootstrap and appearance service apply `--buzz-text-scale`; invalid persisted
 values fall back to 100%, and same-origin storage events re-read the latest choice.
 
-Command+, opens Settings on Apple platforms. Command+= / Command++ increase text,
-Command+- decreases and Command+0 resets. Other platforms use Control. Zoom works
+Command+, opens Settings on Apple platforms. Command+= / Command++ enlarge the interface,
+Command+- reduces it and Command+0 resets. Other platforms use Control. Zoom works
 while typing and in dialogs without changing browser/WebView zoom; Settings does
 not navigate behind an open modal. The [shortcut service](plugin-architecture.md#in-app-keyboard-shortcuts)
 also serves plugins and owns event dispatch/lifetime rules.
 
-Only typography scales: root rem size, layout spacing, icons and native window
-geometry stay unchanged. Shared Tailwind type utilities and built-in fixed-size
-CSS typography consume the scale. Plugin text can inherit host typography or use
-`font-size: calc(15px * var(--buzz-text-scale, 1))`; avoid multiplying inherited
-font size by the scale again. Use unitless or scaled line-height so enlarged text
-does not overlap. Independent plugins that hard-code sizes and third-party shadow
-widgets need their own adapter; this is not a forced CSS rewrite of arbitrary code.
+The preference scales the root rem size, so shared typography, controls, icons and
+spacing grow together. Numeric sizes in the shared icon wrapper are rem values at
+the default 16px root; explicit unit strings and CSS overrides keep their meaning.
+Native window geometry, physical strokes, stored sidebar widths and browser/media
+measurement coordinates remain pixels. Use shared type roles or rem in plugins;
+do not multiply rem or inherited font sizes by the scale again. The legacy token
+`--buzz-text-scale` remains available for existing fixed-pixel plugin typography.
+Use unitless line-height. Emoji Mart translates the root size through its existing
+adapter, keeping vendor slots, column count and popup width coordinated. Composer,
+reaction and avatar pickers rebuild vendor geometry while preserving the query,
+caret/range and highlighted result; clearing a query stays cleared. The host shortcut
+handoff keeps zoom available from the vendor search field.
 
 Settings → Shortcuts lists every host and active plugin shortcut from the live
 dispatcher, grouped by owner, with each owner's deliberate numeric order,
 per-row Change/Reset and Reset all. Buzz's host rows use a functional sequence
-(navigation, text sizing, search/settings, then development-only actions); plugins
+(navigation, interface sizing, search/settings, then development-only actions); plugins
 choose the order of their own actions. Equal orders use stable registry identity
 and then title as tie-breakers. It
 is built from existing components (`Input`, `Button`, `NavigationSection`,
@@ -143,7 +148,7 @@ leave capture without saving, with an accessible instruction explaining the exit
 Rows wrap their actions before the title collapses.
 
 `tests/browser/shortcuts.spec.mjs` covers real key dispatch to Settings and actual
-message/composer text, draft/node preservation, reset/limits/reload, modal/editor/
+message/composer text, icon/control/spacing geometry, draft/node preservation, reset/limits/reload, modal/editor/
 Shadow DOM guards, the independent example's disable/re-enable path, and rebinding
 that example's shortcut from Settings → Shortcuts (host conflict refused, new chord
 fires, old chord does not, persists across reload, reset restores). These
@@ -171,8 +176,8 @@ Do not nest legacy UI inside a migrated boundary without explicitly migrating it
 This boundary does not imply a Panel, padding, scrolling or page lifecycle.
 
 The host's existing `data-color-mode` drives shared dark tokens directly, and
-`--buzz-text-scale` feeds the type ramp once. Root size and layout geometry do not
-scale. Startup bootstrap, preferences, recovery, cross-window events and theme-color
+`--buzz-text-scale` scales the root once; typography and authored rem geometry
+share that size. Startup bootstrap, preferences, recovery, cross-window events and theme-color
 remain owned by the existing appearance service. The viewer retains its separate
 preference and full-document typography; its settings do not change the host.
 BentoWorkspace still uses the viewer preference helper and is not ready for app
@@ -246,9 +251,15 @@ the title for labelled regions. `PanelHeader` still owns workspace chrome, and
 those with a generic heading. The initial adoption covers Profile, Plugins,
 Appearance, Shortcuts and Notifications; other pages can adopt these when touched.
 
-Light-mode inset fields and quiet fills use neutral-2 (#f5f5f6). Panel hover uses
-that same stop; subtle-button hover sits between neutral-2 and neutral-3, while
-selected and pressed states retain stronger contrast. Dark-mode roles are unchanged.
+Light-mode inset fields and quiet fills use neutral-2 (#f5f5f6). Panel and floating hover use
+that same stop; subtle-button hover is #f1f1f2. In dark mode, panels, popovers,
+subtle controls, and hover fills have separate steps. See the shared DESIGN.md
+quiet surface stack.
+
+Authored CSS dimensions now use rem across shell, channel, message, picker, and
+settings layouts. Physical strokes and browser/media measurement coordinates
+remain pixels. The host interface-size preference scales the root; the timeline
+measures its rem-sized leading region for the virtualizer’s pixel start margin.
 
 ## Preference rows
 

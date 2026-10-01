@@ -183,7 +183,7 @@ test("actual composer selects namesakes by exact key, publishes channel/reply ta
       await row.hover();
       await expect(row).toHaveCSS(
         "background-color",
-        mode === "light" ? "rgb(232, 232, 232)" : "rgb(89, 89, 89)",
+        mode === "light" ? "rgb(245, 245, 246)" : "rgb(51, 51, 51)",
       );
       await mention.getByRole("searchbox").fill("");
       const empty = await searchAppearance(mention.locator(".search-field"));

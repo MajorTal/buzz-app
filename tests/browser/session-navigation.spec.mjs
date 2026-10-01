@@ -1,4 +1,5 @@
 import { test, expect } from "./fixture.mjs";
+import { openPage } from "./navigation.mjs";
 import { settle } from "./timeline.mjs";
 
 // The production app's exact-reader -> DOM focus/visibility -> navigation
@@ -217,3 +218,107 @@ membershipTest(
     ).toHaveLength(reads);
   },
 );
+
+// Real container geometry, pointer targeting and editing at enlarged interface sizes.
+test("Sessions keeps new and selected conversations usable at 200%", async ({
+  page,
+  app,
+}) => {
+  await page.setViewportSize({ width: 800, height: 768 });
+  await page.goto(app.origin);
+  await openPage(page, "Sessions");
+  const workspace = page.getByRole("region", { name: "Sessions", exact: true });
+  const composer = workspace.getByRole("textbox", {
+    name: "Message this session",
+    exact: true,
+  });
+  await expect(composer).toBeVisible();
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "2"),
+  );
+  const expectReachable = async () => {
+    await expect
+      .poll(() =>
+        composer.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return (
+            r.width > 150 &&
+            r.left >= 0 &&
+            r.right <= innerWidth &&
+            r.top >= 0 &&
+            r.bottom <= innerHeight &&
+            el.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            )
+          );
+        }),
+      )
+      .toBe(true);
+    await composer.click();
+    await page.keyboard.type("Scaled session draft");
+    await expect(composer).toHaveText("Scaled session draft");
+  };
+  await expectReachable();
+  await workspace
+    .getByRole("navigation", { name: "Previous sessions" })
+    .getByRole("button", { name: /Alpha/ })
+    .click();
+  await expect(
+    workspace.getByRole("heading", { name: "Alpha", exact: true }),
+  ).toBeVisible();
+  await expectReachable();
+  await workspace
+    .getByRole("button", { name: "New session", exact: true })
+    .click();
+  await expect(composer).toHaveText("Scaled session draft");
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "1"),
+  );
+  await expect(composer).toBeInViewport();
+});
+
+// The same session column is also hosted by Channels, outside SessionsWorkspace.
+test("Channels session columns use their available width at 200%", async ({
+  page,
+  app,
+}) => {
+  await page.setViewportSize({ width: 800, height: 768 });
+  await page.goto(app.origin);
+  await expect
+    .poll(() =>
+      page.evaluate(() => window.fixtureNavigation?.snapshot().status),
+    )
+    .toBe("opened");
+  expect(await openTarget(page, target(app))).toEqual({ status: "opened" });
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "2"),
+  );
+  const conversation = page.getByRole("article", {
+    name: "Conversation",
+    exact: true,
+  });
+  const composer = conversation.getByRole("textbox", {
+    name: "Message this session",
+    exact: true,
+  });
+  await expect
+    .poll(() =>
+      composer.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const panel = el.closest("article").getBoundingClientRect();
+        const column = el
+          .closest('[class*="_column_"]')
+          .getBoundingClientRect();
+        return (
+          column.width > panel.width * 0.9 &&
+          r.left >= 0 &&
+          r.right <= innerWidth &&
+          r.bottom <= innerHeight
+        );
+      }),
+    )
+    .toBe(true);
+  await composer.click();
+  await page.keyboard.type("Channel session draft");
+  await expect(composer).toHaveText("Channel session draft");
+});

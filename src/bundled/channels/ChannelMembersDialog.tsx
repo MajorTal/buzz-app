@@ -346,7 +346,7 @@ export function ChannelMembersDialog({
             </Button>
           </p>
         )}
-        <div className="-mx-3 px-1 py-1 max-[480px]:-mx-1">
+        <div className="-mx-3 px-1 py-1 max-[30rem]:-mx-1">
           <h3 className="px-control-inset pb-2 text-caption text-subtle">
             Members · {members.size}
           </h3>

@@ -12,7 +12,7 @@
   padding: var(--space-1h);
 }
 .list {
-  max-height: 280px;
+  max-height: 17.5rem;
   min-height: 0;
   flex: 1 1 auto;
   overflow-y: auto;
@@ -49,15 +49,15 @@
   line-height: 1;
   transform: translateY(var(--emoji-optical-offset, 0));
 }
-@media (max-width: 900px) {
+@media (max-width: 56.25rem) {
   .popup[data-compact] {
     --completion-container-radius: var(--radius-card-compact);
   }
 }
 .preview {
   flex-shrink: 0;
-  width: 28px;
-  height: 28px;
+  width: 1.75rem;
+  height: 1.75rem;
   display: grid;
   place-items: center;
   font-size: var(--text-heading);

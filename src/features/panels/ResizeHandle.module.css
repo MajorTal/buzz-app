@@ -19,8 +19,8 @@
   top: 50%;
   /* The divider occupies the last pixel of the sidebar. */
   left: calc(50% - 0.5px);
-  width: 3px;
-  height: 56px;
+  width: 0.1875rem;
+  height: 3.5rem;
   border-radius: var(--radius-pill);
   background: var(--border-focus);
   content: "";

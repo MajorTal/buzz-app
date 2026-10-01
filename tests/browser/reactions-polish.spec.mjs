@@ -1,6 +1,43 @@
 import { expect } from "@playwright/test";
 import { test } from "./source-fixture.mjs";
 
+// Browser-only: actual rem geometry and the line-height clipping boundary need
+// the production stylesheet and layout engine, not a DOM emulator.
+test("reaction counts and controls grow together without clipping", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/emoji.html?reactions");
+  const message = page
+    .locator("[data-message-id]")
+    .filter({ hasText: "Historic" });
+  const pill = message.locator('button[data-reaction=":party:"]');
+  const count = pill.locator('[class*="_reactionCountMotion_"]');
+  await expect(count).toBeVisible();
+  for (const scale of [1, 1.5, 2, 1]) {
+    await page.evaluate(
+      (scale) =>
+        document.documentElement.style.setProperty(
+          "--buzz-text-scale",
+          String(scale),
+        ),
+      scale,
+    );
+    await expect(pill).toHaveCSS("min-width", `${48 * scale}px`);
+    await expect(pill).toHaveCSS("height", `${28 * scale}px`);
+    await expect(count).toHaveCSS("font-size", `${12 * scale}px`);
+    await expect(count).toHaveCSS("height", `${14 * scale}px`);
+    await expect
+      .poll(() =>
+        count.evaluate(
+          (el) =>
+            el.clientHeight >=
+            Number.parseFloat(getComputedStyle(el).lineHeight),
+        ),
+      )
+      .toBe(true);
+  }
+});
+
 test("reaction pills wrap, preview, toggle, and add from the inline control", async ({
   page,
 }, testInfo) => {

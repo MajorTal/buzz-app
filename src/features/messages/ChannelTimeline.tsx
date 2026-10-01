@@ -21,7 +21,6 @@ import { messageViewKey } from "./view-key";
 import { useKnownAgentPubkeys } from "../agents/use-known";
 import { JumpToLatestButton } from "./JumpToLatestButton";
 
-const EDGE_HEIGHT = 56;
 type ReadingPosition = {
   offset: number;
   bottom: boolean;
@@ -153,8 +152,9 @@ function Timeline({
     row.id === focusedMessageId || pinnedIds.has(row.id) ? [index] : [],
   );
   const scroller = useRef<HTMLElement>(null);
+  const edge = useRef<HTMLDivElement>(null);
   const handle = useRef<VirtualizerHandle>(null);
-  const [size, setSize] = useState({ width: 0, height: 0 });
+  const [size, setSize] = useState({ width: 0, height: 0, edgeHeight: 0 });
   const width = size.width;
   const latest = useRef({ signature, width });
   latest.current = { signature, width };
@@ -307,12 +307,17 @@ function Timeline({
       latest.current.signature,
       measured,
     );
-    let measuredSize = { width: 0, height: 0 };
+    let measuredSize = { width: 0, height: 0, edgeHeight: 0 };
     const measure = () => {
-      const next = { width: element.clientWidth, height: element.clientHeight };
+      const next = {
+        width: element.clientWidth,
+        height: element.clientHeight,
+        edgeHeight: edge.current?.getBoundingClientRect().height ?? 0,
+      };
       if (
         next.width === measuredSize.width &&
-        next.height === measuredSize.height
+        next.height === measuredSize.height &&
+        next.edgeHeight === measuredSize.edgeHeight
       )
         return;
       measuredSize = next;
@@ -322,6 +327,7 @@ function Timeline({
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(element);
+    if (edge.current) observer.observe(edge.current);
     return () => {
       olderDemand.current = false;
       settled.current = false;
@@ -595,7 +601,7 @@ function Timeline({
         loadNearTop(element);
       }}
     >
-      <div className={styles.edge}>
+      <div ref={edge} className={styles.edge}>
         {window.error && <span role="alert">{window.error}</span>}
         {window.historyLimited ? (
           <span>History window limit reached</span>
@@ -630,7 +636,7 @@ function Timeline({
           keepMounted={keptIndices}
           as="ol"
           item="li"
-          startMargin={EDGE_HEIGHT}
+          startMargin={size.edgeHeight}
           {...(initialCache.current ? { cache: initialCache.current } : {})}
         >
           {rows.map((row, index) => {

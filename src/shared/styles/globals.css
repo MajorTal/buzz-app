@@ -23,8 +23,7 @@
    system's text-primary and border-primary meanings. */
 @theme inline {
   --spacing: var(--space-1);
-  /* Scale type, not Tailwind spacing (which is also rem-based). Plugins can
-     consume these utilities or multiply custom font sizes by --buzz-text-scale. */
+  /* Type and spacing share the host-scaled root rem. */
   --text-xs: var(--text-caption);
   --text-xs--line-height: var(--text-caption--line-height);
   --text-sm: var(--text-body-sm);
@@ -186,19 +185,20 @@
 
   .shell-header {
     @apply flex shrink-0 items-center justify-between;
-    height: 48px;
+    min-height: 3rem;
+    flex-wrap: wrap;
     padding-left: var(--space-4);
     padding-right: var(--space-2);
     gap: var(--space-2);
     background: color-mix(in srgb, var(--bg-app) 72%, var(--surface-panel));
   }
-  @media (min-width: 640px) {
+  @media (min-width: 40rem) {
     .shell-header {
       padding-right: var(--space-4);
     }
   }
   .shell-communities {
-    @apply flex min-w-0 items-center justify-start;
+    @apply flex min-w-0 shrink-0 items-center justify-start;
     gap: var(--space-1);
     padding-left: var(--space-4);
   }
@@ -214,9 +214,9 @@
   /* Matches the channel sidebar's icon box so page rows align with sections. */
   .shell-page-icon {
     display: inline-grid;
-    width: 18px;
-    height: 18px;
-    flex: 0 0 18px;
+    width: 1.125rem;
+    height: 1.125rem;
+    flex: 0 0 1.125rem;
     place-items: center;
   }
   .shell-navigation {
@@ -254,6 +254,7 @@
   .shell-sidebar,
   .shell-sidebar-default {
     @apply flex min-h-0 shrink-0;
+    /* Coupled to the sidebar's persisted pixel width and resize limits. */
     border-inline-end: 1px solid var(--border-standard);
     width: 260px;
     min-width: 220px;
@@ -270,11 +271,12 @@
   }
   .shell-actions {
     @apply flex items-center justify-end;
+    margin-left: auto;
     gap: var(--space-2);
   }
   .shell-header .buzz-button[data-icon-variant] {
-    width: 28px;
-    height: 28px;
+    width: 1.75rem;
+    height: 1.75rem;
   }
   .shell-header .buzz-button[data-shell-sidebar-toggle] {
     background: var(--surface-panel);
@@ -282,20 +284,20 @@
   }
   .shell-header .buzz-button[data-icon-variant] svg,
   .shell-header .buzz-button[data-icon-variant="chrome"] img {
-    width: 16px;
-    height: 16px;
+    width: 1rem;
+    height: 1rem;
   }
   .shell-header
     .buzz-button[data-icon-variant="chrome"]
     img[src="/bestie.png"] {
-    width: 18px;
-    height: 18px;
+    width: 1.125rem;
+    height: 1.125rem;
   }
   .shell-header
     .buzz-button[data-shell-sidebar-toggle]:hover:not([data-disabled]) {
     background: var(--affordance-subtle-hover);
   }
-  @media (max-width: 700px) {
+  @media (max-width: 43.75rem) {
     .shell-header {
       padding-left: var(--space-2);
       gap: var(--space-2);
@@ -304,6 +306,7 @@
       padding-left: var(--space-4);
     }
   }
+  /* Keep this in sync with AppShell's matchMedia navigation owner. */
   @media (max-width: 650px) {
     .shell-sidebar,
     .shell-sidebar-default {
@@ -317,7 +320,7 @@
       @apply absolute inset-y-0 left-0 z-20 flex;
       background: var(--surface-panel);
       box-shadow: var(--elevation-dock);
-      max-width: calc(100% - 16px);
+      max-width: calc(100% - 1rem);
     }
     .shell-navigation .shell-sidebar,
     .shell-navigation .shell-sidebar-default {
@@ -328,7 +331,7 @@
       display: none;
     }
   }
-  @media (max-width: 400px) {
+  @media (max-width: 25rem) {
     .shell-header,
     .shell-actions,
     .shell-communities > nav {
@@ -356,10 +359,10 @@
   }
 }
 
-/* Host text preference feeds the system ramp exactly once; rem geometry is unchanged.
-   Compatibility names forward to shared values; the host owns appearance. */
+/* Apply the saved scale once at the root so type, icons and spacing grow together.
+   Keep the existing preference token for persisted settings and fixed-pixel plugins. */
 :root {
-  --type-scale: var(--buzz-text-scale, 1);
+  font-size: calc(100% * var(--buzz-text-scale, 1));
   --buzz-mono-family: var(--font-system-mono);
   --default-mono-font-family: var(--buzz-mono-family);
 }

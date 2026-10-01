@@ -153,7 +153,7 @@ test("browser truthfully offers desktop-only loading", async ({
 });
 
 // Real font metrics, text wrapping and icon geometry are not observable in jsdom.
-test("Settings text buttons contain enlarged labels without resizing icon buttons", async ({
+test("Settings controls scale together and keep enlarged labels reachable", async ({
   page,
   app,
 }, info) => {
@@ -208,11 +208,11 @@ test("Settings text buttons contain enlarged labels without resizing icon button
     await selectSettingsSection(page, "Appearance");
     if (scale === 200) {
       for (let i = 0; i < 10; i++)
-        await button(page, "Increase text size").click();
+        await button(page, "Increase interface size").click();
     }
-    await expect(page.getByRole("status", { name: "Text size" })).toHaveText(
-      `${scale}%`,
-    );
+    await expect(
+      page.getByRole("status", { name: "Interface size" }),
+    ).toHaveText(`${scale}%`);
     for (const [width, mode] of [
       [320, "Light"],
       [800, "Dark"],
@@ -230,13 +230,13 @@ test("Settings text buttons contain enlarged labels without resizing icon button
       );
       await expect(
         appearance.getByRole("button", {
-          name: "Reset text size",
+          name: "Reset interface size",
           exact: true,
         }),
       ).toHaveCount(scale === 100 ? 0 : 1);
       await page.evaluate(() => document.fonts.ready);
       await checkButtons(appearance, scale);
-      // Shared IconButton must not inherit the enlarged text button's minimum.
+      // Icon buttons grow with the interface while keeping their square shape.
       await expect(
         page.getByRole("button", { name: "Search Buzz", exact: true }),
       ).toHaveAttribute("data-icon-size", "md");
@@ -245,25 +245,28 @@ test("Settings text buttons contain enlarged labels without resizing icon button
           page
             .getByRole("region", { name: "Settings", exact: true })
             .locator("button[data-icon-size]")
-            .evaluateAll((buttons) =>
-              buttons
-                .filter((button) => button.getClientRects().length)
-                .map((button) => {
-                  const box = button.getBoundingClientRect();
-                  const sizes = {
-                    sm: 32,
-                    md: 40,
-                    lg: 52,
-                    compact: 32,
-                    toolbar: 32,
-                    default: 40,
-                    large: 52,
-                  };
-                  return (
-                    box.width === sizes[button.dataset.iconSize] &&
-                    box.height === box.width
-                  );
-                }),
+            .evaluateAll(
+              (buttons, scale) =>
+                buttons
+                  .filter((button) => button.getClientRects().length)
+                  .map((button) => {
+                    const box = button.getBoundingClientRect();
+                    const sizes = {
+                      sm: 32,
+                      md: 40,
+                      lg: 52,
+                      compact: 32,
+                      toolbar: 32,
+                      default: 40,
+                      large: 52,
+                    };
+                    return (
+                      box.width ===
+                        sizes[button.dataset.iconSize] * (scale / 100) &&
+                      box.height === box.width
+                    );
+                  }),
+              scale,
             ),
         )
         .not.toContain(false);

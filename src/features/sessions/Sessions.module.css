@@ -1,4 +1,5 @@
 .work {
+  container: session-conversation / inline-size;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -36,14 +37,14 @@
 }
 .empty p {
   color: var(--text-subtle);
-  max-width: 420px;
+  max-width: 26.25rem;
 }
 .empty h1,
 .empty h2 {
   font-size: var(--text-heading);
   font-weight: var(--type-weight-medium);
 }
-@media (max-width: 720px) {
+@container session-conversation (max-width: 45rem) {
   .composer {
     padding: var(--space-2);
   }
@@ -85,7 +86,7 @@
   padding-bottom: var(--space-4);
 }
 
-@media (max-width: 760px) {
+@container session-conversation (max-width: 47.5rem) {
   .startContent {
     width: 100%;
   }
@@ -103,11 +104,11 @@
 .agentTrigger {
   display: inline-flex;
   min-width: 0;
-  max-width: min(240px, 45vw);
+  max-width: min(15rem, 45vw);
 }
 .agentTrigger .agentAvatar {
-  width: 24px;
-  height: 24px;
+  width: 1.5rem;
+  height: 1.5rem;
 }
 .agentName {
   overflow: hidden;

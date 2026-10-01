@@ -33,8 +33,8 @@
 }
 .frame:has(> [data-panel-dock]:not([hidden])) {
   grid-template-columns: minmax(0, 1fr) minmax(
-      300px,
-      var(--secondary-panel-width, 420px)
+      18.75rem,
+      var(--secondary-panel-width, 26.25rem)
     );
 }
 .page {
@@ -49,7 +49,7 @@
   min-width: 0;
   min-height: 0;
 }
-@media (max-width: 1000px) {
+@media (max-width: 62.5rem) {
   .frame:has(> [data-panel-dock]:not([hidden])) {
     grid-template-columns: minmax(0, 1fr);
   }
@@ -61,12 +61,12 @@
     --panel-motion-distance: 100%;
     position: absolute;
     inset: 0 0 0 auto;
-    width: min(420px, 100%);
+    width: min(26.25rem, 100%);
     z-index: 2;
     box-shadow: var(--elevation-dock);
   }
 }
-@media (max-width: 650px) {
+@media (max-width: 40.625rem) {
   .dock {
     width: 100%;
     border-inline-start: 0;

@@ -337,7 +337,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
           (button) => getComputedStyle(button, "::before").backgroundColor,
         ),
       )
-      .toBe("rgb(239, 239, 240)");
+      .toBe("rgb(241, 241, 242)");
     await skinTone.click();
     await expect(skinTone).toHaveAttribute("aria-selected", "");
     const toneMenu = page.locator("em-emoji-picker #root > .menu");
@@ -475,11 +475,11 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     );
     await expect(emojiClear.locator("svg")).toHaveCSS("width", "16px");
     await expect(emojiClear.locator("svg")).toHaveCSS("height", "16px");
-    await expect(emojiClear).toHaveCSS("color", "rgb(102, 102, 102)");
+    await expect(emojiClear).toHaveCSS("color", "rgb(95, 95, 95)");
     await expectPhosphor(emojiClear.locator("svg"), "x");
     await expect(emojiClear.locator("svg path")).toHaveCSS(
       "fill",
-      "rgb(102, 102, 102)",
+      "rgb(95, 95, 95)",
     );
     const clearBox = await emojiClear.boundingBox();
     const fieldBox = await search.boundingBox();

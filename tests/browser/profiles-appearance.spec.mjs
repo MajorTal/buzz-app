@@ -69,7 +69,7 @@ for (const mode of ["light", "dark"]) {
     await copy.hover();
     await expect(copy).toHaveCSS(
       "background-color",
-      mode === "light" ? "rgb(239, 239, 240)" : "rgb(64, 64, 64)",
+      mode === "light" ? "rgb(241, 241, 242)" : "rgb(46, 46, 46)",
     );
     await page.keyboard.press(
       browserName === "webkit" && process.platform === "darwin"
@@ -82,12 +82,26 @@ for (const mode of ["light", "dark"]) {
     await page.mouse.click(2, 2);
     await copy.focus();
     await expect(copy).toHaveCSS("outline-style", "none");
-    // Text controls can grow beyond their minimum to contain enlarged type.
+    // Text and control geometry grow together while keeping labels contained.
     const modifier = process.platform === "darwin" ? "Meta" : "Control";
     await page.keyboard.press(`${modifier}+=`);
-    await expect(region).toHaveCSS("font-size", "15.4px");
-    await expect(key).toHaveCSS("font-size", "13.2px");
-    await expect(copy).toHaveCSS("min-height", "32px");
+    // WebKit serializes rem multiplication as e.g. 15.400001px. Compare the
+    // numeric size to five decimal places, well below a rendered layout unit.
+    for (const [control, property, base] of [
+      [region, "font-size", 14],
+      [key, "font-size", 12],
+      [copy, "min-height", 32],
+    ]) {
+      await expect
+        .poll(() =>
+          control.evaluate(
+            (element, property) =>
+              parseFloat(getComputedStyle(element).getPropertyValue(property)),
+            property,
+          ),
+        )
+        .toBeCloseTo(base * 1.1, 5);
+    }
     await expect
       .poll(() =>
         copy.evaluate((element) => {
@@ -96,7 +110,7 @@ for (const mode of ["light", "dark"]) {
             .querySelector(".buzz-button-label")
             .getBoundingClientRect();
           return (
-            button.height >= 32 &&
+            button.height > 32 &&
             label.top >= button.top &&
             label.bottom <= button.bottom &&
             label.left >= button.left &&
@@ -106,17 +120,35 @@ for (const mode of ["light", "dark"]) {
       )
       .toBe(true);
     await page.keyboard.press(`${modifier}+0`);
+    await expect(region).toHaveCSS("font-size", "14px");
+    await expect(key).toHaveCSS("font-size", "12px");
     for (const width of [1280, 900, 390]) {
       await page.setViewportSize({ width, height: 800 });
+      // matchMedia updates React navigation after the viewport changes. Measure
+      // containment only after the shell has applied that responsive layout.
+      const navigation = page.locator(".shell-navigation");
+      if (width <= 650)
+        await expect(navigation).not.toHaveAttribute(
+          "data-sidebar-collapsible",
+        );
+      else
+        await expect(navigation).toHaveAttribute(
+          "data-sidebar-collapsible",
+          "true",
+        );
       await expect(key).toBeVisible();
-      const bounds = await region.boundingBox();
-      expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
-      expect(
-        await region.evaluate((el) => el.scrollWidth > el.clientWidth),
-      ).toBe(false);
-      expect(await key.evaluate((el) => el.scrollWidth > el.clientWidth)).toBe(
-        false,
-      );
+      await expect
+        .poll(async () => {
+          const bounds = await region.boundingBox();
+          return bounds.x + bounds.width;
+        })
+        .toBeLessThanOrEqual(width);
+      await expect
+        .poll(() => region.evaluate((el) => el.scrollWidth > el.clientWidth))
+        .toBe(false);
+      await expect
+        .poll(() => key.evaluate((el) => el.scrollWidth > el.clientWidth))
+        .toBe(false);
       // The human profile has no Memories tab; keyboard navigation stays
       // confined to the available tabs, including at narrow widths.
       const tabs = region.getByRole("tablist", { name: "Profile sections" });

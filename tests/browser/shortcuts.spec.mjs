@@ -1,6 +1,6 @@
 import { openPage, pageChoices } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
-import { open } from "./timeline.mjs";
+import { open, edge, settle } from "./timeline.mjs";
 
 test.use({ pluginFixtures: true, historyCounts: { alpha: 1, beta: 0 } });
 const button = (page, name) => page.getByRole("button", { name, exact: true });
@@ -57,7 +57,7 @@ test("real Settings keys respect dialogs and modifiers, focus main, and preserve
   await expect(composer).toHaveJSProperty("value", "Keep my draft");
 });
 
-test("zoom keys resize real message/composer text, not window or spacing, and persist/reset", async ({
+test("zoom keys scale text, icons and spacing together and persist/reset", async ({
   page,
   app,
 }, testInfo) => {
@@ -69,11 +69,26 @@ test("zoom keys resize real message/composer text, not window or spacing, and pe
   });
   const message = page.locator("[data-message-id] p").last();
   const base = { composer: await font(composer), message: await font(message) };
-  const header = await page.locator(".shell-header").boundingBox();
+  const header = page.locator(".shell-header");
+  const icon = button(page, "Search Buzz").locator("svg");
+  const geometry = async () => ({
+    root: await font(page.locator("html")),
+    header: await header.evaluate((el) => el.getBoundingClientRect().height),
+    gap: await header.evaluate((el) => parseFloat(getComputedStyle(el).gap)),
+    icon: await icon.evaluate((el) => el.getBoundingClientRect().width),
+  });
+  const initialGeometry = await geometry();
+  const expectGeometry = async (factor) => {
+    for (const [key, value] of Object.entries(initialGeometry))
+      await expect
+        .poll(async () => (await geometry())[key])
+        .toBeCloseTo(value * factor, 1);
+  };
   const node = await composer.elementHandle();
   await composer.fill("Unsent zoom draft");
   await page.keyboard.press(`${modifier}+=`);
   await scale(page, 1.1);
+  await expectGeometry(1.1);
   expect(await font(composer)).toBeCloseTo(base.composer * 1.1, 1);
   expect(await font(message)).toBeCloseTo(base.message * 1.1, 1);
   await page.keyboard.press(`${modifier}+Shift+=`);
@@ -118,9 +133,7 @@ test("zoom keys resize real message/composer text, not window or spacing, and pe
   await scale(page, 1.1);
   expect(await node.evaluate((el) => el.isConnected)).toBe(true);
   await expect(composer).toHaveJSProperty("value", "Unsent zoom draft");
-  expect((await page.locator(".shell-header").boundingBox()).height).toBe(
-    header.height,
-  );
+  await expectGeometry(1.1);
   expect(await page.evaluate(() => window.visualViewport.scale)).toBe(1);
   await page.reload();
   await scale(page, 1.1);
@@ -129,34 +142,47 @@ test("zoom keys resize real message/composer text, not window or spacing, and pe
   await composer.focus();
   for (let i = 0; i < 15; i++) await page.keyboard.press(`${modifier}+=`);
   await scale(page, 2);
+  await expectGeometry(2);
   expect(await font(composer)).toBeCloseTo(base.composer * 2, 1);
   expect(await font(message)).toBeCloseTo(base.message * 2, 1);
   await expect(composer).toBeInViewport();
-  await page.screenshot({ path: testInfo.outputPath("text-200-percent.png") });
+  await page.screenshot({
+    path: testInfo.outputPath("interface-200-percent.png"),
+  });
   await page.keyboard.press(`${modifier}+0`);
   await scale(page, 1);
+  await expectGeometry(1);
   expect(await font(composer)).toBe(base.composer);
   for (let i = 0; i < 5; i++) await page.keyboard.press(`${modifier}+-`);
   await scale(page, 0.8);
+  await expectGeometry(0.8);
   await page.keyboard.press(`${modifier}+,`);
   await button(page, "Appearance").click();
-  await expect(page.getByRole("status", { name: "Text size" })).toHaveText(
+  await expect(page.getByRole("status", { name: "Interface size" })).toHaveText(
     "80%",
   );
-  await button(page, "Reset text size").focus();
+  await button(page, "Reset interface size").focus();
   await page.keyboard.press("Enter");
   await scale(page, 1);
-  await expect(button(page, "Increase text size")).toBeFocused();
+  await expect(button(page, "Increase interface size")).toBeFocused();
   // At 200%, the handoff target is disabled until the reset commit finishes.
   for (const reset of ["keyboard", "external", "external-unfocused"]) {
     for (let i = 0; i < 10; i++)
-      await button(page, "Increase text size").click();
+      await button(page, "Increase interface size").click();
     await scale(page, 2);
-    await expect(button(page, "Increase text size")).toBeDisabled();
+    await expect(
+      page
+        .locator("label")
+        .filter({
+          has: page.getByRole("radio", { name: "Light", exact: true }),
+        })
+        .locator("svg"),
+    ).toHaveCSS("width", "40px");
+    await expect(button(page, "Increase interface size")).toBeDisabled();
     const light = page.getByRole("radio", { name: "Light", exact: true });
     await (reset === "external-unfocused"
       ? light
-      : button(page, "Reset text size")
+      : button(page, "Reset interface size")
     ).focus();
     if (reset === "keyboard") await page.keyboard.press("Enter");
     else
@@ -171,13 +197,172 @@ test("zoom keys resize real message/composer text, not window or spacing, and pe
         );
       });
     await scale(page, 1);
-    await expect(button(page, "Reset text size")).toHaveCount(0);
+    await expect(button(page, "Reset interface size")).toHaveCount(0);
     await expect(
       reset === "external-unfocused"
         ? light
-        : button(page, "Increase text size"),
+        : button(page, "Increase interface size"),
     ).toBeFocused();
   }
+});
+
+// Browser-only: vendor shadow DOM, popup collision geometry and focus must stay
+// coordinated while the actual host keyboard shortcut changes the root size.
+test("interface zoom preserves an open emoji search and scales its controls", async ({
+  page,
+  app,
+}) => {
+  await page.setViewportSize({ width: 800, height: 700 });
+  await open(page, app);
+  const modifier = await mod(page);
+  const composer = page.getByRole("textbox", {
+    name: "Message #Alpha",
+    exact: true,
+  });
+  await composer.fill("Keep this draft ");
+  await button(page, "Insert emoji").click();
+  const search = page.getByRole("searchbox", { name: "Search emoji" });
+  await expect(search).toBeFocused();
+  await search.fill("grinning");
+  const emoji = button(page, "😀");
+  await expect(emoji).toHaveCSS("width", "48px");
+  await search.press("ArrowRight");
+  const selected = page.locator(
+    'em-emoji-picker .category:not([data-id]) button[aria-selected="true"]',
+  );
+  await expect(selected).not.toHaveAttribute("aria-label", "😀");
+  const chosen = await selected.getAttribute("aria-label");
+  for (let i = 0; i < 10; i++) await page.keyboard.press(`${modifier}+=`);
+  await scale(page, 2);
+  await expect(search).toHaveValue("grinning");
+  await expect(search).toBeFocused();
+  await expect(emoji).toHaveCSS("width", "96px");
+  await expect(selected).toHaveAttribute("aria-label", chosen);
+  await expect(page.locator("em-emoji-picker .search .loupe svg")).toHaveCSS(
+    "width",
+    "32px",
+  );
+  const popup = page.getByRole("dialog", { name: "Emoji picker" });
+  await expect
+    .poll(() =>
+      popup.evaluate((el) => {
+        const rect = el.getBoundingClientRect();
+        return (
+          rect.left >= 0 &&
+          rect.right <= innerWidth &&
+          rect.top >= 0 &&
+          rect.bottom <= innerHeight
+        );
+      }),
+    )
+    .toBe(true);
+  await page.keyboard.press(`${modifier}+0`);
+  await scale(page, 1);
+  await expect(search).toHaveValue("grinning");
+  await expect(search).toBeFocused();
+  await expect(emoji).toHaveCSS("width", "48px");
+  await expect(selected).toHaveAttribute("aria-label", chosen);
+  await search.press("Enter");
+  await expect(composer).toHaveJSProperty("value", `Keep this draft ${chosen}`);
+  await expect(composer).toBeFocused();
+  await button(page, "Insert emoji").click();
+  await search.fill("grinning");
+  // Establish a selected query range; Mart owns arrow keys for result navigation.
+  await search.evaluate((input) => {
+    input.setSelectionRange(0, 2);
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+  await expect(selected).toHaveCount(0);
+  const range = () =>
+    search.evaluate((input) => [input.selectionStart, input.selectionEnd]);
+  await expect.poll(range).toEqual([0, 2]);
+  await page.keyboard.press(`${modifier}+=`);
+  await scale(page, 1.1);
+  await expect
+    // The old vendor node is briefly absent during the geometry rebuild.
+    .poll(async () => (await emoji.boundingBox())?.width)
+    .toBeCloseTo(52.8, 1);
+  await expect(search).toBeFocused();
+  await expect.poll(range).toEqual([0, 2]);
+  await page.keyboard.type("gr");
+  await expect(search).toHaveValue("grinning");
+  await expect.poll(range).toEqual([2, 2]);
+  await search.press("Escape");
+  await expect(composer).toHaveJSProperty("value", `Keep this draft ${chosen}`);
+});
+
+test.describe("scaled history", () => {
+  test.use({ historyCounts: { alpha: 21, beta: 0 } });
+  // Twenty rows fill one page; the extra row proves the virtualized paging edge.
+  // Real layout and pointer coordinates cannot be established by a DOM emulator.
+  test("interface zoom keeps timeline paging and sidebar resizing usable", async ({
+    page,
+    app,
+  }) => {
+    await open(page, app);
+    const modifier = await mod(page);
+    for (let i = 0; i < 10; i++) await page.keyboard.press(`${modifier}+=`);
+    await scale(page, 2);
+    await settle(page);
+    const history = page.getByRole("region", {
+      name: "Channel message history",
+    });
+    const older = history.getByRole("button", {
+      name: "Load older messages",
+      exact: true,
+    });
+    await expect(older).toHaveCSS("min-height", "80px");
+    expect(
+      await older.evaluate(
+        (el) => el.parentElement.getBoundingClientRect().height,
+      ),
+    ).toBe(112);
+    const sidebar = page.getByRole("complementary", {
+      name: "Channel sidebar",
+    });
+    const handle = page.getByRole("separator", {
+      name: "Resize channel sidebar",
+    });
+    const before = await sidebar.boundingBox();
+    const grip = await handle.boundingBox();
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(
+      grip.x + grip.width / 2 + 100,
+      grip.y + grip.height / 2,
+    );
+    await page.mouse.up();
+    await expect
+      .poll(async () => (await sidebar.boundingBox()).width)
+      .toBeCloseTo(before.width + 100, 0);
+    await settle(page);
+    await edge(page, -1);
+    await expect.poll(() => app.pending.length).toBe(1);
+    try {
+      const loading = history.getByRole("button", {
+        name: "Loading older…",
+        exact: true,
+      });
+      await expect(loading).toBeInViewport();
+      expect(
+        await loading.evaluate((el) => {
+          const control = el.getBoundingClientRect();
+          const edge = el.parentElement.getBoundingClientRect();
+          return control.top >= edge.top && control.bottom <= edge.bottom;
+        }),
+      ).toBe(true);
+    } finally {
+      app.pending.shift()?.release();
+    }
+    await expect(
+      history.getByRole("button", { name: "Loading older…", exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      history.locator(
+        `[data-message-id="${app.histories.get("primary/alpha")[0].id}"]`,
+      ),
+    ).toBeVisible();
+  });
 });
 
 test("independent plugin consumes injected shortcuts; disable/re-enable and editor guards work", async ({
@@ -248,7 +433,7 @@ test("independent plugin consumes injected shortcuts; disable/re-enable and edit
   await expect(count).toHaveText("Shortcut count: 1");
 });
 
-test("a shadow-root modal blocks Settings and plugin bindings but allows text zoom", async ({
+test("a shadow-root modal blocks Settings and plugin bindings but allows interface zoom", async ({
   page,
   app,
 }) => {

@@ -54,7 +54,7 @@ describe("semantic contrast contract", () => {
     expect(result.output).toContain(
       "checked text and control/state boundaries",
     );
-    expect(result.output.match(/\(accepted link contrast\)/g)).toHaveLength(8);
+    expect(result.output).not.toContain("accepted link contrast");
     expect(result.output.match(/\(accepted Away contrast\)/g)).toHaveLength(9);
     expect(result.output).toContain("not a contrast pass");
     expect(result.output).not.toContain("exceptions no longer needed");
@@ -63,60 +63,63 @@ describe("semantic contrast contract", () => {
   it.each([
     [
       "light foreground",
+      "--blue-11: #0b5fa8;",
       "--blue-11: #0d74ce;",
-      "--blue-11: #0d75ce;",
       "on --affordance-selected",
     ],
     [
       "dark foreground",
+      "--blue-11: #83c4ff;",
       "--blue-11: #70b8ff;",
-      "--blue-11: #70b7ff;",
       "on --surface-panel",
     ],
     [
       "light surface",
       "--neutral-3: #e8e8e8;",
-      "--neutral-3: #e7e7e7;",
+      "--neutral-3: #999999;",
       "on --affordance-selected",
     ],
     [
       "dark surface",
-      "--neutral-5: #333333;",
-      "--neutral-5: #343434;",
+      "--neutral-raised: #282828;",
+      "--neutral-raised: #595959;",
       "on --surface-popover",
     ],
     [
       "another surface role",
       "--surface-inset: var(--neutral-2);",
-      "--surface-inset: var(--neutral-4);",
+      "--surface-inset: var(--neutral-7);",
       "on --surface-inset",
     ],
     [
       "hover role",
       "--affordance-link-hover: var(--blue-3);",
-      "--affordance-link-hover: var(--blue-4);",
+      "--affordance-link-hover: var(--blue-8);",
       "on --affordance-link-hover",
     ],
     [
       "hover color",
       "--blue-3: #0d2847;",
-      "--blue-3: #0d2848;",
+      "--blue-3: #595959;",
       "on --affordance-link-hover",
     ],
-  ])("rejects an unapproved change to %s", (_name, from, to, pairing) => {
-    expect(tokens).toContain(from);
-    const result = check(tokens.replaceAll(from, to));
-    expect(result.status, result.output).toBe(1);
-    expect(result.output).toMatch(
-      new RegExp(`--text-link \\([^\\n]+\\) ${pairing}`),
-    );
-  });
+  ])(
+    "rejects unreadable link text after a change to %s",
+    (_name, from, to, pairing) => {
+      expect(tokens).toContain(from);
+      const result = check(tokens.replaceAll(from, to));
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).toMatch(
+        new RegExp(`--text-link \\([^\\n]+\\) ${pairing}`),
+      );
+    },
+  );
 
-  it("does not extend link exceptions to another text role", () => {
+  it("checks other text roles without a link exception", () => {
     const result = check(
       tokens.replaceAll(
         "--text-accent: var(--purple-12);",
-        "--text-accent: var(--blue-11);",
+        "--text-accent: var(--blue-9);",
       ),
     );
     expect(result.status, result.output).toBe(1);
@@ -124,6 +127,30 @@ describe("semantic contrast contract", () => {
       /dark\s+--text-accent .* on --surface-popover/,
     );
   });
+
+  it.each([
+    [
+      "metadata",
+      "--neutral-9: #5f5f5f;",
+      "--neutral-9: #666666;",
+      "--text-metadata",
+    ],
+    [
+      "accent hover",
+      "--purple-10: #975acc;",
+      "--purple-10: #9a5cd0;",
+      "--text-on-accent",
+    ],
+  ])(
+    "rejects the former %s pair that clears APCA but fails WCAG AA",
+    (_name, from, to, role) => {
+      expect(tokens).toContain(from);
+      const result = check(tokens.replace(from, to));
+      expect(result.status, result.output).toBe(1);
+      expect(result.output).toContain(role);
+      expect(result.output).toContain("needs 4.5:1");
+    },
+  );
 
   it.each(["danger", "warning"])(
     "rejects the former low-contrast %s boundary",

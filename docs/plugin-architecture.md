@@ -719,7 +719,7 @@ Plugins can render the host-provided [`browser.View` component](browser.md) insi
 
 The host composes one `ShortcutsService` in `app/services.ts`. Plugins declare
 `inject = ["shortcuts"]` and call `ctx.shortcuts.register(shortcut)`; their bindings
-use the same matching/dispatch rules as host-owned Settings and text sizing.
+use the same matching/dispatch rules as host-owned Settings and interface sizing.
 There is no OS-wide hotkey registration, native accelerator API, or command bus.
 
 ```ts
@@ -768,7 +768,7 @@ assigns deliberate values to its actions (for example, a primary action starts
 at `10`), leaving gaps for related actions to be added later. Equal orders use
 the stable namespaced contribution key (`pluginId/shortcutId`), then title, as
 presentation tie-breakers. The core Buzz host category uses the same metadata
-and a host-owned functional sequence: navigation, text sizing, search/settings,
+and a host-owned functional sequence: navigation, interface sizing, search/settings,
 then development-only actions. Host rows use their bare IDs for tie-breaking.
 Presentation order does not affect dispatch precedence, and
 shortcuts with duplicate titles remain separate rows because registry keys—not

@@ -1344,7 +1344,7 @@ function ChannelWorkspace({
       <Panel as="article" aria-label="Conversation">
         {/* biome-ignore lint/a11y/noStaticElementInteractions: file-drop fallback; the composer also provides a keyboard-accessible picker. */}
         <div
-          className={styles.conversation}
+          className={`${styles.conversation}${flatSession ? ` ${styles.sessionConversation}` : ""}`}
           data-attachment-drop-zone=""
           onDragOver={rejectUnhandledFileDrop}
           onDrop={rejectUnhandledFileDrop}

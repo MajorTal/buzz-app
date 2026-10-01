@@ -75,25 +75,25 @@ export function AppearanceSettings({
           </RadioGroup>
         </Field>
         <fieldset className="m-0 mt-6 min-w-0 border-0 p-0">
-          <legend className="mb-2 p-0 text-label-sm">Text size</legend>
+          <legend className="mb-2 p-0 text-label-sm">Interface size</legend>
           <div className="flex flex-wrap items-center gap-3">
             <Button
               type="button"
               size="sm"
-              aria-label="Decrease text size"
+              aria-label="Decrease interface size"
               disabled={fontScale <= 0.8}
               onClick={() => appearance.setFontScale(fontScale - 0.1)}
             >
               −
             </Button>
-            <output aria-label="Text size" className="text-body-sm">
+            <output aria-label="Interface size" className="text-body-sm">
               {Math.round(fontScale * 100)}%
             </output>
             <Button
               type="button"
               size="sm"
               ref={increaseButton}
-              aria-label="Increase text size"
+              aria-label="Increase interface size"
               disabled={fontScale >= 2}
               onClick={() => appearance.setFontScale(fontScale + 0.1)}
             >
@@ -104,21 +104,25 @@ export function AppearanceSettings({
                 size="sm"
                 type="button"
                 ref={resetRef}
+                aria-label="Reset interface size"
                 onClick={() => appearance.setFontScale(1)}
               >
-                Reset text size
+                Reset
               </Button>
             )}
           </div>
         </fieldset>
         {active && fontError && (
-          <ToastNotice title="Text size wasn’t saved" description={fontError}>
+          <ToastNotice
+            title="Interface size wasn’t saved"
+            description={fontError}
+          >
             <Button
               type="button"
               size="sm"
               onClick={() => appearance.setFontScale(fontScale)}
             >
-              Retry saving text size
+              Retry saving interface size
             </Button>
           </ToastNotice>
         )}

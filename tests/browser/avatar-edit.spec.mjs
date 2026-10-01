@@ -81,7 +81,57 @@ test("shared human and agent avatar upload, scoped save, publication retry and n
   await page.getByRole("menuitem", { name: "Edit", exact: true }).click();
   await page.getByRole("button", { name: "Edit avatar", exact: true }).click();
   await page.getByRole("tab", { name: "Emoji", exact: true }).click();
-  await page.getByLabel("Emoji", { exact: true }).fill("🧠");
+  const search = page.getByRole("searchbox", { name: "Search emoji" });
+  await expect(search).toBeFocused();
+  await search.fill("grinning");
+  const emoji = page.getByRole("button", { name: "😀", exact: true });
+  await expect(emoji).toHaveCSS("width", "36px");
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "2"),
+  );
+  await expect(emoji).toHaveCSS("width", "72px");
+  await expect(search).toHaveValue("grinning");
+  await expect(search).toBeFocused();
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "1"),
+  );
+  await expect(emoji).toHaveCSS("width", "36px");
+  await search.press("Escape");
+  await expect(search).toHaveValue("");
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "2"),
+  );
+  await expect(
+    page.locator("em-emoji-picker .category button").first(),
+  ).toHaveCSS("width", "72px");
+  await expect(search).toHaveValue("");
+  await expect(search).toBeFocused();
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "1"),
+  );
+  await expect(
+    page.locator("em-emoji-picker .category button").first(),
+  ).toHaveCSS("width", "36px");
+  const manualEmoji = page.getByLabel("Emoji", { exact: true });
+  await manualEmoji.fill("🧠");
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "2"),
+  );
+  await expect(
+    page.locator("em-emoji-picker .category button").first(),
+  ).toHaveCSS("width", "72px");
+  await expect(manualEmoji).toBeFocused();
+  await page.keyboard.type("ABC");
+  await expect(manualEmoji).toHaveValue("🧠ABC");
+  await expect(search).toHaveValue("");
+  await page.evaluate(() =>
+    document.documentElement.style.setProperty("--buzz-text-scale", "1"),
+  );
+  await expect(
+    page.locator("em-emoji-picker .category button").first(),
+  ).toHaveCSS("width", "36px");
+  await expect(manualEmoji).toBeFocused();
+  await manualEmoji.fill("🧠");
   await page.getByLabel("Background color", { exact: true }).fill("#FFF4CC");
   await page.getByRole("button", { name: "Done", exact: true }).click();
   await page.getByRole("button", { name: "Save changes", exact: true }).click();

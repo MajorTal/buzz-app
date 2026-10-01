@@ -254,7 +254,7 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     await expect(launcher).toHaveCSS("padding-left", "0px");
     await expect(launcher).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await launcher.hover();
-    await expect(launcher).toHaveCSS("background-color", "rgb(239, 239, 240)");
+    await expect(launcher).toHaveCSS("background-color", "rgb(241, 241, 242)");
     await launcher.click();
     const drawer = page.getByRole("region", { name: "Terminal drawer" });
     await expect(drawer.locator(".xterm-rows")).toContainText(

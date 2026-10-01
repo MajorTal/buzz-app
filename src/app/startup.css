@@ -21,8 +21,8 @@
 }
 
 .buzz-launch img {
-  width: 72px;
-  height: 72px;
+  width: 4.5rem;
+  height: 4.5rem;
 }
 
 :root[data-color-mode="dark"] .buzz-launch img {

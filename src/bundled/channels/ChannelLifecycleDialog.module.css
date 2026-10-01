@@ -5,7 +5,7 @@
   border: 1px solid var(--border-primary);
   border-radius: var(--radius-panel);
   padding: var(--space-6);
-  width: min(480px, calc(100vw - 2 * var(--space-4)));
+  width: min(30rem, calc(100vw - 2 * var(--space-4)));
   max-height: calc(100dvh - 2 * var(--space-4));
   overflow: auto;
   box-shadow: var(--shadow-sm);

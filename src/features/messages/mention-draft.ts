@@ -13,8 +13,12 @@ export type MentionDraft = {
   recipients: readonly DraftRecipient[];
   document?: ComposerSnapshot;
 };
+// The timeline binds a signed name up to the next non-name character, so the
+// inline Markdown delimiters *, ~ and ` end a mention here as well: typing a
+// closing delimiter after a chip keeps its recipient. An underscore remains a
+// name suffix, as it does on the timeline.
 const boundary = (text: string, end: number) =>
-  end === text.length || /[\s.,!?;:()[\]{}]/u.test(text[end] ?? "");
+  end === text.length || /[\s.,!?;:()[\]{}*~`]/u.test(text[end] ?? "");
 /** Old text-only drafts remain text-only: restoring prose never creates notifications. */
 export function mentionDraft(value: unknown): MentionDraft {
   if (typeof value === "string") return { text: value, recipients: [] };

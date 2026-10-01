@@ -712,6 +712,123 @@ it("sends channel messages and thread replies through real form and keyboard eve
   expect(h.input()).toHaveValue("");
 });
 
+it("opens a code block as ``` is typed without waiting for Enter, then sends the fenced block", async () => {
+  const h = mount();
+  await h.user.type(h.input(), "```");
+  expect(h.input().querySelector("pre > code")).not.toBeNull();
+  expect(h.input()).toHaveValue("");
+  expect(h.messages.send).not.toHaveBeenCalled();
+  await h.user.keyboard("const answer = 42;{Shift>}{Enter}{/Shift}answer");
+  expect(h.input()).toHaveValue("const answer = 42;\nanswer");
+  await h.user.keyboard("{Enter}");
+  expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
+    "channel",
+    "```\nconst answer = 42;\nanswer\n```",
+    [],
+    [],
+  );
+  expect(h.input()).toHaveValue("");
+  expect(h.input().querySelector("pre")).toBeNull();
+});
+
+it("opens a bullet as `- ` is typed, continues it with Shift+Enter and sends the list on Enter", async () => {
+  const h = mount();
+  await h.user.type(h.input(), "- first");
+  expect(h.input().querySelector("ul > li")).toHaveTextContent("first");
+  expect(h.input()).toHaveValue("first");
+  expect(h.messages.send).not.toHaveBeenCalled();
+  await h.user.keyboard("{Shift>}{Enter}{/Shift}second{Enter}");
+  expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
+    "channel",
+    "- first\n- second",
+    [],
+    [],
+  );
+  expect(h.input()).toHaveValue("");
+  expect(h.input().querySelector("ul")).toBeNull();
+});
+
+it("sends a pasted fenced block verbatim on Enter instead of opening a block from its closing fence", async () => {
+  const h = mount();
+  act(() => {
+    h.input().focus();
+    fireEvent.paste(h.input(), {
+      clipboardData: {
+        items: [],
+        getData: (type: string) =>
+          type === "text/plain" ? "```\ncode\n```" : "",
+      },
+    });
+  });
+  expect(h.input()).toHaveValue("```\ncode\n```");
+  await h.user.keyboard("{Enter}");
+  expect(h.input().querySelector("pre")).toBeNull();
+  expect(h.messages.send).toHaveBeenCalledExactlyOnceWith(
+    "channel",
+    "```\ncode\n```",
+    [],
+    [],
+  );
+  expect(h.input()).toHaveValue("");
+});
+
+it("keeps a composed message unchanged through caret keys at its end and refuses a Right Arrow committed as text in either form", async () => {
+  const h = mount();
+  await h.user.type(h.input(), "```");
+  expect(h.input().querySelector("pre")).not.toBeNull();
+  await h.user.keyboard(
+    "Hello!{Shift>}{Enter}{Enter}{/Shift}acascac{Shift>}{Enter}{/Shift}a**a** _a_{Shift>}{Enter}{/Shift}- acacs{Shift>}{Enter}{Enter}{/Shift}",
+  );
+  expect(h.input().querySelector("pre code")).toHaveTextContent("Hello!");
+  expect(h.input().querySelector("strong")).toHaveTextContent("a");
+  expect(h.input().querySelector("em")).toHaveTextContent("a");
+  expect(h.input().querySelector("ul > li")).toHaveTextContent("acacs");
+  expect(h.input()).toHaveValue("Hello!\nacascac\naa a\nacacs\n");
+  const html = h.input().innerHTML;
+  for (let i = 0; i < 11; i++) await h.user.keyboard("{ArrowRight}");
+  for (const key of [
+    "ArrowLeft",
+    "ArrowUp",
+    "ArrowDown",
+    "Shift",
+    "Meta",
+    "Escape",
+  ])
+    await h.user.keyboard(`{${key}}`);
+  // jsdom does not model Home and End on a contenteditable element.
+  for (const key of ["Home", "End"]) {
+    fireEvent.keyDown(h.input(), { key, code: key });
+    fireEvent.keyUp(h.input(), { key, code: key });
+  }
+  expect(h.input()).toHaveValue("Hello!\nacascac\naa a\nacacs\n");
+  expect(h.input().innerHTML).toBe(html);
+  expect(h.messages.send).not.toHaveBeenCalled();
+  // The desktop build committed Right Arrow's raw keyboard-layout translation
+  // U+001D; AppKit's function-key character for the key is U+F703. Neither
+  // has a glyph, so each assertion names its form rather than the character.
+  for (const [label, character] of [
+    ["Right Arrow's layout translation U+001D", "\u001D"],
+    ["Right Arrow's function-key character U+F703", "\uF703"],
+  ] as const) {
+    let prevented = false;
+    act(() => {
+      h.input().focus();
+      prevented = !h.input().dispatchEvent(
+        new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: "insertText",
+          data: character,
+        }),
+      );
+    });
+    expect(prevented, label).toBe(true);
+    expect(h.input(), label).toHaveValue("Hello!\nacascac\naa a\nacacs\n");
+    expect(h.input().innerHTML, label).toBe(html);
+    expect(h.messages.send, label).not.toHaveBeenCalled();
+  }
+});
+
 it("prefixes thread replies with the selected media time and clears it after send", async () => {
   const clearMediaTime = vi.fn();
   const h = mount({
@@ -2268,6 +2385,27 @@ it.each(["bullet_list", "ordered_list", "code_block"] as const)(
     expect(screen.getByText("Editing message")).toBeVisible();
   },
 );
+
+it("saves an edited fenced message on Enter instead of opening a block from its closing fence", () => {
+  const h = mount({}, undefined, first.pubkey);
+  h.setRows([editableMessage({ content: "```js\ncode\n```" })]);
+  fireEvent.keyDown(h.input(), { key: "ArrowUp" });
+  expect(h.input()).toHaveValue("```js\ncode\n```");
+  act(() => {
+    h.input().setSelectionRange(10, 10);
+    h.input().insertText("!");
+    const end = h.input().value.length;
+    h.input().setSelectionRange(end, end);
+  });
+  fireEvent.keyDown(h.input(), { key: "Enter", keyCode: 13 });
+  expect(h.input().querySelector("pre")).toBeNull();
+  expect(h.messages.edit).toHaveBeenCalledExactlyOnceWith(
+    "c".repeat(64),
+    "```js\ncode!\n```",
+    "c".repeat(64),
+  );
+  expect(h.messages.send).not.toHaveBeenCalled();
+});
 
 it("saves only once, locks until delivery, and restores the new-message composer on acceptance", () => {
   const h = mount({}, undefined, first.pubkey);

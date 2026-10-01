@@ -191,6 +191,11 @@ for (const variant of variants) {
  * the second mention, and in the trailing space. Sampled in CSS pixels at the
  * line's vertical centre, away from any glyph, so only highlight paint differs. */
 async function paint(page, input) {
+  // The chip fades its background away to reveal the token's selection paint.
+  // Sample the settled state, not whichever frame the screenshot happens to win.
+  await input.evaluate((el) =>
+    Promise.all(el.getAnimations({ subtree: true }).map((a) => a.finished)),
+  );
   await page.evaluate(() => new Promise(requestAnimationFrame));
   const points = await input.evaluate((el) => {
     const paragraph = el.querySelector("p");

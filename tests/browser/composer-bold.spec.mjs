@@ -56,6 +56,31 @@ test("bold toolbar and shortcut share selection, continued typing, history and d
   ]);
 });
 
+test("typed **Hello** becomes bold on the closing delimiter, undoes to its source and sends as Markdown", async ({
+  page,
+}) => {
+  await page.goto("/tests/fixtures/link-messages.html");
+  const input = page.getByRole("textbox", {
+    name: "Message #design",
+    exact: true,
+  });
+  // The fixture opens with a seeded draft; typing must start from an empty editor.
+  await input.fill("");
+  await input.focus();
+  await page.keyboard.type("**Hello**");
+  await expect(input.locator("strong")).toHaveText("Hello");
+  await expect(input).toHaveJSProperty("value", "Hello");
+  await input.press("ControlOrMeta+z");
+  await expect(input.locator("strong")).toHaveCount(0);
+  await expect(input).toHaveJSProperty("value", "**Hello**");
+  await input.press("ControlOrMeta+Shift+z");
+  await expect(input.locator("strong")).toHaveText("Hello");
+  await input.press("Enter");
+  expect(await page.evaluate(() => window.linkComposerFixture.sent)).toEqual([
+    { text: "**Hello**", mentions: [] },
+  ]);
+});
+
 test("multiline bold copies and cuts the selected fragment without changing source", async ({
   page,
 }) => {

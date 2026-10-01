@@ -49,9 +49,16 @@ import {
   activeBlockFormats,
   toggleComposerBlock,
   composerBlockLineBreak,
+  composerBlockPrefix,
+  composerCodeFence,
+  composerFenceDelimiters,
+  composerPrefixDelimiters,
 } from "./composer-blocks";
 import { composerLinkLabel } from "./composer-link-label";
-import { applyComposerCodeInput } from "./composer-code-input";
+import {
+  applyComposerInlineInput,
+  composerInlineDelimiters,
+} from "./composer-inline-input";
 import { composerMarkdown } from "./composer-markdown";
 import {
   mentionDraft,
@@ -602,7 +609,7 @@ export function EditableInput({
       const source = projection();
       const { from, to } = editor.state.selection;
       // Existing Markdown code stays literal for other formats. Explicit inline
-      // code treats the selected characters literally, with no fence input rule.
+      // code treats the selected characters literally.
       if (
         format !== "code" &&
         markdownRanges(
@@ -1120,15 +1127,40 @@ export function EditableInput({
             composerSchema.marks.code.isInSet(editor.state.storedMarks ?? [])
           )
             tr.setStoredMarks(marks);
-          const codeInput =
-            text === "`" &&
+          const previous = editor.state;
+          editor.dispatch(tr.scrollIntoView());
+          // A typed delimiter converts in a second transaction: the third
+          // character of a lone ``` or ~~~ line opens a code block at once, the
+          // space after a lone list or quote marker opens that block, and a
+          // closing delimiter converts its inline span. One undo restores the
+          // typed source, that character included, and the next keystroke never
+          // merges into the conversion. Near maxLength the typed character
+          // itself can be filtered out; then nothing converts. Completions
+          // claim Space on keydown when a result has a spaceId, so that Space
+          // never reaches this rule; a marker line has no completion trigger.
+          if (
             from === to &&
+            (composerFenceDelimiters.has(text) ||
+              composerPrefixDelimiters.has(text) ||
+              composerInlineDelimiters.has(text)) &&
             !composing.current &&
             !editor.composing &&
-            applyComposerCodeInput(tr);
-          if (codeInput) closeHistory(tr);
-          editor.dispatch(tr.scrollIntoView());
-          if (codeInput) separateHistory = true;
+            editor.state !== previous
+          ) {
+            const block =
+              composerCodeFence(editor.state, text) ??
+              composerBlockPrefix(editor.state, text);
+            const conversion = block ?? editor.state.tr;
+            if (block || applyComposerInlineInput(conversion, text)) {
+              const unconverted = editor.state;
+              editor.dispatch(closeHistory(conversion).scrollIntoView());
+              // Generated delimiters or escapes in the serialized form can
+              // carry the conversion past maxLength, and the normalize filter
+              // then drops it. Only a conversion that landed is its own undo
+              // step; otherwise the next keystroke must not start a new group.
+              if (editor.state !== unconverted) separateHistory = true;
+            }
+          }
           return true;
         },
         handleKeyDown(_view, event) {

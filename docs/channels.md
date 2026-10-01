@@ -918,8 +918,33 @@ tables, task lists, strikethrough and code, while preserving chat-style single l
 Only credential-free HTTPS links are active; raw HTML is ignored and inline remote images
 are not loaded. Existing image Markdown is projected as an attachment instead. Custom emoji remain
 event-local and are not substituted inside links or code.
-Authenticated live traffic reconciles through the same session. Channel creation and composer
-preview/toolbars are not implemented. Reply counts open a bounded thread view; attachments are
+Authenticated live traffic reconciles through the same session. Channel creation is not
+implemented. In the composer, typing the third character of a line holding only ```` ``` ```` or
+`~~~` turns that line into a code block at once, and one undo restores the typed characters.
+Shift+Enter on an empty last line leaves the block. Only a fence that opens a block converts: a
+fence typed inside an existing code block stays literal, and so does pasted or restored fenced
+text, including its closing fence line, so Enter after a pasted or edited fenced block sends or
+saves as usual and the text still renders as code once sent.
+Typing the space after a list or quote marker that starts a line (`- `, `* ` or `+ `, a number
+with a dot or parenthesis such as `1. ` or `3) `, or `> `) turns that line into a bullet, a
+numbered item starting at that number, or a quoted paragraph at once, the same block the
+formatting toolbar creates, and one undo restores the typed marker and its space. Inside a
+quote the markers nest: `- ` opens a list and `> ` a second quote. Inside a list item only a
+marker of the item's own list kind, typed as the only text of an item after the first,
+converts, nesting that item as Tab does. A marker typed after prose on the same line, inside
+a code block or inside pasted fenced text stays literal and renders as prose or code once
+sent. A marker on a line holding a mention, emoji or link, a quote marker or a marker of the
+other list kind typed inside a list item, and any marker typed in a list's first item or
+beside an item's prose also stay literal text in the composer but still render once sent: the
+timeline shows the list or quote, nested inside the item, where the composer shows the marker.
+Two lists of one kind typed one after the other, or separated only by empty lines, send with
+alternating markers (`-` then `*`, `1.` then `1)`) so they stay separate lists once sent.
+Typing an inline span (`**bold**` or `__bold__`, `_italic_` or `*italic*`, `~~strike~~`,
+`` `code` ``) converts it to formatting as the closing delimiter is typed, including on a
+heading line such as `# Title **bold**`, and one undo restores the typed characters. Heading
+lines themselves stay text in the composer and render as headings once sent. A single `~`
+never strikes, and pasted or restored delimiters stay literal text that still renders once
+sent. Reply counts open a bounded thread view; attachments are
 links. Routine freshness labels are not shown; Channel Settings → Diagnostics
 exposes refresh, outbox inspection and timings. Packaged builds do not
 include the development relay broker. GitHub fetches public data only; signed-in

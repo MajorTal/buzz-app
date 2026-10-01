@@ -220,16 +220,39 @@ describe("composer resources", () => {
       act(() => h.input.setSelectionRange(1, 1));
       await h.user.keyboard(prefix);
       if (suffix) {
+        // A lone backtick is literal text, so the link still sends as itself.
+        expect(resources(h)).toBe(1);
+        expect(links(h.markdown())).toEqual([uri]);
         act(() =>
           h.input.setSelectionRange(h.input.value.length, h.input.value.length),
         );
         await h.user.keyboard(suffix);
       }
       // What remains visible is the ordinary text that will be sent.
+      const literal = `x${prefix}[Fix login](${uri}) ${suffix}`;
+      expect(h.markdown()).toBe(literal);
       expect(resources(h)).toBe(0);
       expect(links(h.markdown())).toEqual([]);
+      if (suffix) {
+        // The closing backtick demotes the resource in its own history event
+        // and then converts the span to code in a separate one. The first undo
+        // restores the literal source, closing backtick included, where the
+        // resource still would not send as its link; the next removes that
+        // backtick together with the demotion it caused.
+        expect(h.input.querySelector("code")).toHaveTextContent(
+          `[Fix login](${uri})`,
+        );
+        act(() => h.input.undo(false));
+        expect(h.input.querySelector("code")).toBeNull();
+        expect(h.markdown()).toBe(literal);
+        expect(resources(h)).toBe(0);
+        expect(links(h.markdown())).toEqual([]);
+        act(() => h.input.undo(false));
+        expect(h.markdown()).toBe(`x${prefix}[Fix login](${uri}) `);
+        expect(resources(h)).toBe(1);
+        expect(links(h.markdown())).toEqual([uri]);
+      }
       act(() => h.input.undo(false));
-      if (suffix) act(() => h.input.undo(false));
       expect(h.markdown()).toBe(sent);
       expect(resources(h)).toBe(1);
     }

@@ -110,7 +110,9 @@ function protectInlineContent(
     },
   );
   const used = new Set(
-    [...decoded.matchAll(/\uE000(\d+)\uE001/g)].map((match) => match[1]),
+    [...decoded.matchAll(/[\uE000\uFFFC](\d+)\uE001/g)].map(
+      (match) => match[1],
+    ),
   );
   let nonce = 0;
   while (used.has(String(nonce))) nonce++;
@@ -118,7 +120,18 @@ function protectInlineContent(
   const parts: InlinePart[] = [];
   const token = (part: InlinePart) => {
     parts.push(part);
-    return `${prefix}${parts.length - 1}\uE002`;
+    // Mention edges must keep their punctuation class for emphasis flanking:
+    // @Honey* beside italic ! is punctuation on both sides, not a word. The
+    // wire itself holds no emphasis there for a parser that does not split
+    // out the mention first, since the name's star and the delimiter merge
+    // into one run; the exact signed name was kept over italics that other
+    // clients could read.
+    // U+FFFC is a Unicode symbol, not Markdown syntax. Keep it inside the
+    // nonce-protected token so restoration removes only generated characters.
+    const start = part.target ? `\uFFFC${nonce}\uE001` : prefix;
+    const end =
+      part.target && /[\p{P}\p{S}]$/u.test(part.text) ? "\uFFFC" : "\uE002";
+    return `${start}${parts.length - 1}${end}`;
   };
   let offset = 0;
   const content = profileMentionParts(row, profiles, agents)
@@ -196,7 +209,10 @@ function protectInlineContent(
 }
 
 const placeholderPattern = (protectedContent: ProtectedContent) =>
-  new RegExp(`${protectedContent.prefix}(\\d+)\uE002`, "g");
+  new RegExp(
+    `[\uE000\uFFFC]${protectedContent.prefix.slice(1)}(\\d+)[\uE002\uFFFC]`,
+    "g",
+  );
 
 function inlineProtectionKey(
   row: ChannelMessage,

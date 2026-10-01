@@ -90,6 +90,96 @@ test("list toolbar, native item splitting and indentation survive reload and sen
   ).toBe("- one\n- two\n- three\n\noutside");
 });
 
+test("a typed fence opens a code block at once, and the block sends fenced", async ({
+  page,
+}) => {
+  const input = await composer(page);
+  await input.pressSequentially("``");
+  await expect(input.locator("pre")).toHaveCount(0);
+  await input.pressSequentially("`");
+  await expect(input.locator("pre code")).toHaveCount(1);
+  const value = () => input.evaluate((el) => el.value);
+  expect(await value()).toBe("");
+  await page.keyboard.press("ControlOrMeta+z");
+  await expect(input.locator("pre")).toHaveCount(0);
+  await expect.poll(value).toBe("```");
+  await page.keyboard.press("ControlOrMeta+Shift+z");
+  await expect(input.locator("pre code")).toHaveCount(1);
+  expect(
+    await page.evaluate(() => window.linkComposerFixture.sent.length),
+  ).toBe(0);
+  await page.keyboard.type("const answer = 42;");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("answer");
+  await expect(input.locator("pre code")).toContainText("answer");
+  await input.press("Enter");
+  expect(
+    await page.evaluate(() => window.linkComposerFixture.sent.at(-1).text),
+  ).toBe("```\nconst answer = 42;\nanswer\n```");
+  await expect(input.locator("pre")).toHaveCount(0);
+});
+
+test("caret keys at the end of a composed message never insert a character", async ({
+  page,
+}) => {
+  const input = await composer(page);
+  await input.pressSequentially("```");
+  await expect(input.locator("pre code")).toHaveCount(1);
+  await page.keyboard.type("Hello!");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("acascac");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("a**a** _a_");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("- acacs");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.press("Shift+Enter");
+  await expect(input.locator("strong")).toHaveText("a");
+  await expect(input.locator("em")).toHaveText("a");
+  await expect(input.locator("ul > li")).toHaveText("acacs");
+  const state = () =>
+    input.evaluate((el) => ({
+      value: el.value,
+      codes: [...el.value].map((c) => c.codePointAt(0).toString(16)),
+      html: el.innerHTML,
+    }));
+  const before = await state();
+  expect(before.value).toBe("Hello!\nacascac\naa a\nacacs\n");
+  for (let i = 0; i < 11; i++) await page.keyboard.press("ArrowRight");
+  for (const key of [
+    "ArrowLeft",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+    "Escape",
+  ])
+    await page.keyboard.press(key);
+  await page.keyboard.press("Shift");
+  await page.keyboard.press("Meta");
+  expect(await state()).toEqual(before);
+  // The platform's own text-insertion path (WebKit's insertTextAsync, Chromium's
+  // IME commit) handing the composer Right Arrow's raw keyboard-layout
+  // translation U+001D, the character the desktop build committed on every
+  // press, or AppKit's function-key character for the key U+F703, is refused
+  // before the DOM changes, and typing continues as before.
+  await input.evaluate((el) =>
+    el.setSelectionRange(el.value.length, el.value.length),
+  );
+  for (const character of ["\u001D", "\uF703"]) {
+    await page.keyboard.insertText(character);
+    expect(await state(), JSON.stringify(character)).toEqual(before);
+  }
+  await page.keyboard.type("!");
+  await expect
+    .poll(() => input.evaluate((el) => el.value))
+    .toBe(`${before.value}!`);
+  expect(
+    await page.evaluate(() => window.linkComposerFixture.sent.length),
+  ).toBe(0);
+});
+
 test("sent spoilers hide content and links behind a keyboard-accessible reduced-motion sparkle", async ({
   page,
 }) => {

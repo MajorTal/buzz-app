@@ -56,6 +56,25 @@ it("replacement edits keep only mentions outside the browser's target range", ()
   ).toEqual([]);
 });
 
+it("inline Markdown delimiters end a mention as the timeline binds it, but an underscore extends the name", () => {
+  for (const text of ["**@Honey**", "~~@Honey~~", "`@Honey`", "*@Honey*"]) {
+    const start = text.indexOf("@Honey");
+    expect(
+      mentionDraft({
+        text,
+        recipients: [{ ...first, start, end: start + 6 }],
+      }).recipients,
+      text,
+    ).toEqual([{ ...first, start, end: start + 6 }]);
+  }
+  expect(
+    mentionDraft({
+      text: "_@Honey_",
+      recipients: [{ ...first, start: 1, end: 7 }],
+    }).recipients,
+  ).toEqual([]);
+});
+
 it("legacy prose and malformed persisted metadata never infer recipients", () => {
   expect(mentionDraft("@Honey").recipients).toEqual([]);
   for (const recipient of [

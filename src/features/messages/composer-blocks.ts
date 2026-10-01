@@ -8,6 +8,7 @@ import {
 import {
   wrapInList,
   liftListItem,
+  sinkListItem,
   splitListItemKeepMarks,
 } from "prosemirror-schema-list";
 import {
@@ -18,6 +19,7 @@ import {
   exitCode,
 } from "prosemirror-commands";
 import type { Command } from "prosemirror-state";
+import type { ResolvedPos } from "prosemirror-model";
 import {
   composerSchema as schema,
   projectComposerDocument,
@@ -242,6 +244,267 @@ export function toggleComposerBlock(
     tr.join(pos + 1);
   }
   return tr.setStoredMarks([]);
+}
+
+/** Typed characters that can complete a fence line. */
+export const composerFenceDelimiters: ReadonlySet<string> = new Set(["`", "~"]);
+// The fence the composer converts as it is typed: exactly three backticks or
+// tildes filling the caret's line. The third character is the trigger, so an
+// info string can never be typed before the block opens, and a fourth character
+// typed after undoing the conversion leaves the line literal.
+const FENCE = /^(`{3}|~{3})$/;
+// Any fence line CommonMark accepts in authored source, for reading the other
+// lines of the paragraph: up to three spaces of indentation and any info string.
+const FENCE_LINE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
+
+type Fence = { marker: string; length: number };
+
+/** The fence a line opens or closes, as the timeline will read it. A block
+ * closes only on a line holding the opening marker, at least as long, followed
+ * by nothing but whitespace; a backtick fence's info string cannot hold a
+ * backtick. */
+function readFence(line: string, open: Fence | undefined): Fence | undefined {
+  const match = FENCE_LINE.exec(line);
+  const run = match?.[1],
+    info = match?.[2] ?? "";
+  if (!run) return open;
+  const marker = run[0] ?? "";
+  if (!open)
+    return marker === "~" || !info.includes("`")
+      ? { marker, length: run.length }
+      : undefined;
+  return marker === open.marker && run.length >= open.length && !info.trim()
+    ? undefined
+    : open;
+}
+
+/** Whether authored lines leave a fenced block open. */
+function insideFence(lines: readonly string[]): boolean {
+  let open: Fence | undefined;
+  for (const line of lines) open = readFence(line, open);
+  return !!open;
+}
+
+/** Whether one of the lines below a fence closes it. */
+function closedBelow(fence: Fence, lines: readonly string[]): boolean {
+  return lines.some((line) => !readFence(line, fence));
+}
+
+/** Draft offsets of the run of sibling paragraphs holding the caret's. Sibling
+ * paragraphs serialise joined by single newlines, exactly as the draft text
+ * holds them, so the timeline reads the run as one source context: a fence
+ * opened or closed in one paragraph counts for the others, and a toolbar
+ * toggle that splits a paragraph changes nothing on the wire. Any other block
+ * between two paragraphs ends the run. */
+function paragraphRun(
+  $from: ResolvedPos,
+  source: ReturnType<typeof projectComposerDocument>,
+): { start: number; end: number } {
+  const depth = $from.depth,
+    parent = $from.node(depth - 1);
+  let first = $from.index(depth - 1),
+    last = first,
+    from = $from.before(depth),
+    to = $from.after(depth);
+  while (first > 0 && parent.child(first - 1).type === schema.nodes.paragraph)
+    from -= parent.child(--first).nodeSize;
+  while (
+    last + 1 < parent.childCount &&
+    parent.child(last + 1).type === schema.nodes.paragraph
+  )
+    to += parent.child(++last).nodeSize;
+  return { start: source.source(from), end: source.source(to - 1) };
+}
+
+/** Typing the third character of a line holding only ``` or ~~~ turns that line
+ * into a code block at once, without waiting for Enter. Only a fence the typed
+ * character completes at the end of its line qualifies: a fence that closes or
+ * sits inside a block the other lines of its paragraph, or of the sibling
+ * paragraphs joined to it on the wire, open (pasted source, a message opened
+ * for editing, or a paragraph a toolbar toggle split), fences inside
+ * code/link/literal ranges or tokens, and any line inside an existing code
+ * block stay literal source. The transaction carries the deletion and the
+ * block; the caller closes history around it, so one undo restores the typed
+ * fence. */
+export function composerCodeFence(
+  state: EditorState,
+  typed: string,
+): Transaction | undefined {
+  const { $from, empty } = state.selection;
+  if (!composerFenceDelimiters.has(typed) || !empty) return;
+  if ($from.parent.type !== schema.nodes.paragraph) return;
+  const source = projectComposerDocument(state.doc);
+  const text = source.draft.text;
+  const caret = source.source($from.pos);
+  const block = source.blocks.find(
+    (block) => $from.pos >= block.from && $from.pos <= block.to,
+  );
+  if (!block) return;
+  // The caret must end the fence line; text after it would be a code line.
+  if (caret !== source.source(block.to) && text[caret] !== "\n") return;
+  const start = Math.max(block.start, text.lastIndexOf("\n", caret - 1) + 1);
+  const match = FENCE.exec(text.slice(start, caret));
+  if (!match || match[1]?.[0] !== typed) return;
+  // A closing fence, a fence line inside an open block, or an opening fence a
+  // later line already closes is authored source the timeline renders as code:
+  // it never opens a second block. The lines read are those of the whole run
+  // of sibling paragraphs, since the wire joins them with single newlines.
+  const run = paragraphRun($from, source);
+  if (insideFence(text.slice(run.start, start).split("\n"))) return;
+  const below = text.slice(caret, run.end);
+  if (
+    below &&
+    closedBelow({ marker: typed, length: 3 }, below.slice(1).split("\n"))
+  )
+    return;
+  const from = source.position(start),
+    to = $from.pos;
+  if (source.source(from) !== start) return;
+  let plain = true;
+  state.doc.nodesBetween(from, to, (node) => {
+    if (!node.isInline) return;
+    if (
+      !node.isText ||
+      (["code", "link", "literal"] as const).some((name) =>
+        schema.marks[name].isInSet(node.marks),
+      )
+    )
+      plain = false;
+  });
+  if (!plain) return;
+  const tr = state.tr.delete(from, to);
+  isolate(tr);
+  if (!apply(tr, setBlockType(schema.nodes.code_block))) return;
+  return tr.setStoredMarks([]);
+}
+
+/** The typed character that completes a list or quote prefix. */
+export const composerPrefixDelimiters: ReadonlySet<string> = new Set([" "]);
+// A block prefix filling the caret's line up to the typed space, as CommonMark
+// reads it: a bullet marker, one to nine digits with a dot or parenthesis, or a
+// quote marker. Every form the timeline renders as a list converts, so `* `,
+// `+ ` and `1) ` open blocks although the serializer writes each bullet as `- `
+// and each number with a dot; the sent text renders the same either way.
+const PREFIX = /^(?:([-*+])|(\d{1,9})[.)]|>) $/;
+// Positions to read before the caret: the widest prefix and its space, plus the
+// character before them, so the cheap check sees whether the line starts there.
+const PREFIX_WINDOW = 12;
+
+/** Typing the space after a lone `- `, `1. ` or `> ` marker turns the caret's
+ * line into a list item or quoted paragraph at once, producing the node the
+ * toolbar toggle would: prose after the caret on that line becomes the block's
+ * content, and the paragraph's other lines stay where they are. Inside a quote
+ * the markers nest a list or a second quote; inside a list item a marker of
+ * the item's own list kind, typed as the only text of an item after the first,
+ * nests that item as Tab does. A marker typed after prose, inside a code block,
+ * inside pasted fenced source, or on a line holding a token or
+ * code/link/literal text stays literal. The caller closes history around the
+ * transaction, so one undo restores the typed prefix. */
+export function composerBlockPrefix(
+  state: EditorState,
+  typed: string,
+): Transaction | undefined {
+  const { $from, empty } = state.selection;
+  if (!composerPrefixDelimiters.has(typed) || !empty) return;
+  if ($from.parent.type !== schema.nodes.paragraph) return;
+  // Space is typed constantly; read only the caret's line before projecting.
+  const offset = $from.parentOffset;
+  const window = $from.parent.textBetween(
+    Math.max(0, offset - PREFIX_WINDOW),
+    offset,
+  );
+  const newline = window.lastIndexOf("\n");
+  if (newline < 0 && offset > PREFIX_WINDOW) return;
+  const match = PREFIX.exec(window.slice(newline + 1));
+  if (!match) return;
+  const kind = match[1]
+    ? "bullet_list"
+    : match[2]
+      ? "ordered_list"
+      : "blockquote";
+  // Nesting converts where the schema can hold the shape the timeline reads
+  // from the sent text. A paragraph in the document or in a quote wraps, so
+  // `> ` inside a quote nests a second quote as `> > inner` renders. A list
+  // item's first child must stay a paragraph, so a marker typed there can only
+  // nest the item itself, as Tab does: a marker of the item's own list kind,
+  // typed as the only text of an item after the first, sinks that item. A
+  // quote marker or a marker of the other list kind inside an item, a marker
+  // in a list's first item, or one beside the item's prose stays literal text
+  // that still nests once sent: the timeline shows a quote or list inside that
+  // item where the composer shows the marker.
+  const sink = $from.node($from.depth - 1).type === schema.nodes.list_item;
+  if (
+    sink &&
+    ($from.node($from.depth - 2).type !== schema.nodes[kind] ||
+      $from.index($from.depth - 1) !== 0 ||
+      $from.index($from.depth - 2) === 0 ||
+      $from.parent.textContent !== match[0])
+  )
+    return;
+  const source = projectComposerDocument(state.doc);
+  const text = source.draft.text;
+  const caret = source.source($from.pos);
+  const block = source.blocks.find(
+    (block) => $from.pos >= block.from && $from.pos <= block.to,
+  );
+  if (!block) return;
+  const start = Math.max(block.start, text.lastIndexOf("\n", caret - 1) + 1);
+  if (text.slice(start, caret) !== match[0]) return;
+  // A marker inside authored fenced source is a code line on the timeline,
+  // whichever paragraph of the run the fence was opened in.
+  if (
+    insideFence(
+      text.slice(paragraphRun($from, source).start, start).split("\n"),
+    )
+  )
+    return;
+  const from = source.position(start),
+    to = $from.pos;
+  if (source.source(from) !== start) return;
+  const lineBreak = text.indexOf("\n", caret);
+  const lineEnd =
+    lineBreak < 0
+      ? block.to
+      : Math.min(block.to, source.position(lineBreak, -1));
+  let plain = true;
+  state.doc.nodesBetween(from, lineEnd, (node) => {
+    if (!node.isInline) return;
+    if (
+      !node.isText ||
+      (["code", "link", "literal"] as const).some((name) =>
+        schema.marks[name].isInSet(node.marks),
+      )
+    )
+      plain = false;
+  });
+  if (!plain) return;
+  const marks = $from.marks();
+  const tr = state.tr.delete(from, to);
+  if (sink) {
+    if (!apply(tr, sinkListItem(schema.nodes.list_item))) return;
+    // A sunk item joins the previous item's nested list when there is one, as
+    // Tab does, and the typed number is then a continuation. A new nested list
+    // starts at the typed number, as a top-level marker does.
+    const $sunk = tr.selection.$from,
+      depth = $sunk.depth - 2;
+    if (kind === "ordered_list" && $sunk.node(depth).childCount === 1)
+      tr.setNodeMarkup($sunk.before(depth), undefined, {
+        order: Number(match[2]),
+      });
+  } else {
+    isolate(tr);
+    const command =
+      kind === "blockquote"
+        ? wrapIn(schema.nodes.blockquote)
+        : wrapInList(
+            schema.nodes[kind],
+            kind === "ordered_list" ? { order: Number(match[2]) } : null,
+          );
+    if (!apply(tr, command)) return;
+  }
+  // The marker's own marks (an explicit Bold typing mode) continue into the
+  // block, as the typed prose already carried them.
+  return marks.length ? tr.setStoredMarks(marks) : tr;
 }
 
 /** Shift+Enter continues the block; an empty last line exits it. Plain Enter

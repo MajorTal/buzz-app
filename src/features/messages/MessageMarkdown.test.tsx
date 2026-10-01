@@ -622,6 +622,17 @@ describe("Markdown profile mentions", () => {
     owned.dispose();
   });
 
+  it("preserves authored punctuation markers without creating extra profile controls", () => {
+    const literal = "\uFFFC0\uE0010\uFFFC";
+    const encoded = "&#65532;1&#57345;0&#65532;";
+    const html = render(literal + " " + encoded + " then @Mic");
+    expect(html.match(/<button/g)).toHaveLength(1);
+    expect(html).toContain(
+      "\uFFFC0\uE0010\uFFFC \uFFFC1\uE0010\uFFFC then <button",
+    );
+    expect(render(literal + " " + encoded)).not.toContain("<button");
+  });
+
   it("cannot fabricate profile controls with literal, entity-encoded or legacy markers", () => {
     const spoof =
       "\uE0000\uE0010\uE002 &#57344;&#49;&#57345;0&#57346; \uE000&#x32;\uE0010\uE002 \uE0000\uE001";

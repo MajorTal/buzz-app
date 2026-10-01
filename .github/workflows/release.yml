@@ -167,7 +167,7 @@ jobs:
 
   publish:
     name: Publish GitHub prerelease
-    needs: build
+    needs: [build, windows, linux]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
@@ -176,8 +176,36 @@ jobs:
       - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: signed-macos-release
-          path: release-assets
-      - name: Publish signed DMG
+          path: build-assets/macos
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: windows-x64-candidate
+          path: build-assets/windows
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: linux-x64-candidates
+          path: build-assets/linux
+      - name: Verify and assemble release assets
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          for platform in macos windows linux; do
+            (cd "build-assets/$platform" && sha256sum --check SHA256SUMS)
+          done
+          # Exact names also reject mixed versions after a partial-job rerun.
+          # Rerun all jobs so every platform uses the same run attempt/version.
+          mkdir release-assets
+          cp "build-assets/macos/Buzz_${VERSION}_aarch64.dmg" release-assets/
+          cp "build-assets/macos/Buzz_${VERSION}_aarch64.app.tar.gz" release-assets/
+          cp "build-assets/macos/Buzz_${VERSION}_aarch64.app.tar.gz.sig" release-assets/
+          cp "build-assets/windows/Buzz_${VERSION}_x64_unsigned.exe" release-assets/
+          cp "build-assets/linux/Buzz_${VERSION}_amd64.deb" release-assets/
+          cp "build-assets/linux/Buzz_${VERSION}_x86_64.AppImage" release-assets/
+          printf '%s\n' "$SOURCE_SHA" > release-assets/SOURCE_COMMIT
+          (cd release-assets && sha256sum ./Buzz_* > SHA256SUMS)
+      - name: Publish desktop previews
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -186,8 +214,8 @@ jobs:
         run: |
           gh release create "v$VERSION" release-assets/* \
             --target "$SOURCE_SHA" --prerelease --latest=false \
-            --title "Buzz $VERSION (macOS preview)" \
-            --notes "Apple Silicon macOS preview from commit $SOURCE_SHA. Built, signed, and notarized by Actions run $GITHUB_RUN_ID."
+            --title "Buzz $VERSION (desktop preview)" \
+            --notes "Desktop preview from commit $SOURCE_SHA, built by Actions run $GITHUB_RUN_ID. Includes Apple Silicon macOS (signed and notarized), Windows x64 (unsigned NSIS installer), and Linux x64 (Ubuntu 24.04 deb and AppImage). Windows/Linux require manual installation and desktop acceptance; only macOS uses the preview updater feed."
 
   promote_preview:
     name: Promote verified macOS preview
@@ -251,8 +279,8 @@ jobs:
         run: node scripts/prune-preview-releases.mjs --apply
 
   windows:
-    if: github.repository == 'block/buzz-app' && inputs.candidates
-    name: Windows x64 candidate (unsigned)
+    if: github.repository == 'block/buzz-app' && (inputs.candidates || (github.ref == 'refs/heads/main' && !inputs.promote_version))
+    name: Windows x64 installer (unsigned)
     runs-on: windows-2025
     timeout-minutes: 120
     defaults:
@@ -321,8 +349,8 @@ jobs:
           retention-days: 7
 
   linux:
-    if: github.repository == 'block/buzz-app' && inputs.candidates
-    name: Linux x64 candidates
+    if: github.repository == 'block/buzz-app' && (inputs.candidates || (github.ref == 'refs/heads/main' && !inputs.promote_version))
+    name: Linux x64 installers
     runs-on: ubuntu-latest
     # Shipped old-Buzz recipe, without its mesh/Kubernetes/updater dependencies.
     container: ubuntu:24.04@sha256:33ceb71981b602c1a7443a53469e4dba065f7503eab3078a2d7a57a2ab987517

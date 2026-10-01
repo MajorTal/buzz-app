@@ -174,7 +174,7 @@ test("successful preview publication promotes automatically; manual recovery byp
   );
   const { build, publish, promote_preview: promotion } = workflow.jobs;
   assert.match(build.if, /!inputs\.promote_version/);
-  assert.equal(publish.needs, "build");
+  assert.deepEqual(publish.needs, ["build", "windows", "linux"]);
   assert.deepEqual(promotion.needs, ["build", "publish"]);
   assert.match(promotion.if, /!cancelled\(\)/);
   assert.match(promotion.if, /!inputs\.candidates/);

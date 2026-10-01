@@ -140,12 +140,60 @@ for (const target of ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]) {
   });
 }
 
-test("candidate builds cannot reach publisher or macOS signing and use read-only tokens", () => {
+// These job guards use the common Actions/JavaScript boolean-expression subset.
+function selected(
+  job,
+  inputs = {},
+  ref = "refs/heads/main",
+  repository = "block/buzz-app",
+) {
+  return new Function("github", "inputs", `return (${job.if})`)(
+    { ref, repository },
+    inputs,
+  );
+}
+
+test("all-platform releases preserve candidate isolation and read-only installer jobs", () => {
   const workflow = parse(read(".github/workflows/release.yml"));
   assert.equal(workflow.on.workflow_dispatch.inputs.candidates.default, false);
   assert.equal(workflow.permissions.contents, "read");
+  const { jobs } = workflow;
+  for (const job of [jobs.build, jobs.windows, jobs.linux]) {
+    assert.equal(selected(job), true);
+    assert.equal(
+      selected(job, { candidates: false, promote_version: "" }),
+      true,
+    );
+    assert.equal(
+      selected(job, { promote_version: "0.0.0-preview.42.2" }),
+      false,
+    );
+    assert.equal(selected(job, {}, "refs/heads/main", "fork/buzz-app"), false);
+  }
+  assert.equal(selected(jobs.build, { candidates: true }), false);
+
+  const downloads = jobs.publish.steps.filter((step) =>
+    step.uses?.startsWith("actions/download-artifact@"),
+  );
+  assert.deepEqual(
+    downloads.map((step) => step.with.path),
+    ["build-assets/macos", "build-assets/windows", "build-assets/linux"],
+  );
+  for (const [index, job] of [jobs.build, jobs.windows, jobs.linux].entries()) {
+    assert.equal(downloads[index].with.name, job.steps.at(-1).with.name);
+  }
+  const publication = jobs.publish.steps.at(-1).run;
+  assert.match(
+    publication,
+    /gh release create "v\$VERSION" release-assets\/\*/,
+  );
+  assert.match(
+    publication,
+    /--target "\$SOURCE_SHA" --prerelease --latest=false/,
+  );
+
   assert.match(workflow.jobs.build.if, /!inputs\.candidates/);
-  assert.equal(workflow.jobs.publish.needs, "build");
+  assert.deepEqual(workflow.jobs.publish.needs, ["build", "windows", "linux"]);
   assert.equal(
     workflow.jobs.publish.if,
     undefined,
@@ -154,9 +202,10 @@ test("candidate builds cannot reach publisher or macOS signing and use read-only
   for (const platform of ["windows", "linux"]) {
     const job = workflow.jobs[platform];
     assert.equal(
-      job.if,
-      "github.repository == 'block/buzz-app' && inputs.candidates",
+      selected(job, { candidates: true }, "refs/heads/feature"),
+      true,
     );
+    assert.equal(selected(job, {}, "refs/heads/feature"), false);
     assert.equal(job.permissions, undefined);
     assert.ok(
       job.steps.some((step) => step.run?.includes("verify-runtime-bundle.mjs")),

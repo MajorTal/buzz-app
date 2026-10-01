@@ -1,9 +1,22 @@
 # Desktop test releases
 
-The **Desktop previews** workflow builds and signs Apple Silicon test builds from
-`main`. It publishes a DMG, a signed updater archive with its `.sig`, and
-`SHA256SUMS` as a GitHub prerelease, tagged
-`v<app-version>-preview.<run-number>.<attempt>` at the built commit.
+The **Desktop previews** workflow builds all supported desktop platforms from
+`main` and publishes one GitHub prerelease, tagged
+`v<app-version>-preview.<run-number>.<attempt>` at the built commit:
+
+- **Apple Silicon macOS:** signed/notarized DMG and a signed updater archive with
+  its `.sig`.
+- **Windows x64:** unsigned NSIS `.exe` installer.
+- **Linux x64:** Ubuntu 24.04 `.deb` and AppImage.
+- **Provenance:** `SOURCE_COMMIT` and one `SHA256SUMS` covering all six asset files.
+
+Publication waits for all three platform jobs and their existing payload checks.
+A failed platform blocks publication and automatic macOS feed promotion; it does
+not publish a macOS-only release. Downloads are checked against each job's
+checksums before assembly. If a job fails, use **Re-run all jobs**, not just failed
+jobs: the run attempt is part of the version, and publication rejects mixed-version
+artifacts. Windows/Linux are manual-install previews, not signed Windows releases
+or evidence of completed desktop acceptance.
 
 Runs are scheduled at **00:17, 06:17, 12:17, and 18:17 UTC**. To start one manually:
 
@@ -11,7 +24,7 @@ Runs are scheduled at **00:17, 06:17, 12:17, and 18:17 UTC**. To start one manua
 gh workflow run release.yml --repo block/buzz-app --ref main
 ```
 
-These builds use `macos-latest` and the repository's pinned toolchain. The
+The macOS build uses `macos-latest` and the repository's pinned toolchain. The
 workflow publishes an Apple-signed/notarized DMG and a separately Tauri-signed
 updater `.app.tar.gz` and `.sig` for Apple Silicon. The updater archive is
 rebuilt from the verified app in the signed DMG; built-in Tauri artifact
@@ -22,7 +35,7 @@ This includes scheduled runs and manual builds without `promote_version`.
 An updater-less artifact, invalid signature, or rollback leaves the existing feed
 unchanged, but the promotion job fails and needs investigation. The workflow
 does **not** publish to the legacy `block/buzz` updater. Older installed apps
-cannot use the feed until an updater-enabled build is installed. Preview builds
+cannot use the feed until an updater-enabled build is installed. macOS preview builds
 are built with the updater enabled and check the preview endpoint below.
 
 ## macOS preview updater feed (automatic promotion, manual recovery)
@@ -138,7 +151,7 @@ before each launch. Development builds and other platforms still require the
 manifest hashes to match. The release workflow verifies the signed seal,
 notarization, and manifest identity before publishing.
 
-## Windows and Linux installer candidates
+## Windows and Linux installers and candidate-only runs
 
 The same **Desktop previews** workflow has a manual `candidates` switch. It builds
 unsigned Windows x64 NSIS `.exe` and Ubuntu 24.04 x64 `.deb`/AppImage artifacts,
@@ -149,10 +162,13 @@ gh workflow run release.yml --repo block/buzz-app \
   --ref <candidate-branch> -f candidates=true
 ```
 
-Scheduled runs and dispatches without this switch retain the existing macOS
-publication path. Candidates use the same preview version, source commit, pinned
-Buzz/Goose pins and six-tool manifest; they never use legacy Buzz's sidecars,
-updater feed, application identifier, or signing secrets. The workflow records
+Scheduled runs and dispatches without this switch build and publish all three
+platforms. A `promote_version` recovery run skips all platform builds and only
+updates the macOS feed. Candidate-only runs remain artifact-only and can run from
+a feature branch, without signing credentials or publication. They use the same
+preview version, source commit, Buzz/Goose pins and six-tool manifest; they never
+use legacy Buzz's sidecars, updater feed, application identifier, or signing
+secrets. The workflow records
 `SOURCE_COMMIT` and checksums over final installer bytes. Download the
 `windows-x64-candidate` and `linux-x64-candidates` artifacts from that Actions run
 within seven days. These are **ready to try only after their build and payload
@@ -191,5 +207,6 @@ separator assertion and model-auth recovery). Re-run the existing manual Windows
 CI lane on the candidate and diagnose any surviving failures separately from
 installer success. The packaging jobs do not waive them or enable local-agent
 hosting. Builderlab/NIP-FI admission remains a separate product limitation.
-There is no Windows/Linux publication or auto-update in this first candidate
-slice; accepted artifact publication follows native acceptance.
+Windows/Linux installers are published as previews by normal release runs, but
+remain outside the auto-updater feed. Publishing a preview does not waive the
+manual acceptance checks above.

@@ -632,6 +632,9 @@ companionTest(
     await expect(launch).toHaveCount(0);
     await expect(companion).toHaveCount(0);
     await expect(enabled).toBeFocused();
+    // The closing dock is already aria-hidden, but still narrows Settings.
+    // Wait for its removal before the next click can race the layout expansion.
+    await expect(page.locator("[data-panel-dock]")).toHaveCount(0);
     await enabled.click();
     await expect(launch).toBeVisible();
     await expect(companion).toHaveCount(0);

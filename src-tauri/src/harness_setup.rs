@@ -11,16 +11,10 @@ use std::fs::{File, OpenOptions};
 #[cfg(any(target_os = "macos", target_os = "linux", test))]
 use std::future::Future;
 use std::path::Path;
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-use std::process::Stdio;
 #[cfg(any(target_os = "macos", target_os = "linux", test))]
 use std::sync::atomic::{AtomicBool, Ordering};
 #[cfg(any(target_os = "macos", target_os = "linux"))]
 use tauri::Manager as _;
-
-// Same command as old Buzz's discovery/catalog.rs; block/goose redirects here.
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-const INSTALL: &str = "curl -fsSL https://github.com/aaif-goose/goose/releases/download/stable/download_cli.sh | CONFIGURE=false bash";
 
 /// App-lifetime install owner: one install at a time, and the running installer's
 /// process group so normal Quit can stop it (Tauri exits without dropping futures).
@@ -58,7 +52,7 @@ impl HarnessSetup {
         if self
             .1
             .lock()
-            .map_err(|_| "Goose install state is unavailable")?
+            .map_err(|_| "Harness install state is unavailable")?
             .shutting_down
         {
             return Err("Buzz is quitting".into());
@@ -74,7 +68,7 @@ impl HarnessSetup {
         let mut state = self
             .1
             .lock()
-            .map_err(|_| "Goose install state is unavailable")?;
+            .map_err(|_| "Harness install state is unavailable")?;
         if state.shutting_down {
             return Err("Buzz is quitting".into());
         }
@@ -179,7 +173,7 @@ where
         .map_err(|_| "Could not read the Harnesses install log")?;
     let error = match status {
         Ok(true) => None,
-        Ok(false) => Some("Goose installer failed. See the install log.".to_owned()),
+        Ok(false) => Some("Harness installer failed. See the install log.".to_owned()),
         Err(message) => Some(message),
     };
     Ok(InstallReport {
@@ -213,63 +207,6 @@ impl Drop for InstallerChild<'_> {
     }
 }
 
-#[cfg(any(target_os = "macos", target_os = "linux"))]
-async fn upstream(setup: &HarnessSetup, log: File) -> Result<bool, String> {
-    // pipefail preserves curl failures; the group owns every installer child.
-    // Never pass app, agent or provider credentials to the downloaded script.
-    let home = std::env::var_os("HOME").ok_or("Goose install requires HOME")?;
-    let mut command = tokio::process::Command::new("bash");
-    command.env_clear();
-    for name in [
-        "TMPDIR",
-        "USER",
-        "LOGNAME",
-        "LANG",
-        "SSL_CERT_FILE",
-        "SSL_CERT_DIR",
-        "HTTPS_PROXY",
-        "https_proxy",
-        "NO_PROXY",
-        "no_proxy",
-    ] {
-        if let Some(value) = std::env::var_os(name) {
-            command.env(name, value);
-        }
-    }
-    command
-        .env("HOME", &home)
-        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin")
-        .current_dir(&home)
-        .args(["-o", "pipefail", "-c", INSTALL])
-        .stdin(Stdio::null())
-        .stdout(Stdio::from(
-            log.try_clone()
-                .map_err(|_| "Could not open install output")?,
-        ))
-        .stderr(Stdio::from(log))
-        .kill_on_drop(true)
-        .process_group(0);
-    let mut child = setup.spawn(|| command.spawn())?;
-    let result = tokio::time::timeout(std::time::Duration::from_secs(300), child.child.wait())
-        .await
-        .map_err(|_| "Goose installer timed out after five minutes".to_owned())?
-        .map(|status| status.success())
-        .map_err(|_| "Goose installer could not finish".to_owned());
-    child.reaped = result.is_ok();
-    drop(child);
-    result
-}
-
-pub(crate) fn waiting_for_goose(agent: &buzz_agent_controller::AgentView) -> bool {
-    waiting(
-        agent.enabled,
-        agent.status,
-        &agent.harness.command,
-        "goose",
-        agent.error.as_deref(),
-    )
-}
-
 pub(crate) fn waiting_for_pi(agent: &buzz_agent_controller::AgentView) -> bool {
     waiting(
         agent.enabled,
@@ -301,72 +238,6 @@ fn waiting(
     // indistinguishable from ones the person chose not to run this session, and a
     // relative command still fails after install.
     error == Some("Required runtime executable is missing")
-}
-
-#[tauri::command]
-pub(crate) async fn goose_install<R: tauri::Runtime>(
-    app: tauri::AppHandle<R>,
-    state: tauri::State<'_, HarnessSetup>,
-    agents: tauri::State<'_, AgentHost>,
-) -> Result<InstallReport, String> {
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        let _ = (app, state, agents);
-        Err("Goose installation is supported only on macOS and Linux".into())
-    }
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
-    {
-        let _guard = state.claim()?;
-        if buzz_agent_controller::installed("goose").is_some() {
-            return Err("Goose is already installed; click Check again".into());
-        }
-        let waiting = agents.waiting_for_goose().await?;
-        let path = app
-            .path()
-            .app_data_dir()
-            .map_err(|_| "Could not resolve Harnesses install storage")?
-            .join("agent-controller/goose-install.log");
-        // The outer guard includes re-detection and restarts; the inner runner
-        // only owns file creation and captured combined output.
-        let setup = state.inner();
-        let mut report = run_install(&path, |log| upstream(setup, log)).await?;
-        if !report.ready {
-            return Ok(report);
-        }
-        if buzz_agent_controller::installed("goose").is_none() {
-            report.ready = false;
-            report.error = Some(
-                "Installer finished but Goose was not found. See the log and check ~/.local/bin."
-                    .into(),
-            );
-            return Ok(report);
-        }
-        for id in waiting {
-            match agents::start(
-                agents.inner().clone(),
-                id.clone(),
-                Action::Restart,
-                false,
-                None,
-                Some(InstallRestart::Goose),
-            )
-            .await
-            {
-                Err(error) if error == agents::NOT_WAITING_FOR_GOOSE => continue,
-                Ok(snapshot)
-                    if snapshot
-                        .data
-                        .agents
-                        .iter()
-                        .any(|agent| agent.id == id && agent.status == ProcessStatus::Running) =>
-                {
-                    report.restarted += 1
-                }
-                _ => report.restart_failures += 1,
-            }
-        }
-        Ok(report)
-    }
 }
 
 #[tauri::command]

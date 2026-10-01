@@ -1,5 +1,5 @@
 use crate::Result;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
 use std::io::Read;
@@ -9,6 +9,15 @@ use std::path::{Path, PathBuf};
 struct Source {
     revision: String,
     tools: Vec<String>,
+    goose: GooseSource,
+}
+#[derive(Deserialize, Serialize, PartialEq)]
+#[serde(deny_unknown_fields)]
+struct GooseSource {
+    repository: String,
+    revision: String,
+    profile: String,
+    features: String,
 }
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -17,6 +26,7 @@ struct Manifest {
     revision: String,
     target: String,
     files: BTreeMap<String, String>,
+    goose: GooseSource,
 }
 /// App resource provenance/integrity check, not a defense against a same-user
 /// attacker able to replace the application itself. No PATH/old-app fallback.
@@ -50,8 +60,9 @@ impl RuntimeBundle {
         let source: Source =
             serde_json::from_str(include_str!("../../../runtime/agent-runtime.json"))
                 .map_err(|_| "Runtime source specification is invalid")?;
-        if manifest.version != 1
+        if manifest.version != 2
             || manifest.revision != source.revision
+            || manifest.goose != source.goose
             || manifest.target != env!("BUZZ_RUNTIME_TARGET")
             || manifest.files.len() != source.tools.len()
         {

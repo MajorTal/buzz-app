@@ -14,7 +14,7 @@ import { AgentDefaultsCard } from "./AgentDefaultsCard";
 import styles from "./AgentSettings.module.css";
 
 const acpHint =
-  "Buzz talks to harnesses through the Agent Client Protocol (ACP). Goose supports it natively. Pi needs a small adapter, `buzz-pi-acp`. Your existing CLI setup and sign-in are left untouched.";
+  "Buzz talks to harnesses through the Agent Client Protocol (ACP). Goose ships with Buzz and supports ACP natively. Pi needs a small adapter, `buzz-pi-acp`. Your existing CLI setup and sign-in are left untouched.";
 const piCommand = "npm install -g '@earendil-works/pi-coding-agent@>=0.99.0'";
 const adapterCommand =
   "npm install -g --install-links=true 'git+https://github.com/salman1993/buzz-pi-acp.git#72015de'";
@@ -42,11 +42,6 @@ export function AgentSettings({
   const copyAttempt = useRef(0);
   const state = useSyncExternalStore(control.subscribe, control.snapshot);
   const {
-    installing,
-    report: installResult,
-    error: installError,
-  } = state.gooseInstall ?? { installing: false, report: null, error: null };
-  const {
     installing: installingPi,
     report: piResult,
     error: piError,
@@ -59,7 +54,6 @@ export function AgentSettings({
     options?.find((option) => option.label === name),
   );
   const available = harnesses.every((option) => !!option?.status);
-  const goose = harnesses[1];
   const pi = harnesses[2];
   const change = (enabled: boolean) =>
     setError(setRememberAgentsPreference(enabled));
@@ -99,10 +93,7 @@ export function AgentSettings({
             size="sm"
             type="button"
             disabled={
-              state.status === "unavailable" ||
-              state.busy ||
-              installing ||
-              installingPi
+              state.status === "unavailable" || state.busy || installingPi
             }
             loading={checking}
             onClick={() => {
@@ -161,7 +152,6 @@ export function AgentSettings({
                           disabled={
                             state.status !== "ready" ||
                             state.busy ||
-                            installing ||
                             installingPi
                           }
                           onClick={() => {
@@ -171,33 +161,10 @@ export function AgentSettings({
                           {option.status === "ready" ? "Update Pi" : "Install"}
                         </Button>
                       )}
-                    {option?.label === "Goose" &&
-                      option.status === "cli-needed" &&
-                      option.installSupported &&
-                      control.installGoose &&
-                      !installResult?.ready && (
-                        <Button
-                          size="sm"
-                          type="button"
-                          loading={installing}
-                          disabled={
-                            state.status !== "ready" ||
-                            state.busy ||
-                            installing ||
-                            installingPi
-                          }
-                          onClick={() => {
-                            void control.installGoose?.().catch(() => {});
-                          }}
-                        >
-                          Install
-                        </Button>
-                      )}
                   </span>
                 </li>
               ))}
             </ul>
-            {installing && <p role="status">Installing Goose…</p>}
             {installingPi && (
               <p role="status">Installing Pi and its ACP adapter…</p>
             )}
@@ -220,32 +187,6 @@ export function AgentSettings({
                       className={`${styles.command} whitespace-pre-wrap break-all`}
                     >
                       {piResult.output || "No output was recorded."}
-                    </pre>
-                  </details>
-                )}
-              </div>
-            )}
-            {!installing &&
-              installResult?.ready &&
-              goose?.status === "ready" && (
-                <p role="status">
-                  Goose installed. Restarted {installResult.restarted} waiting
-                  agents.
-                  {installResult.restartFailures > 0 &&
-                    ` ${installResult.restartFailures} agents could not restart; check Agents.`}
-                </p>
-              )}
-            {!installing && (installResult?.error || installError) && (
-              <div role="alert" className="text-body-sm">
-                <p>{installResult?.error || installError}</p>
-                {installResult && (
-                  <details>
-                    <summary>Goose install log</summary>
-                    <p className="break-all">{installResult.logPath}</p>
-                    <pre
-                      className={`${styles.command} whitespace-pre-wrap break-all`}
-                    >
-                      {installResult.output || "No output was recorded."}
                     </pre>
                   </details>
                 )}

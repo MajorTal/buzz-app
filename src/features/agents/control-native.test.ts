@@ -25,7 +25,6 @@ it("all command names and camelCase payloads match the native contract", async (
     { id: "exact-id", pubkey: "a".repeat(64), relayUrl: "wss://relay.example" },
     "nonce-fixture",
   );
-  await host.installGoose?.();
   await host.installPi?.();
   const edit = {
     name: "Agent",
@@ -61,7 +60,6 @@ it("all command names and camelCase payloads match the native contract", async (
         signature: "signature-fixture",
       },
     ],
-    ["goose_install"],
     ["pi_install"],
     ["agent_control_save", { id: "exact-id", expectedRevision: 3, edit }],
     ["agent_control_delete", { id: "exact-id", expectedRevision: 3 }],

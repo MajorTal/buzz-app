@@ -122,7 +122,9 @@ pub(crate) fn selectors<'a>(
         .and_then(|s| s.to_str())
     {
         Some("buzz-agent") => Some(("BUZZ_AGENT_MODEL", "BUZZ_AGENT_PROVIDER")),
-        Some("goose") => Some(("GOOSE_MODEL", "GOOSE_PROVIDER")),
+        Some("goose" | "goose.exe" | "goose-acp" | "goose-acp.exe") => {
+            Some(("GOOSE_MODEL", "GOOSE_PROVIDER"))
+        }
         _ => None,
     };
     let saved = |value: &'a String| (!value.is_empty()).then_some(value.as_str());

@@ -1,11 +1,12 @@
 use super::*;
 use std::io::Write as _;
+use std::process::Stdio;
 
 #[tokio::test]
 async fn one_install_at_a_time_and_success_log() {
     let state = std::sync::Arc::new(HarnessSetup::default());
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("agent-controller/goose-install.log");
+    let path = dir.path().join("agent-controller/pi-install.log");
     let (started, observed) = tokio::sync::oneshot::channel();
     let (release, done) = tokio::sync::oneshot::channel::<()>();
     let installing = state.clone();
@@ -36,7 +37,7 @@ async fn one_install_at_a_time_and_success_log() {
     {
         use std::os::unix::fs::PermissionsExt;
         assert_eq!(
-            std::fs::metadata(dir.path().join("agent-controller/goose-install.log"))
+            std::fs::metadata(dir.path().join("agent-controller/pi-install.log"))
                 .unwrap()
                 .permissions()
                 .mode()
@@ -49,7 +50,7 @@ async fn one_install_at_a_time_and_success_log() {
 #[tokio::test]
 async fn failure_records_combined_output_and_error() {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().join("goose-install.log");
+    let path = dir.path().join("pi-install.log");
     let report = run_install(&path, |mut log| async move {
         writeln!(log, "stdout and stderr").unwrap();
         Err("Installer exited unexpectedly".into())
@@ -65,51 +66,6 @@ async fn failure_records_combined_output_and_error() {
     assert!(std::fs::read_to_string(path)
         .unwrap()
         .contains("Installer exited unexpectedly"));
-}
-
-#[test]
-fn only_enabled_goose_waiting_for_a_missing_cli_restarts() {
-    use ProcessStatus::{Failed, Running, Stopped};
-    assert!(waiting(
-        true,
-        Failed,
-        "/home/user/.local/bin/goose",
-        "goose",
-        Some("Required runtime executable is missing")
-    ));
-    // Enabled but never started this session is not evidence of waiting.
-    assert!(!waiting(true, Stopped, "goose", "goose", None));
-    assert!(!waiting(
-        true,
-        Failed,
-        "goose",
-        "goose",
-        Some("Choose the installed harness's absolute executable path")
-    ));
-    assert!(!waiting(false, Stopped, "goose", "goose", None));
-    assert!(!waiting(
-        false,
-        Failed,
-        "goose",
-        "goose",
-        Some("Required runtime executable is missing")
-    ));
-    assert!(!waiting(true, Running, "goose", "goose", None));
-    assert!(!waiting(true, Stopped, "buzz-agent", "goose", None));
-    assert!(!waiting(
-        true,
-        Failed,
-        "goose",
-        "goose",
-        Some("Agent listener exited; restart to retry")
-    ));
-    assert!(!waiting(
-        true,
-        Failed,
-        "goose",
-        "goose",
-        Some("Saved agent key is unavailable")
-    ));
 }
 
 #[cfg(any(target_os = "macos", target_os = "linux"))]
@@ -240,14 +196,14 @@ fn a_finished_install_clears_its_group_without_killing_it_again_on_quit() {
 }
 
 #[test]
-fn goose_and_pi_claim_the_same_app_lifetime_install_guard() {
+fn install_claim_is_exclusive_and_shutdown_fences_it() {
     let setup = HarnessSetup::default();
-    let goose = setup.claim().unwrap();
+    let first = setup.claim().unwrap();
     assert_eq!(
         setup.claim().err().as_deref(),
         Some("A Harness installation is already in progress")
     );
-    drop(goose);
+    drop(first);
     let pi = setup.claim().unwrap();
     assert!(setup.claim().is_err());
     drop(pi);

@@ -789,10 +789,18 @@ it("shares the identity presentation with invitation rows without assigning a ch
   expect(
     (await screen.findAllByRole("menuitem")).map((item) => item.textContent),
   ).toEqual(["View profile"]);
+  const menu = screen.getByRole("menu", { name: "Actions for Fixture agent" });
+  await vi.waitFor(() => expect(menu).toHaveFocus());
   await t.user.keyboard("{Escape}");
+  await vi.waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
   expect(row.querySelector("[title]")).not.toBeInTheDocument();
   expect(within(row).queryByText("Role unverified")).not.toBeInTheDocument();
-  expect(within(add).getByText("Add", { exact: true })).toBeVisible();
+  expect(
+    within(screen.getByRole("button", { name: /Add Fixture agent/ })).getByText(
+      "Add",
+      { exact: true },
+    ),
+  ).toBeVisible();
   expect(t.publish).not.toHaveBeenCalled();
 });
 

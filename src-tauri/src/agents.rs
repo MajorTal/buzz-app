@@ -189,7 +189,6 @@ fn pi_current(_: &std::path::Path) -> bool {
 }
 
 fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
-    let goose = installed_goose();
     let (pi, pi_status, pi_managed) = pi_choice(
         PiTools {
             cli: buzz_agent_controller::installed("pi"),
@@ -224,20 +223,13 @@ fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
             ][usize::from(cfg!(windows))..],
         },
         HarnessOption {
-            command: goose.as_ref().map_or_else(
-                || "goose".into(),
-                |path| path.to_string_lossy().into_owned(),
-            ),
+            command: "goose".into(),
             label: "Goose",
-            available: goose.is_some(),
-            status: if goose.is_some() {
-                "ready"
-            } else {
-                "cli-needed"
-            },
-            install_supported: Some(cfg!(any(target_os = "macos", target_os = "linux"))),
+            available: true,
+            status: "ready",
+            install_supported: None,
             update_supported: None,
-            default_args: &["acp"],
+            default_args: &[],
             providers: GOOSE_PROVIDERS,
         },
         HarnessOption {
@@ -258,10 +250,6 @@ fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
             providers: &[],
         },
     ]
-}
-
-fn installed_goose() -> Option<PathBuf> {
-    buzz_agent_controller::installed("goose")
 }
 
 struct LogChallenge {
@@ -616,11 +604,6 @@ impl AgentHost {
         run(self.clone(), |host| host.controller.inherited_workspace()).await
     }
     #[cfg(any(target_os = "macos", target_os = "linux"))]
-    pub(crate) async fn waiting_for_goose(&self) -> Result<Vec<String>, String> {
-        self.waiting_for(crate::harness_setup::waiting_for_goose)
-            .await
-    }
-    #[cfg(any(target_os = "macos", target_os = "linux"))]
     pub(crate) async fn waiting_for_pi(&self) -> Result<Vec<String>, String> {
         self.waiting_for(crate::harness_setup::waiting_for_pi).await
     }
@@ -703,9 +686,9 @@ impl AgentHost {
         let id = id.map(str::to_owned);
         run(self.clone(), move |host| match (id.as_deref(), revision) {
             (Some(id), Some(revision)) => host.controller.goose_model_context(id, revision, edit),
-            (None, None) => {
-                Controller::draft_goose_model_context(host.controller.effective_draft(edit)?)
-            }
+            (None, None) => host
+                .controller
+                .draft_goose_model_context(host.controller.effective_draft(edit)?),
             _ => Err("Invalid agent model context".into()),
         })
         .await
@@ -954,7 +937,6 @@ fn startup_trace(value: serde_json::Value) {
         );
     }
 }
-pub(crate) const NOT_WAITING_FOR_GOOSE: &str = "Agent no longer waiting for Goose";
 pub(crate) const NOT_WAITING_FOR_PI: &str = "Agent no longer waiting for Pi";
 #[derive(Clone, Copy)]
 #[cfg_attr(
@@ -965,7 +947,6 @@ pub(crate) const NOT_WAITING_FOR_PI: &str = "Agent no longer waiting for Pi";
     )
 )]
 pub(crate) enum InstallRestart {
-    Goose,
     Pi,
 }
 pub(crate) async fn start(
@@ -978,10 +959,6 @@ pub(crate) async fn start(
 ) -> Result<Snapshot, String> {
     let guard = install_restart.map(|harness| -> StartGuard {
         match harness {
-            InstallRestart::Goose => (
-                crate::harness_setup::waiting_for_goose,
-                NOT_WAITING_FOR_GOOSE,
-            ),
             InstallRestart::Pi => (crate::harness_setup::waiting_for_pi, NOT_WAITING_FOR_PI),
         }
     });

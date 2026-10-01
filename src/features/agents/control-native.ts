@@ -32,7 +32,6 @@ export function nativeAgentControlHost(): AgentControlHost | null {
         signature,
       });
     },
-    installGoose: () => invoke("goose_install"),
     installPi: () => invoke("pi_install"),
     save: (id, expectedRevision, edit) =>
       invoke("agent_control_save", { id, expectedRevision, edit }),

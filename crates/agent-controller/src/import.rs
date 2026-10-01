@@ -383,7 +383,7 @@ fn resolve(data: &Source, record: &Value, workspace: &Path, destination: &str) -
             (_, Some(c)) => string(c, "command").to_owned(),
             (Some("claude"), _) => "claude-agent-acp".into(),
             (Some("codex"), _) => "codex-acp".into(),
-            (Some("goose"), _) => "goose".into(),
+            (Some("goose" | "goose-bundled"), _) => "goose".into(),
             (None | Some("buzz-agent"), _) => "buzz-agent".into(),
             _ => return Err("Source uses an unsupported harness definition; restore its custom definition before importing".into()),
         }

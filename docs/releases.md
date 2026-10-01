@@ -151,7 +151,7 @@ gh workflow run release.yml --repo block/buzz-app \
 
 Scheduled runs and dispatches without this switch retain the existing macOS
 publication path. Candidates use the same preview version, source commit, pinned
-runtime revision and five-tool manifest; they never use legacy Buzz's sidecars,
+Buzz/Goose pins and six-tool manifest; they never use legacy Buzz's sidecars,
 updater feed, application identifier, or signing secrets. The workflow records
 `SOURCE_COMMIT` and checksums over final installer bytes. Download the
 `windows-x64-candidate` and `linux-x64-candidates` artifacts from that Actions run

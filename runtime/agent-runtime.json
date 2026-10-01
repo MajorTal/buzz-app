@@ -6,6 +6,13 @@
     "buzz-agent",
     "buzz-dev-mcp",
     "buzz",
-    "git-credential-nostr"
-  ]
+    "git-credential-nostr",
+    "goose-acp"
+  ],
+  "goose": {
+    "repository": "https://github.com/aaif-goose/goose.git",
+    "revision": "4dea9b483efbd2541d43500b8ed3c044c65e6d2f",
+    "profile": "lean",
+    "features": "native-tls,system-keyring,online-model-meta,openssl/vendored"
+  }
 }

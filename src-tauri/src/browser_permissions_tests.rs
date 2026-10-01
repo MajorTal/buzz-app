@@ -105,7 +105,6 @@ fn native_command_permissions_allow_only_main_webview() {
         "agent_control_snapshot",
         "agent_control_log_challenge",
         "agent_control_read_log",
-        "goose_install",
         "pi_install",
         "agent_control_save",
         "agent_control_save_defaults",

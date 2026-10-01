@@ -15,7 +15,12 @@ export interface AgentDraft {
   databricks?: { host: string; filter: string } | null;
 }
 export function isGoose(command: string): boolean {
-  return command.replaceAll("\\", "/").split("/").at(-1) === "goose";
+  const name = command
+    .replaceAll("\\", "/")
+    .split("/")
+    .at(-1)
+    ?.replace(/\.exe$/, "");
+  return name === "goose" || name === "goose-acp";
 }
 /** Agent defaults harness a saved command belongs to, matching native. */
 export function harnessKind(
@@ -23,7 +28,7 @@ export function harnessKind(
 ): "buzz-agent" | "goose" | "pi" | undefined {
   const name = command.replaceAll("\\", "/").split("/").at(-1);
   if (name === "buzz-agent") return "buzz-agent";
-  if (name === "goose") return "goose";
+  if (isGoose(command)) return "goose";
   if (name === "buzz-pi-acp") return "pi";
   return undefined;
 }

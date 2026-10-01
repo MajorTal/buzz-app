@@ -24,11 +24,11 @@ const spec = JSON.parse(
   await readFile(join(root, "runtime/agent-runtime.json"), "utf8"),
 );
 const { env, cargo, rustc } = runtimeBuildPlatform(root);
-async function run(command, args, capture = false, cwd = root) {
+async function run(command, args, capture = false, cwd = root, childEnv = env) {
   return new Promise((accept, reject) => {
     const child = spawn(command, args, {
       cwd,
-      env,
+      env: childEnv,
       stdio: ["ignore", capture ? "pipe" : "inherit", "inherit"],
     });
     let output = "";
@@ -69,6 +69,21 @@ const buildArgs = [
   "--target",
   target,
 ].concat(...packages.map((name) => ["-p", name]));
+const gooseBuildArgs = [
+  "build",
+  "--locked",
+  "-p",
+  "goose",
+  "--bin",
+  "goose-acp",
+  "--profile",
+  spec.goose.profile,
+  "--no-default-features",
+  "--features",
+  spec.goose.features,
+  "--target",
+  target,
+];
 // Worktrees of one clone share finished bundles built from identical inputs.
 function cachedBundle() {
   let common;
@@ -82,7 +97,7 @@ function cachedBundle() {
     return undefined;
   }
   const key = createHash("sha256")
-    .update(JSON.stringify([spec, toolchain, buildArgs]))
+    .update(JSON.stringify([spec, toolchain, buildArgs, gooseBuildArgs]))
     .digest("hex")
     .slice(0, 16);
   return join(common, "buzz-agent-runtime", key);
@@ -95,8 +110,9 @@ async function verifiedBundle(directory) {
     if (!meta.isFile() || meta.size > 16384) return false;
     const manifest = JSON.parse(await readFile(manifestPath, "utf8"));
     if (
-      Object.keys(manifest).length !== 4 ||
-      manifest.version !== 1 ||
+      Object.keys(manifest).length !== 5 ||
+      manifest.version !== 2 ||
+      JSON.stringify(manifest.goose) !== JSON.stringify(spec.goose) ||
       manifest.revision !== spec.revision ||
       manifest.target !== target ||
       Object.keys(manifest.files).length !== filenames.length
@@ -134,7 +150,13 @@ async function publish(source, directory) {
       .digest("hex");
     await rename(temporary, join(directory, filename));
   }
-  const manifest = { version: 1, revision: spec.revision, target, files };
+  const manifest = {
+    version: 2,
+    revision: spec.revision,
+    goose: spec.goose,
+    target,
+    files,
+  };
   await writeFile(
     join(directory, "manifest.json.new"),
     `${JSON.stringify(manifest, null, 2)}\n`,
@@ -196,6 +218,60 @@ try {
     source,
   );
   await run(cargo, buildArgs, false, source);
+  // Goose is an independent upstream pin, built with the same locked toolchain.
+  const gooseSource = join(stage, "goose");
+  await mkdir(gooseSource);
+  await run("git", ["init", "--quiet"], false, gooseSource);
+  await run(
+    "git",
+    [
+      "fetch",
+      "--quiet",
+      "--depth",
+      "1",
+      spec.goose.repository,
+      spec.goose.revision,
+    ],
+    false,
+    gooseSource,
+  );
+  await run(
+    "git",
+    ["checkout", "--quiet", "--detach", spec.goose.revision],
+    false,
+    gooseSource,
+  );
+  await run(cargo, gooseBuildArgs, false, gooseSource, {
+    ...env,
+    OPENSSL_STATIC: "1",
+    OPENSSL_NO_VENDOR: "0",
+  });
+  const gooseBinary = join(
+    env.CARGO_TARGET_DIR,
+    target,
+    spec.goose.profile,
+    process.platform === "win32" ? "goose-acp.exe" : "goose-acp",
+  );
+  if (process.platform === "darwin") {
+    const libraries = await run("otool", ["-L", gooseBinary], true);
+    for (const line of libraries.trim().split("\n").slice(1)) {
+      const library = line.trim().split(" (compatibility version")[0];
+      if (
+        !library.startsWith("/usr/lib/") &&
+        !library.startsWith("/System/Library/")
+      )
+        throw new Error(`Unbundled Goose dependency: ${library}`);
+    }
+  }
+  await copyFile(
+    gooseBinary,
+    join(
+      env.CARGO_TARGET_DIR,
+      target,
+      "release",
+      process.platform === "win32" ? "goose-acp.exe" : "goose-acp",
+    ),
+  );
   await publish(join(env.CARGO_TARGET_DIR, target, "release"), destination);
   console.log(
     `Verified inputs staged at ${destination} (${spec.revision}, ${target})`,

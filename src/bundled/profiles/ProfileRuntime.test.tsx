@@ -171,8 +171,8 @@ it("shows the verified owner saved configuration and persists start on launch", 
 it("opens Harnesses from both profile editors and closes a discarded draft after navigation", async () => {
   const fixture = controlFixture();
   fixture.data.harnessOptions?.push({
-    command: "goose",
-    label: "Goose",
+    command: "buzz-pi-acp",
+    label: "Pi",
     available: false,
     status: "cli-needed",
     providers: [],

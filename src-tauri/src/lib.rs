@@ -46,7 +46,7 @@ use buzzodz_plugins::{
 };
 use deep_links::{deep_link_take, deep_link_watch, DeepLinks};
 use dock::{dock_permission, unread_indicator_set};
-use harness_setup::{goose_install, pi_install, HarnessSetup};
+use harness_setup::{pi_install, HarnessSetup};
 use host_command::plugin_host_run_command;
 use host_request::plugin_host_request;
 use notifications::{notification_show, Notifications};
@@ -420,7 +420,6 @@ fn commands<R: tauri::Runtime>() -> impl Fn(tauri::ipc::Invoke<R>) -> bool + Sen
         agent_control_snapshot,
         agent_control_log_challenge,
         agent_control_read_log,
-        goose_install,
         pi_install,
         agent_control_use_here,
         agent_control_local_clone_settings,

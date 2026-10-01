@@ -311,7 +311,7 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
         std::path::Path::new(&edit.harness.command)
             .file_name()
             .and_then(|name| name.to_str())
-            == Some("goose")
+            .is_some_and(|name| matches!(name.trim_end_matches(".exe"), "goose" | "goose-acp"))
     });
     if goose {
         // Goose's catalog handler may start OAuth on a cache miss. Only an

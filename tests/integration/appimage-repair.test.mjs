@@ -42,8 +42,9 @@ function fixture(t) {
   writeFileSync(
     join(source, "manifest.json"),
     JSON.stringify({
-      version: 1,
+      version: 2,
       revision: spec.revision,
+      goose: spec.goose,
       target: "x86_64-unknown-linux-gnu",
       files,
     }),

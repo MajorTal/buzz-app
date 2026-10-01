@@ -437,7 +437,7 @@ it("duplicates editable settings into a new identity without copying write-only 
     name: "Fixture agent copy",
     systemPrompt: "Be concise",
     harness: { provider: "openai", model: "example-model" },
-    environment: {},
+    environment: { BUZZ_ACP_AGENTS: "10" },
   });
 });
 
@@ -610,13 +610,13 @@ it("shows Harness, Provider and Model in that order when adding an agent", async
   expect(f.calls.every((call) => call.action === "snapshot")).toBe(true);
 });
 
-it("selects installed Goose with ACP arguments and saves its provider and model", async () => {
+it("selects bundled Goose without subcommand arguments and saves its provider and model", async () => {
   const { f } = setup("ready", (fixture) => {
     fixture.data.harnessOptions?.push({
-      command: "/Users/test/.local/bin/goose",
+      command: "goose",
       label: "Goose",
       available: true,
-      defaultArgs: ["acp"],
+      defaultArgs: [],
       providers: [
         { value: "anthropic", label: "Anthropic" },
         { value: "openrouter", label: "OpenRouter" },
@@ -664,8 +664,8 @@ it("selects installed Goose with ACP arguments and saves its provider and model"
       edit: {
         sessionPolicy: "thread",
         harness: {
-          command: "/Users/test/.local/bin/goose",
-          args: ["acp"],
+          command: "goose",
+          args: [],
           provider: "openrouter",
           model: "anthropic/claude-sonnet-4",
         },
@@ -786,7 +786,7 @@ it("keeps Goose model browsing available after a draft provider override", async
   expect(within(dialog).getByRole("combobox", { name: "Model" })).toBeVisible();
 });
 
-it("creates and starts a Goose agent with the selected provider", async () => {
+it("creates and starts a bundled Goose agent with the selected provider", async () => {
   vi.spyOn(communityApi, "communityRequest").mockResolvedValue({ auth: [] });
   const commit = vi.fn();
   const start = vi.fn();
@@ -794,10 +794,10 @@ it("creates and starts a Goose agent with the selected provider", async () => {
     fixture.data.createAvailable = true;
     fixture.data.defaultWorkspace = "/fixture/workspace";
     fixture.data.harnessOptions?.push({
-      command: "/Users/test/.local/bin/goose",
+      command: "goose",
       label: "Goose",
       available: true,
-      defaultArgs: ["acp"],
+      defaultArgs: [],
       providers: [{ value: "openrouter", label: "OpenRouter" }],
     });
     fixture.host.prepareCreate = async () => ({
@@ -848,10 +848,13 @@ it("creates and starts a Goose agent with the selected provider", async () => {
   fireEvent.click(within(dialog).getByRole("button", { name: "Create agent" }));
   await waitFor(() => expect(commit).toHaveBeenCalledOnce());
   expect(commit.mock.calls[0]?.[1].harness).toMatchObject({
-    command: "/Users/test/.local/bin/goose",
-    args: ["acp"],
+    command: "goose",
+    args: [],
     provider: "openrouter",
     model: "anthropic/claude-sonnet-4",
+  });
+  expect(commit.mock.calls[0]?.[1].environment).toEqual({
+    BUZZ_ACP_AGENTS: "10",
   });
   expect(start).toHaveBeenCalledExactlyOnceWith("created-goose", "start");
   expect(
@@ -997,13 +1000,13 @@ it("checks an unconfirmed Start without repeating it", async () => {
   expect(profile).toHaveBeenCalledOnce();
 });
 
-it("shows an unavailable Goose harness without allowing selection", async () => {
+it("shows an unavailable Pi harness without allowing selection", async () => {
   setup("ready", (fixture) => {
     fixture.data.harnessOptions?.push({
-      command: "goose",
-      label: "Goose",
+      command: "buzz-pi-acp",
+      label: "Pi",
       available: false,
-      defaultArgs: ["acp"],
+      defaultArgs: [],
       providers: [{ value: "anthropic", label: "Anthropic" }],
     });
   });
@@ -1013,9 +1016,9 @@ it("shows an unavailable Goose harness without allowing selection", async () => 
     within(dialog).getByRole("combobox", { name: "Harness" }),
   );
   expect(
-    await screen.findByRole("option", { name: "Goose (install first)" }),
+    await screen.findByRole("option", { name: "Pi (install first)" }),
   ).toHaveAttribute("aria-disabled", "true");
-  expect(within(dialog).getByText(/Install the Goose CLI/)).toBeVisible();
+  expect(within(dialog).getByText(/Pi needs its CLI/)).toBeVisible();
 });
 
 it.each(["Create agent", "Edit agent"] as const)(
@@ -1026,8 +1029,8 @@ it.each(["Create agent", "Edit agent"] as const)(
       "ready",
       (fixture) => {
         fixture.data.harnessOptions?.push({
-          command: "goose",
-          label: "Goose",
+          command: "buzz-pi-acp",
+          label: "Pi",
           available: false,
           status: "cli-needed",
           providers: [],
@@ -1770,13 +1773,13 @@ for (const mode of ["edit", "create"] as const) {
           )?.edit;
     expect(edit).toMatchObject({
       name: "Name-only change",
-      environment: {},
+      environment: mode === "create" ? { BUZZ_ACP_AGENTS: "10" } : {},
       harness: { command: "buzz-agent", provider: "", model: "" },
     });
     expect(edit.harness.databricks).toBeUndefined();
   });
 }
-it("create copies only the default harness and shows inherited defaults", async () => {
+it("create seeds editable workers while inheriting model and context defaults", async () => {
   const user = userEvent.setup();
   const create = vi.fn();
   vi.spyOn(communityApi, "communityRequest").mockResolvedValue({ auth: [] });
@@ -1831,10 +1834,15 @@ it("create copies only the default harness and shows inherited defaults", async 
   await user.click(
     await screen.findByRole("option", { name: "Entire channel" }),
   );
+  await user.click(within(dialog).getByRole("button", { name: "Environment" }));
+  const workers = within(dialog).getByLabelText(
+    "Replacement for BUZZ_ACP_AGENTS",
+  );
+  expect(workers).toHaveValue("10");
+  fireEvent.change(workers, { target: { value: "3" } });
   fireEvent.click(within(dialog).getByRole("button", { name: "Create agent" }));
   await waitFor(() => expect(create).toHaveBeenCalled());
-  // Only the harness is copied; provider, model, effort and env stay blank
-  // so they are looked up at each start.
+  // Harness and worker count are explicit; other defaults stay inherited.
   expect(create.mock.calls[0]?.[1]).toMatchObject({
     harness: {
       command: "/opt/tools/goose",
@@ -1842,7 +1850,7 @@ it("create copies only the default harness and shows inherited defaults", async 
       provider: "",
       model: "",
     },
-    environment: {},
+    environment: { BUZZ_ACP_AGENTS: "3" },
     sessionPolicy: "channel",
   });
 });

@@ -75,9 +75,9 @@ test("runtime preparation builds missing resources, reuses verified files, and r
       .trim()
       .split("\n").length;
   assert.match(run(), /Verified inputs staged/);
-  assert.equal(count(), 1);
+  assert.equal(count(), 2);
   assert.match(run(), /Agent runtime ready/);
-  assert.equal(count(), 1, "warm preparation must not invoke Cargo");
+  assert.equal(count(), 2, "warm preparation must not invoke Cargo");
   const filename =
     process.platform === "win32" ? "buzz-agent.exe" : "buzz-agent";
   const binary = path.join(bundle, filename);
@@ -95,7 +95,7 @@ test("runtime preparation builds missing resources, reuses verified files, and r
       manifest.unexpected = true;
       writeFileSync(manifestPath, JSON.stringify(manifest));
     },
-    ...["revision", "target", "version"].map((key) => () => {
+    ...["revision", "target", "version", "goose"].map((key) => () => {
       const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
       manifest[key] = "outdated";
       writeFileSync(manifestPath, JSON.stringify(manifest));
@@ -105,10 +105,10 @@ test("runtime preparation builds missing resources, reuses verified files, and r
     const before = count();
     mutation();
     assert.match(run(), /Verified inputs staged/);
-    assert.equal(count(), before + 1);
+    assert.equal(count(), before + 2);
     assert.ok(existsSync(binary));
     assert.match(run(), /Agent runtime ready/);
-    assert.equal(count(), before + 1);
+    assert.equal(count(), before + 2);
   }
 });
 
@@ -135,7 +135,7 @@ test("runtime output ignores a user-level build target and survives an interrupt
       .trim()
       .split("\n")
       .map((line) => JSON.parse(line)),
-    [false, true],
+    [false, true, true],
     "the retry reuses the interrupted build's target",
   );
 });
@@ -187,6 +187,16 @@ test("worktrees of one clone reuse a verified runtime built from identical input
   );
   assert.match(run(one), /Verified inputs staged/);
   assert.equal(readdirSync(path.join(common, "buzz-agent-runtime")).length, 2);
+  writeFileSync(
+    specPath,
+    JSON.stringify({
+      ...spec,
+      goose: { ...spec.goose, revision: "1".repeat(40) },
+    }),
+  );
+  assert.match(run(one), /Verified inputs staged/);
+  assert.equal(readdirSync(path.join(common, "buzz-agent-runtime")).length, 3);
+  assert.match(run(one), /Agent runtime ready/);
 });
 
 test("a build that finishes after a concurrent publish keeps the published entry", (t) => {

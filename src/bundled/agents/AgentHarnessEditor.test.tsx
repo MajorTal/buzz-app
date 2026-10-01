@@ -67,7 +67,12 @@ it("keeps custom mode separate from saved values and supports an unset provider"
   );
 });
 
-it.each(["/opt/homebrew/bin/goose", "C:\\tools\\goose"])(
+it.each([
+  "/opt/homebrew/bin/goose",
+  "C:\\tools\\goose",
+  "/opt/buzz/goose-acp",
+  "C:\\tools\\goose-acp.exe",
+])(
   "preserves Goose settings while editing custom executable %s",
   async (path) => {
     const f = controlFixture();
@@ -92,9 +97,9 @@ it.each(["/opt/homebrew/bin/goose", "C:\\tools\\goose"])(
                 providers: [{ value: "databricks_v2", label: "Databricks v2" }],
               },
               {
-                command: "/usr/local/bin/goose",
+                command: "goose",
                 label: "Goose",
-                defaultArgs: ["acp"],
+                defaultArgs: [],
                 providers: [{ value: "openrouter", label: "OpenRouter" }],
               },
             ]}
@@ -157,10 +162,10 @@ it("switching Pi, Goose and Buzz resets incompatible selections and uses each ha
             defaultArgs: [],
           },
           {
-            command: "/local/goose",
+            command: "goose",
             label: "Goose",
             providers: [],
-            defaultArgs: ["acp"],
+            defaultArgs: [],
           },
           {
             command: "/local/buzz-pi-acp",
@@ -206,8 +211,8 @@ it("switching Pi, Goose and Buzz resets incompatible selections and uses each ha
   await user.click(screen.getByRole("combobox", { name: "Harness" }));
   await user.click(await screen.findByRole("option", { name: "Goose" }));
   expect(current).toMatchObject({
-    command: "/local/goose",
-    args: '["acp"]',
+    command: "goose",
+    args: "[]",
     provider: "",
     model: "",
   });

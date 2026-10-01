@@ -20,11 +20,13 @@ const manifest = JSON.parse(
 );
 assert.deepEqual(Object.keys(manifest).sort(), [
   "files",
+  "goose",
   "revision",
   "target",
   "version",
 ]);
-assert.equal(manifest.version, 1);
+assert.equal(manifest.version, 2);
+assert.deepEqual(manifest.goose, source.goose);
 assert.equal(manifest.revision, source.revision);
 assert.equal(manifest.target, target);
 const windows = target.endsWith("-windows-msvc");

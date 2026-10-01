@@ -41,17 +41,27 @@ const flag = process.argv.indexOf("--target");
 const configured = path.join(fixture, "config-build-target");
 const triple = flag >= 0 ? process.argv[flag + 1]
   : fs.existsSync(configured) ? fs.readFileSync(configured, "utf8") : "";
-const output = path.join(process.env.CARGO_TARGET_DIR, triple, "release");
+const profileFlag = process.argv.indexOf("--profile");
+const output = path.join(process.env.CARGO_TARGET_DIR, triple,
+  profileFlag >= 0 ? process.argv[profileFlag + 1] : "release");
 fs.mkdirSync(output, { recursive: true });
 // Compilation progress that an interrupted build leaves for the next one.
 const progress = path.join(process.env.CARGO_TARGET_DIR, "progress");
 fs.appendFileSync(path.join(fixture, "resumed.jsonl"), JSON.stringify(fs.existsSync(progress)) + "\\n");
 fs.writeFileSync(progress, "");
 if (fs.existsSync(path.join(fixture, "interrupt-build"))) process.exit(130);
-const spec = JSON.parse(fs.readFileSync(path.join(fixture, "runtime/agent-runtime.json"), "utf8"));
-for (const name of spec.tools) fs.writeFileSync(path.join(output,
+// Like Cargo, emit only the requested binaries, not the final bundle's inventory.
+const binFlag = process.argv.indexOf("--bin");
+const names = binFlag >= 0 ? [process.argv[binFlag + 1]]
+  : process.argv.flatMap((arg, index) => arg === "-p"
+    ? [process.argv[index + 1] === "buzz-cli" ? "buzz" : process.argv[index + 1]] : []);
+for (const name of names) fs.writeFileSync(path.join(output,
   process.platform === "win32" ? name + ".exe" : name), "fixture " + name + " " + fixture, { mode: 0o755 });
 `,
+  );
+  tool(
+    "otool",
+    'console.log("fixture:\\n\\t/usr/lib/libSystem.B.dylib (compatibility version 1.0.0)");',
   );
   // Source fetches succeed offline; a git-common-dir file opts into the shared cache.
   tool(

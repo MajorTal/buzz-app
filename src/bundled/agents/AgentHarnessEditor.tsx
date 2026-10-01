@@ -4,7 +4,7 @@ import { Field } from "../../shared/design-system/ui/Field";
 import { Input } from "../../shared/design-system/ui/Input";
 import { useState } from "react";
 import type { ControlSnapshot } from "../../features/agents/control";
-import { isGoose, PI_API_KEYS, type AgentDraft } from "./agent-edit";
+import { harnessKind, PI_API_KEYS, type AgentDraft } from "./agent-edit";
 
 /** Choices come from the injected native snapshot, never a plugin runtime catalog. */
 export function AgentHarnessEditor({
@@ -26,21 +26,14 @@ export function AgentHarnessEditor({
   defaultProvider?: string | undefined;
   onChange(patch: Partial<AgentDraft>): void;
 }) {
-  const executable = draft.command.replaceAll("\\", "/").split("/").at(-1);
+  const kind = harnessKind(draft.command);
   const harness =
     options.find((option) => option.command === draft.command) ??
-    (executable === "goose" || executable === "buzz-pi-acp"
-      ? options.find(
-          (option) =>
-            option.command.replaceAll("\\", "/").split("/").at(-1) ===
-            executable,
-        )
+    (kind === "goose" || kind === "pi"
+      ? options.find((option) => harnessKind(option.command) === kind)
       : undefined);
   const external = harness?.label === "Goose" || harness?.label === "Pi";
   const piLoading = harness?.label === "Pi" && piProviders === null;
-  const missingGoose = options.some(
-    (option) => isGoose(option.command) && option.available === false,
-  );
   const missingPi = options.some(
     (option) => option.label === "Pi" && option.available === false,
   );
@@ -75,17 +68,12 @@ export function AgentHarnessEditor({
           });
         }}
       />
-      {missingGoose && (
-        <p className="text-body-sm text-secondary">
-          Install the Goose CLI to use it as a harness.
-        </p>
-      )}
       {missingPi && (
         <p className="text-body-sm text-secondary">
           Pi needs its CLI, Node.js and buzz-pi-acp before you can select it.
         </p>
       )}
-      {(missingGoose || missingPi) && onOpenHarnesses && (
+      {missingPi && onOpenHarnesses && (
         <div className="space-y-1">
           <Button
             type="button"

@@ -187,6 +187,67 @@ fi
     )
     .unwrap_err();
     assert!(error.to_string().contains("could not complete a request"));
+
+    let sidecar = dir.path().join("goose-acp");
+    let temporary = dir.path().join("temporary-session");
+    std::fs::write(
+        &sidecar,
+        r#"#!/bin/sh
+[ "$#" -eq 0 ] || exit 1
+[ "$GOOSE_PROVIDER $GOOSE_MODEL $GOOSE_MAX_TOKENS $GOOSE_THINKING_EFFORT $GOOSE_MODE" = 'openai effective-model 10 off chat' ] || exit 1
+[ "$(pwd)" = '__WORKSPACE__' ] || exit 1
+read request
+printf '%s\n' '{"jsonrpc":"2.0","id":1,"result":{"protocolVersion":1,"agentCapabilities":{"sessionCapabilities":{"delete":{}}}}}'
+read request
+case "$request" in *'"hidden":true'*) ;; *) exit 1 ;; esac
+case "$request" in *'"enabledExtensions":[]'*) ;; *) exit 1 ;; esac
+: > '__TEMPORARY__'
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"sessionId":"temporary-test"}}'
+read request
+if [ "$OPENAI_API_KEY" = 'draft-key' ]; then
+  printf '%s\n' '{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"temporary-test","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"OK"}}}}'
+  printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"stopReason":"end_turn"}}'
+  read request
+  case "$request" in *'"method":"_goose/unstable/session/export"'*) ;; *) exit 1 ;; esac
+  printf '%s\n' '{"jsonrpc":"2.0","id":5,"result":{"data":"{\"id\":\"temporary-test\",\"conversation\":[{\"role\":\"assistant\",\"content\":[{\"type\":\"text\",\"text\":\"OK\"}]}]}"}}'
+else
+  printf '%s\n' '{"jsonrpc":"2.0","id":3,"error":{"code":-32000,"message":"DO_NOT_PROJECT_PROVIDER_SECRET"}}'
+fi
+read request
+case "$request" in *'"method":"session/delete"'*) ;; *) exit 1 ;; esac
+case "$request" in *'"sessionId":"temporary-test"'*) ;; *) exit 1 ;; esac
+rm '__TEMPORARY__'
+printf '%s\n' '{"jsonrpc":"2.0","id":4,"result":{}}'
+"#
+        .replace("__WORKSPACE__", &dir.path().canonicalize().unwrap().display().to_string())
+        .replace("__TEMPORARY__", &temporary.display().to_string()),
+    )
+    .unwrap();
+    std::fs::set_permissions(&sidecar, std::fs::Permissions::from_mode(0o700)).unwrap();
+    bad["harness"]["command"] = json!(sidecar);
+    bad["harness"]["args"] = json!([]);
+    for key in ["draft-key", "bad-key"] {
+        bad["environment"]["OPENAI_API_KEY"] = json!(key);
+        let ticket = invoke(&view, "agent_models_begin", json!({})).unwrap();
+        let result = invoke(
+            &view,
+            "agent_models_run",
+            json!({"ticket":ticket,"request":{
+                "host":"","filter":"","action":"test","edit":bad
+            }}),
+        );
+        if key == "draft-key" {
+            assert_eq!(result.unwrap()["models"], json!([]));
+        } else {
+            let error = result.unwrap_err().to_string();
+            assert!(error.contains("could not complete a request"));
+            assert!(!error.contains("DO_NOT_PROJECT_PROVIDER_SECRET"));
+        }
+        assert!(
+            !temporary.exists(),
+            "the test must delete its own temporary session before returning"
+        );
+    }
 }
 #[test]
 fn real_ipc_explicit_only_projection_overrides_retry_disconnect_and_gates() {

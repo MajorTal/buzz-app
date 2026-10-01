@@ -70,7 +70,6 @@ fn main() {
             "agent_control_snapshot",
             "agent_control_log_challenge",
             "agent_control_read_log",
-            "goose_install",
             "pi_install",
             "agent_security",
             "agent_control_save",

@@ -166,7 +166,7 @@ export type AgentLogTarget = Pick<AgentView, "id" | "pubkey" | "relayUrl"> & {
     nonce: string,
   ): Promise<string>;
 };
-export interface GooseInstallReport {
+export interface HarnessInstallReport {
   ready: boolean;
   restarted: number;
   restartFailures: number;
@@ -191,8 +191,7 @@ export interface AgentControlHost {
   localCloneSettings?(id: string): Promise<CloneSettings>;
   cloneSettings?(source: ImportSource, pubkey: string): Promise<CloneSettings>;
   models?: ModelHost;
-  installGoose?(): Promise<GooseInstallReport>;
-  installPi?(): Promise<GooseInstallReport>;
+  installPi?(): Promise<HarnessInstallReport>;
   prepareCreate?(
     requestId: string,
     destination: string,
@@ -235,14 +234,9 @@ export interface AgentControlState {
   data: ControlSnapshot | null;
   busy: boolean;
   /** App-lifetime install progress and last result, independent of agent writes. */
-  gooseInstall?: {
-    installing: boolean;
-    report: GooseInstallReport | null;
-    error: string | null;
-  };
   piInstall?: {
     installing: boolean;
-    report: GooseInstallReport | null;
+    report: HarnessInstallReport | null;
     error: string | null;
   };
   /** A credential wait may be interrupted only by explicit Stop. */
@@ -259,8 +253,7 @@ export interface AgentControl {
   localCloneSettings?: AgentControlHost["localCloneSettings"];
   cloneSettings?: AgentControlHost["cloneSettings"];
   models?: AgentModels;
-  installGoose?(): Promise<GooseInstallReport>;
-  installPi?(): Promise<GooseInstallReport>;
+  installPi?(): Promise<HarnessInstallReport>;
   create?(
     requestId: string,
     destination: string,
@@ -344,7 +337,6 @@ export function createAgentControl(
     status: host ? "idle" : "unavailable",
     data: null,
     busy: false,
-    gooseInstall: { installing: false, report: null, error: null },
     piInstall: { installing: false, report: null, error: null },
     error: host ? null : agentControlUnavailable,
   };
@@ -491,7 +483,6 @@ export function createAgentControl(
       command === "stop" ? undefined : id,
     );
   };
-  const installGoose = host?.installGoose;
   const installPi = host?.installPi;
   return {
     models,
@@ -507,45 +498,11 @@ export function createAgentControl(
           },
         }
       : {}),
-    ...(installGoose
-      ? {
-          installGoose: async () => {
-            if (disposed) throw new Error(agentControlUnavailable);
-            if (state.gooseInstall?.installing || state.piInstall?.installing)
-              throw new Error("A Goose installation is already in progress.");
-            if (state.status !== "ready" || state.busy)
-              throw new Error("Refresh local agents before installing Goose.");
-            update({
-              gooseInstall: { installing: true, report: null, error: null },
-            });
-            try {
-              const report = await installGoose();
-              update({
-                gooseInstall: { installing: false, report, error: null },
-              });
-              return report;
-            } catch {
-              update({
-                gooseInstall: {
-                  installing: false,
-                  report: null,
-                  error:
-                    "Couldn’t install Goose. Try again or check the desktop app.",
-                },
-              });
-              throw new Error("Could not install Goose.");
-            } finally {
-              installNeedsRefresh = true;
-              await refreshAfterInstall();
-            }
-          },
-        }
-      : {}),
     ...(installPi
       ? {
           installPi: async () => {
             if (disposed) throw new Error(agentControlUnavailable);
-            if (state.piInstall?.installing || state.gooseInstall?.installing)
+            if (state.piInstall?.installing)
               throw new Error("A Harness installation is already in progress.");
             if (state.status !== "ready" || state.busy)
               throw new Error("Refresh local agents before installing Pi.");

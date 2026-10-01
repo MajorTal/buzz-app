@@ -67,8 +67,8 @@ export function AgentCreateDialog({
   onClose(): void;
 }) {
   const [requestId] = useState(() => crypto.randomUUID());
-  const [draft, setDraft] = useState<AgentDraft>(() =>
-    source
+  const [draft, setDraft] = useState<AgentDraft>(() => {
+    const initial = source
       ? {
           ...agentDraft(source),
           name: `${source.name} copy`,
@@ -77,8 +77,9 @@ export function AgentCreateDialog({
           ...newAgentDraft(state),
           name: initialSettings?.name ?? "",
           systemPrompt: initialSettings?.systemPrompt ?? "",
-        },
-  );
+        };
+    return { ...initial, environment: { BUZZ_ACP_AGENTS: "10" } };
+  });
   const [dirty, setDirty] = useState(false);
   const [saved, setSaved] = useState<AgentView | null>(null);
   const [nextStep, setNextStep] = useState<"start" | "profile">("start");

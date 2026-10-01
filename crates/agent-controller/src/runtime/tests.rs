@@ -162,6 +162,7 @@ fn bundle(directory: &Path) -> RuntimeBundle {
         "buzz-dev-mcp",
         "buzz",
         "git-credential-nostr",
+        "goose-acp",
     ]
     .map(|name| format!("{name}{}", std::env::consts::EXE_SUFFIX));
     for name in &names {
@@ -205,7 +206,7 @@ while :; do [ -f "$BUZZ_AGENT_CONFIG_DIR/exit-listener" ] && exit 0; /bin/sleep 
         .collect();
     let source: serde_json::Value =
         serde_json::from_str(include_str!("../../../../runtime/agent-runtime.json")).unwrap();
-    fs::write(directory.join("manifest.json"), serde_json::to_vec(&json!({"version":1,"revision":source["revision"],"target":env!("BUZZ_RUNTIME_TARGET"),"files":files})).unwrap()).unwrap();
+    fs::write(directory.join("manifest.json"), serde_json::to_vec(&json!({"version":2,"goose":source["goose"],"revision":source["revision"],"target":env!("BUZZ_RUNTIME_TARGET"),"files":files})).unwrap()).unwrap();
     RuntimeBundle::new(directory.into()).unwrap()
 }
 fn wait_for_contents<T>(path: &Path, parse: impl Fn(&str) -> Option<T>) -> T {
@@ -1182,18 +1183,20 @@ fn shared_cache_spawn_capture_disconnect_snapshot_and_private_temp_cleanup() {
 
 #[test]
 #[cfg(unix)]
-fn bundle_rejects_a_revision_different_from_the_runtime_spec() {
+fn bundle_rejects_source_revisions_different_from_the_runtime_spec() {
     let tools = tempfile::tempdir().unwrap();
     bundle(tools.path());
     let path = tools.path().join("manifest.json");
-    let mut manifest: serde_json::Value =
-        serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
-    manifest["revision"] = json!("0".repeat(40));
-    fs::write(path, serde_json::to_vec(&manifest).unwrap()).unwrap();
-    assert!(matches!(
-        RuntimeBundle::new(tools.path().into()),
-        Err(error) if error == "Runtime target/revision does not match this app"
-    ));
+    let original: serde_json::Value = serde_json::from_slice(&fs::read(&path).unwrap()).unwrap();
+    for pointer in ["/revision", "/goose/revision"] {
+        let mut manifest = original.clone();
+        *manifest.pointer_mut(pointer).unwrap() = json!("0".repeat(40));
+        fs::write(&path, serde_json::to_vec(&manifest).unwrap()).unwrap();
+        assert!(matches!(
+            RuntimeBundle::new(tools.path().into()),
+            Err(error) if error == "Runtime target/revision does not match this app"
+        ));
+    }
 }
 
 #[test]
@@ -1615,6 +1618,12 @@ fn goose_model_context_uses_effective_draft_provider_without_projecting_secrets(
     let goose = dir.path().join("goose");
     fs::write(&goose, "#!/bin/sh\nexit 0\n").unwrap();
     fs::set_permissions(&goose, fs::Permissions::from_mode(0o700)).unwrap();
+    let controller = Controller::new(
+        Store::open(dir.path().join("config")).unwrap(),
+        Arc::new(Memory),
+        Err("Runtime bundle is missing".into()),
+        dir.path().join("ownership"),
+    );
     let edit = |override_provider: Option<&str>| AgentEdit {
         picture: None,
         name: "Goose".into(),
@@ -1640,8 +1649,9 @@ fn goose_model_context_uses_effective_draft_provider_without_projecting_secrets(
             ),
         ]),
     };
-    let context = Controller::draft_goose_model_context(edit(None)).unwrap();
+    let context = controller.draft_goose_model_context(edit(None)).unwrap();
     assert_eq!(context.command, goose);
+    assert_eq!(context.args, ["acp"]);
     assert_eq!(context.provider_id, "databricks_v2");
     assert_eq!(context.model_id, "effective-model");
     assert_eq!(context.workspace, dir.path());
@@ -1652,10 +1662,93 @@ fn goose_model_context_uses_effective_draft_provider_without_projecting_secrets(
     );
     assert!(!context.environment.contains_key("GOOSE_PROVIDER"));
     assert_eq!(
-        Controller::draft_goose_model_context(edit(Some("openai")))
+        controller
+            .draft_goose_model_context(edit(Some("openai")))
             .unwrap()
             .provider_id,
         "openai"
+    );
+}
+
+#[test]
+fn bundled_goose_launch_and_model_lookup_share_the_verified_sidecar() {
+    let dir = tempfile::tempdir().unwrap();
+    let tools = tempfile::tempdir().unwrap();
+    let runtime = bundle(tools.path());
+    let mut saved = agent(dir.path());
+    saved.harness.provider = "openai".into();
+    saved.harness.model = "fixture-model".into();
+    let key = Secret::parse(KEY, PUB).unwrap();
+    let sidecar = runtime.display_path("goose-acp").unwrap();
+    let mut store = Store::open(dir.path().join("config")).unwrap();
+    saved.harness.command = "goose".into();
+    saved.harness.args = vec!["acp".into()];
+    store.insert(vec![saved.clone()]).unwrap();
+    let mut controller = Controller::new(
+        store,
+        Arc::new(Memory),
+        Ok(runtime),
+        dir.path().join("ownership"),
+    );
+    for (selection, args, expected) in [
+        ("goose", vec![], ""),
+        ("goose", vec!["acp".into()], ""),
+        ("goose", vec![" acp ".into()], ""),
+        ("goose", vec![" ".into(), " AcP ".into()], ""),
+        (
+            "goose-acp",
+            vec!["acp".into(), "--with-builtin".into(), "developer".into()],
+            "--with-builtin,developer",
+        ),
+    ] {
+        saved.harness.command = selection.into();
+        saved.harness.args = args;
+        let command = controller
+            .bundle
+            .as_ref()
+            .unwrap()
+            .command_with_defaults(&saved, &key, &crate::BuildDefaults::default())
+            .unwrap();
+        let env: BTreeMap<_, _> = command
+            .get_envs()
+            .filter_map(|(k, v)| {
+                v.map(|v| {
+                    (
+                        k.to_string_lossy().into_owned(),
+                        v.to_string_lossy().into_owned(),
+                    )
+                })
+            })
+            .collect();
+        assert_eq!(env["BUZZ_ACP_AGENT_COMMAND"], sidecar.to_str().unwrap());
+        assert_eq!(env["BUZZ_ACP_AGENT_ARGS"], expected);
+        assert_eq!(env["GOOSE_PROVIDER"], "openai");
+        assert_eq!(env["GOOSE_MODEL"], "fixture-model");
+    }
+    let edit = || AgentEdit {
+        name: saved.name.clone(),
+        picture: None,
+        system_prompt: saved.system_prompt.clone(),
+        session_policy: Some(None),
+        workspace: saved.workspace.clone(),
+        harness: saved.harness.clone(),
+        environment: BTreeMap::new(),
+    };
+    let context = controller
+        .goose_model_context(&saved.id, saved.revision, edit())
+        .unwrap();
+    assert_eq!(context.command, sidecar);
+    assert!(context.args.is_empty(), "the sidecar runs ACP directly");
+    assert!(!context.environment.contains_key("BUZZ_PRIVATE_KEY"));
+    fs::write(&sidecar, b"corrupt").unwrap();
+    assert!(controller
+        .goose_model_context(&saved.id, saved.revision, edit())
+        .is_err());
+    let snapshot = controller.action(&saved.id, Action::Start).unwrap();
+    assert!(matches!(snapshot.agents[0].status, ProcessStatus::Failed));
+    assert!(
+        controller.running.is_empty(),
+        "a corrupt sidecar must not fall back to PATH"
     );
 }
 

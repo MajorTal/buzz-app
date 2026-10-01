@@ -104,7 +104,13 @@ for (const target of ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]) {
       writeFileSync(join(directory, name), tool, { mode: 0o755 });
       files[name] = createHash("sha256").update(tool).digest("hex");
     }
-    const manifest = { version: 1, revision: spec.revision, target, files };
+    const manifest = {
+      version: 2,
+      revision: spec.revision,
+      goose: spec.goose,
+      target,
+      files,
+    };
     const save = () =>
       writeFileSync(join(directory, "manifest.json"), JSON.stringify(manifest));
     const run = () =>

@@ -1,4 +1,4 @@
-//! One-shot Goose ACP catalog lookup. The child never receives a Buzz identity.
+//! One-shot Goose model lookup and inference checks. No child receives a Buzz identity.
 use buzz_agent_controller::GooseModelContext;
 use serde_json::{json, Value};
 use std::{process::Stdio, time::Duration};
@@ -8,6 +8,8 @@ const MAX_RESPONSE_BYTES: u64 = 8 * 1024 * 1024;
 const MAX_TEST_BYTES: u64 = 1024 * 1024;
 const METHOD: &str = "_goose/unstable/providers/supported-models/list";
 const TEST_FAILURE: &str = "Goose could not complete a request with this provider and model. Check its credentials, model and network, then test again.";
+const TEST_TIMEOUT: &str = "Goose connection test timed out. Check the network, then test again.";
+const CLEANUP_FAILURE: &str = "Goose could not delete its temporary connection-test session. It may remain in Goose history; retry the test.";
 
 struct CheckChild(tokio::process::Child);
 impl Drop for CheckChild {
@@ -20,8 +22,8 @@ impl Drop for CheckChild {
     }
 }
 
-/// Run one Goose turn through its normal session path without saving a session
-/// or loading extensions. Databricks rejects `info --check`'s empty system prompt.
+/// Run one Goose turn without tools. ACP uses a hidden temporary session;
+/// the external CLI can avoid saving a session altogether.
 /// The selected draft and write-only overrides are resolved by the controller.
 pub(super) async fn test(context: GooseModelContext) -> Result<(), String> {
     if context.model_id.trim().is_empty()
@@ -33,7 +35,10 @@ pub(super) async fn test(context: GooseModelContext) -> Result<(), String> {
     if !context.workspace.is_absolute() || !context.workspace.is_dir() {
         return Err("Choose an existing absolute workspace before testing Goose".into());
     }
-    let mut command = tokio::process::Command::new(context.command);
+    if context.command.file_stem().and_then(|name| name.to_str()) == Some("goose-acp") {
+        return test_acp(context).await;
+    }
+    let mut command = goose_command(&context);
     command
         .args([
             "run",
@@ -47,28 +52,8 @@ pub(super) async fn test(context: GooseModelContext) -> Result<(), String> {
             "--output-format",
             "json",
         ])
-        .current_dir(context.workspace)
-        .env_clear()
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .kill_on_drop(true);
-    for name in [
-        "HOME",
-        "TMPDIR",
-        "USER",
-        "LOGNAME",
-        "LANG",
-        "SSL_CERT_FILE",
-        "SSL_CERT_DIR",
-    ] {
-        if let Some(value) = std::env::var_os(name) {
-            command.env(name, value);
-        }
-    }
-    command
-        .envs(context.environment)
-        .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+        .current_dir(&context.workspace)
+        .stdin(Stdio::null());
     command
         .env("GOOSE_PROVIDER", context.provider_id)
         .env("GOOSE_MODEL", context.model_id)
@@ -101,16 +86,187 @@ pub(super) async fn test(context: GooseModelContext) -> Result<(), String> {
         }
     })
     .await
-    .map_err(|_| {
-        "Goose connection test timed out. Check the network, then test again.".to_owned()
-    })?
+    .map_err(|_| TEST_TIMEOUT.to_owned())?
+}
+
+// Holds the transport and partial line across cancellation, so Drop can finish
+// an in-flight session/new and delete only the session created by this test.
+struct AcpTest {
+    _child: CheckChild,
+    input: tokio::process::ChildStdin,
+    output: BufReader<tokio::io::Take<tokio::process::ChildStdout>>,
+    line: Vec<u8>,
+    creating: bool,
+    deleting: bool,
+    session_id: Option<String>,
+}
+
+impl AcpTest {
+    async fn send(&mut self, id: u64, method: &str, params: Value) -> Result<(), String> {
+        let request = json!({"jsonrpc":"2.0","id":id,"method":method,"params":params});
+        self.input
+            .write_all(format!("{request}\n").as_bytes())
+            .await
+            .map_err(|_| TEST_FAILURE.to_owned())
+    }
+
+    async fn response(&mut self, id: u64) -> Result<Value, String> {
+        loop {
+            if self
+                .output
+                .read_until(b'\n', &mut self.line)
+                .await
+                .map_err(|_| TEST_FAILURE)?
+                == 0
+            {
+                return Err(TEST_FAILURE.into());
+            }
+            let line = std::mem::take(&mut self.line);
+            let value: Value = serde_json::from_slice(&line).map_err(|_| TEST_FAILURE)?;
+            if value.get("id").and_then(Value::as_u64) == Some(id) && value.get("method").is_none()
+            {
+                if id == 2 {
+                    self.creating = false;
+                    self.session_id = value["result"]["sessionId"]
+                        .as_str()
+                        .filter(|id| !id.is_empty())
+                        .map(str::to_owned);
+                }
+                if value.get("error").is_some() {
+                    return Err(TEST_FAILURE.into());
+                }
+                return value
+                    .get("result")
+                    .cloned()
+                    .ok_or_else(|| TEST_FAILURE.to_owned());
+            }
+            if value.get("id").is_some() && value.get("method").is_some() {
+                // This check grants no file, terminal, or permission requests.
+                return Err(TEST_FAILURE.into());
+            }
+        }
+    }
+
+    async fn cleanup(&mut self) -> Result<(), String> {
+        if self.creating {
+            // A rejected session/new already cleans itself up in pinned Goose.
+            let _ = tokio::time::timeout(Duration::from_secs(30), self.response(2)).await;
+            if self.creating {
+                return Err(CLEANUP_FAILURE.into());
+            }
+        }
+        let Some(session_id) = self.session_id.clone() else {
+            return Ok(());
+        };
+        self.output.get_mut().set_limit(MAX_TEST_BYTES + 1);
+        tokio::time::timeout(Duration::from_secs(5), async {
+            if !self.deleting {
+                self.deleting = true;
+                self.send(4, "session/delete", json!({"sessionId":session_id}))
+                    .await?;
+            }
+            self.response(4).await?;
+            self.session_id = None;
+            Ok::<_, String>(())
+        })
+        .await
+        .map_err(|_| CLEANUP_FAILURE.to_owned())?
+        .map_err(|_| CLEANUP_FAILURE.to_owned())
+    }
+}
+
+struct AcpTestGuard(Option<AcpTest>);
+impl Drop for AcpTestGuard {
+    fn drop(&mut self) {
+        if let Some(mut test) = self.0.take() {
+            tokio::spawn(async move {
+                if test.cleanup().await.is_err() {
+                    eprintln!("{CLEANUP_FAILURE}");
+                }
+            });
+        }
+    }
+}
+
+async fn test_acp(context: GooseModelContext) -> Result<(), String> {
+    let mut command = goose_command(&context);
+    command
+        .current_dir(&context.workspace)
+        .stdin(Stdio::piped());
+    command
+        .env("GOOSE_PROVIDER", context.provider_id)
+        .env("GOOSE_MODEL", context.model_id)
+        .env("GOOSE_MAX_TOKENS", "10")
+        .env("GOOSE_THINKING_EFFORT", "off")
+        .env("GOOSE_MODE", "chat")
+        // Suppress the sidecar's default developer builtin without altering user configuration.
+        .env(
+            "EXTENSIONS",
+            r#"{"developer":{"type":"builtin","name":"developer","enabled":false}}"#,
+        );
+    #[cfg(unix)]
+    command.process_group(0);
+    let mut child = CheckChild(
+        command
+            .spawn()
+            .map_err(|_| "Could not start Goose to test the model".to_owned())?,
+    );
+    let input = child.0.stdin.take().ok_or(TEST_FAILURE)?;
+    let output = BufReader::new(
+        child
+            .0
+            .stdout
+            .take()
+            .ok_or(TEST_FAILURE)?
+            .take(MAX_TEST_BYTES + 1),
+    );
+    let mut guard = AcpTestGuard(Some(AcpTest {
+        _child: child,
+        input,
+        output,
+        line: Vec::new(),
+        creating: false,
+        deleting: false,
+        session_id: None,
+    }));
+    let test = guard.0.as_mut().unwrap();
+    let result = tokio::time::timeout(Duration::from_secs(30), async {
+        test.send(1, "initialize", json!({"protocolVersion":1,"clientInfo":{"name":"buzz-connection-test","version":env!("CARGO_PKG_VERSION")},"clientCapabilities":{}})).await?;
+        let initialized = test.response(1).await?;
+        if initialized["protocolVersion"] != 1 || !initialized["agentCapabilities"]["sessionCapabilities"]["delete"].is_object() {
+            return Err("Goose does not support temporary connection-test session cleanup".into());
+        }
+        test.creating = true;
+        test.send(2, "session/new", json!({"cwd":context.workspace,"mcpServers":[],"_meta":{"hidden":true,"sessionTitle":"Buzz connection test","enabledExtensions":[]}})).await?;
+        test.response(2).await?;
+        let session_id = test.session_id.as_ref().ok_or(TEST_FAILURE)?.clone();
+        test.send(3, "session/prompt", json!({"sessionId":session_id,"prompt":[{"type":"text","text":"Reply OK."}]})).await?;
+        let response = test.response(3).await?;
+        if !matches!(response["stopReason"].as_str(), Some("end_turn" | "max_tokens")) { return Err(TEST_FAILURE.into()); }
+        test.send(5, "_goose/unstable/session/export", json!({"sessionId":session_id,"format":"json"})).await?;
+        let exported = test.response(5).await?;
+        let session: Value = serde_json::from_str(exported["data"].as_str().ok_or(TEST_FAILURE)?).map_err(|_| TEST_FAILURE)?;
+        if session["id"] == session_id && assistant_reply(&session["conversation"]) { Ok(()) } else { Err(TEST_FAILURE.into()) }
+    }).await.unwrap_or_else(|_| Err(TEST_TIMEOUT.into()));
+    let cleanup = test.cleanup().await;
+    // Cleanup was awaited; retire the one-shot child without scheduling it again.
+    if let Some(mut test) = guard.0.take() {
+        let _ = test._child.0.kill().await;
+        let _ = test._child.0.wait().await;
+    }
+    cleanup?;
+    result
 }
 
 fn successful_reply(response: &Value) -> bool {
     if response["metadata"]["status"] != "completed" {
         return false;
     }
-    let Some(messages) = response["messages"].as_array() else {
+    assistant_reply(&response["messages"])
+}
+
+fn assistant_reply(messages: &Value) -> bool {
+    let Some(messages) = messages.as_array() else {
         return false;
     };
     let mut replied = false;
@@ -134,13 +290,11 @@ fn successful_reply(response: &Value) -> bool {
     replied
 }
 
-pub(super) async fn fetch(context: GooseModelContext) -> Result<Vec<String>, String> {
-    let provider_id = context.provider_id.clone();
-    let mut command = tokio::process::Command::new(context.command);
+// The same native-only environment boundary applies to catalogs and both tests.
+fn goose_command(context: &GooseModelContext) -> tokio::process::Command {
+    let mut command = tokio::process::Command::new(&context.command);
     command
-        .arg("acp")
         .env_clear()
-        .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .kill_on_drop(true);
@@ -158,8 +312,15 @@ pub(super) async fn fetch(context: GooseModelContext) -> Result<Vec<String>, Str
         }
     }
     command
-        .envs(context.environment)
+        .envs(&context.environment)
         .env("PATH", "/usr/bin:/bin:/usr/sbin:/sbin");
+    command
+}
+
+pub(super) async fn fetch(context: GooseModelContext) -> Result<Vec<String>, String> {
+    let provider_id = context.provider_id.clone();
+    let mut command = goose_command(&context);
+    command.args(&context.args).stdin(Stdio::piped());
     let mut child = command
         .spawn()
         .map_err(|_| "Could not start Goose to list models".to_owned())?;
@@ -249,6 +410,255 @@ fn parse_response(value: &Value, provider_id: &str) -> Result<Vec<String>, Strin
 mod tests {
     use super::*;
 
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn acp_connection_test_checks_reply_and_cleans_up_on_failure_or_cancel() {
+        use std::{
+            io::{BufRead, Read, Write},
+            os::{fd::FromRawFd, unix::fs::PermissionsExt},
+        };
+        const SOCKET: &str = "BUZZ_GOOSE_TEST_SOCKET";
+        const CASE: &str = "BUZZ_GOOSE_TEST_CASE";
+        if let Ok(socket) = std::env::var(SOCKET) {
+            let case = std::env::var(CASE).unwrap();
+            let mut gate = std::os::unix::net::UnixStream::connect(&socket).unwrap();
+            gate.set_read_timeout(Some(Duration::from_secs(10)))
+                .unwrap();
+            let mut input = std::io::stdin().lock();
+            let mut output = unsafe { std::fs::File::from_raw_fd(3) };
+            let mut request = || {
+                let mut line = String::new();
+                assert_ne!(input.read_line(&mut line).unwrap(), 0);
+                serde_json::from_str::<Value>(&line).unwrap()
+            };
+            let initialize = request();
+            assert_eq!(initialize["method"], "initialize");
+            let capabilities = if case == "no-delete" {
+                json!({})
+            } else {
+                json!({"sessionCapabilities":{"delete":{}}})
+            };
+            writeln!(output, "{}", json!({"jsonrpc":"2.0","id":initialize["id"],"result":{"protocolVersion":1,"agentCapabilities":capabilities}})).unwrap();
+            if case == "no-delete" {
+                gate.write_all(b"I").unwrap();
+                // The parent must return without creating a session.
+                let mut line = String::new();
+                assert_eq!(input.read_line(&mut line).unwrap(), 0);
+                return;
+            }
+            let new = request();
+            assert_eq!(new["method"], "session/new");
+            assert_eq!(new["params"]["_meta"]["hidden"], true);
+            assert_eq!(new["params"]["_meta"]["enabledExtensions"], json!([]));
+            let session_file = std::path::Path::new(&socket).with_file_name("session");
+            std::fs::write(&session_file, "temporary").unwrap();
+            let session =
+                json!({"jsonrpc":"2.0","id":new["id"],"result":{"sessionId":"test-session"}})
+                    .to_string();
+            // Hold session creation during a partial response before cancellation.
+            let split = session.len() / 2;
+            output.write_all(&session.as_bytes()[..split]).unwrap();
+            gate.write_all(b"C").unwrap();
+            gate.read_exact(&mut [0]).unwrap();
+            writeln!(output, "{}", &session[split..]).unwrap();
+            let mut next = request();
+            if next["method"] == "session/prompt" {
+                assert_eq!(next["params"]["sessionId"], "test-session");
+                assert_eq!(
+                    next["params"]["prompt"],
+                    json!([{"type":"text","text":"Reply OK."}])
+                );
+                gate.write_all(b"P").unwrap();
+                gate.read_exact(&mut [0]).unwrap();
+                if !matches!(case.as_str(), "cancel-prompt" | "timeout") {
+                    if case == "provider-error" {
+                        writeln!(output, "{}", json!({"jsonrpc":"2.0","id":next["id"],"error":{"code":-32000,"message":"DO_NOT_PROJECT_SECRET"}})).unwrap();
+                    } else {
+                        let session_id = if case == "wrong-session" {
+                            "other-session"
+                        } else {
+                            "test-session"
+                        };
+                        let update = if case == "thought-only" {
+                            "agent_thought_chunk"
+                        } else {
+                            "agent_message_chunk"
+                        };
+                        let text = if case == "empty" { " " } else { "OK" };
+                        writeln!(output, "{}", json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":session_id,"update":{"sessionUpdate":update,"content":{"type":"text","text":text}}}})).unwrap();
+                        let stop = if case == "cancelled" {
+                            "cancelled"
+                        } else if matches!(case.as_str(), "max-tokens" | "synthetic-limit") {
+                            "max_tokens"
+                        } else {
+                            "end_turn"
+                        };
+                        writeln!(
+                            output,
+                            "{}",
+                            json!({"jsonrpc":"2.0","id":next["id"],"result":{"stopReason":stop}})
+                        )
+                        .unwrap();
+                    }
+                }
+                next = request();
+            }
+            if next["method"] == "_goose/unstable/session/export" {
+                assert_eq!(
+                    next["params"],
+                    json!({"sessionId":"test-session","format":"json"})
+                );
+                let content = match case.as_str() {
+                    "error-text" => {
+                        json!([{"type":"text","text":"Provider failed"},{"type":"error","message":"DO_NOT_PROJECT_SECRET","kind":"other"}])
+                    }
+                    "empty" | "synthetic-limit" => json!([]),
+                    "thought-only" => json!([{"type":"thinking","thinking":"OK"}]),
+                    _ => json!([{"type":"text","text":"OK"}]),
+                };
+                let id = if case == "wrong-session" {
+                    "other-session"
+                } else {
+                    "test-session"
+                };
+                let data = json!({"id":id,"conversation":[{"role":"assistant","content":content}]})
+                    .to_string();
+                writeln!(
+                    output,
+                    "{}",
+                    json!({"jsonrpc":"2.0","id":next["id"],"result":{"data":data}})
+                )
+                .unwrap();
+                next = request();
+            }
+            assert_eq!(next["method"], "session/delete");
+            assert_eq!(next["params"]["sessionId"], "test-session");
+            if case == "cleanup-error" {
+                writeln!(output, "{}", json!({"jsonrpc":"2.0","id":next["id"],"error":{"code":-32603,"message":"DO_NOT_PROJECT_SECRET"}})).unwrap();
+            } else {
+                std::fs::remove_file(session_file).unwrap();
+                writeln!(
+                    output,
+                    "{}",
+                    json!({"jsonrpc":"2.0","id":next["id"],"result":{}})
+                )
+                .unwrap();
+            }
+            gate.write_all(b"D").unwrap();
+            return;
+        }
+        let dir = tempfile::Builder::new()
+            .prefix("goose-check")
+            .tempdir_in("/tmp")
+            .unwrap();
+        let socket = dir.path().join("gate");
+        let listener = tokio::net::UnixListener::bind(&socket).unwrap();
+        let command = dir.path().join("goose-acp");
+        std::fs::write(&command, r#"#!/bin/sh
+[ "$#" -eq 0 ] || exit 1
+exec "$BUZZ_GOOSE_TEST_EXE" --exact goose_models::tests::acp_connection_test_checks_reply_and_cleans_up_on_failure_or_cancel --nocapture 3>&1 >/dev/null
+"#).unwrap();
+        std::fs::set_permissions(&command, std::fs::Permissions::from_mode(0o700)).unwrap();
+        for case in [
+            "success",
+            "max-tokens",
+            "provider-error",
+            "error-text",
+            "synthetic-limit",
+            "empty",
+            "wrong-session",
+            "thought-only",
+            "cancelled",
+            "cleanup-error",
+            "no-delete",
+            "cancel-new",
+            "cancel-prompt",
+            "timeout",
+        ] {
+            let context = GooseModelContext {
+                command: command.clone(),
+                args: vec![],
+                workspace: dir.path().into(),
+                provider_id: "openai".into(),
+                model_id: "test-model".into(),
+                model_overridden: false,
+                environment: [
+                    (SOCKET.into(), socket.to_str().unwrap().into()),
+                    (CASE.into(), case.into()),
+                    (
+                        "BUZZ_GOOSE_TEST_EXE".into(),
+                        std::env::current_exe().unwrap().to_str().unwrap().into(),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+            };
+            let task = tokio::spawn(test(context));
+            let mut gate = tokio::time::timeout(Duration::from_secs(10), listener.accept())
+                .await
+                .unwrap()
+                .unwrap()
+                .0;
+            let mut stage = [0];
+            gate.read_exact(&mut stage).await.unwrap();
+            if case == "no-delete" {
+                assert_eq!(stage, *b"I");
+                assert!(task
+                    .await
+                    .unwrap()
+                    .unwrap_err()
+                    .contains("does not support"));
+                assert!(!dir.path().join("session").exists());
+                continue;
+            }
+            assert_eq!(stage, *b"C");
+            assert!(dir.path().join("session").exists());
+            if case == "cancel-new" {
+                task.abort();
+            }
+            gate.write_all(&[1]).await.unwrap();
+            if case != "cancel-new" {
+                gate.read_exact(&mut stage).await.unwrap();
+                assert_eq!(stage, *b"P");
+                if case == "cancel-prompt" {
+                    task.abort();
+                }
+                if case == "timeout" {
+                    tokio::time::pause();
+                    tokio::time::advance(Duration::from_secs(31)).await;
+                    tokio::time::resume();
+                }
+                gate.write_all(&[1]).await.unwrap();
+            }
+            tokio::time::timeout(Duration::from_secs(10), gate.read_exact(&mut stage))
+                .await
+                .unwrap()
+                .unwrap();
+            assert_eq!(stage, *b"D", "{case}");
+            let result = task.await;
+            if case.starts_with("cancel-") {
+                assert!(result.unwrap_err().is_cancelled());
+            } else if matches!(case, "success" | "max-tokens") {
+                result.unwrap().unwrap();
+            } else {
+                let error = result.unwrap().unwrap_err();
+                assert!(!error.contains("DO_NOT_PROJECT_SECRET"));
+                if case == "cleanup-error" {
+                    assert_eq!(error, CLEANUP_FAILURE);
+                } else if case == "timeout" {
+                    assert_eq!(error, TEST_TIMEOUT);
+                } else {
+                    assert_eq!(error, TEST_FAILURE);
+                }
+            }
+            if case == "cleanup-error" {
+                std::fs::remove_file(dir.path().join("session")).unwrap();
+            } else {
+                assert!(!dir.path().join("session").exists(), "{case}");
+            }
+        }
+    }
+
     #[test]
     fn accepts_only_bounded_model_names() {
         assert_eq!(
@@ -332,30 +742,39 @@ mod tests {
             .unwrap();
         let socket = dir.path().join("gate");
         let listener = tokio::net::UnixListener::bind(&socket).unwrap();
-        let command = dir.path().join("goose");
-        std::fs::write(&command, r#"#!/bin/sh
-[ "$1" = acp ] || exit 1
+        for (name, args, argument_check) in [
+            (
+                "goose",
+                vec!["acp".into()],
+                r#"[ "$#" -eq 1 ] && [ "$1" = acp ] || exit 1"#,
+            ),
+            ("goose-acp", vec![], r#"[ "$#" -eq 0 ] || exit 1"#),
+        ] {
+            let command = dir.path().join(name);
+            std::fs::write(&command, format!(r#"#!/bin/sh
+{argument_check}
 exec "$BUZZ_GOOSE_TEST_EXE" --exact goose_models::tests::one_shot_acp_request_reads_catalog_before_closing_stdin --nocapture 3>&1 >/dev/null
-"#).unwrap();
-        std::fs::set_permissions(&command, std::fs::Permissions::from_mode(0o700)).unwrap();
-        let context = GooseModelContext {
-            command,
-            workspace: dir.path().into(),
-            provider_id: "openai".into(),
-            model_id: "gpt-6-sol".into(),
-            environment: [
-                ("OPENAI_API_KEY".into(), "test-key".into()),
-                (SOCKET.into(), socket.to_str().unwrap().into()),
-                (
-                    "BUZZ_GOOSE_TEST_EXE".into(),
-                    std::env::current_exe().unwrap().to_str().unwrap().into(),
-                ),
-            ]
-            .into_iter()
-            .collect(),
-            model_overridden: false,
-        };
-        tokio::time::timeout(Duration::from_secs(10), async {
+"#)).unwrap();
+            std::fs::set_permissions(&command, std::fs::Permissions::from_mode(0o700)).unwrap();
+            let context = GooseModelContext {
+                command,
+                args,
+                workspace: dir.path().into(),
+                provider_id: "openai".into(),
+                model_id: "gpt-6-sol".into(),
+                environment: [
+                    ("OPENAI_API_KEY".into(), "test-key".into()),
+                    (SOCKET.into(), socket.to_str().unwrap().into()),
+                    (
+                        "BUZZ_GOOSE_TEST_EXE".into(),
+                        std::env::current_exe().unwrap().to_str().unwrap().into(),
+                    ),
+                ]
+                .into_iter()
+                .collect(),
+                model_overridden: false,
+            };
+            tokio::time::timeout(Duration::from_secs(10), async {
             let mut lookup = std::pin::pin!(fetch(context));
             let mut gate = tokio::select! {
                 accepted = listener.accept() => accepted.unwrap().0,
@@ -378,5 +797,6 @@ exec "$BUZZ_GOOSE_TEST_EXE" --exact goose_models::tests::one_shot_acp_request_re
         })
         .await
         .expect("catalog fixture did not finish");
+        }
     }
 }

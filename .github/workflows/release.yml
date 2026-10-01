@@ -119,7 +119,8 @@ jobs:
           const directory = process.argv[2];
           const source = JSON.parse(readFileSync('runtime/agent-runtime.json', 'utf8'));
           const manifest = JSON.parse(readFileSync(`${directory}/manifest.json`, 'utf8'));
-          assert.equal(manifest.version, 1);
+          assert.equal(manifest.version, 2);
+          assert.deepEqual(manifest.goose, source.goose);
           assert.equal(manifest.revision, source.revision);
           assert.equal(manifest.target, 'aarch64-apple-darwin');
           assert.deepEqual(Object.keys(manifest.files).sort(), [...source.tools].sort());

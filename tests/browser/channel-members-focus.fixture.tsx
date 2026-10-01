@@ -1,4 +1,6 @@
 import { useState } from "react";
+import { schnorr } from "@noble/curves/secp256k1.js";
+import { bytesToHex } from "nostr-tools/utils";
 import { AgentSelection } from "../../src/bundled/channel-templates/TemplateFields";
 import { Dialog } from "../../src/shared/design-system/ui/Dialog";
 import { Button } from "../../src/shared/design-system/ui/Button";
@@ -7,6 +9,9 @@ import { createRoot } from "react-dom/client";
 import { ChannelMembersButton } from "../../src/bundled/channels/ChannelMembersDialog";
 import { createRelaySession } from "../../src/features/relay/session";
 import { matchesEvent } from "../../src/features/relay/projection";
+import { bindNames } from "../../src/features/identity-names/service";
+import { createNameProvider } from "../../src/features/identity-names/directory";
+import { resolveIdentityNames } from "../../src/features/identity-names/policy";
 import {
   keypair,
   profile,
@@ -27,6 +32,12 @@ const candidates = new URLSearchParams(location.search).has("multiple")
 const candidateProfiles = candidates.map(({ key, name }) =>
   profile(key, { name }),
 );
+const holdNames = new URLSearchParams(location.search).has("loading");
+let releaseNames = () => {};
+const namesReady = new Promise<void>((resolve) => {
+  releaseNames = resolve;
+});
+let namesRequested = false;
 // A team long enough to scroll inside its dialog.
 const team = new URLSearchParams(location.search).has("team")
   ? Array.from({ length: 12 }, (_, index) => ({
@@ -36,7 +47,62 @@ const team = new URLSearchParams(location.search).has("team")
   : [{ pubkey: person.pubkey, name: "Morgan" }];
 const additions: string[] = [];
 const channelId = "11111111-1111-4111-8111-111111111111";
-const members = [viewer.pubkey];
+// Only the scroll-dismissal journey needs an overflowing roster.
+const scrollMembers = new URLSearchParams(location.search).has("scroll")
+  ? Array.from({ length: 16 }, (_, index) => ({
+      key: keypair(),
+      name: `Member ${index + 1}`,
+    }))
+  : [];
+// Real owner signatures for the opt-in search workload, not a mocked verifier.
+const invitationScale = new URLSearchParams(location.search).has(
+  "invitation-scale",
+);
+const inventory = invitationScale
+  ? Array.from({ length: 240 }, (_, index) => ({
+      pubkey: keypair().pubkey,
+      name: `Helper ${String(index + 1).padStart(3, "0")}`,
+    }))
+  : [];
+const searchScale = new URLSearchParams(location.search).has("search-scale");
+const managed = searchScale
+  ? Array.from({ length: 60 }, (_, index) => ({
+      key: keypair(),
+      name: `Agent ${index + 1}`,
+    }))
+  : [];
+const managedProfiles = await Promise.all(
+  managed.map(async ({ key, name }) => {
+    const digest = await crypto.subtle.digest(
+      "SHA-256",
+      new TextEncoder().encode(`nostr:agent-auth:${key.pubkey}:`),
+    );
+    return signed(key, {
+      kind: 0,
+      content: JSON.stringify({
+        name,
+        is_agent: true,
+        picture: `https://example.test/${key.pubkey}.png`,
+      }),
+      tags: [
+        [
+          "auth",
+          viewer.pubkey,
+          "",
+          bytesToHex(schnorr.sign(new Uint8Array(digest), viewer.secret)),
+        ],
+      ],
+    });
+  }),
+);
+const members = [
+  viewer.pubkey,
+  ...scrollMembers.map(({ key }) => key.pubkey),
+  ...managed.map(({ key }) => key.pubkey),
+];
+const scrollProfiles = scrollMembers.map(({ key, name }) =>
+  profile(key, { name }),
+);
 let clock = 1700000000;
 let publishStarted = () => {};
 let releasePublish = () => {};
@@ -46,15 +112,32 @@ const published = new Promise<void>((resolve) => {
 const held = new Promise<void>((resolve) => {
   releasePublish = resolve;
 });
-const { session } = createRelaySession(
+const searchWork = { images: 0, observations: 0 };
+const provider = createNameProvider({
+  id: "fixture",
+  resolve: resolveIdentityNames,
+});
+const { session: sharedSession } = createRelaySession(
   {
     viewer: viewer.pubkey,
     scope: "https://relay.example.test",
     relayAuthor: relay.pubkey,
-    media: () => undefined,
-    readAgentLibrary: async () => ({ definitions: [], identities: [] }),
+    media: () => {
+      searchWork.images++;
+      return undefined;
+    },
+    readAgentLibrary: async () => ({ definitions: [], identities: inventory }),
     query: async (filters) => {
-      if (filters.some((filter) => filter.search)) return candidateProfiles;
+      if (filters.some((filter) => filter.search)) {
+        // The roster-only workload must not introduce a new identity: random
+        // npub suffix collisions legitimately change every row's key label.
+        if (invitationScale || searchScale) return [];
+        return candidateProfiles;
+      }
+      if (holdNames && filters.some((filter) => filter.kinds?.includes(0))) {
+        namesRequested = true;
+        await namesReady;
+      }
       return [
         roster(relay, channelId, members, clock),
         signed(relay, {
@@ -69,6 +152,8 @@ const { session } = createRelaySession(
         }),
         profile(viewer, { name: "Carl" }),
         ...candidateProfiles,
+        ...scrollProfiles,
+        ...managedProfiles,
       ].filter((event) =>
         filters.some((filter) => matchesEvent(event, filter)),
       );
@@ -87,8 +172,36 @@ const { session } = createRelaySession(
       },
     },
   },
-  { outboxStorage: { load: () => [], save: () => {} } },
+  {
+    outboxStorage: { load: () => [], save: () => {} },
+    identityNames: {
+      register() {},
+      bind(source) {
+        const names = bindNames(source, {
+          snapshot: () => [provider],
+          subscribe: () => () => {},
+        });
+        return names;
+      },
+    },
+  },
 );
+const session: typeof sharedSession = {
+  ...sharedSession,
+  observe(...args) {
+    if (
+      args[0].some(
+        (filter) =>
+          filter.kinds?.includes(0) &&
+          filter.authors?.some((key) =>
+            managed.some((agent) => agent.key.pubkey === key),
+          ),
+      )
+    )
+      searchWork.observations++;
+    return sharedSession.observe(...args);
+  },
+};
 session.channels.ensureList();
 const root = document.getElementById("root");
 if (!root) throw new Error("Missing fixture root");
@@ -97,7 +210,12 @@ function Fixture() {
   const [selected, setSelected] = useState<string[]>([]);
   return (
     <ToastProvider>
-      <ChannelMembersButton session={session} channelId={channelId} />
+      <ChannelMembersButton
+        session={session}
+        channelId={channelId}
+        canOpenLink={() => true}
+        onOpenLink={() => true}
+      />
       <Button onClick={() => setOpen(true)}>Edit team</Button>
       <Dialog open={open} onOpenChange={setOpen} title="Team">
         <AgentSelection
@@ -113,5 +231,12 @@ function Fixture() {
 createRoot(root).render(<Fixture />);
 // The test controls when confirmation arrives; no relay or member is contacted.
 Object.assign(window, {
-  focusFixture: { published, additions, confirm: () => releasePublish() },
+  focusFixture: {
+    searchWork,
+    published,
+    namesRequested: () => namesRequested,
+    releaseNames: () => releaseNames(),
+    additions,
+    confirm: () => releasePublish(),
+  },
 });

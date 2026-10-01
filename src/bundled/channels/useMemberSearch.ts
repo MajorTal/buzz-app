@@ -70,6 +70,7 @@ export function useMemberSearch(
     more: visible && result.more,
     error: visible ? result.error : undefined,
     next: () => setRequest((old) => ({ ...old, page: old.page + 1 })),
-    retry: () => setRequest((old) => ({ ...old, attempt: old.attempt + 1 })),
+    refresh: () =>
+      setRequest((old) => ({ ...old, page: 1, attempt: old.attempt + 1 })),
   };
 }

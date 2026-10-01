@@ -461,6 +461,9 @@ attempt, and late completion cannot acknowledge a replacement attempt.
 
 Version-1 `OpenTarget` accepts legacy Home targets (resolved to Messages), Settings sections, contributed pages with
 optional versioned JSON routes, and account/community-bound conversations.
+Conversation targets may include `panel: "members"` to restore that channel’s
+Members dialog without replacing its channel/message identity. Unknown panel
+values are rejected; this is presentation state, never mutation or confirmation state.
 The boundary copies, freezes and bounds route data; an address is never an access
 grant. Scoped targets require the original viewer and an already joined community.
 An explicit `scope: null` restores Personal space; omitted page scope leaves the

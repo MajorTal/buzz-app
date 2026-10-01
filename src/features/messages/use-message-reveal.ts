@@ -9,6 +9,7 @@ export function useMessageReveal({
   ready,
   complete,
   prepare,
+  focus = true,
 }: {
   scroller: RefObject<HTMLElement | null>;
   settled: RefObject<boolean>;
@@ -17,6 +18,8 @@ export function useMessageReveal({
   ready: boolean;
   complete(): void;
   prepare?(): void;
+  /** A covering modal owns focus; the underlying target still verifies/reveals. */
+  focus?: boolean;
 }) {
   const revealed = useRef<AbortSignal | undefined>(undefined);
   useLayoutEffect(() => {
@@ -53,7 +56,7 @@ export function useMessageReveal({
         behavior: "instant",
       });
       settled.current = true;
-      row.focus({ preventScroll: true });
+      if (focus) row.focus({ preventScroll: true });
       frame = requestAnimationFrame(() => {
         if (signal?.aborted || !row.isConnected || !container.contains(row))
           return;
@@ -66,7 +69,7 @@ export function useMessageReveal({
           box.top < Math.min(viewport.bottom, window.innerHeight) &&
           box.right > Math.max(viewport.left, 0) &&
           box.left < Math.min(viewport.right, window.innerWidth);
-        if (document.activeElement !== row || !visible) return;
+        if ((focus && document.activeElement !== row) || !visible) return;
         revealed.current = signal;
         cancel();
         complete();
@@ -88,6 +91,6 @@ export function useMessageReveal({
       cancel();
       signal.removeEventListener("abort", cancel);
     };
-  }, [scroller, settled, messageId, signal, ready, complete, prepare]);
+  }, [scroller, settled, messageId, signal, ready, complete, prepare, focus]);
   return revealed;
 }

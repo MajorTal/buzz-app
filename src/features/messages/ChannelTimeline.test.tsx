@@ -262,7 +262,7 @@ function setup({
     ref: { current: unknown };
     children: unknown[];
     onScroll: (event: unknown) => void;
-    onWheel: () => void;
+    onPointerDown: () => void;
     onFocus: (event: unknown) => void;
     onBlur: (event: unknown) => void;
   }>;
@@ -400,7 +400,7 @@ function setup({
       flush();
     },
     gesture() {
-      section.props.onWheel();
+      section.props.onPointerDown();
     },
     dispatchScroll() {
       section.props.onScroll({ currentTarget: element });
@@ -408,7 +408,7 @@ function setup({
     scroll(user = true) {
       resized(element);
       render();
-      if (user) section.props.onWheel();
+      if (user) section.props.onPointerDown();
       section.props.onScroll({ currentTarget: element });
     },
     edit(runFrames = true) {
@@ -1470,6 +1470,47 @@ it("list shrinkage clamps the offset without revoking bottom follow", () => {
   });
   h.unmount();
   expect(h.saved().bottom).toBe(true);
+});
+
+it("virtualizer correction plus native shrink clamping retains bottom follow", () => {
+  const h = setup();
+  h.element.scrollTop = 3038;
+  h.scroll();
+  h.gesture(); // The link-opening click did not scroll the reader.
+  h.append();
+  // A wider panel layout contracts measured rows. WebKit clamps scrollTop,
+  // then Virtua applies its own resize correction before native scroll delivery.
+  h.element.scrollHeight -= 640;
+  h.element.scrollTop -= 1279;
+  h.measureRows(false);
+  h.dispatchScroll();
+  h.handle.scrollToIndex.mockClear();
+  h.flush();
+  expect(h.handle.scrollToIndex).toHaveBeenCalledExactlyOnceWith(2, {
+    align: "end",
+  });
+  h.unmount();
+  expect(h.saved().bottom).toBe(true);
+});
+
+it("reader movement after a shrink correction still stops bottom follow", () => {
+  const h = setup();
+  h.element.scrollTop = 3038;
+  h.scroll();
+  h.append();
+  h.element.scrollHeight -= 640;
+  h.element.scrollTop -= 1279;
+  h.measureRows(false);
+  h.gesture();
+  h.element.scrollTop -= 200;
+  h.dispatchScroll();
+  h.handle.scrollToIndex.mockClear();
+  h.flush();
+  h.append();
+  h.measureRows();
+  expect(h.handle.scrollToIndex).not.toHaveBeenCalled();
+  h.unmount();
+  expect(h.saved().bottom).toBe(false);
 });
 
 it("input saves pending DOM movement even if navigation precedes its scroll event", () => {

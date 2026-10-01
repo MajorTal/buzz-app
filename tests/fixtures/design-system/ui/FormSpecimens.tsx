@@ -251,6 +251,7 @@ export function SelectExamples() {
           <Select
             label="Row workspace"
             variant="compact"
+            align="end"
             value={inline}
             onValueChange={setInline}
             groups={workspaceGroups}

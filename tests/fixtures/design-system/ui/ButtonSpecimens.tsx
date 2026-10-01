@@ -2,6 +2,7 @@ import { useState } from "react";
 import {
   ArrowRightIcon,
   PlusIcon,
+  DotsThreeIcon,
   GearIcon,
 } from "../../../../src/shared/design-system/icons";
 import { Avatar } from "../../../../src/shared/design-system/ui/Avatar";
@@ -215,6 +216,17 @@ export function IconButtonSpecimen() {
         />
       </div>
       <ButtonMatrix kind="icon" />
+      <div className="component-specimen-frame">
+        <div className="flex min-h-12 items-center rounded-row bg-affordance-subtle">
+          <span className="px-control-inset text-body-sm">Row action</span>
+          <IconButton
+            size="sm"
+            shape="row-end"
+            aria-label="Row actions"
+            icon={<DotsThreeIcon aria-hidden="true" />}
+          />
+        </div>
+      </div>
       <div className="component-specimen-frame">
         <IconButton
           size="xs"

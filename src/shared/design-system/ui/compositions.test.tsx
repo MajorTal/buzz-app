@@ -366,6 +366,33 @@ test("a nested right dialog renders its own dismissal backdrop", () => {
   ).not.toBeNull();
 });
 
+test("dialog content-owned layout is opt-in and retains the shared body", () => {
+  const props = {
+    open: true,
+    onOpenChange: () => {},
+    title: "Browse",
+    children: <p>Results</p>,
+  };
+  const { rerender } = render(<Dialog {...props} />);
+  expect(screen.getByRole("dialog")).toHaveAttribute(
+    "data-body-layout",
+    "flow",
+  );
+  rerender(<Dialog {...props} height="stable" bodyLayout="flex" />);
+  expect(screen.getByRole("dialog")).toHaveAttribute(
+    "data-body-layout",
+    "flex",
+  );
+  expect(screen.getByText("Results").parentElement).toHaveClass(
+    "buzz-dialog-body",
+  );
+  rerender(<Dialog {...props} />);
+  expect(screen.getByRole("dialog")).toHaveAttribute(
+    "data-body-layout",
+    "flow",
+  );
+});
+
 test("navigation tabs retain keyboard selection and separate close buttons", async () => {
   const user = userEvent.setup();
   const close = vi.fn();

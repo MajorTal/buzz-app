@@ -20,6 +20,7 @@ function Example({
   action = "Save",
   informational = false,
   height,
+  bodyLayout,
   children,
 }: {
   label: string;
@@ -29,6 +30,7 @@ function Example({
   action?: string;
   informational?: boolean;
   height?: "content" | "stable";
+  bodyLayout?: "flow" | "flex";
   children: ReactNode;
 }) {
   const [open, setOpen] = useState(false);
@@ -52,6 +54,7 @@ function Example({
         onOpenChange={setOpen}
         title={title}
         {...(height ? { height } : {})}
+        {...(bodyLayout ? { bodyLayout } : {})}
         {...(intro ? { description: intro } : {})}
         actions={
           informational ? (
@@ -121,6 +124,30 @@ export function DialogSpecimens() {
             },
           ]}
         />
+      </Example>
+      <Example
+        label="Fixed controls and scrolling content"
+        description="A fixed search field above a single list that fills the remaining height."
+        title="Browse people"
+        height="stable"
+        bodyLayout="flex"
+        informational
+      >
+        <div className="flex min-h-0 flex-1 flex-col gap-4">
+          <div className="shrink-0">
+            <Input aria-label="Search people" placeholder="Search people" />
+          </div>
+          <section className="min-h-0 flex-1 overflow-auto" aria-label="People">
+            {Array.from(
+              { length: 20 },
+              (_, index) => `Person ${index + 1}`,
+            ).map((name) => (
+              <p key={name} className="py-2 text-body-sm">
+                {name}
+              </p>
+            ))}
+          </section>
+        </div>
       </Example>
       <Example
         label="Single field"

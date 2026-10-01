@@ -164,6 +164,17 @@
     flex: 1;
     overflow: auto;
   }
+  /* Opt in when fixed controls and one inner scrollport share the body. */
+  .buzz-dialog[data-body-layout="flex"] > .buzz-dialog-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* Without footer actions, the popup already supplies the bottom gutter. */
+  .buzz-dialog[data-body-layout="flex"] > .buzz-dialog-body:last-child {
+    padding-bottom: 0;
+  }
   .buzz-tooltip-positioner {
     z-index: var(--layer-tooltip);
   }

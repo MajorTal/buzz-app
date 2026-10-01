@@ -13,7 +13,7 @@ type IconButtonSize =
   | "xs"
   | "toolbar"
   | "large";
-type IconButtonShape = "control" | "round";
+type IconButtonShape = "control" | "round" | "row-end";
 
 export type IconButtonProps = Omit<
   ComponentProps<typeof Button>,

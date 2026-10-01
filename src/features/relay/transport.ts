@@ -85,6 +85,7 @@ export interface ReadTransport {
   readonly channelLifecycle?: RelayWriter;
   /** Name/about/private-only metadata writer, separate from lifecycle and outbox. */
   readonly channelDetails?: RelayWriter;
+  readonly memberAdministration?: RelayWriter;
   /** Narrow NIP-IA 9035/9036 signer/publisher; never supplied to the message outbox. */
   readonly identityArchive?: RelayWriter;
   /** Purpose-bound observer decoding on the shared host live stream. */
@@ -373,6 +374,7 @@ export async function connectBrokerTransport(
     directMessages?: boolean;
     channelLifecycle?: boolean;
     channelDetails?: boolean;
+    memberAdministration?: boolean;
     identityArchives?: boolean;
     relayUrl?: string;
     relayHttpUrl?: string;
@@ -821,6 +823,9 @@ export async function connectBrokerTransport(
       : {}),
     ...(session.channelDetails === true
       ? { channelDetails: routeWriter("channel-details") }
+      : {}),
+    ...(session.memberAdministration === true
+      ? { memberAdministration: routeWriter("member-administration") }
       : {}),
     ...(session.channelLifecycle === true
       ? { channelLifecycle: routeWriter("channel-lifecycle") }

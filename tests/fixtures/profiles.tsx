@@ -50,6 +50,23 @@ const fixtureOrigin = instanceProbe
 const archivedProbe = new URLSearchParams(location.search).has("archived");
 const actionsProbe = new URLSearchParams(location.search).has("agent-actions");
 const logProbe = new URLSearchParams(location.search).has("harness-log");
+const memberMessageProbe = new URLSearchParams(location.search).has(
+  "member-message",
+);
+let dmOpened = false;
+const dmOpens: string[][] = [];
+const dmEvents = () => [
+  signed(authority, {
+    kind: 39000,
+    content: "",
+    tags: [
+      ["d", "member-dm"],
+      ["t", "dm"],
+      ["name", "Member conversation"],
+    ],
+  }),
+  roster(authority, "member-dm", [viewer.pubkey, mic.pubkey]),
+];
 const root = message(viewer, "one", "Hello @Mic", 10, [["p", mic.pubkey]]);
 const unknown = signed(missing, {
   kind: 40002,
@@ -121,6 +138,23 @@ async function attestAgentProfile() {
 function session() {
   return createRelaySession({
     viewer: viewer.pubkey,
+    ...(memberMessageProbe
+      ? {
+          openDirectMessage: async (keys: readonly string[]) => {
+            dmOpens.push([...keys]);
+            dmOpened = true;
+            return "member-dm";
+          },
+          writer: {
+            kinds: [9],
+            sign: async (template: Parameters<typeof signed>[1]) =>
+              signed(viewer, template),
+            publish: async () => {
+              report.publications++;
+            },
+          },
+        }
+      : {}),
     ...(logProbe ? { authorizeAgentLog: async () => "fixture-proof" } : {}),
     relayAuthor: authority.pubkey,
     archiveAuthority: authority.pubkey,
@@ -154,6 +188,17 @@ function session() {
     },
     async query(filters) {
       return filters.flatMap((filter) => {
+        if (dmOpened && filter["#d"]?.includes("member-dm"))
+          return dmEvents().filter((event) =>
+            filter.kinds?.includes(event.kind),
+          );
+        if (filter.kinds?.includes(9) && filter["#h"]?.includes("member-dm"))
+          return [
+            bounds(authority, "member-dm", "head", {
+              has_more: false,
+              next_cursor: null,
+            }),
+          ];
         if (filter.kinds?.includes(13535))
           return [
             signed(authority, {
@@ -363,6 +408,7 @@ const providers = new TemplateProvidersService(context);
 Object.assign(window, {
   profilesFixture: {
     report,
+    navigation: context.navigation,
     async deleteSecond() {
       native.data.agents = native.data.agents.filter(
         (agent) => agent.id !== "second",
@@ -376,6 +422,7 @@ Object.assign(window, {
       releaseLaunch = undefined;
     },
     contexts,
+    dmOpens,
     targets: {
       viewer: profileTarget(viewer.pubkey),
       mic: profileTarget(mic.pubkey),

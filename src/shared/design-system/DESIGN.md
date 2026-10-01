@@ -82,6 +82,15 @@ remain enforced. This exception is not an accessibility pass. Dark Away meets
 3:1 on these opaque surfaces. Offline stays unoutlined. Badge footprints,
 Bézier artwork cutouts, presence behavior and accessible names are unchanged.
 
+For a separate trailing action attached to a row, use `IconButton shape="row-end"`
+in a stretched flex slot. It keeps the size-selected width, fills the row height,
+and rounds only the right corners with `radius-row`. Decorative inverse corners
+on the left extend the state fill around the preceding row's rounded edge without
+expanding the hit target. They inherit the fill, including hover/pressed/menu-open
+states, rather than painting over the adjacent surface. Hover uses the same
+contextual row highlight as NavigationItem, not the brighter floating-button
+step. Shared pressed and keyboard behavior remains unchanged.
+
 ## Public identity text
 
 Public-key recognition labels use the shared pure formatter in
@@ -268,8 +277,11 @@ For finite choices, use Select: its inline layout fits compact toolbars and
 `variant="field"` fits labelled forms. The proposed `variant="compact"` fits
 trailing row choices: a small ghost trigger with a visually hidden accessible
 label, bounded single-line value, and full choice text in the popup and value hint.
-The caller owns its column width. Pass `disabled` explicitly when the choice
-is unavailable. For searchable choices, use the shared Combobox parts; keep
+Its popup has an 11.25rem minimum (bounded by the viewport) and reserves the
+selection-mark slot in every option so selecting the widest label cannot resize it.
+The caller owns its column width. `align="end"` anchors a trailing choice popup
+to the trigger’s right edge; the default remains `start`. Pass `disabled` explicitly
+when the choice is unavailable. For searchable choices, use the shared Combobox parts; keep
 filtering, custom-value commits, and async requests with the feature. Its Control
 owns the label, input and integrated browse caret; Popup and Item own the shared
 menu presentation. Use its loading state while discovering options, and keep
@@ -398,6 +410,13 @@ the close button so its hit area does not enlarge the text gap. The body owns
 vertical padding matching the dialog's horizontal padding: `--space-6` (24px),
 or `--space-4` (16px) at the compact breakpoint. Do not add an outer flex gap
 on top of that body padding.
+For a bounded dialog with fixed controls above a list, use `height="stable"`
+with `bodyLayout="flex"`. The body becomes a non-scrolling flex column; the
+feature supplies a `flex: 1; min-height: 0` composition with fixed controls and
+one flexing scrollport. Keep all results and recovery feedback reachable in that
+scrollport. Without footer actions, the flex body omits its bottom padding so
+only the popup supplies the outer bottom gutter. With actions, it retains the
+body-to-footer spacing. The default flow layout and other dialogs remain unchanged.
 The shared Dialog uses state opacity and settling transform tokens for a centered
 0.98-scale entrance, with fast timing on exit. Base UI owns transition presence;
 keep the controlled component mounted while setting `open={false}` for an exit.

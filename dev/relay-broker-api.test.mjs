@@ -2894,3 +2894,105 @@ test("details routes are narrow, require the live owner, and do not widen lifecy
     await h.close();
   }
 });
+
+test("member administration uses isolated shape-limited routes and the current community socket", async () => {
+  const h = await harness(success);
+  let live;
+  try {
+    const transport = await connectBrokerTransport(h.base);
+    const id = "11111111-1111-4111-8111-111111111111";
+    const target = getPublicKey(new Uint8Array(32).fill(5));
+    const signal = new AbortController().signal;
+    const template = {
+      kind: 9000,
+      created_at: 1700000000,
+      content: "",
+      tags: [
+        ["h", id],
+        ["p", target],
+        ["role", "admin"],
+      ],
+    };
+    const invalid = [
+      { ...template, kind: 9002 },
+      { ...template, content: "metadata" },
+      {
+        ...template,
+        tags: [
+          ["h", id],
+          ["p", target],
+          ["role", "owner"],
+        ],
+      },
+      {
+        ...template,
+        tags: [
+          ["h", id],
+          ["p", target],
+          ["role", "bot"],
+        ],
+      },
+      {
+        ...template,
+        tags: [
+          ["h", id],
+          ["p", transport.viewer],
+          ["role", "member"],
+        ],
+      },
+      {
+        ...template,
+        kind: 9001,
+        tags: [
+          ["h", id],
+          ["p", transport.viewer],
+        ],
+      },
+      { ...template, tags: [...template.tags, ["h", id]] },
+      { ...template, tags: null },
+      { ...template, tags: [null] },
+    ];
+    for (const event of invalid)
+      for (const route of [
+        "member-administration-sign",
+        "member-administration-publish",
+      ])
+        expect((await h.post(route, event)).status).toBe(400);
+    expect((await h.post("sign", template)).status).toBe(400);
+    const signed = await transport.memberAdministration.sign(template, signal);
+    expect(verifyEvent(signed)).toBe(true);
+    expect(signed).toMatchObject(template);
+    expect((await h.post("publish", signed)).status).toBe(400);
+    await expect(
+      transport.memberAdministration.publish(signed, signal),
+    ).rejects.toBeInstanceOf(PublishRejected);
+    expect(h.publications).toHaveLength(0);
+    live = await openBrokerSocket(transport);
+    await transport.memberAdministration.publish(signed, signal);
+    const removal = await transport.memberAdministration.sign(
+      { ...template, kind: 9001, tags: template.tags.slice(0, 2) },
+      signal,
+    );
+    expect(
+      (
+        await h.post("sign", {
+          ...template,
+          kind: 9001,
+          tags: template.tags.slice(0, 2),
+        })
+      ).status,
+    ).toBe(400);
+    await transport.memberAdministration.publish(removal, signal);
+    const foreign = finalizeEvent(
+      structuredClone(template),
+      new Uint8Array(32).fill(5),
+    );
+    expect(
+      (await h.post("member-administration-publish", foreign)).status,
+    ).toBe(400);
+    expect(h.publications).toHaveLength(2);
+  } finally {
+    live?.dispose();
+    await h.close();
+  }
+});

@@ -36,6 +36,8 @@ export type OpenTarget =
       messageId?: string;
       /** Hint only. Resolve the actual root from verified message evidence. */
       threadRootId?: string;
+      /** Presentation within this conversation; never mutation or confirmation state. */
+      panel?: "members";
     }>;
 
 const MAX_BYTES = 8192;
@@ -175,8 +177,11 @@ export function parseOpenTarget(input: unknown): OpenTarget {
           "channelId",
           "messageId",
           "threadRootId",
+          "panel",
         ]);
         if (value.threadRootId !== undefined && value.messageId === undefined)
+          throw invalid();
+        if (value.panel !== undefined && value.panel !== "members")
           throw invalid();
         target = {
           version: 1,
@@ -192,6 +197,7 @@ export function parseOpenTarget(input: unknown): OpenTarget {
           ...(value.threadRootId !== undefined
             ? { threadRootId: text(value.threadRootId, hex).toLowerCase() }
             : {}),
+          ...(value.panel === "members" ? { panel: "members" } : {}),
         };
         break;
       default:

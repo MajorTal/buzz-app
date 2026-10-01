@@ -5,6 +5,7 @@ import {
   selectSettingsSection,
 } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
+import { finalizeEvent, generateSecretKey } from "nostr-tools";
 import { wheel, anchor, settle, upper, expectAnchor } from "./timeline.mjs";
 
 const scroll = test.extend({ historyCounts: { alpha: 20, beta: 1 } });
@@ -1180,3 +1181,212 @@ sidebarActions(
     }
   },
 );
+
+// Probe the platform's native default separately from the app: Linux and macOS
+// WebKit differ for Control+Home and keyboard chaining through CSS containment.
+// The app must preserve native behavior, not invent a cross-platform shortcut.
+async function nativeUpwardScroll(context, key, containment) {
+  const probe = await context.newPage();
+  try {
+    await probe.setContent(`
+      <div id="outer" style="height:400px;overflow:auto">
+        <div style="height:1600px"></div>
+        <div id="inner" style="${containment ? `height:160px;overflow:auto;overscroll-behavior-y:${containment}` : ""}">
+          <a id="control" href="#">Message link</a>
+          ${containment ? '<div style="height:1600px"></div>' : ""}
+        </div>
+      </div>`);
+    const outer = probe.locator("#outer");
+    await outer.evaluate((el) => {
+      el.scrollTop = el.scrollHeight;
+    });
+    await probe
+      .locator("#control")
+      .evaluate((el) => el.focus({ preventScroll: true }));
+    await settle(probe, outer);
+    const before = await outer.evaluate((el) => el.scrollTop);
+    await probe.keyboard.press(key);
+    await settle(probe, outer);
+    return await outer.evaluate(
+      (el, start) => el.scrollTop < start - 80,
+      before,
+    );
+  } finally {
+    await probe.close();
+  }
+}
+
+// Native default keyboard scrolling from a focused descendant is browser-owned;
+// deterministic same-shrink ordering is covered in ChannelTimeline.restore.test.
+for (const [control, key] of [
+  ["link", "PageUp"],
+  ["button", "PageUp"],
+  ["link", process.platform === "darwin" ? "Meta+ArrowUp" : "Control+Home"],
+  ...(process.platform === "darwin" ? [["link", "Alt+ArrowUp"]] : []),
+]) {
+  readingTest(
+    `${key} from a message ${control} preserves native scroll ownership`,
+    async ({ page, app, context }) => {
+      const nativeScroll = await nativeUpwardScroll(context, key);
+      await open(page, app);
+      await settle(page);
+      const target = "https://example.com/keyboard-reading";
+      const added = app.append(
+        "primary",
+        "alpha",
+        `Read ${target}`,
+        true,
+        false,
+      );
+      const row = page.locator(`[data-message-id="${added.id}"]`);
+      await expect(row).toBeInViewport();
+      await settle(page);
+      const history = page.getByRole("region", {
+        name: "Channel message history",
+      });
+      const focused =
+        control === "link"
+          ? row.getByRole("link", { name: target, exact: true })
+          : row.getByRole("button", { name: /^View .* profile$/ }).first();
+      await focused.evaluate((element) =>
+        element.focus({ preventScroll: true }),
+      );
+      await expect(focused).toBeFocused();
+      const before = await history.evaluate((element) => element.scrollTop);
+      await page.keyboard.press(key);
+      if (!nativeScroll) {
+        await settle(page);
+        expect(await history.evaluate((element) => element.scrollTop)).toBe(
+          before,
+        );
+        const arrival = app.append(
+          "primary",
+          "alpha",
+          "Still following after a native no-op key",
+        );
+        await expect(
+          page.locator(`[data-message-id="${arrival.id}"]`),
+        ).toBeInViewport();
+        await settle(page);
+        await expect
+          .poll(() =>
+            history.evaluate(
+              (el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+            ),
+          )
+          .toBeLessThan(2);
+        return;
+      }
+      await expect
+        .poll(() => history.evaluate((element) => element.scrollTop))
+        .toBeLessThan(before - 80);
+      await settle(page);
+      const reading = await anchor(page);
+      app.append("primary", "alpha", "Do not steal the reader's position");
+      await expect(
+        history.locator("[data-jump-to-latest]"),
+      ).toHaveAccessibleName(/new message/i);
+      await settle(page);
+      await expectAnchor(page, reading);
+      await expect(history.locator("[data-jump-to-latest]")).toBeVisible();
+    },
+  );
+}
+
+// Exercise both propagation and no-op lifecycle against the same engine's
+// native baseline, rather than imposing macOS behavior on Linux WebKit.
+for (const containment of ["auto", "contain"])
+  readingTest(
+    `Page Up respects the raw diff ${containment} scroll boundary`,
+    async ({ page, app, context }) => {
+      const nativeScroll = await nativeUpwardScroll(
+        context,
+        "PageUp",
+        containment,
+      );
+      const historyEvents = app.histories.get("primary/alpha");
+      historyEvents.push(
+        finalizeEvent(
+          {
+            kind: 40008,
+            created_at: historyEvents.at(-1).created_at + 1,
+            tags: [
+              ["h", "alpha"],
+              ["file", "reading.txt"],
+            ],
+            content: "Raw, unparseable patch line\n".repeat(100),
+          },
+          generateSecretKey(),
+        ),
+      );
+      await open(page, app);
+      const raw = page.getByRole("region", { name: "Raw diff", exact: true });
+      await expect(raw).toBeVisible();
+      // The enabled diff renderer owns vertical overflow in its preview wrapper.
+      const inner = page.getByRole("region", {
+        name: "Diff preview: reading.txt",
+      });
+      await expect(inner).toBeVisible();
+      await settle(page);
+      const history = page.getByRole("region", {
+        name: "Channel message history",
+      });
+      const before = await history.evaluate((el) => el.scrollTop);
+      await inner.evaluate((el) => {
+        el.scrollTop = 100;
+      });
+      await raw.evaluate((el) => el.focus({ preventScroll: true }));
+      await expect(raw).toBeFocused();
+      await page.keyboard.press("PageUp");
+      await expect.poll(() => inner.evaluate((el) => el.scrollTop)).toBe(0);
+      await settle(page);
+      expect(await history.evaluate((el) => el.scrollTop)).toBe(before);
+
+      await inner.evaluate((el, value) => {
+        el.style.overscrollBehaviorY = value;
+      }, containment);
+      await page.keyboard.press("PageUp");
+      if (nativeScroll) {
+        await expect
+          .poll(() => history.evaluate((el) => el.scrollTop))
+          .toBeLessThan(before - 80);
+        await settle(page);
+        const reading = await anchor(page);
+        app.append("primary", "alpha", "Keep the reader above the diff");
+        await expect(
+          history.locator("[data-jump-to-latest]"),
+        ).toHaveAccessibleName(/new message/i);
+        await settle(page);
+        await expectAnchor(page, reading);
+      } else {
+        await settle(page);
+        expect(await history.evaluate((el) => el.scrollTop)).toBe(before);
+        // No outer scrollend will retire this key. A later real layout contraction
+        // must retain bottom follow, including the next incoming message.
+        const height = await history.evaluate((el) => el.scrollHeight);
+        await inner.evaluate((el) => {
+          el.style.maxHeight = "80px";
+        });
+        await expect
+          .poll(() => history.evaluate((el) => el.scrollHeight))
+          .toBeLessThan(height);
+        await settle(page);
+        const arrival = app.append(
+          "primary",
+          "alpha",
+          "Still following after an unconsumed Page Up",
+        );
+        await expect(
+          page.locator(`[data-message-id="${arrival.id}"]`),
+        ).toBeInViewport();
+        await settle(page);
+        await expect
+          .poll(() =>
+            history.evaluate(
+              (el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+            ),
+          )
+          .toBeLessThan(2);
+      }
+    },
+  );

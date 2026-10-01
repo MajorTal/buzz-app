@@ -181,7 +181,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     purpose: "A shared modal frame with title, content and actions.",
     behavior:
       "Base UI owns focus, positioning, dismissal and transition presence; shared motion tokens animate entry and exit",
-    variants: ["default", "expanded", "motion none"],
+    variants: ["default", "expanded", "motion none", "flex body"],
     status: "proposed",
     collection: "components",
     source: "shared/design-system/ui/Dialog.tsx",
@@ -385,7 +385,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
       "chrome",
       "avatar",
       "media",
-      "shape: round (default) | control",
+      "shape: round (default) | control | row-end",
       "size: xs (20px, 12px icon) | sm (32px) | md (40px) | lg (52px)",
       "legacy aliases: quiet, solid, compact, toolbar, default, large",
     ],
@@ -672,7 +672,13 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     purpose:
       "A labelled choice with inline, compact row and full-width form layouts.",
     behavior: "Base UI owns focus, keyboard selection, grouping, and dismissal",
-    variants: ["inline", "compact", "field", "disabled"],
+    variants: [
+      "inline",
+      "compact",
+      "field",
+      "disabled",
+      "align: start | center | end",
+    ],
     status: "proposed",
     collection: "components",
     owner: "desktop-new Design system",

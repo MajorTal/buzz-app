@@ -18,6 +18,7 @@ import { createAgentMemories } from "../agents/memory";
 import type { PresenceActivity } from "../presence/activity";
 import { bindNames, type IdentityNames } from "../identity-names/service";
 import { sessionMetadata } from "../sessions/metadata";
+import { createMemberAdministration } from "../channel-members/administration";
 import { createChannelLifecycle } from "./channel-lifecycle";
 import { createChannelDetails } from "./channel-details";
 import { createWorkflows } from "../workflows/capability";
@@ -347,6 +348,7 @@ export function createRelaySession(
       cancelUploads();
       lifecycle.cancel();
       details.cancel();
+      memberAdministration.clear();
       typing.clear();
       // Saved owner inventory does not depend on channel access. Preserve only
       // that narrow read; broad, mixed, ID and channel reads must still retire.
@@ -695,6 +697,15 @@ export function createRelaySession(
     acceptDiscovery: (events) => channels.acceptDiscovery(events),
     removed: (id) =>
       channels.denyChannel(id, new Error("Channel is no longer available")),
+  });
+  const memberAdministration = createMemberAdministration({
+    reader: transport && !options.cachedOnly ? requests.reader : undefined,
+    writer: transport?.memberAdministration,
+    viewer: transport?.viewer ?? "",
+    relayAuthor: transport?.relayAuthor ?? "",
+    canAccess: (id) =>
+      !closed && !revoking && !cacheClearing && canReadRemote(id),
+    acceptDiscovery: (events) => channels.acceptDiscovery(events),
   });
   const workflows = createWorkflows({
     reader: transport ? verified : undefined,
@@ -1674,6 +1685,7 @@ export function createRelaySession(
       : undefined,
     channelLifecycle: lifecycle.capability,
     channelDetails: details.capability,
+    memberAdministration: memberAdministration.capability,
     agentActivity: activity.queries,
     agentMemories: memories.capability,
     archives: archives.queries,
@@ -2241,6 +2253,7 @@ export function createRelaySession(
         channelKit.clear();
         lifecycle.clear();
         details.clear();
+        memberAdministration.clear();
         // New windows must not yield to or receive errors from retired owners.
         catchups.clear();
         catchupQueue.clear();
@@ -2274,6 +2287,7 @@ export function createRelaySession(
       sidebarPreferences.dispose();
       lifecycle.dispose();
       details.dispose();
+      memberAdministration.dispose();
       stopInterests();
       stopWarmPreferences();
       traffic?.dispose();

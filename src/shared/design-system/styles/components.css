@@ -200,6 +200,43 @@
     border-radius: var(--radius-pill);
   }
 
+  /* Trailing row actions keep their size-selected width and fill the row height. */
+  .buzz-button[data-icon-variant][data-icon-shape="row-end"] {
+    --interaction-hover: var(--interaction-row-hover);
+    align-self: stretch;
+    height: auto;
+    border-radius: 0 var(--radius-row) var(--radius-row) 0;
+  }
+
+  /* Extend the state fill around the preceding row's right-hand corners.
+     These inverse corners are decorative; the adjacent profile keeps its hit area. */
+  .buzz-button[data-icon-shape="row-end"]::before,
+  .buzz-button[data-icon-shape="row-end"]::after {
+    content: "";
+    position: absolute;
+    right: 100%;
+    width: var(--radius-row);
+    height: var(--radius-row);
+    background: inherit;
+    pointer-events: none;
+  }
+  .buzz-button[data-icon-shape="row-end"]::before {
+    top: 0;
+    mask: radial-gradient(
+      circle at bottom left,
+      transparent var(--radius-row),
+      black var(--radius-row)
+    );
+  }
+  .buzz-button[data-icon-shape="row-end"]::after {
+    bottom: 0;
+    mask: radial-gradient(
+      circle at top left,
+      transparent var(--radius-row),
+      black var(--radius-row)
+    );
+  }
+
   .buzz-button[data-icon-variant="ghost"][data-selected],
   .buzz-button[data-icon-variant="ghost"][data-selected]:hover:not(
     [data-disabled]

@@ -25,6 +25,7 @@ export function Select({
   placeholder,
   valueLabel,
   valueTitle,
+  align = "start",
 }: {
   label: string;
   description?: ReactNode;
@@ -36,6 +37,8 @@ export function Select({
   /** Compact display text; option labels retain their full meaning. */
   valueLabel?: string;
   valueTitle?: string;
+  /** Anchor the popup to the corresponding trigger edge. */
+  align?: "start" | "center" | "end";
   variant?: "inline" | "field" | "compact";
   disabled?: boolean;
   value: string;
@@ -125,7 +128,7 @@ export function Select({
           <BaseSelect.Positioner
             className="buzz-select-positioner"
             sideOffset={4}
-            align="start"
+            align={align}
             alignItemWithTrigger={false}
           >
             <BaseSelect.Popup
@@ -151,7 +154,10 @@ export function Select({
                         <BaseSelect.ItemText>
                           {option.label}
                         </BaseSelect.ItemText>
-                        <BaseSelect.ItemIndicator>
+                        <BaseSelect.ItemIndicator
+                          className="buzz-select-indicator"
+                          keepMounted={variant === "compact"}
+                        >
                           <CheckIcon size={14} aria-hidden="true" />
                         </BaseSelect.ItemIndicator>
                       </BaseSelect.Item>

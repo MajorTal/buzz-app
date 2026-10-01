@@ -463,3 +463,201 @@ it.each(["converged", "gesture", "removed"])(
     ).toBe(true);
   },
 );
+
+// Intent and native/virtualizer shrink can arrive in one scroll observation.
+it.each([
+  "wheel",
+  "touch",
+  "keyboard",
+  "link",
+  "button",
+  "command up",
+  "option up",
+  "control up",
+  "control home",
+  "nested top",
+  "contained top",
+  "no overscroll",
+] as const)(
+  "%s reader input wins over shrink in the same observation",
+  async (input) => {
+    const h = mount(true);
+    await frame();
+    const region = screen.getByRole("region", {
+      name: "Channel message history",
+    });
+    region.scrollTop = 1400;
+    fireEvent.scroll(region);
+    if (input === "wheel") fireEvent.wheel(region, { deltaY: -200 });
+    if (input === "keyboard") fireEvent.keyDown(region, { key: "PageUp" });
+    if (
+      [
+        "link",
+        "button",
+        "command up",
+        "option up",
+        "control up",
+        "control home",
+        "nested top",
+        "contained top",
+        "no overscroll",
+      ].includes(input)
+    ) {
+      const control = document.createElement(
+        input === "button" ? "button" : "a",
+      );
+      if (control instanceof HTMLAnchorElement)
+        control.href = "https://example.com";
+      control.textContent = "Message control";
+      region.append(control);
+      if (["nested top", "contained top", "no overscroll"].includes(input)) {
+        const inner = document.createElement("div");
+        inner.style.overflowY = "auto";
+        inner.style.overscrollBehaviorY =
+          input === "contained top"
+            ? "contain"
+            : input === "no overscroll"
+              ? "none"
+              : "auto";
+        region.append(inner);
+        inner.append(control);
+        inner.scrollTop = 0;
+      }
+      control.focus();
+      fireEvent.keyDown(control, {
+        key: input.endsWith("up")
+          ? "ArrowUp"
+          : input === "control home"
+            ? "Home"
+            : "PageUp",
+        metaKey: input === "command up",
+        altKey: input === "option up",
+        ctrlKey: input.startsWith("control"),
+      });
+    }
+    if (input === "touch") {
+      fireEvent.touchStart(region, { touches: [{ clientY: 100 }] });
+      fireEvent.touchMove(region, { touches: [{ clientY: 300 }] });
+    }
+    // No intermediate stable-height scroll: native clamp, virtualizer correction
+    // and the reader's movement are first seen together.
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(
+      1600,
+    );
+    region.scrollTop = 400;
+    fireEvent.scroll(region);
+    scroll.toIndex.mockClear();
+    h.promote();
+    await frame();
+    await h.measured();
+    await frame();
+    expect(scroll.toIndex).not.toHaveBeenCalled();
+    h.unmount();
+    expect(readView("scope", "scroll:c", null)).toMatchObject({
+      bottom: false,
+    });
+  },
+);
+it.each(["auto", "contain", "none"])(
+  "retires an unconsumed %s inner-top PageUp before a later layout-only shrink",
+  async (containment) => {
+    const h = mount(true);
+    await frame();
+    const region = screen.getByRole("region", {
+      name: "Channel message history",
+    });
+    region.scrollTop = 1400;
+    fireEvent.scroll(region);
+    const inner = document.createElement("div");
+    inner.style.overflowY = "auto";
+    inner.style.overscrollBehaviorY = containment;
+    const control = document.createElement("a");
+    control.href = "https://example.com";
+    inner.append(control);
+    region.append(inner);
+    control.focus();
+    fireEvent.keyDown(control, { key: "PageUp" });
+    // WebKit can consume this key without moving either scrollport. No scroll or
+    // scrollend follows; let that rendering opportunity pass before later reflow.
+    await frame();
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(
+      1600,
+    );
+    region.scrollTop = 800;
+    fireEvent.scroll(region);
+    scroll.toIndex.mockClear();
+    h.promote();
+    await frame();
+    expect(scroll.toIndex).toHaveBeenCalled();
+    h.unmount();
+    expect(readView("scope", "scroll:c", null)).toMatchObject({ bottom: true });
+  },
+);
+
+it("a finished near-bottom wheel does not taint a later layout-only shrink", async () => {
+  const h = mount(true);
+  await frame();
+  const region = screen.getByRole("region", {
+    name: "Channel message history",
+  });
+  region.scrollTop = 1400;
+  fireEvent.scroll(region);
+  fireEvent.wheel(region, { deltaY: -1 });
+  region.scrollTop -= 1;
+  fireEvent.scroll(region);
+  fireEvent(region, new Event("scrollend"));
+  vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(1600);
+  region.scrollTop = 600;
+  fireEvent.scroll(region);
+  h.promote();
+  await frame();
+  h.unmount();
+  expect(readView("scope", "scroll:c", null)).toMatchObject({ bottom: true });
+});
+
+it.each([
+  "editable",
+  "nested scroll",
+  "prevented",
+  "button activation",
+  "modified page up",
+] as const)(
+  "%s keyboard input does not claim history scrolling during shrink",
+  async (input) => {
+    const h = mount(true);
+    await frame();
+    const region = screen.getByRole("region", {
+      name: "Channel message history",
+    });
+    region.scrollTop = 1400;
+    fireEvent.scroll(region);
+    const control = document.createElement(
+      input === "editable" ? "textarea" : "button",
+    );
+    region.append(control);
+    if (input === "nested scroll") {
+      const inner = document.createElement("div");
+      inner.style.overflowY = "auto";
+      region.append(inner);
+      inner.append(control);
+      inner.scrollTop = 100;
+    }
+    if (input === "prevented")
+      control.addEventListener("keydown", (event) => event.preventDefault());
+    control.focus();
+    fireEvent.keyDown(control, {
+      key: input === "button activation" ? " " : "PageUp",
+      shiftKey: input === "button activation",
+      altKey: input === "modified page up",
+    });
+    vi.spyOn(HTMLElement.prototype, "scrollHeight", "get").mockReturnValue(
+      1600,
+    );
+    region.scrollTop = 400;
+    fireEvent.scroll(region);
+    h.promote();
+    await frame();
+    h.unmount();
+    expect(readView("scope", "scroll:c", null)).toMatchObject({ bottom: true });
+  },
+);

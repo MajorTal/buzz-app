@@ -28,6 +28,16 @@ describe("open target boundary", () => {
     expect(Object.isFrozen(target)).toBe(true);
     expect(Object.isFrozen("scope" in target && target.scope)).toBe(true);
   });
+  it("gives Members its own scoped visit without losing the conversation or message", () => {
+    const target = parseOpenTarget({ ...conversation, panel: "members" });
+    expect(target).toEqual({
+      ...parseOpenTarget(conversation),
+      panel: "members",
+    });
+    expect(targetKey(target)).not.toBe(targetKey(conversation));
+    expect(Object.isFrozen(target)).toBe(true);
+    expect(() => parseOpenTarget({ ...target, scope: undefined })).toThrow();
+  });
   it("supports local targets without account or relay and gives routes stable identity", () => {
     for (const target of [
       { version: 1, kind: "home" },
@@ -70,6 +80,9 @@ describe("open target boundary", () => {
       scope: { viewer: "npub1wrong", communityOrigin: "https://relay.example" },
     },
     { ...conversation, messageId: "not-an-id" },
+    { ...conversation, panel: "settings" },
+    { ...conversation, panel: { kind: "members", remove: "someone" } },
+    { ...conversation, panel: null },
     { ...conversation, messageId: undefined, threadRootId: "b".repeat(64) },
     { ...conversation, channelId: "../../other" },
     { version: 1, kind: "page", pluginId: "a/b", pageId: "board" },

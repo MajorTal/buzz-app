@@ -1,0 +1,153 @@
+.layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: var(--space-4);
+  /* Tighten this search-led composition without changing other dialogs. */
+  margin-block-start: calc(-1 * var(--space-2));
+}
+.memberList {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  gap: var(--space-4);
+  border: 1px solid var(--border-standard);
+  border-radius: var(--radius-control);
+  /* Keep the native scrollbar and row focus rings inside the fixed border.
+     The heading owns its top inset so there is no padding to scroll away. */
+  padding: 0 var(--space-1) var(--space-2);
+}
+.memberList > * {
+  flex-shrink: 0;
+}
+/* Headings already provide their top inset; tighten only adjacent role groups. */
+.memberList > section + section:not(.memberGroup) {
+  margin-block-start: calc(-1 * var(--space-2));
+}
+.loadingMembers {
+  display: grid;
+  flex: 1;
+  place-items: center;
+  min-height: var(--size-row);
+  color: var(--text-subtle);
+}
+.groupHeading {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-block-start: var(--space-2);
+  background: var(--surface-popover);
+}
+.memberGroup {
+  border-top: 1px solid var(--border-standard);
+  padding-top: var(--space-2);
+}
+.member {
+  --size-row: calc(var(--size-control-lg) - var(--space-1));
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  min-height: var(--size-row);
+  border-radius: var(--radius-row);
+}
+.member:is(:hover, :focus-within, [data-menu-open]) {
+  background: var(--affordance-subtle);
+}
+.addAction {
+  flex-shrink: 0;
+  padding: var(--space-1) var(--space-2) var(--space-1) 0;
+}
+.memberActions {
+  display: flex;
+  align-self: stretch;
+  flex-shrink: 0;
+}
+@media (hover: hover) and (pointer: fine) {
+  .memberActions {
+    opacity: 0;
+    pointer-events: none;
+  }
+  .member:is(:hover, :focus-within, [data-menu-open]) .memberActions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+.profile {
+  flex: 1;
+  min-width: 0;
+}
+.staticProfile {
+  position: relative;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  min-height: var(--size-row);
+  gap: var(--space-row-gap);
+  padding: var(--space-half) var(--space-control-inset);
+}
+.staticProfile[data-profile-link] {
+  /* Reserve the default avatar, owned by the sibling navigation target. */
+  padding-inline-start: calc(
+    var(--space-control-inset) +
+    var(--size-control-sm) +
+    var(--space-row-gap)
+  );
+}
+.profileContent {
+  flex: 1;
+  position: relative;
+  min-width: 0;
+}
+.profileHitTarget {
+  position: absolute;
+  inset: 0;
+  display: flex;
+}
+.identity {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.identityName {
+  position: relative;
+  display: inline-block;
+  max-width: 100%;
+  vertical-align: bottom;
+}
+.name {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.manager {
+  color: var(--text-subtle);
+  font-size: var(--text-caption);
+}
+.manager > * {
+  pointer-events: auto;
+}
+.publicKey {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+}
+.metadata {
+  display: block;
+  overflow: hidden;
+}
+.metadataContent {
+  position: relative;
+  display: block;
+  min-height: calc(var(--text-body-sm) * var(--text-body-sm--line-height));
+}
+.member:is(:hover, :focus-within) .publicKey {
+  opacity: 1;
+  visibility: visible;
+}

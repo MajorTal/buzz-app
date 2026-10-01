@@ -24,6 +24,8 @@ export type DialogProps = {
   closeLabel?: string;
   /** Reserve viewport-capped space for changing content; scroll only the body. */
   height?: "content" | "stable";
+  /** Let bounded content own its scrolling instead of the shared body. */
+  bodyLayout?: "flow" | "flex";
   /** Expanded reading surfaces retain the same modal/focus behavior. */
   size?: "default" | "expanded";
   /** Keep frequent surfaces such as search palettes immediate. */
@@ -53,6 +55,7 @@ export function Dialog({
   preventClose = false,
   motion = "default",
   height = "content",
+  bodyLayout = "flow",
   initialFocus,
   finalFocus,
 }: DialogProps) {
@@ -91,6 +94,7 @@ export function Dialog({
           className="buzz-dialog gap-0"
           data-placement={placement}
           data-height={height}
+          data-body-layout={bodyLayout}
           data-size={size}
           data-motion={transition}
           aria-modal="true"

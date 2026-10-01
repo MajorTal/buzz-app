@@ -217,7 +217,17 @@
     flex-shrink: 0;
   }
   .buzz-select-popup[data-variant="compact"] {
+    min-width: min(
+      max(var(--anchor-width), 11.25rem),
+      calc(100vw - var(--space-6))
+    );
     overflow-wrap: anywhere;
+  }
+  .buzz-select-indicator {
+    flex-shrink: 0;
+  }
+  .buzz-select-indicator:not([data-selected]) {
+    visibility: hidden;
   }
   .buzz-dropdown-chevron {
     transform: rotate(0deg);

@@ -408,6 +408,26 @@ function ChannelWorkspace({
     navigation?.target.kind === "conversation"
       ? navigation.target.threadRootId
       : undefined;
+  const membersRequested =
+    navigation?.target.kind === "conversation" &&
+    navigation.target.panel === "members";
+  const membersOpen = membersRequested && current?.channelType !== "session";
+  useLayoutEffect(() => {
+    // Sessions have no Members surface. Canonicalize an old/handwritten route
+    // before a child reader can complete it, retaining its exact message address.
+    if (
+      !cached &&
+      current &&
+      !current.cached &&
+      current.channelType === "session" &&
+      navigation?.target.kind === "conversation" &&
+      navigation.target.panel === "members" &&
+      !navigation.signal.aborted
+    ) {
+      const { panel: _panel, ...target } = navigation.target;
+      navigation.resolve(target);
+    }
+  }, [cached, current, navigation]);
   const currentId = current?.id;
   const committedVisit = useRef<{
     currentId: string | undefined;
@@ -888,7 +908,7 @@ function ChannelWorkspace({
     };
   }, [currentId, showingThread?.navigation]);
   const openLink = useCallback(
-    (url: string, fromThread = false) => {
+    (url: string, fromThread = false, returnFocus?: HTMLElement) => {
       const { current, navigation } = destination.current;
       const connection = relay.snapshot();
       if (
@@ -923,9 +943,10 @@ function ChannelWorkspace({
       if (context.channelId && candidate) {
         setSettings(undefined);
         panelTrigger.current =
-          document.activeElement instanceof HTMLElement
+          returnFocus ??
+          (document.activeElement instanceof HTMLElement
             ? document.activeElement
-            : null;
+            : null);
         // Thread-origin details cover the live thread instead of retiring it.
         if (!fromThread) {
           if (context.routedThread) select(context.channelId);
@@ -1434,6 +1455,48 @@ function ChannelWorkspace({
                           session={queries}
                           channelId={current.id}
                           control={agentControl}
+                          presentation={
+                            navigator
+                              ? {
+                                  open: membersOpen,
+                                  onOpenChange: (open) => {
+                                    if (
+                                      !navigation ||
+                                      navigation.signal.aborted ||
+                                      navigation.target.kind !==
+                                        "conversation" ||
+                                      navigation.target.channelId !==
+                                        current.id ||
+                                      navigator.snapshot().entry.id !==
+                                        navigation.entryId
+                                    )
+                                      return;
+                                    // A profile panel keeps this conversation; a DM
+                                    // handoff already owns a different visit. Never
+                                    // let modal cleanup overwrite that destination.
+                                    const { panel: _panel, ...target } =
+                                      navigation.target;
+                                    void navigator.open(
+                                      open
+                                        ? { ...target, panel: "members" }
+                                        : target,
+                                    );
+                                  },
+                                }
+                              : undefined
+                          }
+                          canOpenLink={canOpenLink}
+                          onOpenLink={(url, returnFocus) =>
+                            openLink(url, false, returnFocus)
+                          }
+                          onOpenConversation={
+                            navigator && viewer
+                              ? (id) =>
+                                  openLink(
+                                    `buzz://channel/${encodeURIComponent(id)}`,
+                                  )
+                              : undefined
+                          }
                         />
                       )}
                       {drawer.launchers}
@@ -1626,10 +1689,11 @@ function ChannelWorkspace({
                     key={currentId}
                     value={selectedTab}
                     focusOnMount={
-                      continuingVisit ||
-                      (!!requestedMessage &&
-                        (thread?.channelId !== currentId ||
-                          thread?.messageId !== requestedMessage))
+                      !membersOpen &&
+                      (continuingVisit ||
+                        (!!requestedMessage &&
+                          (thread?.channelId !== currentId ||
+                            thread?.messageId !== requestedMessage)))
                     }
                     select={selectPanelTab}
                     add={addTab}
@@ -1674,6 +1738,7 @@ function ChannelWorkspace({
                                   messageId={showingThread.messageId}
                                   navigation={showingThread.navigation}
                                   active={
+                                    !membersOpen &&
                                     tabState.paneOpen &&
                                     selectedTab === "thread"
                                   }

@@ -19,9 +19,10 @@ import { mentionDraft, type MentionDraft } from "./mention-draft";
 composerDOMFixture();
 afterEach(cleanup);
 
-function mount(text = "") {
+function mount(initial: string | MentionDraft = "") {
   const ref = createRef<ComposerInputElement>();
-  let draft: MentionDraft = mentionDraft(text);
+  let draft: MentionDraft = mentionDraft(initial);
+  const text = draft.text;
   function Editor() {
     const [value, setValue] = useState(draft);
     return (
@@ -32,7 +33,14 @@ function mount(text = "") {
         disabled={false}
         placeholder="Draft"
         maxLength={16000}
-        decorationsFor={() => []}
+        // Explicit recipients render as mention tokens, as in RichComposerInput.
+        decorationsFor={(current) =>
+          current.recipients.map(({ start, end, name }) => ({
+            start,
+            end,
+            content: <span data-mention>@{name}</span>,
+          }))
+        }
         onFormatsChange={() => {}}
         onDraftChange={(next) => {
           draft = next;
@@ -255,6 +263,237 @@ it.each([true, false])(
     expect(!!item.querySelector("strong")).toBe(enabled);
   },
 );
+
+const imp = { pubkey: "a".repeat(64), name: "Imp" };
+const jitter = { pubkey: "b".repeat(64), name: "Jitter" };
+// Display names with a space are one token too; the label never splits.
+const maryJane = { pubkey: "c".repeat(64), name: "Mary Jane" };
+const mattToohey = { pubkey: "d".repeat(64), name: "Matt Toohey" };
+/** Every `@Name` of these people in the text is an explicit, resolved recipient. */
+function mentioned(text: string): MentionDraft {
+  return {
+    text,
+    recipients: [imp, jitter, maryJane, mattToohey].flatMap((recipient) => {
+      const start = text.indexOf(`@${recipient.name}`);
+      return start < 0
+        ? []
+        : [{ ...recipient, start, end: start + recipient.name.length + 1 }];
+    }),
+  };
+}
+const selection = (input: ComposerInputElement) =>
+  [input.selectionStart, input.selectionEnd, input.selectionDirection] as const;
+/** Arrow keys are deliberately low-level: user-event cannot extend a selection. */
+const shiftArrow = (
+  input: ComposerInputElement,
+  key: "ArrowLeft" | "ArrowRight",
+) =>
+  act(() => {
+    fireEvent.keyDown(input, { key: "Shift", keyCode: 16, shiftKey: true });
+    fireEvent.keyDown(input, {
+      key,
+      code: key,
+      keyCode: key === "ArrowLeft" ? 37 : 39,
+      shiftKey: true,
+    });
+  });
+
+it.each([jitter.name, maryJane.name])(
+  "extends a backward selection over @%s before it and keeps the anchor",
+  (name) => {
+    const text = `@Imp say hello to @${name} `;
+    const mention = text.lastIndexOf("@");
+    const h = mount(mentioned(text));
+    expect(h.input.querySelectorAll("[data-mention]")).toHaveLength(2);
+    act(() => h.input.setSelectionRange(text.length, text.length));
+    // The browser itself answers the first Shift+Left by selecting the trailing
+    // space. Model that native result, then let the editor handle the second.
+    act(() => {
+      const space = h.input.querySelector("p")?.lastChild;
+      if (!(space instanceof Text)) throw new Error("Missing trailing text");
+      document.getSelection()?.setBaseAndExtent(space, 1, space, 0);
+    });
+    shiftArrow(h.input, "ArrowLeft");
+    expect(selection(h.input)).toEqual([mention, text.length, "backward"]);
+    expect(text.slice(mention)).toBe(`@${name} `);
+    expect(h.input.selectionEnd - h.input.selectionStart).toBeLessThanOrEqual(
+      h.input.value.length,
+    );
+    shiftArrow(h.input, "ArrowRight");
+    expect(selection(h.input)).toEqual([
+      text.length - 1,
+      text.length,
+      "backward",
+    ]);
+  },
+);
+
+it.each([
+  [
+    "after a mention with no trailing space",
+    "@Imp say hello to @Jitter",
+    25,
+    "ArrowLeft",
+    [18, 25, "backward"],
+  ],
+  [
+    "before a mention",
+    "@Imp say hello to @Jitter ",
+    18,
+    "ArrowRight",
+    [18, 25, "forward"],
+  ],
+  [
+    "after the mention at the start",
+    "@Imp say hello to @Jitter ",
+    4,
+    "ArrowLeft",
+    [0, 4, "backward"],
+  ],
+  [
+    "the document start",
+    "@Imp say hello to @Jitter ",
+    0,
+    "ArrowRight",
+    [0, 4, "forward"],
+  ],
+  ["the document end", "hello @Jitter", 13, "ArrowLeft", [6, 13, "backward"]],
+  [
+    "after a two-word mention with no trailing space",
+    "@Imp say hello to @Mary Jane",
+    28,
+    "ArrowLeft",
+    [18, 28, "backward"],
+  ],
+  [
+    "before a two-word mention",
+    "@Imp say hello to @Mary Jane ",
+    18,
+    "ArrowRight",
+    [18, 28, "forward"],
+  ],
+  [
+    "after the two-word mention at the start",
+    "@Mary Jane says hello",
+    10,
+    "ArrowLeft",
+    [0, 10, "backward"],
+  ],
+  [
+    "the document start before a two-word mention",
+    "@Mary Jane says hello",
+    0,
+    "ArrowRight",
+    [0, 10, "forward"],
+  ],
+  [
+    "the document end after a two-word mention",
+    "hello @Mary Jane",
+    16,
+    "ArrowLeft",
+    [6, 16, "backward"],
+  ],
+] as const)(
+  "Shift+Arrow from %s selects the whole mention",
+  (_, text, caret, key, expected) => {
+    const h = mount(mentioned(text));
+    act(() => h.input.setSelectionRange(caret, caret));
+    shiftArrow(h.input, key);
+    expect(selection(h.input)).toEqual(expected);
+  },
+);
+
+it.each([
+  [
+    "extends a forward selection from prose over a mention",
+    "@Imp say hello to @Jitter ",
+    16,
+    18,
+    "forward",
+    "ArrowRight",
+    [16, 25, "forward"],
+  ],
+  [
+    "extends a backward selection from prose over a mention",
+    "@Imp say hello to @Jitter ",
+    4,
+    8,
+    "backward",
+    "ArrowLeft",
+    [0, 8, "backward"],
+  ],
+  [
+    "shrinks a forward selection off a mention",
+    "@Imp say hello to @Jitter ",
+    18,
+    25,
+    "forward",
+    "ArrowLeft",
+    [18, 18, "forward"],
+  ],
+  [
+    "shrinks a backward selection off a mention",
+    "@Imp say hello to @Jitter ",
+    18,
+    26,
+    "backward",
+    "ArrowRight",
+    [25, 26, "backward"],
+  ],
+  [
+    "extends a forward selection from prose over a two-word mention",
+    "@Imp say hello to @Mary Jane ",
+    16,
+    18,
+    "forward",
+    "ArrowRight",
+    [16, 28, "forward"],
+  ],
+  [
+    "shrinks a forward selection off a two-word mention",
+    "@Imp say hello to @Mary Jane ",
+    18,
+    28,
+    "forward",
+    "ArrowLeft",
+    [18, 18, "forward"],
+  ],
+  [
+    "shrinks a backward selection off a two-word mention",
+    "@Imp say hello to @Mary Jane ",
+    18,
+    29,
+    "backward",
+    "ArrowRight",
+    [28, 29, "backward"],
+  ],
+  // Two two-word mentions one space apart: the browser selects that space,
+  // then the editor extends over the first mention in the same direction.
+  [
+    "extends a backward selection over the first of two two-word mentions",
+    "@Mary Jane @Matt Toohey ",
+    10,
+    24,
+    "backward",
+    "ArrowLeft",
+    [0, 24, "backward"],
+  ],
+  [
+    "extends a forward selection over the second of two two-word mentions",
+    "@Mary Jane @Matt Toohey ",
+    0,
+    11,
+    "forward",
+    "ArrowRight",
+    [0, 23, "forward"],
+  ],
+] as const)("%s", (_, text, start, end, direction, key, expected) => {
+  const h = mount(mentioned(text));
+  act(() => h.input.setSelectionRange(start, end, direction));
+  expect(selection(h.input)).toEqual([start, end, direction]);
+  shiftArrow(h.input, key);
+  expect(selection(h.input)).toEqual(expected);
+});
 
 it("retains the native caret after replacing text with an unchanged suffix", async () => {
   const h = mount(":unknown:");

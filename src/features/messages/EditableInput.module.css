@@ -43,6 +43,16 @@ html[data-keyboard-navigation] .input:focus-visible {
   background-color: transparent;
   color: inherit;
 }
+/* A token paints its own selected state above. Its native selection colour is
+   transparent because WebKit fills a line's selection gap with the colour of the
+   first selected box's parent, and a range that starts exactly where prose meets
+   a token has no selected prose before it: WebKit then treats the line as the
+   end of a longer selection and fills from the block edge to the token, which
+   highlights prose that is not selected. */
+.input .token::selection,
+.input .token *::selection {
+  background-color: transparent;
+}
 .input .token :is(div, p) {
   display: inline;
   margin: 0;

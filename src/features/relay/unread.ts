@@ -34,6 +34,9 @@ export type MessageAttention = Readonly<{
   /** The event explicitly p-tags the viewer, even inside DM channels. */
   mentioned?: boolean;
   rootId?: string;
+  /** The reply's conversation is still being looked up; it may become thread
+   * attention when the lookup finishes. */
+  pending?: boolean;
   unread: boolean;
   /** This row is explicitly forced unread during the current channel visit. */
   forced: boolean;
@@ -229,6 +232,8 @@ export function createUnread({
       );
   const keyFor = (target: ReadTarget) =>
     `${target.channelId}:${targetKey(target)}`;
+  /** Counted evidence, or a fetched parent/root kept only for structure. */
+  const structural = (id: string) => events.get(id) ?? lookupEvents.get(id);
   function root(event: RelayEvent): string | undefined {
     const channel = channelOf(event);
     let current = event;
@@ -238,7 +243,7 @@ export function createUnread({
       seen.add(current.id);
       const reference = threadReference(current);
       if (!reference) return current.id;
-      const next = events.get(reference.rootId);
+      const next = structural(reference.rootId);
       if (!next || !contentKind(next) || channelOf(next) !== channel) return;
       current = next;
     }
@@ -247,18 +252,81 @@ export function createUnread({
     event: RelayEvent;
     channelId: string;
     rootId: string | undefined;
+    /** Direct parent of a reply; undefined for top-level messages. */
+    parentId: string | undefined;
     mentioned: boolean;
+    broadcast: boolean;
   };
   let indexed = false;
   const byChannel = new Map<string, Evidence[]>();
   const tombstones = new Set<string>();
-  const participants = new Set<string>();
+  // Conversation membership: the viewer's own messages, and the parents the
+  // viewer has replied to, each keyed by channel. A conversation is the set of
+  // replies to one parent.
+  const own = new Map<string, string>();
+  const joined = new Set<string>();
+  // Relay lookups for parents the sampled window cannot decide. They are kept
+  // apart from counted evidence: fetched events never count, never fill the
+  // window and survive its overflow reset, because whether the viewer wrote or
+  // answered a message does not change with the sample. Bounded, oldest first.
+  // Keyed by channel and parent, like `joined`. `evidence` is one of the
+  // viewer's messages that make the viewer a member (the parent itself, or a
+  // reply to it), held as a witness; `more` records that the viewer has
+  // others. The viewer's own parent is preferred, and the first witness is
+  // kept. Deleting the witness ends the membership, or asks again if `more`.
+  // One witness per lookup keeps every positive lookup within the witness
+  // bound, however many replies one batch returns.
+  type Lookup = {
+    channelId: string;
+    done: boolean;
+    evidence: string | undefined;
+    more: boolean;
+  };
+  const lookups = new Map<string, Lookup>();
+  const lookupEvents = new Map<string, RelayEvent>();
+  const queued = new Map<
+    string,
+    { channelId: string; parentId: string; ids: Set<string> }
+  >();
+  // The viewer's own deleted messages, so neither a stored lookup result nor
+  // one still in flight can outlive them.
+  const retracted = new Set<string>();
+  // The viewer's messages behind positive lookups, kept so a deletion from
+  // another client can be verified (see `event`) after the window drops them.
+  // They are not counted evidence. Evicting one forgets the lookups it backs,
+  // so a membership never outlives the means to observe its deletion. Callers
+  // remember a lookup before witnessing it, so eviction always sees it.
+  const witnesses = new Map<string, RelayEvent>();
+  const conversationKey = (channelId: string, parentId: string) =>
+    `${channelId}:${parentId}`;
+  function witness(lookup: Lookup, event: RelayEvent) {
+    // Keep the first witness: replacing it could hide the deletion of a
+    // cached parent that a later lookup would reuse.
+    if (lookup.evidence !== undefined && lookup.evidence !== event.id) {
+      lookup.more = true;
+      return;
+    }
+    lookup.evidence = event.id;
+    witnesses.delete(event.id);
+    witnesses.set(event.id, event);
+    for (const [oldest] of witnesses) {
+      if (witnesses.size <= 4096) break;
+      witnesses.delete(oldest);
+      for (const [key, other] of lookups)
+        if (other.evidence === oldest) lookups.delete(key);
+    }
+  }
+  let scheduled = false;
+  let failures = 0;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  const membershipListeners = new Set<() => void>();
   function indexEvidence() {
     if (indexed) return;
     indexed = true;
     byChannel.clear();
     tombstones.clear();
-    participants.clear();
+    own.clear();
+    joined.clear();
     for (const event of events.values()) {
       if (event.kind !== 5 && event.kind !== 9005) continue;
       for (const [name, id] of event.tags)
@@ -270,14 +338,27 @@ export function createUnread({
       const channel = channelOf(event);
       if (!channel) continue;
       const rootId = root(event);
-      if (event.pubkey === viewer && rootId) participants.add(rootId);
+      const parentId = threadReference(event)?.parentId;
+      if (event.pubkey === viewer) {
+        own.set(event.id, channel);
+        if (parentId) {
+          joined.add(`${channel}:${parentId}`);
+          // A later reply of the viewer outlives the window that showed it.
+          const lookup = lookups.get(conversationKey(channel, parentId));
+          if (lookup?.done) witness(lookup, event);
+        }
+      }
       const rows = byChannel.get(channel) ?? [];
       rows.push({
         event,
         channelId: channel,
-        rootId: threadReference(event) ? rootId : undefined,
+        rootId: parentId ? rootId : undefined,
+        parentId,
         mentioned: event.tags.some(
           ([name, value]) => name === "p" && value === viewer,
+        ),
+        broadcast: event.tags.some(
+          ([name, value]) => name === "broadcast" && value === "1",
         ),
       });
       byChannel.set(channel, rows);
@@ -296,9 +377,49 @@ export function createUnread({
       (target.kind === "thread" && rootId === target.rootId)
     );
   }
+  const isDm = (channelId: string) =>
+    channels.list().channels.find((channel) => channel.id === channelId)
+      ?.channelType === "dm";
+  /** The reply is in a conversation the viewer is part of in its own channel:
+   * it answers the viewer's message, or the viewer also replied to the same
+   * parent. Undecided parents are not members until their lookup finishes. */
+  const conversation = ({ parentId, channelId }: Evidence) => {
+    if (!parentId) return false;
+    const key = conversationKey(channelId, parentId);
+    return (
+      own.get(parentId) === channelId ||
+      joined.has(key) ||
+      lookups.get(key)?.evidence !== undefined
+    );
+  };
+  /** Top-level posts always count. A reply counts only in the viewer's own
+   * conversations, or when it is a DM, mentions the viewer, or is broadcast. */
+  const relevant = (entry: Evidence, dm: boolean) =>
+    !entry.parentId ||
+    dm ||
+    entry.mentioned ||
+    entry.broadcast ||
+    conversation(entry);
+  /** Retained evidence cannot decide this reply's conversation yet. */
+  const undecided = (entry: Evidence, dm: boolean) =>
+    !!entry.parentId &&
+    !relevant(entry, dm) &&
+    !lookups.get(conversationKey(entry.channelId, entry.parentId))?.done;
   function isUnread(entry: Evidence, state: ReadState, dm: boolean) {
-    const { event, channelId, rootId } = entry;
+    const { event, channelId } = entry;
     if (event.pubkey === viewer) return false;
+    // Explicit per-message unread intent wins; otherwise replies outside the
+    // viewer's conversations are not unread.
+    if (
+      forcedMessages.get(channelId)?.has(event.id) ||
+      reads.localUnread(`msg:${event.id}`)
+    )
+      return true;
+    return relevant(entry, dm) && afterFrontier(entry, state, dm);
+  }
+  /** The read-state half of unread, before conversation relevance. */
+  function afterFrontier(entry: Evidence, state: ReadState, dm: boolean) {
+    const { event, channelId, rootId } = entry;
     const frontier = effectiveFrontier(
       state,
       `msg:${event.id}`,
@@ -327,34 +448,25 @@ export function createUnread({
       ? state.frontiers[`thread-activity:${rootId}`]
       : undefined;
     const caughtUp = Math.max(frontier ?? -1, ordinary ?? -1, thread ?? -1);
-    return (
-      forcedMessages.get(channelId)?.has(event.id) ||
-      !!reads.localUnread(`msg:${event.id}`) ||
-      event.created_at > caughtUp ||
-      !!forced
-    );
+    return event.created_at > caughtUp || !!forced;
   }
   function category(
-    { rootId, mentioned }: Evidence,
+    entry: Evidence,
     dm: boolean,
   ): MessageAttention["category"] {
     // DM events p-tag the recipient, so a mention check would classify every
-    // direct message as a mention. Direct wins inside DM channels.
+    // direct message as a mention. Direct wins inside DM channels. Thread
+    // attention follows the direct parent, even when the root is unknown.
     return dm
       ? "direct"
-      : mentioned
+      : entry.mentioned
         ? "mention"
-        : rootId && participants.has(rootId)
+        : conversation(entry)
           ? "thread"
           : undefined;
   }
   function priority(entry: Evidence, dm: boolean) {
-    return (
-      !!category(entry, dm) ||
-      entry.event.tags.some(
-        ([name, value]) => name === "broadcast" && value === "1",
-      )
-    );
+    return !!category(entry, dm) || entry.broadcast;
   }
   function attention(channelId: string, messageId: string): MessageAttention {
     const unknown = Object.freeze({
@@ -378,20 +490,27 @@ export function createUnread({
         forced: forcedMessages.get(channelId)?.has(messageId) ?? false,
         viewing: false,
       });
-    const dm =
-      channels.list().channels.find((channel) => channel.id === channelId)
-        ?.channelType === "dm";
+    const dm = isDm(channelId);
     const kind = category(entry, dm);
+    // A queued or running lookup may still make this reply thread attention.
+    // A read reply is never looked up, so it is undecided but not pending.
+    const open = undecided(entry, dm);
+    if (open) want(entry, dm);
+    const pending =
+      open &&
+      lookups.get(conversationKey(channelId, entry.parentId ?? ""))?.done ===
+        false;
     const viewing = [...views.values()].some(
       (view) => view.ids.has(messageId) && view.visible(),
     );
     return Object.freeze({
       status: kind
         ? "eligible"
-        : threadReference(event) && !entry.rootId
+        : open || (threadReference(event) && !entry.rootId)
           ? "unknown"
           : "ineligible",
       ...(kind ? { category: kind } : {}),
+      ...(pending ? { pending: true } : {}),
       ...(entry.mentioned ? { mentioned: true } : {}),
       ...(entry.rootId ? { rootId: entry.rootId } : {}),
       unread: isUnread(entry, reads.state(), dm),
@@ -405,9 +524,10 @@ export function createUnread({
       allowed(target.channelId) &&
       (target.kind === "channel" ||
         (() => {
-          const event = events.get(
-            target.kind === "thread" ? target.rootId : target.messageId,
-          );
+          const event =
+            target.kind === "thread"
+              ? structural(target.rootId)
+              : events.get(target.messageId);
           return (
             !!event &&
             channelOf(event) === target.channelId &&
@@ -427,11 +547,7 @@ export function createUnread({
     const state = reads.state();
     let count = 0,
       attention = 0;
-    const dm =
-      channels
-        .list()
-        .channels.find((channel) => channel.id === target.channelId)
-        ?.channelType === "dm";
+    const dm = isDm(target.channelId);
     indexEvidence();
     let latest: RelayEvent | undefined;
     for (const entry of byChannel.get(target.channelId) ?? []) {
@@ -443,37 +559,9 @@ export function createUnread({
           (event.created_at === latest.created_at && event.id < latest.id))
       )
         latest = event;
-      if (!inTarget(entry, target) || !isUnread(entry, state, dm)) continue;
-      // Quiet ordinary sidebar activity at the channel bottom without reading
-      // the replies themselves. Late participation can still promote their dot.
-      if (
-        target.kind === "channel" &&
-        entry.rootId &&
-        !priority(entry, dm) &&
-        !forcedMessages.get(target.channelId)?.has(event.id) &&
-        !reads.localUnread(`msg:${event.id}`) &&
-        !reads.localUnread(`thread:${entry.rootId}`) &&
-        !overrideActive(
-          state.overrides[`msg:${event.id}`],
-          effectiveFrontier(
-            state,
-            `msg:${event.id}`,
-            target.channelId,
-            entry.rootId,
-          ),
-        ) &&
-        !overrideActive(
-          state.overrides[`thread:${entry.rootId}`],
-          effectiveFrontier(state, `thread:${entry.rootId}`, target.channelId),
-        ) &&
-        !overrideActive(
-          state.overrides[target.channelId],
-          effectiveFrontier(state, target.channelId),
-        ) &&
-        event.created_at <=
-          (state.frontiers[`activity:${target.channelId}`] ?? -1)
-      )
-        continue;
+      if (!inTarget(entry, target)) continue;
+      want(entry, dm);
+      if (!isUnread(entry, state, dm)) continue;
       count++;
       if (priority(entry, dm)) attention++;
     }
@@ -522,20 +610,16 @@ export function createUnread({
       });
     indexEvidence();
     const state = reads.state();
-    const dm =
-      channels.list().channels.find((channel) => channel.id === channelId)
-        ?.channelType === "dm";
+    const dm = isDm(channelId);
     const grouped = new Map<string, ThreadActivityItem>();
     // Only unread thread activity is presented; most publishes have none.
     let presented: Map<string, string> | undefined;
     for (const evidence of byChannel.get(channelId) ?? []) {
-      const { event, rootId, mentioned } = evidence;
-      const broadcast = event.tags.some(
-        ([name, value]) => name === "broadcast" && value === "1",
-      );
+      const { event, rootId, mentioned, broadcast } = evidence;
+      want(evidence, dm);
       if (
         !rootId ||
-        (!mentioned && !broadcast && !participants.has(rootId)) ||
+        (!mentioned && !broadcast && !conversation(evidence)) ||
         !isUnread(evidence, state, dm)
       )
         continue;
@@ -692,6 +776,14 @@ export function createUnread({
     epoch++;
     for (const channelId of channelReadGenerations.keys())
       if (!allowed(channelId)) channelReadGenerations.delete(channelId);
+    for (const [key, lookup] of lookups)
+      if (!allowed(lookup.channelId)) lookups.delete(key);
+    for (const [id, event] of lookupEvents)
+      if (!allowed(channelOf(event) ?? "")) lookupEvents.delete(id);
+    for (const [id, event] of witnesses)
+      if (!allowed(channelOf(event) ?? "")) witnesses.delete(id);
+    for (const [key, { channelId }] of queued)
+      if (!allowed(channelId)) queued.delete(key);
     const denied = new Set(
       [...known, ...forcedMessages.keys()].filter(
         (channel) => !allowed(channel),
@@ -765,6 +857,232 @@ export function createUnread({
       }
     }
   });
+  // Conversation membership for unread replies whose parent conversation is
+  // not decided by retained evidence: the parent may be the viewer's own older
+  // message, or the viewer may have replied to it outside the sampled window.
+  // A selector that evaluates an otherwise-unread reply asks the relay once per
+  // parent. Selectors only queue the parent; the fetch starts in a microtask,
+  // so channels nobody observes cost nothing. Fetched events are structure
+  // only: they never count and never start another lookup, so a lookup cannot
+  // walk up an old thread.
+  function want(entry: Evidence, dm: boolean) {
+    const { event, channelId, parentId } = entry;
+    if (!parentId || event.pubkey === viewer) return;
+    const key = conversationKey(channelId, parentId);
+    if (
+      lookups.has(key) ||
+      !undecided(entry, dm) ||
+      !afterFrontier(entry, reads.state(), dm)
+    )
+      return;
+    lookups.set(key, {
+      channelId,
+      done: false,
+      evidence: undefined,
+      more: false,
+    });
+    const ids = new Set([parentId]);
+    // Also fetch the root so a reply to a fetched parent still groups and opens.
+    const rootId = threadReference(event)?.rootId;
+    if (rootId && !structural(rootId)) ids.add(rootId);
+    queued.set(key, { channelId, parentId, ids });
+    if (scheduled || retry) return;
+    scheduled = true;
+    queueMicrotask(() => {
+      scheduled = false;
+      void resolveConversations();
+    });
+  }
+  function resetLookups() {
+    lookups.clear();
+    lookupEvents.clear();
+    queued.clear();
+    retracted.clear();
+    witnesses.clear();
+    failures = 0;
+    if (retry) clearTimeout(retry);
+    retry = undefined;
+  }
+  function remember(key: string, lookup: Lookup) {
+    lookups.delete(key);
+    lookups.set(key, lookup);
+    for (const [oldest] of lookups) {
+      if (lookups.size <= 4096) break;
+      lookups.delete(oldest);
+    }
+  }
+  function keep(event: RelayEvent) {
+    lookupEvents.set(event.id, event);
+    for (const [oldest] of lookupEvents) {
+      if (lookupEvents.size <= 1024) break;
+      lookupEvents.delete(oldest);
+    }
+  }
+  const contentKinds = [9, 40002, 40008];
+  /** The viewer's replies under these parents, with their deletions. `#e`
+   * also matches root tags, so a busy thread can fill one page: split a full
+   * page, and page one parent back in time until its direct reply appears. */
+  async function viewerReplies(
+    channelId: string,
+    parents: readonly string[],
+    signal: AbortSignal,
+    until?: number,
+    pages = 0,
+  ): Promise<RelayEvent[]> {
+    const rows = await reader.read(
+      [
+        {
+          kinds: contentKinds,
+          authors: [viewer],
+          "#h": [channelId],
+          "#e": [...parents],
+          include_aux: true,
+          limit: 500,
+          ...(until === undefined ? {} : { until }),
+        },
+      ],
+      { signal, priority: "background" },
+    );
+    const content = rows.filter((event) => contentKinds.includes(event.kind));
+    if (content.length < 500) return [...rows];
+    if (parents.length > 1) {
+      const half = Math.ceil(parents.length / 2);
+      return [
+        ...(await viewerReplies(channelId, parents.slice(0, half), signal)),
+        ...(await viewerReplies(channelId, parents.slice(half), signal)),
+      ];
+    }
+    // `until` is inclusive: stop when a page makes no progress, and after ten
+    // pages (5,000 replies under one root) as a cost bound.
+    const oldest = Math.min(...content.map((event) => event.created_at));
+    if (
+      content.some(
+        (event) => threadReference(event)?.parentId === parents[0],
+      ) ||
+      oldest === until ||
+      pages >= 9
+    )
+      return [...rows];
+    return [
+      ...rows,
+      ...(await viewerReplies(channelId, parents, signal, oldest, pages + 1)),
+    ];
+  }
+  let resolving = false;
+  async function resolveConversations() {
+    if (closed || resolving || !queued.size) return;
+    resolving = true;
+    try {
+      while (!closed && queued.size) {
+        const channelId = queued.values().next().value?.channelId;
+        if (!channelId) return;
+        const chunk = [...queued]
+          .filter(([, item]) => item.channelId === channelId)
+          .slice(0, 50);
+        for (const [key] of chunk) queued.delete(key);
+        const parents = chunk.map(([, item]) => item.parentId);
+        // A reset or access change during the read makes its answer stale.
+        // Re-queue only lookups the reset kept; cleared ones are asked again
+        // by the next selector that needs them.
+        const generation = epoch;
+        const requeue = () => {
+          for (const [key, item] of chunk)
+            if (lookups.get(key)?.done === false) queued.set(key, item);
+        };
+        const ids = [
+          ...new Set(chunk.flatMap(([, item]) => [...item.ids])),
+        ].filter((id) => !structural(id));
+        const signal = AbortSignal.any([
+          lifetime.signal,
+          AbortSignal.timeout(10000),
+        ]);
+        let fetched: readonly RelayEvent[];
+        let replies: readonly RelayEvent[];
+        try {
+          [fetched, replies] = await Promise.all([
+            ids.length
+              ? reader.read(
+                  [
+                    {
+                      kinds: contentKinds,
+                      ids,
+                      include_aux: true,
+                      limit: ids.length,
+                    },
+                  ],
+                  { signal, priority: "background" },
+                )
+              : Promise.resolve([]),
+            viewerReplies(channelId, parents, signal),
+          ]);
+        } catch {
+          if (closed) return;
+          requeue();
+          // A reset retires its requests; that is not a relay failure.
+          if (generation !== epoch) continue;
+          // Keep the parents pending, so they are not asked twice, and retry
+          // the batch with backoff while the relay is unavailable.
+          const delay = Math.min(60000, 1000 * 2 ** failures++);
+          retry = setTimeout(() => {
+            retry = undefined;
+            void resolveConversations();
+          }, delay);
+          return;
+        }
+        failures = 0;
+        if (closed) return;
+        if (generation !== epoch) {
+          requeue();
+          continue;
+        }
+        if (!allowed(channelId)) continue;
+        const removed = new Set<string>();
+        for (const event of [...fetched, ...replies])
+          if (event.kind === 5 || event.kind === 9005)
+            for (const [name, id] of event.tags)
+              if (name === "e" && id) removed.add(`${event.pubkey}:${id}`);
+        const live = (event: RelayEvent) =>
+          contentKind(event) &&
+          channelOf(event) === channelId &&
+          !removed.has(`${event.pubkey}:${event.id}`) &&
+          !(event.pubkey === viewer && retracted.has(event.id));
+        for (const event of fetched) if (live(event)) keep(event);
+        const mine = new Map(parents.map((id) => [id, [] as RelayEvent[]]));
+        for (const event of replies) {
+          const parentId = threadReference(event)?.parentId;
+          if (event.pubkey === viewer && live(event))
+            mine.get(parentId ?? "")?.push(event);
+        }
+        for (const [id, found] of mine) {
+          const parent = structural(id);
+          const ownParent = parent?.pubkey === viewer && live(parent);
+          const lookup: Lookup = {
+            channelId,
+            done: true,
+            evidence: undefined,
+            more: found.length + (ownParent ? 1 : 0) > 1,
+          };
+          remember(conversationKey(channelId, id), lookup);
+          // The viewer's own parent is the witness when there is one: it may
+          // come from the structural cache, which a later lookup reuses, so
+          // its deletion must stay observable. Replies are always refetched.
+          const newest = found.reduce<RelayEvent | undefined>(
+            (best, event) =>
+              !best || event.created_at > best.created_at ? event : best,
+            undefined,
+          );
+          const chosen = ownParent ? parent : newest;
+          if (chosen) witness(lookup, chosen);
+        }
+        indexed = false;
+        publish(new Set([channelId]));
+        // Live notifications wait on pending replies; let them re-check.
+        for (const listener of [...membershipListeners]) listener();
+      }
+    } finally {
+      resolving = false;
+    }
+  }
   async function repair(priority: Priority = "foreground") {
     requested = true;
     if (closed) return;
@@ -821,8 +1139,41 @@ export function createUnread({
     });
     return refresh;
   }
+  /** The viewer's deletions end lookup memberships they were evidence for,
+   * including ones decided before the deletion, and even when the deletion
+   * itself is not retained as counted evidence. */
+  function retract(batch: readonly RelayEvent[]) {
+    const ids = batch.flatMap((event) =>
+      (event.kind === 5 || event.kind === 9005) && event.pubkey === viewer
+        ? event.tags.flatMap(([name, id]) => (name === "e" && id ? [id] : []))
+        : [],
+    );
+    if (!ids.length) return;
+    const changed = new Set<string>();
+    for (const id of ids) {
+      retracted.delete(id);
+      retracted.add(id);
+      witnesses.delete(id);
+      // A deleted message must be fetched again, not reused from the cache.
+      lookupEvents.delete(id);
+      for (const [key, lookup] of lookups) {
+        if (lookup.evidence !== id) continue;
+        changed.add(lookup.channelId);
+        // Other messages of the viewer may still hold the membership: ask
+        // again (the retracted message stays excluded) rather than end it.
+        if (lookup.more) lookups.delete(key);
+        else lookup.evidence = undefined;
+      }
+    }
+    for (const id of retracted) {
+      if (retracted.size <= 1024) break;
+      retracted.delete(id);
+    }
+    if (changed.size) publish(changed);
+  }
   function accept(batch: readonly RelayEvent[]) {
     if (closed) return false;
+    retract(batch);
     const changed = new Set<string>();
     indexed = false;
     const incoming = new Map(batch.map((event) => [event.id, event]));
@@ -978,7 +1329,14 @@ export function createUnread({
     activity,
     subscribeActivity: addActivityListener,
     sync: reads.snapshot,
-    subscribeSync: reads.subscribe,
+    subscribeSync(listener) {
+      const stop = reads.subscribe(listener);
+      membershipListeners.add(listener);
+      return () => {
+        stop();
+        membershipListeners.delete(listener);
+      };
+    },
     ensure: () => refresh ?? (requested ? Promise.resolve() : repair()),
     refresh: async () => {
       await reads.refresh("foreground");
@@ -1303,6 +1661,9 @@ export function createUnread({
     // bounded, fail-closed ancestry used for retention.
     event(id: string) {
       if (closed) return;
+      const witnessed = witnesses.get(id);
+      if (witnessed)
+        return allowed(channelOf(witnessed) ?? "") ? witnessed : undefined;
       const event = events.get(id);
       if (!event) return;
       const owners = channelOwnership((targetId) => events.get(targetId))(
@@ -1325,6 +1686,7 @@ export function createUnread({
     clear() {
       epoch++;
       channelReadGenerations.clear();
+      resetLookups();
       repairAgain = false;
       indexed = false;
       events.clear();
@@ -1341,6 +1703,8 @@ export function createUnread({
       epoch++;
       channelReadGenerations.clear();
       lifetime.abort();
+      resetLookups();
+      membershipListeners.clear();
       for (const stop of [...handles]) stop();
       stopRead();
       stopChannels();

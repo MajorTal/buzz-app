@@ -933,3 +933,48 @@ it.each([true, false])(
     expect(decode).toHaveBeenCalledTimes(2);
   },
 );
+
+it.each([true, false])(
+  "a live reply whose parent is outside the window waits for its conversation lookup (viewer's parent=%s)",
+  async (own) => {
+    vi.spyOn(Date, "now").mockReturnValue(1_780_000_000_000);
+    const h = await setup();
+    const parent = message(
+      own ? h.viewer : h.peer,
+      "room",
+      "old",
+      1_700_000_000,
+    );
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const base = h.query.getMockImplementation();
+    h.query.mockImplementation(async (filters, ...rest) => {
+      if (filters[0]?.ids?.includes(parent.id)) {
+        await held;
+        return [parent];
+      }
+      return (await base?.(filters, ...rest)) ?? [];
+    });
+    const reply = message(h.peer, "room", "answer", 1_780_000_000, [
+      ["e", parent.id, "", "reply"],
+    ]);
+    h.emit([reply], "live");
+    await flush();
+    expect(h.owner.session.unread.attention("room", reply.id)).toMatchObject({
+      status: "unknown",
+      pending: true,
+    });
+    expect(h.show).not.toHaveBeenCalled();
+    release();
+    await vi.waitFor(() =>
+      expect(
+        h.owner.session.unread.attention("room", reply.id).pending,
+      ).toBeUndefined(),
+    );
+    await flush();
+    if (own) await vi.waitFor(() => expect(h.show).toHaveBeenCalledOnce());
+    else expect(h.show).not.toHaveBeenCalled();
+  },
+);

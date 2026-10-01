@@ -6,6 +6,9 @@ test.use({
   productionBroker: true,
   readState: true,
   threadUnread: true,
+  // Keep the viewer's profile off the startup path: the test holds it until
+  // the viewer's linked message is focused.
+  threadUnreadOwnedRoot: false,
   pluginFixtures: true,
   historyCounts: { alpha: 640, beta: 1 },
 });

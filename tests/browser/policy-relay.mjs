@@ -338,6 +338,28 @@ export function policyRelay({
             filters.flatMap((filter) => answer(community, filter)),
           );
         }
+        // Unread conversation lookup: missing parents by ID, and the viewer's
+        // replies to undecided parents in one channel.
+        if (
+          filters.every(
+            (filter) =>
+              [9, 40002, 40008].every((kind) => filter.kinds?.includes(kind)) &&
+              filter.include_aux &&
+              (filter.ids || (filter["#e"] && filter.authors)),
+          )
+        ) {
+          const community = communityOf(url);
+          for (const filter of filters) {
+            if (filter.authors) {
+              expect(filter.authors).toEqual([viewer]);
+              expect(filter["#h"]).toHaveLength(1);
+            } else expect(filter["#h"]).toBeUndefined();
+            report.queries.push({ community, filter, at: performance.now() });
+          }
+          return Response.json(
+            filters.flatMap((filter) => answer(community, filter)),
+          );
+        }
         if (filters.length !== 1) {
           // Sidebar preferences read only these four exact own-author coordinates.
           expect(filters).toHaveLength(4);

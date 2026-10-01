@@ -171,6 +171,26 @@ function setup(
   };
 }
 
+it("a read reply that needs no conversation lookup is not reported pending", async () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.alice, "room", "root", 11);
+  const reply = message(h.alice, "room", "reply", 12, [
+    ["e", root.id, "", "reply"],
+  ]);
+  h.emit([root, reply]);
+  await h.session.unread.markMessageRead("room", reply.id);
+  // Undecided, but read: no lookup is queued, so nothing would settle a
+  // pending notification.
+  const attention = h.session.unread.attention("room", reply.id);
+  expect(attention).toMatchObject({ status: "unknown", unread: false });
+  expect(attention.pending).toBeUndefined();
+  await flush();
+  expect(
+    h.query.mock.calls.some(([filters]) => filters.some((f) => f.authors)),
+  ).toBe(false);
+});
+
 it("production live evidence feeds stable snapshots; selection/prefetch do not read", async () => {
   const h = setup();
   h.grant("room");
@@ -350,6 +370,68 @@ it("promotes mentions, broadcasts and participating-thread replies without promo
   ).toMatchObject({ status: "unknown", unread: true });
 });
 
+it("counts replies only in the viewer's conversations; nested threads stay quiet until joined or mentioned", async () => {
+  const h = setup();
+  h.grant("room");
+  const reply = (
+    author: typeof h.alice,
+    content: string,
+    time: number,
+    root: string,
+    parent: string,
+    extra: string[][] = [],
+  ) =>
+    message(author, "room", content, time, [
+      ...(root === parent ? [] : [["e", root, "", "root"]]),
+      ["e", parent, "", "reply"],
+      ...extra,
+    ]);
+  const root = message(h.alice, "room", "root", 10);
+  const mine = reply(h.viewer, "my reply", 11, root.id, root.id);
+  const sibling = reply(h.alice, "same level as me", 12, root.id, root.id);
+  const answer = reply(h.alice, "answer to me", 13, root.id, mine.id);
+  const nested = reply(h.alice, "nested under answer", 14, root.id, answer.id);
+  const otherRoot = message(h.alice, "room", "other thread", 15);
+  const unjoined = reply(h.alice, "unjoined", 16, otherRoot.id, otherRoot.id);
+  h.emit([root, mine, sibling, answer, nested, otherRoot, unjoined]);
+
+  const unread = (id: string) => h.session.unread.attention("room", id);
+  expect(unread(sibling.id)).toMatchObject({
+    category: "thread",
+    unread: true,
+  });
+  expect(unread(answer.id)).toMatchObject({ category: "thread", unread: true });
+  expect(unread(nested.id)).toMatchObject({ unread: false });
+  expect(unread(nested.id).category).toBeUndefined();
+  expect(unread(unjoined.id)).toMatchObject({ unread: false });
+  // Top-level root + other root + sibling + answer.
+  expect(h.snapshot()).toMatchObject({ observedCount: 4, attentionCount: 2 });
+  expect(
+    h.session.unread.snapshot({
+      kind: "thread",
+      channelId: "room",
+      rootId: root.id,
+    }).observedCount,
+  ).toBe(2);
+  expect(h.session.unread.activity("room").items).toEqual([
+    expect.objectContaining({ rootId: root.id, unreadCount: 2 }),
+  ]);
+
+  const mention = reply(h.alice, "nested mention", 17, root.id, answer.id, [
+    ["p", h.viewer.pubkey],
+  ]);
+  h.emit([mention]);
+  expect(unread(mention.id)).toMatchObject({
+    category: "mention",
+    unread: true,
+  });
+
+  // Joining the nested conversation makes its replies count.
+  h.emit([reply(h.viewer, "joining", 18, root.id, answer.id)]);
+  expect(unread(nested.id)).toMatchObject({ category: "thread", unread: true });
+  expect(h.snapshot()).toMatchObject({ observedCount: 6, attentionCount: 4 });
+});
+
 it("late DM metadata updates an existing attention selector without expiring reading intent", async () => {
   const h = setup();
   h.grant("room");
@@ -450,8 +532,11 @@ it("groups unread thread activity by same-channel root and clears one item witho
   const firstReply = message(h.alice, "room", "first reply", 12, [
     ["e", firstRoot.id, "", "reply"],
   ]);
+  // Nested under Alice's reply, so it counts only because it mentions the viewer.
   const latestFirstReply = message(h.alice, "room", "latest first reply", 14, [
+    ["e", firstRoot.id, "", "root"],
     ["e", firstReply.id, "", "reply"],
+    ["p", h.viewer.pubkey],
   ]);
   const secondReply = message(h.alice, "room", "second reply", 13, [
     ["e", secondRoot.id, "", "reply"],
@@ -740,7 +825,7 @@ it("canonical unread ancestry still requires retained same-channel content", asy
 it("individual reply visibility leaves unseen siblings and the channel prefix untouched", async () => {
   const h = setup();
   h.grant("room");
-  const root = message(h.alice, "room", "root", 11);
+  const root = message(h.viewer, "room", "root", 11);
   const reply = message(h.alice, "room", "visible", 12, [
     ["e", root.id, "", "reply"],
   ]);
@@ -751,7 +836,7 @@ it("individual reply visibility leaves unseen siblings and the channel prefix un
   const handle = h.session.unread.reading("room");
   await handle.observe([reply.id]);
   expect(h.journal()?.state.frontiers).toEqual({ [`msg:${reply.id}`]: 12 });
-  expect(h.snapshot().observedCount).toBe(2);
+  expect(h.snapshot().observedCount).toBe(1);
   expect(
     h.session.unread.snapshot({
       kind: "thread",
@@ -1910,13 +1995,14 @@ it("bottom catch-up preserves mentions, broadcasts, participating threads and la
   expect(h.journal()?.state.frontiers).toEqual({ "activity:room": 20 });
   expect(h.snapshot()).toMatchObject({ observedCount: 3, attentionCount: 3 });
   expect(h.session.unread.attention("room", reply.id).unread).toBe(true);
+  // A peer thread the viewer never joined does not count, even directly.
   expect(
     h.session.unread.snapshot({
       kind: "thread",
       channelId: "room",
       rootId: ordinaryRoot.id,
     }).observedCount,
-  ).toBe(1);
+  ).toBe(0);
   h.emit([
     message(h.alice, "room", "late old ordinary", 19),
     message(h.alice, "room", "new", 21),
@@ -2061,14 +2147,18 @@ it("mark all captures later channels at invocation, not after the first save", a
   ).toBe(1);
 });
 
-it("channel bottom quiets replies newer than the top-level head; Mark all still reads their receipts", async () => {
+it("channel bottom catch-up leaves newer replies in the viewer's thread unread; Mark all reads them", async () => {
   const h = setup();
   h.grant("room");
-  const root = message(h.alice, "room", "root", 11);
+  const root = message(h.viewer, "room", "root", 11);
   const reply = message(h.alice, "room", "newer reply", 15, [
     ["e", root.id, "", "reply"],
   ]);
-  h.emit([root, reply]);
+  const peerRoot = message(h.alice, "room", "peer root", 12);
+  const peerReply = message(h.alice, "room", "peer reply", 16, [
+    ["e", peerRoot.id, "", "reply"],
+  ]);
+  h.emit([root, reply, peerRoot, peerReply]);
   const unread = h.session.unread;
   const thread = {
     kind: "thread" as const,
@@ -2076,22 +2166,16 @@ it("channel bottom quiets replies newer than the top-level head; Mark all still 
     rootId: root.id,
   };
   const lease = unread.reading("room");
-  await lease.catchUp(root.id);
-  expect(h.journal()?.state.frontiers).toEqual({ "activity:room": 15 });
-  expect(h.snapshot().observedCount).toBe(0);
+  await lease.catchUp(peerRoot.id);
+  // The cut covers the newest retained reply, but only top-level rows inherit it.
+  expect(h.journal()?.state.frontiers).toEqual({ "activity:room": 16 });
+  expect(h.snapshot()).toMatchObject({ observedCount: 1, attentionCount: 1 });
   expect(unread.snapshot(thread).observedCount).toBe(1);
-  // Same visible head, newer retained activity: another dwell can quiet it too.
-  const next = message(h.alice, "room", "next reply", 16, [
-    ["e", root.id, "", "reply"],
-  ]);
-  h.emit([next]);
-  expect(h.snapshot().observedCount).toBe(1);
-  await lease.catchUp(root.id);
-  expect(h.snapshot().observedCount).toBe(0);
-  expect(unread.snapshot(thread).observedCount).toBe(2);
+  expect(unread.attention("room", peerReply.id).unread).toBe(false);
   clock(20);
   expect(await unread.markAllChannelsRead()).toHaveLength(1);
   expect(unread.snapshot(thread).observedCount).toBe(0);
+  expect(h.snapshot().observedCount).toBe(0);
   expect(await unread.markAllChannelsRead()).toEqual([]);
   lease.dispose();
 });
@@ -2163,54 +2247,5 @@ it.each(["channel", "thread", "message"] as const)(
     await Promise.all([mark, clear]);
     expect(h.session.unread.snapshot(target).manual).toBe("none");
     expect(h.journal()?.localUnread).toEqual({});
-  },
-);
-
-it.each(["channel", "thread", "message"] as const)(
-  "cleared %s override floors do not block reply quieting, but active overrides do",
-  async (target) => {
-    const h = setup();
-    h.grant("room");
-    const root = message(h.alice, "room", "root", 11);
-    const reply = message(h.alice, "room", "reply", 12, [
-      ["e", root.id, "", "reply"],
-    ]);
-    h.emit([root, reply]);
-    const key =
-      target === "channel"
-        ? "room"
-        : target === "thread"
-          ? `thread:${root.id}`
-          : `msg:${reply.id}`;
-    const marker = async (set: number, clear: number) => {
-      clock(30 + set);
-      return signReadState(
-        {
-          slot: "a".repeat(32),
-          createdAt: 30 + set,
-          blob: {
-            v: 1,
-            client_id: "peer",
-            contexts: {
-              [`ov_s:${key}`]: set,
-              [`ov_c:${key}`]: clear,
-              [`ov_b:${key}`]: 0,
-            },
-          },
-        },
-        h.viewer.secret,
-      );
-    };
-    h.emit([await marker(0, 1)]);
-    await flush();
-    const lease = h.session.unread.reading("room");
-    await lease.catchUp(root.id);
-    expect(h.snapshot().observedCount).toBe(0);
-    expect(h.session.unread.attention("room", reply.id).unread).toBe(true);
-    h.emit([await marker(2, 1)]);
-    await flush();
-    expect(h.snapshot().observedCount).toBeGreaterThan(0);
-    expect(h.session.unread.attention("room", reply.id).unread).toBe(true);
-    lease.dispose();
   },
 );

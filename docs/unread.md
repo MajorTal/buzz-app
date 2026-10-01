@@ -49,12 +49,12 @@ catch-up (including a message taller than the viewport):
 
 - `activity:<channel>` uses the newest retained verified event timestamp at dwell
   completion, including replies newer than the visible top-level head. It reads
-  ordinary top-level backlog and quiets ordinary reply activity in the channel
-  aggregate. It never acknowledges
-  the replies themselves: direct thread/message selectors retain them. Mentions,
-  broadcasts, DMs, manual intent and currently known participating-thread activity
-  are not quieted. Missing retained participation cannot erase a reply's unread
-  state; later participation evidence can restore the sidebar attention dot.
+  ordinary top-level backlog only. It never acknowledges replies: replies that
+  count (see [Relevant replies](#relevant-replies)) are all attention, and stay
+  unread until read in their thread. Replies outside the viewer's conversations
+  do not count at all, so there is no reply activity to quiet. Mentions,
+  broadcasts, DMs and manual intent are not quieted. Participation discovered
+  later makes a reply relevant again, with its own unread state intact.
 - `thread-activity:<root>` acknowledges replies through the newest reply only in
   that thread. A collapsed newest reply, or one outside the bottom viewport in a
   branch-ordered thread, cannot earn catch-up; visible rows still read individually.
@@ -67,9 +67,8 @@ backlog and the thread being read, without reading unopened threads' replies.
 
 - `observedCount` is `null` when unknown or denied, never a fabricated zero.
   Otherwise it counts the bounded evidence currently known, excluding own messages,
-  auxiliary events and authorized deletions. The channel aggregate additionally
-  excludes ordinary replies quieted by its activity cutoff; direct thread and
-  message selectors still report those replies as unread. It is **not an exact total or lower
+  auxiliary events, authorized deletions and replies outside the viewer's
+  conversations (see [Relevant replies](#relevant-replies)). It is **not an exact total or lower
   bound**: missing markers/deletions can overcount; missing history can undercount.
 - `coverage` and `freshness` describe message evidence, separately from `sync()`.
   Evidence is capped at 4,096 events / 8 MiB. Repair queries the membership roster
@@ -88,8 +87,9 @@ backlog and the thread being read, without reading unopened threads' replies.
   for markers. Marker failure stays visible separately in `sync()` even when
   evidence succeeds. Concurrent `ensure()` calls share active work; a failed attempt
   needs explicit `refresh()` or reconnect, not an unlimited automatic retry loop.
-- `attentionCount` is a separate observed subset: DMs, mentions and replies to
-  participating threads. It does not trigger notifications or implement mute policy.
+- `attentionCount` is a separate observed subset: DMs, mentions, broadcasts and
+  replies in the viewer's conversations. It does not trigger notifications or
+  implement mute policy.
 - `markThrough(target, messageId)` is explicit prefix intent through verified
   evidence. It can mark unloaded earlier messages read; do not use it for viewport
   observation. A channel prefix requires a top-level message, not a reply.
@@ -108,8 +108,8 @@ backlog and the thread being read, without reading unopened threads' replies.
   invocation and reserves each channel's mutation order before newer manual
   actions. It saves one channel at a time, so a slow first write cannot
   acknowledge post-click activity in a later channel. It selects accessible
-  listed channels with retained unread evidence or a local mark, including replies
-  quieted in the channel aggregate, so an already-read community costs no writes. One failing channel does not stop
+  listed channels with retained unread evidence or a local mark, including thread
+  marks that the channel count does not show, so an already-read community costs no writes. One failing channel does not stop
   the sweep; the first failure is rethrown afterwards. A channel whose grant is
   revoked before its turn is skipped, not failed; like a grant that arrives
   mid-sweep, it waits for the next explicit action. The community rail's
@@ -165,6 +165,68 @@ Unread ancestry uses the same canonical marked-reference parser as thread openin
 and row projection (case-insensitive hex, last valid marker wins). Resolution still
 requires bounded, retained same-channel message evidence; references alone do not
 grant access or trigger a read.
+
+## Relevant replies
+
+Every top-level message counts. A reply counts only when it is in one of the
+viewer's conversations, or it is a DM, mentions the viewer, or is broadcast to the
+channel. A conversation is the set of direct replies to one parent message. The
+viewer is part of it when the viewer wrote the parent or also replied to that
+parent. A nested thread under someone else's reply therefore stays quiet until the
+viewer posts in it or is mentioned there. Explicit per-message unread intent still
+applies to any reply. The same rule feeds channel and thread counts, thread
+activity, per-message attention and the `thread` notification category.
+
+Membership is checked in the reply's own channel, and lookups are keyed by
+channel and parent, so a reply in another channel that tags the same parent
+gets its own answer. It starts from retained
+evidence. When a reply is otherwise unread but its conversation is undecided
+(the parent is not loaded, or the viewer's own reply to it is not), a projection
+that evaluates the reply queues one relay lookup for that parent. The fetch runs
+in a microtask, at background priority, in batches of up to 50 parents from one
+channel:
+
+- the missing parents, and the replies' roots, by ID;
+- the viewer's replies in that channel that tag those parents (`#e`, `#h`,
+  `include_aux`, limit 500). `#e` also matches root tags, so a full page is
+  split and asked again; a full page for one parent pages back in time until
+  the viewer's direct reply appears (at most ten pages). Only replies whose
+  reply tag names the parent count, and deleted ones do not.
+
+While a lookup is queued or running, the reply is quiet and its attention is
+`unknown` with `pending: true`; a live notification for it waits instead of
+being dropped. A read reply is never looked up: it stays `unknown` but is not
+`pending`, because nothing would settle it. A failed batch keeps its parents
+pending and retries with backoff (1 s doubling to 60 s), so the same parent is
+never asked twice at once. A session reset or access change during a lookup
+discards its answer; parents the reset kept are asked again.
+
+Lookup results are kept apart from counted evidence, in a store bounded to
+4,096 decided parents and 1,024 fetched events. Fetched parents and roots are
+structure only: they give a reply its root for grouping and navigation, but
+they never count, never start another lookup (so a lookup cannot climb an old
+thread) and never fill the 4,096-event window. Whether the viewer wrote or
+answered a message does not change with the sample, so results survive the
+window's overflow reset and roster changes for still-accessible channels. A
+session reset clears them. Thread attention follows the direct parent, so a
+reply whose root could not be fetched still counts as the viewer's thread; it
+just cannot be grouped. A later reply of the viewer turns a negative result
+into membership, so it still counts after the window drops that reply. A
+positive result records one of the viewer's messages that made it as its
+witness (the viewer's own parent when there is one, since a later lookup reuses
+the cached parent; otherwise the newest reply), and whether the viewer has
+others. A later message does not replace the witness. When the viewer deletes
+the witness, even after the lookup, the membership ends, or the parent is asked
+again if there were others (the deleted message stays excluded and is dropped
+from the cache, so it is fetched again). Witnesses are kept (up to 4,096, not
+counted) so a deletion from another client still passes
+the target-visibility check after the window drops them. One witness per
+decided parent keeps every positive result inside that bound, however many
+replies one batch returns; evicting a witness forgets its lookup, which is
+asked again. Residuals: a direct reply older than 5,000 of the viewer's
+root-tag matches is not seen, and a single deletion event that names several
+of the viewer's messages is visible only if all of them are retained. Replies
+still require retained evidence of their own.
 
 ## Explicit clearing matrix
 

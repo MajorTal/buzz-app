@@ -96,8 +96,15 @@ export function bindMessageNotifications(
           message.channelId,
           message.messageId,
         );
-        const category = attention.category;
-        if (attention.status !== "eligible" || !category) continue;
+        // A reply whose conversation lookup is pending may become thread
+        // attention; admission waits until the lookup decides it.
+        const category =
+          attention.category ?? (attention.pending ? "thread" : undefined);
+        if (
+          !category ||
+          (attention.status !== "eligible" && !attention.pending)
+        )
+          continue;
         void notifications.admit(
           category,
           labels[category],
@@ -137,6 +144,7 @@ export function bindMessageNotifications(
             }
             if (
               attention.status === "ineligible" ||
+              (!attention.pending && attention.category !== category) ||
               (!notifications.snapshot().preferences.notifyWhileViewing &&
                 attention.viewing)
             )

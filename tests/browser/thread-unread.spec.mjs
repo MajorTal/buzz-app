@@ -6,6 +6,9 @@ test.use({
   productionBroker: true,
   readState: true,
   threadUnread: true,
+  // The viewer joined the peer's thread outside the loaded window, so its
+  // replies count only after the membership lookup.
+  threadUnreadJoined: true,
   historyCounts: { alpha: 20, beta: 1 },
   largeSidebar: true,
   pluginFixtures: true, // Observe the real navigation completion, not reply mount timing.
@@ -37,8 +40,10 @@ test.describe("mentioned reply priority", () => {
     expect(
       names.every((name) => name?.startsWith("Open unread thread from ")),
     ).toBe(true);
+    // Each thread previews its latest relevant reply: the nested mention in
+    // the broadcast thread, and the direct mention in the other.
     expect(new Set(names.map((name) => name?.split(": ").at(-1)))).toEqual(
-      new Set(["Broadcast reply", "Unread reply 1"]),
+      new Set(["Broadcast descendant", "Unread reply 1"]),
     );
   });
 });
@@ -110,9 +115,19 @@ test("thread buttons show observed unread independently, clear only after readin
   await popover.screenshot({
     path: testInfo.outputPath("activity-popover.png"),
   });
+  // The viewer's own thread and the peer thread the viewer joined. Channel
+  // evidence never returns the viewer's displaced reply, so only the
+  // conversation lookup can make the second thread count.
   await expect(
     popover.getByRole("button", { name: /Open unread thread from/ }),
-  ).toHaveCount(1);
+  ).toHaveCount(2);
+  expect(
+    app.report.queries.some(
+      ({ filter }) =>
+        filter.authors?.[0] === app.viewer &&
+        filter["#e"]?.includes(roots[1].id),
+    ),
+  ).toBe(true);
   const queries = () =>
     app.report.queries.filter(({ filter }) => filter.depth_limit);
   expect(queries()).toHaveLength(0); // Merely displaying buttons never fetches threads.
@@ -351,7 +366,9 @@ test("same-thread sidebar activity replaces timeline focus return", async ({
     await alpha.hover();
     const activity = page.getByRole("dialog", { name: "Activity in Alpha" });
     await activity
-      .getByRole("button", { name: /Open unread thread from.*Broadcast reply/ })
+      .getByRole("button", {
+        name: /Open unread thread from.*Broadcast descendant/,
+      })
       .click();
     await expect
       .poll(() =>

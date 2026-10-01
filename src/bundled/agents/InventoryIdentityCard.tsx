@@ -187,7 +187,6 @@ export function InventoryIdentityCard({
                 state.busy ||
                 state.status !== "ready" ||
                 !!decision.blocked ||
-                !data.localInventoryActions ||
                 !control.configureHere
               }
               onClick={() => onUseHere(row.pubkey, "use")}
@@ -195,11 +194,6 @@ export function InventoryIdentityCard({
               Use here
             </Button>
             {decision.blocked && <p role="status">{decision.blocked}</p>}
-            {!data.localInventoryActions && (
-              <p>
-                Restart an updated desktop build to use local inventory actions.
-              </p>
-            )}
           </>
         )}
         {(tile || decision.action === "clone") && cloneAction}

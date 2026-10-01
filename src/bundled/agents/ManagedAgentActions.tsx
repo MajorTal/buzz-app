@@ -109,7 +109,7 @@ export function ManagedAgentActions({
           >
             Use here
           </Button>
-        ) : state.data?.localInventoryActions && control.configureHere ? (
+        ) : control.configureHere ? (
           <LocalInventoryAction
             control={control}
             agent={agent}
@@ -121,9 +121,7 @@ export function ManagedAgentActions({
             onUsed={() => {}}
             onClone={() => {}}
           />
-        ) : (
-          <p>Update the desktop app to set up this imported identity.</p>
-        ))}
+        ) : null)}
       {agent.startOnAppLaunch && (
         <p className="m-0 text-body-sm text-secondary">Starts with this app.</p>
       )}

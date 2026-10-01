@@ -81,7 +81,10 @@ test("channel completion preserves native editing, focus, popup geometry and sig
       "value",
       "[\\#General](buzz://channel/c) ",
     );
-    await expect(input.locator("[data-link-renderer]")).toHaveText("#General");
+    await expect(input.locator("[data-link-renderer]")).toHaveText("General");
+    await expect(
+      input.locator('[data-link-renderer] svg[aria-hidden="true"]'),
+    ).toHaveCount(1);
     await expect(input).toBeFocused();
     expect(
       await page.evaluate(() => window.mentionFixture.publications),
@@ -137,9 +140,10 @@ test("channel completion preserves native editing, focus, popup geometry and sig
         "value",
         "[\\#General](buzz://channel/c) ",
       );
-      await expect(input.locator("[data-link-renderer]")).toHaveText(
-        "#General",
-      );
+      await expect(input.locator("[data-link-renderer]")).toHaveText("General");
+      await expect(
+        input.locator('[data-link-renderer] svg[aria-hidden="true"]'),
+      ).toHaveCount(1);
       await input.press(shortcut);
       await input.press("ControlOrMeta+a");
       await input.press("Backspace");

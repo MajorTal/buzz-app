@@ -221,7 +221,7 @@ it("distinguishes loading, empty and failed lists; only explicit retry refreshes
 });
 
 it.each([true, false])(
-  "renders the authored label and stable target with member visibility %s",
+  "renders the channel name without its hash beside the icon, with the stable target and member visibility %s",
   (member) => {
     const name = "crew-ops [a] & <b>";
     const row = channel("stable", { name, private: true });
@@ -268,8 +268,9 @@ it.each([true, false])(
         onOpenLink={onOpenLink}
       />,
     );
-    const link = screen.getByRole("link", { name: `#${name}` });
-    expect(link.textContent).toBe(`#${name}`);
+    const link = screen.getByRole("link", { name: "#crew-ops [a] & <b>" });
+    expect(link.querySelector('svg[aria-hidden="true"]')).not.toBeNull();
+    expect(link.textContent).toBe("crew-ops [a] & <b>");
     expect(link.getAttribute("href")).toBe("buzz://channel/stable");
     expect(screen.getAllByRole("link")).toHaveLength(1);
     fireEvent.click(link);

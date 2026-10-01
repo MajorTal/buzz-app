@@ -140,6 +140,10 @@ export function LinkLabel({
   }
   // The channel icon already supplies the visual hash.
   if (kind === "channel" && label.startsWith("#")) label = label.slice(1);
+  const visibleContent =
+    kind === "channel" && typeof content === "string" && content.startsWith("#")
+      ? content.slice(1)
+      : content;
   // Markdown encodes Unicode in destinations while retaining it in visible text.
   const rawDestination =
     label === href ||
@@ -149,7 +153,7 @@ export function LinkLabel({
     return (
       <span data-link-kind={kind}>
         <Icon aria-hidden="true" className={styles.icon} />
-        {content}
+        {visibleContent}
       </span>
     );
   // Shorten only raw destinations; authored labels and resolved channel names stay intact.

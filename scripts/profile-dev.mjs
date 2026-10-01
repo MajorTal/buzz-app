@@ -1,8 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { mkdir, writeFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
+import { setTimeout as pause } from "node:timers/promises";
+import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import process from "node:process";
+import { relayOrigin } from "../src/features/communities/destination.ts";
 
 const root = fileURLToPath(new URL("../", import.meta.url));
 
@@ -173,6 +176,20 @@ async function recordManifest(directory, target, profileArgs, extra = {}) {
   );
 }
 
+// The relay the dev server will use: Vite's environment for its mode (.env
+// files, with the process environment winning) reduced to the validated public
+// origin. A rejected value may carry a credential, so it is never recorded.
+export async function configuredRelay(mode, directory = root) {
+  const { loadEnv } = await import("vite");
+  const value = loadEnv(mode, directory, "BUZZ_").BUZZ_RELAY_URL;
+  if (!value?.trim()) return null;
+  try {
+    return relayOrigin(value);
+  } catch {
+    return null;
+  }
+}
+
 function processGroupAlive(pid) {
   try {
     process.kill(-pid, 0);
@@ -228,10 +245,23 @@ export function normalizeWebViteArgs(values) {
   let port = 1430;
   let sawPort = false;
   let sawHost = false;
+  let mode;
   for (let index = 0; index < values.length; index++) {
     const value = values[index];
     if (value === "--")
       throw new Error("Web profiling does not accept Vite arguments after --.");
+    if (/^(?:--mode|-m)(?:=|$)/.test(value)) {
+      if (mode !== undefined)
+        throw new Error("Web profiling accepts only one --mode option.");
+      const equals = value.indexOf("=");
+      mode = equals < 0 ? values[++index] : value.slice(equals + 1);
+      if (!mode) throw new Error("--mode requires a mode name.");
+      continue;
+    }
+    // Vite also takes a mode from a short-flag group or --m. The manifest's
+    // relay follows the mode, so a mode Vite alone sees would misattribute it.
+    if (/^-[^-=]*m|^--m(?:=|$)/.test(value))
+      throw new Error("Web profiling requires the mode as --mode <mode>.");
     if (value === "--port") {
       if (sawPort)
         throw new Error("Web profiling accepts only one --port option.");
@@ -270,6 +300,7 @@ export function normalizeWebViteArgs(values) {
     throw new Error("--port must be an integer between 1 and 65535.");
   return {
     port,
+    mode: mode ?? "development",
     args: [
       ...normalized,
       "--host",
@@ -277,6 +308,7 @@ export function normalizeWebViteArgs(values) {
       "--port",
       String(port),
       "--strictPort",
+      ...(mode === undefined ? [] : ["--mode", mode]),
     ],
   };
 }
@@ -501,12 +533,84 @@ export function networkRecorder(session, directory) {
   };
 }
 
+const SCENARIO_TIMEOUT_MS = 5 * 60_000;
+
+export function takeScenario(values) {
+  const args = [];
+  let scenario;
+  for (let index = 0; index < values.length; index++) {
+    const value = values[index];
+    if (value !== "--scenario" && !value.startsWith("--scenario=")) {
+      args.push(value);
+      continue;
+    }
+    if (scenario !== undefined)
+      throw new Error("Profiling accepts only one --scenario option.");
+    scenario = value === "--scenario" ? values[++index] : value.slice(11);
+    if (!scenario) throw new Error("--scenario requires a scenario file.");
+  }
+  return { scenario, args };
+}
+
+// A scenario file default-exports `async (page, { signal }) => {}` and drives
+// the Playwright page. It runs as the developer's real account.
+export async function loadScenario(file) {
+  const location = path.resolve(file);
+  const { default: run } = await import(pathToFileURL(location).href);
+  if (typeof run !== "function")
+    throw new Error(`Scenario ${location} must default-export a function.`);
+  return { file: location, run };
+}
+
+export async function runScenario(
+  scenario,
+  page,
+  directory,
+  signal,
+  timeoutMs = SCENARIO_TIMEOUT_MS,
+) {
+  // The scenario's signal aborts on Ctrl-C, at the timeout, and once this run
+  // settles, so abort-aware work it leaves behind cannot keep the process alive.
+  const ended = new AbortController();
+  const stop = AbortSignal.any([signal, ended.signal]);
+  try {
+    const metrics = await Promise.race([
+      (async () => {
+        await scenario.run(page, { signal: stop });
+        // The app's own client-metrics export (docs/client-metrics.md).
+        return await page.evaluate(
+          (label) => globalThis.__buzzClientMetrics.export(label),
+          path.basename(scenario.file),
+        );
+      })(),
+      // Ctrl-C also ends this wait, so an interrupted scenario that finishes
+      // late saves no metrics.
+      pause(timeoutMs, undefined, { signal: stop }).then(() => {
+        throw new Error(
+          `Scenario did not finish within ${timeoutMs / 1000} seconds.`,
+        );
+      }),
+    ]);
+    await writeFile(
+      `${directory}/client-metrics.json`,
+      `${JSON.stringify(metrics, null, 2)}\n`,
+    );
+    return { reason: "scenario", code: 0 };
+  } catch (error) {
+    return { reason: "scenario", code: 1, error };
+  } finally {
+    ended.abort();
+  }
+}
+
 export async function profileWeb({
   directory,
   profileArgs,
   args,
   network,
   trace = false,
+  scenario,
+  scenarioTimeoutMs,
 }) {
   const vite = normalizeWebViteArgs(args);
   await recordManifest(directory, "web", profileArgs, {
@@ -514,11 +618,16 @@ export async function profileWeb({
       trace ? "chromium-trace" : "chromium-renderer",
       "vite-broker",
       ...(network ? ["chromium-network"] : []),
+      ...(scenario ? ["client-metrics"] : []),
     ],
     network,
+    scenario: scenario?.file ?? null,
+    relay: await configuredRelay(vite.mode),
   });
 
   const control = stopController();
+  // Aborts the scenario's signal however the capture ends, including Vite exit.
+  const captureEnd = new AbortController();
   // Browser operations do not accept AbortSignal. Stop waiting immediately and
   // let finally close the owning browser; late results must not resume startup.
   const duringStartup = async (operation) => {
@@ -618,13 +727,38 @@ export async function profileWeb({
     control.abort.signal.throwIfAborted();
     captureStarted = true;
     console.log(
-      `\nProfiling ${url}. Press Ctrl-C to stop and save the profile.`,
+      `\nProfiling ${url}. ${
+        scenario
+          ? `Running scenario ${scenario.file}; the capture stops when it ends.`
+          : "Press Ctrl-C to stop and save the profile."
+      }`,
     );
-    outcome = await Promise.race([control.requested, viteExit]);
+    outcome = await Promise.race([
+      control.requested,
+      viteExit,
+      ...(scenario
+        ? [
+            runScenario(
+              scenario,
+              page,
+              directory,
+              AbortSignal.any([control.abort.signal, captureEnd.signal]),
+              scenarioTimeoutMs,
+            ),
+          ]
+        : []),
+    ]);
+    if (outcome.error)
+      failures.push(
+        new Error(`Scenario failed; artifacts remain at ${directory}.`, {
+          cause: outcome.error,
+        }),
+      );
   } catch (error) {
     if (!control.abort.signal.aborted) failures.push(error);
     outcome ??= { reason: "startup", code: 1 };
   } finally {
+    captureEnd.abort();
     let rendererProfile;
     let brokerProfile;
     if (rendererStarted) {
@@ -772,13 +906,23 @@ async function profileDesktop({ directory, profileArgs, args }) {
   process.exitCode = forced ? 130 : outcome.code;
 }
 
+// A wrapped failure names the artifacts; its cause carries the stack to debug.
+export function failureReport(error) {
+  if (!(error instanceof Error)) return error;
+  const { cause } = error;
+  if (cause === undefined) return error.message;
+  return `${error.message}\n${cause instanceof Error ? cause.stack : cause}`;
+}
+
 async function main() {
   const target = process.argv[2];
   const profileArgs = process.argv.slice(3);
   const network = target === "web" && profileArgs.includes("--network");
   const trace = target === "web" && profileArgs.includes("--trace");
-  const args = profileArgs.filter(
-    (argument) => argument !== "--network" && argument !== "--trace",
+  const { scenario: scenarioFile, args } = takeScenario(
+    profileArgs.filter(
+      (argument) => argument !== "--network" && argument !== "--trace",
+    ),
   );
   if (target !== "web" && target !== "desktop") {
     console.error(
@@ -787,6 +931,8 @@ async function main() {
     process.exitCode = 1;
     return;
   }
+  if (scenarioFile !== undefined && target !== "web")
+    throw new Error("--scenario is supported for web profiling only.");
   if (process.platform !== "darwin") {
     console.error("Development profiling currently supports macOS only.");
     process.exitCode = 1;
@@ -796,10 +942,18 @@ async function main() {
     .toISOString()
     .replaceAll(":", "-")
     .replace(/\.\d{3}Z$/, "Z");
+  const scenario = scenarioFile && (await loadScenario(scenarioFile));
   const directory = `${root}.profiles/${stamp}-${target}`;
   await mkdir(directory, { recursive: true });
   if (target === "web")
-    await profileWeb({ directory, profileArgs, args, network, trace });
+    await profileWeb({
+      directory,
+      profileArgs,
+      args,
+      network,
+      trace,
+      scenario,
+    });
   else await profileDesktop({ directory, profileArgs, args });
 }
 
@@ -810,7 +964,7 @@ if (
   try {
     await main();
   } catch (error) {
-    console.error(error instanceof Error ? error.message : error);
+    console.error(failureReport(error));
     await stopChildren();
     process.exitCode = 1;
   }

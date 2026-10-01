@@ -60,6 +60,26 @@ need their own validation.
   sessions short. Press Ctrl+C to finalize the capture; the command prints the
   `.profiles/...-web` output directory. Load `.cpuprofile` and trace files in
   Chromium DevTools (**Performance** > **Load profile**).
+  Use `just web profile --scenario <file>` for an unattended capture. The file
+  is any JavaScript module, inside or outside the repository (a relative path
+  resolves from the repository root), that default-exports
+  `async (page, { signal }) => {}` and drives the Playwright `page`. When it
+  returns, the command saves the app's [client metrics](client-metrics.md)
+  export as `client-metrics.json` and exits without Ctrl+C. A scenario that
+  throws or does not finish within five minutes fails the run: the command
+  prints the scenario's stack and the directory holding the remaining
+  artifacts, saves no client metrics, and exits nonzero. Ctrl+C during a
+  scenario also saves no client metrics but exits zero, like any interrupted
+  capture. `signal` aborts on Ctrl+C, at the timeout, and when the capture ends,
+  so pass it to any wait that would otherwise outlive the run. A scenario
+  outside the repository resolves bare imports from its own location, not from
+  the repository's `node_modules`. A scenario runs as your real account, so
+  keep it read-only. Every capture starts from a fresh browser profile with no
+  community selected unless `BUZZ_DEV_OPEN_RELAY=1` is set. `manifest.json`
+  records the scenario file and `relay`, the `https://` origin of the
+  `BUZZ_RELAY_URL` that Vite resolves from the environment or its `.env` files;
+  a value the dev server would reject is recorded as `null`. To profile in
+  another Vite mode, pass it as `--mode <mode>` so the manifest follows it.
 - `just desktop [args...]`: install locked dependencies and forward arguments to
   Tauri, e.g. `just desktop --port 1431 --no-watch`. Before launching, the adapter
   builds the pinned agent runtime when missing/outdated, or verifies and reuses it.

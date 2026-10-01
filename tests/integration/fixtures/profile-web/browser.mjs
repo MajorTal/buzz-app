@@ -32,6 +32,7 @@ const page = {
   context() {
     return { newCDPSession: () => operation("newCDPSession", session) };
   },
+  locator: () => ({ click: () => operation("click") }),
   evaluate: () =>
     operation("evaluate", { epochMilliseconds: 1, monotonicMilliseconds: 1 }),
   async goto() {

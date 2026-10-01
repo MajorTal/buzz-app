@@ -35,3 +35,6 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 
 [target.'cfg(any(target_os = "windows", target_os = "linux"))'.dependencies]
 buzz-credential-store = { path = "../credential-store" }
+
+[target.'cfg(target_os = "macos")'.dev-dependencies]
+tungstenite = { version = "0.29", default-features = false, features = ["handshake"] }

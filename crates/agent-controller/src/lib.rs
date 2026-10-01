@@ -18,6 +18,7 @@ mod profile;
 mod restart;
 mod runtime;
 mod secret;
+pub mod security;
 mod store;
 mod supervisor;
 pub use supervisor::dispatch as dispatch_agent_supervisor;

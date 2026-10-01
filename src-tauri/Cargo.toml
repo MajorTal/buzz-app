@@ -20,7 +20,7 @@ buzzodz-plugins = { path = "../crates/plugin-manager" }
 buzz-agent-controller = { path = "../crates/agent-controller" }
 serde = { version = "1", features = ["derive"] }
 serde_json = { version = "1", features = ["raw_value"] }
-buzz-agent = { git = "https://github.com/block/buzz.git", rev = "48884848f566d02c42ce07636636c4ad5f164c27" }
+buzz-agent = { git = "https://github.com/block/buzz.git", rev = "95b018c8713be9beebbd2517ace48529e3c0e6ed" }
 tokio = { version = "1", features = ["sync", "time", "macros", "process", "io-util"] }
 sha2 = "0.10"
 hmac = "0.12"

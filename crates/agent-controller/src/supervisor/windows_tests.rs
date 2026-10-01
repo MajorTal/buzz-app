@@ -126,6 +126,7 @@ fn parent_entrypoint() {
         &dir.join("locks"),
         ID,
         &dir.join("temp"),
+        None,
         &dir.join("harness.log"),
     )
     .unwrap();
@@ -191,6 +192,7 @@ fn stop_and_root_exit_end_the_listener_tree_before_release() {
             &root.join("locks"),
             ID,
             &temp,
+            None,
             &root.join("harness.log"),
         )
         .unwrap();

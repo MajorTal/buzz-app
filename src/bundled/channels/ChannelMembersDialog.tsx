@@ -824,7 +824,6 @@ export function ChannelMembersDialog({
   };
   return (
     <Dialog
-      dismissOnOutsideClick
       open
       dismissOnOutsideClick
       onOpenChange={(open) => {

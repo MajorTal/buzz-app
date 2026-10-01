@@ -390,10 +390,12 @@ pub struct GooseModelContext {
 pub struct Controller {
     pub(crate) store: Store,
     credentials: Arc<dyn Credentials>,
-    bundle: Result<RuntimeBundle>,
+    pub(crate) bundle: Result<RuntimeBundle>,
     running: BTreeMap<String, Running>,
     errors: BTreeMap<String, String>,
-    ownership_root: PathBuf,
+    pub(crate) ownership_root: PathBuf,
+    pub(crate) protection_paths: Result<Vec<PathBuf>>,
+    pub(crate) security_providers: BTreeMap<String, crate::security::Provider>,
 }
 impl Controller {
     pub fn new(
@@ -409,6 +411,8 @@ impl Controller {
             running: BTreeMap::new(),
             errors: BTreeMap::new(),
             ownership_root,
+            security_providers: BTreeMap::new(),
+            protection_paths: Ok(Vec::new()),
         }
     }
     pub fn snapshot(&mut self) -> Result<ControlSnapshot> {
@@ -902,6 +906,8 @@ impl Controller {
             .prefix("agent-")
             .tempdir_in(&runs)
             .map_err(|_| "Could not create private runtime directory")?;
+        let scratch = temporary.path().join("tmp");
+        crate::connection::private_directory(&scratch)?;
         let mut command = if let Some(preflight) = preflight {
             bundle.command_checked(&agent, key, &crate::build_defaults(), Some(preflight))?
         } else {
@@ -915,24 +921,27 @@ impl Controller {
         // may redirect credentials/temp signing material outside this app profile.
         command
             .env("BUZZ_AGENT_CONFIG_DIR", config)
-            .env("TMPDIR", temporary.path())
-            .env("TMP", temporary.path())
-            .env("TEMP", temporary.path());
+            .env("TMPDIR", &scratch)
+            .env("TMP", &scratch)
+            .env("TEMP", &scratch);
         if let Some(settings) = &settings {
             command
                 .env("DATABRICKS_HOST", &settings.host)
                 .env("DATABRICKS_MODEL_FILTER", &settings.filter)
                 .env_remove("DATABRICKS_TOKEN");
         }
+        let control = self.wrap_protected_worker(&agent, &mut command)?;
         // Disarm app-side deletion before a child can use this directory. The
         // supervisor deletes it only after confirmed whole-session teardown.
         let log_path = crate::logs::path(config, &agent.id)?;
         let temporary = temporary.keep();
+        let control = control.map(tempfile::TempDir::keep);
         let process = Supervised::spawn(
             &command,
             &self.ownership_root,
             &agent.id,
             &temporary,
+            control.as_deref(),
             &log_path,
         )?;
         self.running.insert(

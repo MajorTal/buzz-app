@@ -1706,10 +1706,8 @@ fn real_ipc_start_on_app_launch_persists_reopens_and_recovers_from_write_failure
     std::fs::set_permissions(&store, std::fs::Permissions::from_mode(0o500)).unwrap();
     let failed = set(true);
     std::fs::set_permissions(&store, std::fs::Permissions::from_mode(0o700)).unwrap();
-    assert_eq!(
-        failed.unwrap_err(),
-        "Could not prepare agent settings write"
-    );
+    // Staging is private and writable; replacement into the read-only store fails.
+    assert_eq!(failed.unwrap_err(), "Could not replace agent settings");
     let current = invoke(&view, "agent_control_snapshot", json!({})).unwrap();
     assert_eq!(current["agents"][0]["startOnAppLaunch"], false);
     assert_eq!(disk()["agents"][0]["startOnAppLaunch"], false);

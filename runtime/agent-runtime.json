@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/block/buzz.git",
-  "revision": "48884848f566d02c42ce07636636c4ad5f164c27",
+  "revision": "95b018c8713be9beebbd2517ace48529e3c0e6ed",
   "tools": [
     "buzz-acp",
     "buzz-agent",

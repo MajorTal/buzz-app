@@ -43,7 +43,7 @@ impl Binding {
     }
     pub(crate) fn decode(value: Option<&Value>) -> Result<Option<Self>> {
         let binding: Option<Self> = serde_json::from_value(value.cloned().unwrap_or(Value::Null))
-            .map_err(|_| "Saved protection is malformed; launch refused")?;
+            .map_err(|_| "Saved protection is malformed")?;
         if let Some(binding) = &binding {
             binding.validate()?;
         }
@@ -60,6 +60,17 @@ struct Document {
     parked: BTreeMap<String, ParkedIdentity>,
     #[serde(flatten)]
     extra: BTreeMap<String, Value>,
+}
+impl Document {
+    fn protection_revision(&self) -> Result<u64> {
+        match self.extra.get("launchProtectionRevision") {
+            None => Ok(0),
+            Some(value) => value
+                .as_u64()
+                .filter(|n| *n <= 9_007_199_254_740_991)
+                .ok_or("Invalid protection revision".into()),
+        }
+    }
 }
 /// Keyless inventory. Provenance is not proof of present key custody or membership.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -413,6 +424,30 @@ impl Store {
         agent.apply(edit)?;
         self.write(&doc)
     }
+    pub(crate) fn set_launch_protection_defaults(
+        &mut self,
+        revision: u64,
+        binding: Option<Binding>,
+    ) -> Result<()> {
+        if let Some(binding) = &binding {
+            binding.validate()?;
+        }
+        let mut doc = self.read()?;
+        if doc.protection_revision()? != revision {
+            return Err("Protection defaults changed; reload before saving".into());
+        }
+        let next = revision
+            .checked_add(1)
+            .filter(|n| *n <= 9_007_199_254_740_991)
+            .ok_or("Protection defaults revision exhausted")?;
+        doc.extra.insert(
+            PROTECTION_KEY.into(),
+            serde_json::to_value(binding).map_err(|_| "Invalid defaults")?,
+        );
+        doc.extra
+            .insert("launchProtectionRevision".into(), json!(next));
+        self.write(&doc)
+    }
     pub(crate) fn set_launch_protection(
         &mut self,
         id: &str,
@@ -451,7 +486,8 @@ impl Store {
                 Ok(json!({"id": a.id, "binding": Binding::decode(a.extra.get(PROTECTION_KEY))?}))
             })
             .collect::<Result<Vec<_>>>()?;
-        Ok(json!({"agents": agents}))
+        Ok(json!({"revision": doc.protection_revision()?,
+            "defaults": Binding::decode(doc.extra.get(PROTECTION_KEY))?, "agents": agents}))
     }
     pub(crate) fn remove(&mut self, id: &str, revision: u64) -> Result<()> {
         let mut doc = self.read()?;
@@ -506,10 +542,20 @@ impl Store {
     /// One atomic import batch; repairs add only the missing team snapshot.
     pub(crate) fn import(
         &mut self,
-        agents: Vec<Agent>,
+        mut agents: Vec<Agent>,
         repairs: Vec<(String, u64, String)>,
     ) -> Result<()> {
         let mut doc = self.read()?;
+        let defaults = Binding::decode(doc.extra.get(PROTECTION_KEY))?;
+        for agent in &mut agents {
+            if defaults.is_some() && !agent.extra.contains_key(PROTECTION_KEY) {
+                agent.extra.insert(
+                    PROTECTION_KEY.into(),
+                    serde_json::to_value(&defaults)
+                        .map_err(|_| "Could not encode protection defaults")?,
+                );
+            }
+        }
         for (id, revision, instructions) in repairs {
             let agent = doc
                 .agents
@@ -529,9 +575,7 @@ impl Store {
         self.write(&doc)
     }
     pub(crate) fn insert(&mut self, agents: Vec<Agent>) -> Result<()> {
-        let mut doc = self.read()?;
-        doc.agents.extend(agents);
-        self.write(&doc)
+        self.import(agents, Vec::new())
     }
 }
 impl Drop for Store {

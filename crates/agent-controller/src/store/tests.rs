@@ -514,3 +514,161 @@ fn oversized_defaults_are_rejected_before_replacing_the_usable_record() {
     );
     assert_eq!(store.defaults().unwrap().model, "working-model");
 }
+
+#[test]
+fn protection_defaults_preserve_explicit_bindings_and_persist_copies() {
+    let root = tempfile::tempdir().unwrap();
+    let mut store = Store::open(root.path().into()).unwrap();
+    let defaults = Binding {
+        provider: "default.provider".into(),
+        policy: json!({"network":"selected"}),
+    };
+    store
+        .set_launch_protection_defaults(0, Some(defaults.clone()))
+        .unwrap();
+    let mut agents: Vec<_> = ["a1", "b2", "c3"]
+        .into_iter()
+        .map(|key| {
+            let mut agent = fixture();
+            agent.pubkey = key.repeat(32);
+            agent.id = agent_id(&agent.pubkey, &agent.relay_url);
+            agent
+        })
+        .collect();
+    agents[1].extra.insert(PROTECTION_KEY.into(), Value::Null);
+    let override_binding = json!({"provider":"agent.provider","policy":{"network":"deny_all"}});
+    agents[2]
+        .extra
+        .insert(PROTECTION_KEY.into(), override_binding.clone());
+    store.insert(agents.clone()).unwrap();
+    let before = fs::read(store.path()).unwrap();
+    assert_eq!(
+        store.set_launch_protection_defaults(0, None).unwrap_err(),
+        "Protection defaults changed; reload before saving"
+    );
+    assert_eq!(fs::read(store.path()).unwrap(), before);
+    store.set_launch_protection_defaults(1, None).unwrap();
+    drop(store);
+    let store = Store::open(root.path().into()).unwrap();
+    let saved = store.agents().unwrap();
+    agents[0].extra.insert(
+        PROTECTION_KEY.into(),
+        serde_json::to_value(defaults).unwrap(),
+    );
+    assert_eq!(
+        serde_json::to_value(saved).unwrap(),
+        serde_json::to_value(agents).unwrap()
+    );
+    let snapshot = store.launch_protection_snapshot().unwrap();
+    assert_eq!(snapshot["revision"], 2);
+    assert!(snapshot["defaults"].is_null());
+}
+
+#[test]
+fn protection_defaults_and_team_repair_commit_as_one_batch() {
+    let root = tempfile::tempdir().unwrap();
+    let mut store = Store::open(root.path().into()).unwrap();
+    let mut repaired = fixture();
+    repaired.imported["record"] = json!({"team_id":"fixture-team"});
+    store.insert(vec![repaired.clone()]).unwrap();
+    let defaults = Binding {
+        provider: "default.provider".into(),
+        policy: json!({"network":"selected"}),
+    };
+    store
+        .set_launch_protection_defaults(0, Some(defaults.clone()))
+        .unwrap();
+    let mut incoming = fixture();
+    incoming.pubkey = "cd".repeat(32);
+    incoming.id = agent_id(&incoming.pubkey, &incoming.relay_url);
+    let before = fs::read(store.path()).unwrap();
+    assert_eq!(
+        store
+            .import(
+                vec![incoming.clone()],
+                vec![(
+                    repaired.id.clone(),
+                    repaired.revision + 1,
+                    "Team instructions".into()
+                )]
+            )
+            .unwrap_err(),
+        "Agent settings changed; preview the team import again"
+    );
+    assert_eq!(fs::read(store.path()).unwrap(), before);
+    store
+        .import(
+            vec![incoming.clone()],
+            vec![(
+                repaired.id.clone(),
+                repaired.revision,
+                "Team instructions".into(),
+            )],
+        )
+        .unwrap();
+    repaired.imported["teamInstructions"] = json!("Team instructions");
+    repaired.revision += 1;
+    incoming.extra.insert(
+        PROTECTION_KEY.into(),
+        serde_json::to_value(defaults).unwrap(),
+    );
+    drop(store);
+    let store = Store::open(root.path().into()).unwrap();
+    assert_eq!(
+        serde_json::to_value(store.agents().unwrap()).unwrap(),
+        serde_json::to_value(vec![repaired, incoming]).unwrap()
+    );
+}
+
+#[test]
+fn protection_defaults_reject_malformed_values_without_inserting_agents() {
+    let root = tempfile::tempdir().unwrap();
+    let mut store = Store::open(root.path().into()).unwrap();
+    let mut doc = store.read().unwrap();
+    doc.extra
+        .insert(PROTECTION_KEY.into(), json!("malformed binding"));
+    store.write(&doc).unwrap();
+    let before = fs::read(store.path()).unwrap();
+    assert_eq!(
+        store.insert(vec![fixture()]).unwrap_err(),
+        "Saved protection is malformed"
+    );
+    assert_eq!(fs::read(store.path()).unwrap(), before);
+}
+
+#[test]
+fn protection_defaults_revision_limit_preserves_saved_bytes() {
+    let root = tempfile::tempdir().unwrap();
+    let mut store = Store::open(root.path().into()).unwrap();
+    let mut doc = store.read().unwrap();
+    doc.extra.insert(
+        "launchProtectionRevision".into(),
+        json!(9_007_199_254_740_990u64),
+    );
+    store.write(&doc).unwrap();
+    store
+        .set_launch_protection_defaults(9_007_199_254_740_990, None)
+        .unwrap();
+    assert_eq!(
+        store.launch_protection_snapshot().unwrap()["revision"],
+        9_007_199_254_740_991u64
+    );
+    let before = fs::read(store.path()).unwrap();
+    assert_eq!(
+        store
+            .set_launch_protection_defaults(9_007_199_254_740_991, None)
+            .unwrap_err(),
+        "Protection defaults revision exhausted"
+    );
+    assert_eq!(fs::read(store.path()).unwrap(), before);
+    let mut doc = store.read().unwrap();
+    doc.extra.insert(
+        "launchProtectionRevision".into(),
+        json!(9_007_199_254_740_992u64),
+    );
+    store.write(&doc).unwrap();
+    assert_eq!(
+        store.launch_protection_snapshot().unwrap_err(),
+        "Invalid protection revision"
+    );
+}

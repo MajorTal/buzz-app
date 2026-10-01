@@ -4,6 +4,8 @@ The controller accepts native launcher registrations and opaque per-agent policy
 
 Registration requires an absolute executable path, fingerprints its bytes and returns an opaque lease. Unregistering a lease removes that registration; a late unregister cannot remove a replacement registration. Saving a binding requires an available provider and the current agent revision. A null binding explicitly clears protection.
 
+Global protection defaults have their own revision. Create and Import copy the current default in the same atomic write that inserts new agents, preserving an explicit null opt-out or per-agent binding. Changing defaults later leaves existing agents unchanged, including records whose team instructions are repaired during an import.
+
 All controller start and restart paths resolve the saved provider immediately before spawning. Missing or changed providers fail closed. Existing running processes are not changed by policy edits or lease disposal.
 
 The host uses the ACP launch-prefix hook from [block/buzz#7985](https://github.com/block/buzz/pull/7985). ACP keeps the real worker identity, normalizes its arguments, then invokes the provider as `--launch <path> -- <worker> [args...]`. The private version-2 JSON context contains `providerDirectory`, `policy`, `relayUrl`, `workspace` and `protectedPaths`. The launcher must preserve ACP stdin/stdout, apply its policy, and supervise the worker. Resolve bundled provider resources relative to `providerDirectory`, not the staged launcher's location.

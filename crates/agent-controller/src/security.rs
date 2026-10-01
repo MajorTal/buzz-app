@@ -27,6 +27,10 @@ pub enum Request {
         provider: String,
         lease: String,
     },
+    Defaults {
+        revision: u64,
+        binding: Option<Binding>,
+    },
     Agent {
         id: String,
         revision: u64,
@@ -107,6 +111,12 @@ impl Controller {
                 {
                     self.security_providers.remove(&provider);
                 }
+                self.security_snapshot()
+            }
+            Request::Defaults { revision, binding } => {
+                self.require_provider(&binding)?;
+                self.store
+                    .set_launch_protection_defaults(revision, binding)?;
                 self.security_snapshot()
             }
             Request::Agent {

@@ -235,6 +235,10 @@ test("message actions reveal, copy, restore focus and reply across responsive la
     expect(bounds.x).toBeGreaterThanOrEqual(0);
     expect(bounds.x + bounds.width).toBeLessThanOrEqual(width);
     await page.keyboard.press("Escape");
+    // Escape starts the exit; its deferred focus return must finish before the
+    // next resize/pointer transition, or that old return can reopen the bar.
+    await expect(menu).toHaveCount(0);
+    await expect(trigger).toBeFocused();
   }
   await page.screenshot({
     path: test.info().outputPath("message-actions-narrow.png"),

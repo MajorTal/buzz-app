@@ -1,6 +1,6 @@
 import { settleShellToggle } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
-import { open } from "./timeline.mjs";
+import { open, wheel } from "./timeline.mjs";
 
 test.use({ savedSidebar: true });
 
@@ -872,28 +872,31 @@ test("non-ready sidebar keeps page rows and Retry reachable by pointer scrolling
     exact: true,
   });
   await expect(retry).toBeAttached();
+  const scroller = sidebar.locator('[class*="sidebarScroll"]');
   const scrollToBottom = async (target) => {
     await sidebar.hover();
-    await page.mouse.wheel(0, 800);
+    // Visibility is not input completion: focusing early interrupts WebKit's
+    // smooth wheel at a visible-but-not-fully-scrolled Retry button. The shared
+    // helper observes scrollend before dispatch; an already-reached edge needs
+    // no gesture (and would emit no scrollend).
+    if (
+      await scroller.evaluate(
+        (el) => el.scrollHeight - el.clientHeight - el.scrollTop > 1,
+      )
+    )
+      await wheel(page, 800, scroller);
+    await expect
+      .poll(() =>
+        scroller.evaluate(
+          (el) => el.scrollHeight - el.clientHeight - el.scrollTop,
+        ),
+      )
+      .toBeLessThanOrEqual(1);
     await expect
       .poll(async () => {
         const bounds = await sidebar.boundingBox();
         const row = await target.boundingBox();
-        // A visible row is not the end of WebKit's asynchronous wheel gesture.
-        // Focusing early can stop it before the bottom padding clears the ring.
-        const atEnd = await target.evaluate((element) => {
-          let scroll = element.parentElement;
-          while (scroll && getComputedStyle(scroll).overflowY !== "auto")
-            scroll = scroll.parentElement;
-          return (
-            !!scroll &&
-            Math.abs(
-              scroll.scrollHeight - scroll.clientHeight - scroll.scrollTop,
-            ) <= 1
-          );
-        });
         return (
-          atEnd &&
           !!bounds &&
           !!row &&
           row.y >= bounds.y &&

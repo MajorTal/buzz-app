@@ -357,16 +357,25 @@ the complete suite still runs with `pnpm test` / `just scan`:
 - **Browser measurements:** Chromium then WebKit, serially on an isolated runner.
 - **Browser journeys:** twelve runners (Chromium and WebKit, six file-level shards
   per engine), each with two workers. They start alongside measurements on separate
-  runners; `CI required` still requires both lanes. A separate Ubuntu job builds
-  the native plugin-manager fixture using the repository Rust pin and uploads it
-  for all twelve shards. Shards wait for that job, restore executable permission,
-  and pass its path through `BUZZ_BROWSER_FIXTURE`; local journeys still build
-  with Cargo. No measurements are repeated on shards and no retries hide failures.
+  runners; `CI required` still requires both lanes. A separate required Ubuntu
+  job builds the native plugin-manager fixture once with Hermit's pinned Cargo.
+  It uploads a tar with executable permission, checkout revision and SHA-256
+  checksum; shards download by exact same-run artifact ID and verify all three
+  before running. A missing artifact fails CI rather than rebuilding. Local
+  non-CI journeys retain the locked Cargo build. Each browser test uses its own
+  mutable fixture home. No measurements are repeated on shards and no retries
+  hide failures.
 - Both browser lanes use the version-matched, digest-pinned
   [Playwright Docker image](https://playwright.dev/docs/docker), which supplies
   browsers and Linux libraries without per-job apt provisioning. Follow the
   [CI container guidance](https://playwright.dev/docs/ci#via-containers).
   Update both image references and digests when upgrading `@playwright/test`.
+  Setup verifies installed Playwright against image metadata and launches the
+  selected engine (both for measurements) before tests; it never downloads a
+  missing browser. Hermit pins Node/pnpm through explicit `./bin/` entry points
+  and fails closed if the pnpm store path cannot be resolved. Containers use
+  `HOME=/root` and trust only their exact checked-out workspace. Native host
+  jobs keep their normal toolchain and library setup.
 - **CI required:** fails unless every automatic Linux lane and every browser shard succeeds,
   including cancellation or an unexpectedly skipped lane. Configure this status
   as a required repository check; the workflow does not change branch protection.

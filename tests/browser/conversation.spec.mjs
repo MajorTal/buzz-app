@@ -3,6 +3,7 @@ import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath } from "node:url";
 import { run } from "./run-command.mjs";
+import { nativeFixture } from "./native-fixture.mjs";
 import { mkdtemp, cp, readFile, writeFile, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -51,22 +52,7 @@ test("independent packed author consumer and native-installed contribution survi
     run("pnpm", ["build"], source);
     const code = await readFile(join(source, "dist/plugin.js"), "utf8");
     expect(code).not.toMatch(/^import\s|^export.*from\s/m);
-    // CI supplies the Ubuntu-built bridge; local runs retain the Cargo build.
-    let binary = process.env.BUZZ_BROWSER_FIXTURE;
-    if (!binary) {
-      run("cargo", [
-        "build",
-        "--locked",
-        "-p",
-        "buzzodz-plugins",
-        "--example",
-        "fixture-bridge",
-      ]);
-      const metadata = JSON.parse(
-        run("cargo", ["metadata", "--no-deps", "--format-version=1"]),
-      );
-      binary = join(metadata.target_directory, "debug/examples/fixture-bridge");
-    }
+    const binary = nativeFixture();
     const home = join(temp, "home");
     const native = (op, ...args) =>
       JSON.parse(run(binary, [home, op, ...args]));

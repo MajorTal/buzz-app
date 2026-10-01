@@ -1,19 +1,20 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import {
+  chmodSync,
   mkdirSync,
   mkdtempSync,
   readFileSync,
-  readdirSync,
-  realpathSync,
   rmSync,
-  symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, posix } from "node:path";
 import test from "node:test";
 import { parse } from "yaml";
+import { imageEngines } from "../../scripts/check-browser-image.mjs";
+import { verifiedFixture, nativeFixture } from "../browser/native-fixture.mjs";
+import { createHash } from "node:crypto";
 import ciConfig from "../browser/playwright.ci.config.mjs";
 import config from "../browser/playwright.config.mjs";
 import { run } from "../browser/run-command.mjs";
@@ -39,7 +40,7 @@ const matrixValues = (key) => {
   return values.split(",").map((value) => value.trim());
 };
 
-test("twelve browser jobs retain isolated measurements and a required native fixture", () => {
+test("twelve browser jobs retain isolated measurements and one required native build", () => {
   assert.deepEqual(matrixValues("engine"), ["chromium", "webkit"]);
   assert.deepEqual(matrixValues("shard"), ["1", "2", "3", "4", "5", "6"]);
   assert.match(browser, /^ {4}needs: \[browser_fixture\]$/m);
@@ -50,35 +51,13 @@ test("twelve browser jobs retain isolated measurements and a required native fix
     browser,
     /name: browser-journeys-\$\{\{ matrix\.engine \}\}-\$\{\{ matrix\.shard \}\}/,
   );
-  const fixture = parse(workflow).jobs.browser_fixture;
+  const preparation = browser.indexOf("name: Verify native browser fixture");
+  const journey = browser.indexOf("-- ./bin/pnpm test:browser:ci");
   assert.ok(
-    fixture.steps.some(
-      (step) =>
-        step.run ===
-        "cargo build --locked -p buzzodz-plugins --example fixture-bridge",
-    ),
+    preparation >= 0 && journey > preparation,
+    "same-revision native fixture must verify before journeys",
   );
-  // Setup must run on misses too, not merely when a cache is present.
-  const build = fixture.steps.find(
-    (step) =>
-      step.run ===
-      "cargo build --locked -p buzzodz-plugins --example fixture-bridge",
-  );
-  assert.equal(build.if, undefined);
-  assert.equal(build["continue-on-error"], undefined);
-  const upload = fixture.steps.find(
-    (step) => step.with?.name === "native-browser-fixture",
-  );
-  assert.equal(upload.with["if-no-files-found"], "error");
-  const download = parse(workflow).jobs.browser.steps.find(
-    (step) => step.with?.name === "native-browser-fixture",
-  );
-  assert.equal(download.with.path, ".browser-fixture");
-  assert.match(browser, /run: chmod \+x \.browser-fixture\/fixture-bridge/);
-  assert.equal(
-    parse(workflow).jobs.browser.env.BUZZ_BROWSER_FIXTURE,
-    `\${{ github.workspace }}/.browser-fixture/fixture-bridge`,
-  );
+  assert.doesNotMatch(browser, /apt-get|rustup|run: (?:\.\/bin\/)?cargo/);
   const functional = browser
     .split("      - name: Functional journeys\n")[1]
     ?.split("      - name:")[0];
@@ -88,7 +67,7 @@ test("twelve browser jobs retain isolated measurements and a required native fix
   assert.match(functional, /--reporter=list,json/);
   assert.match(
     job("measurements"),
-    /-- pnpm test:browser:ci --project '\*-measurements' --workers=1 --reporter=list,json$/m,
+    /-- \.\/bin\/pnpm test:browser:ci --project '\*-measurements' --workers=1 --reporter=list,json$/m,
   );
   assert.equal(config.workers, 2);
   assert.equal(config.retries, 0);
@@ -105,82 +84,97 @@ test("twelve browser jobs retain isolated measurements and a required native fix
     assert.deepEqual(projects[engine].dependencies, ["webkit-measurements"]);
 });
 
-test("browser Rust setup uses the repository pin before Hermit and fails closed", (t) => {
-  const { steps } = parse(workflow).jobs.browser_fixture;
-  const install = steps.find(
-    (step) => step.name === "Install minimal pinned Rust for browser fixtures",
+test("one same-run native artifact preserves the executable, revision and test-owned homes", (t) => {
+  const { jobs } = parse(workflow),
+    build = jobs.browser_fixture,
+    steps = jobs.browser.steps;
+  assert.equal(build["runs-on"], "ubuntu-24.04");
+  assert.equal(build.container, undefined);
+  assert.equal(build["timeout-minutes"], 15);
+  const compile = build.steps.find(
+    (step) => step.name === "Build native browser fixture",
   );
-  assert.ok(install);
-  assert.equal(install.if, undefined);
-  assert.equal(install["continue-on-error"], undefined);
-  assert.ok(
-    steps.indexOf(install) <
-      steps.findIndex(
-        (step) =>
-          step.run ===
-          "cargo build --locked -p buzzodz-plugins --example fixture-bridge",
-      ),
+  assert.equal(
+    compile.run,
+    "./bin/cargo build --locked -p buzzodz-plugins --example fixture-bridge --target-dir target/browser-fixture",
   );
-  const pins = readdirSync(new URL("../../bin", import.meta.url)).filter(
-    (name) => /^\.rust-.*\.pkg$/.test(name),
+  assert.equal(compile.if, undefined);
+  assert.equal(compile["continue-on-error"], undefined);
+  const upload = build.steps.find((step) =>
+    step.uses?.startsWith("actions/upload-artifact@"),
   );
-  assert.equal(pins.length, 1);
-  const version = pins[0].slice(6, -4);
-  const cwd = realpathSync(mkdtempSync(join(tmpdir(), "buzz-browser-rust-")));
+  const download = steps.find((step) =>
+    step.uses?.startsWith("actions/download-artifact@"),
+  );
+  assert.equal(
+    upload.with.name,
+    `browser-fixture-\${{ github.sha }}-\${{ github.run_attempt }}`,
+  );
+  assert.equal(upload.with["if-no-files-found"], "error");
+  assert.equal(upload.id, "fixture-upload");
+  assert.equal(
+    build.outputs["artifact-id"],
+    `\${{ steps.fixture-upload.outputs.artifact-id }}`,
+  );
+  assert.equal(
+    download.with["artifact-ids"],
+    `\${{ needs.browser_fixture.outputs.artifact-id }}`,
+  );
+  assert.equal(download.with["merge-multiple"], true);
+  assert.equal(download.with.name, undefined);
+  assert.equal(download.with["run-id"], undefined);
+  assert.equal(download.with["github-token"], undefined);
+  assert.equal(download.with.path, jobs.browser.env.BUZZ_BROWSER_FIXTURE_DIR);
+  const verify = steps.find(
+    (step) => step.name === "Verify native browser fixture",
+  );
+  assert.equal(verify.if, undefined);
+  assert.equal(verify["continue-on-error"], undefined);
+  const cwd = mkdtempSync(join(tmpdir(), "buzz-fixture-artifact-"));
   t.after(() => rmSync(cwd, { recursive: true, force: true }));
-  mkdirSync(join(cwd, "bin"));
-  mkdirSync(join(cwd, "toolchain"));
-  for (const name of ["cargo", "rustc"])
-    writeFileSync(join(cwd, "toolchain", name), "#!/bin/sh\nexit 0\n", {
-      mode: 0o755,
-    });
-  writeFileSync(
-    join(cwd, "rustup"),
-    '#!/bin/sh\nprintf "%s\\n" "$*" >> calls\nif [ "$1" = toolchain ]; then exit "$INSTALL_STATUS"; fi\nprintf "%s/toolchain/rustc\\n" "$PWD"\n',
-    { mode: 0o755 },
+  const binary = join(cwd, "fixture-bridge"),
+    revision = "a".repeat(40);
+  writeFileSync(binary, "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  writeFileSync(join(cwd, "revision"), `${revision}\n`);
+  const checksum = () =>
+    createHash("sha256").update(readFileSync(binary)).digest("hex");
+  writeFileSync(join(cwd, "SHA256SUMS"), `${checksum()}  fixture-bridge\n`);
+  assert.equal(verifiedFixture(cwd, revision), binary);
+  assert.throws(
+    () => verifiedFixture(cwd, "b".repeat(40)),
+    "wrong revision fails",
   );
-  const output = join(cwd, "output");
-  const execute = (status = "0") => {
-    writeFileSync(output, "");
-    writeFileSync(join(cwd, "calls"), "");
-    return spawnSync("bash", ["-eo", "pipefail", "-c", install.run], {
-      cwd,
-      env: {
-        ...process.env,
-        PATH: `${cwd}:${process.env.PATH}`,
-        GITHUB_ENV: output,
-        INSTALL_STATUS: status,
-      },
-      encoding: "utf8",
-      timeout: 5000,
-    });
-  };
-  assert.notEqual(execute().status, 0, "missing pin must fail");
-  symlinkSync("hermit", join(cwd, "bin", pins[0]));
-  const result = execute();
-  assert.equal(result.status, 0, result.stderr);
-  assert.equal(
-    readFileSync(join(cwd, "calls"), "utf8"),
-    `toolchain install ${version} --profile minimal --no-self-update\nwhich --toolchain ${version} rustc\n`,
+  chmodSync(binary, 0o644);
+  assert.throws(
+    () => verifiedFixture(cwd, revision),
+    "non-executable artifact fails",
   );
-  assert.equal(
-    readFileSync(output, "utf8"),
-    `RUSTUP_TOOLCHAIN=${version}\nHERMIT_PREPEND_PATH=${cwd}/toolchain\n`,
-  );
-  assert.notEqual(
-    execute("1").status,
-    0,
-    "installation failure must propagate",
-  );
-  assert.equal(readFileSync(output, "utf8"), "");
-  symlinkSync("hermit", join(cwd, "bin/.rust-other.pkg"));
-  assert.notEqual(execute().status, 0, "ambiguous pin must fail");
-  assert.equal(readFileSync(join(cwd, "calls"), "utf8"), "");
+  chmodSync(binary, 0o755);
+  writeFileSync(binary, "changed");
+  assert.throws(() => verifiedFixture(cwd, revision), "altered binary fails");
+  rmSync(binary);
+  assert.throws(() => verifiedFixture(cwd, revision), "missing artifact fails");
+  const ci = process.env.CI,
+    directory = process.env.BUZZ_BROWSER_FIXTURE_DIR;
+  try {
+    process.env.CI = "true";
+    delete process.env.BUZZ_BROWSER_FIXTURE_DIR;
+    assert.throws(
+      () => nativeFixture(),
+      /must supply/,
+      "CI cannot silently rebuild missing evidence",
+    );
+  } finally {
+    if (ci === undefined) delete process.env.CI;
+    else process.env.CI = ci;
+    if (directory === undefined) delete process.env.BUZZ_BROWSER_FIXTURE_DIR;
+    else process.env.BUZZ_BROWSER_FIXTURE_DIR = directory;
+  }
 });
 
 test("workflow shards discover every functional test/project exactly once", (t) => {
   const command = browser.match(
-    /^ {8}run: .+ -- (pnpm test:browser:ci .+)$/m,
+    /^ {8}run: .+ -- (\.\/bin\/pnpm test:browser:ci .+)$/m,
   )?.[1];
   assert.ok(command, "functional invocation must exist");
   const discover = (args) => {
@@ -219,7 +213,9 @@ test("workflow shards discover every functional test/project exactly once", (t) 
       const expanded = command
         .replaceAll(/\$\{\{ matrix\.engine \}\}/g, engine)
         .replaceAll(/\$\{\{ matrix\.shard \}\}/g, shard);
-      const selected = discover(expanded.split(/\s+/).slice(1));
+      const selected = discover(
+        expanded.replace(/^\.\/bin\/pnpm /, "").split(/\s+/),
+      );
       assert.ok(selected.length > 0, `${engine}/${shard} must select tests`);
       assert.ok(selected.every((id) => id.startsWith(`${engine}:`)));
       actual.push(...selected);
@@ -251,7 +247,7 @@ test("classic-scrollbar cases run exactly once, after the measurements, without 
   assert.equal(classic.if, undefined);
   assert.equal(classic["continue-on-error"], undefined);
   const command = classic.run.match(
-    /^node scripts\/ci-test-report\.mjs kind=playwright report=(\S+) evidence=(\S+) title="[^"]+" -- (pnpm test:browser:ci --project chromium-classic-scrollbars --no-deps --reporter=list,json)$/,
+    /^\.\/bin\/node scripts\/ci-test-report\.mjs kind=playwright report=(\S+) evidence=(\S+) title="[^"]+" -- (\.\/bin\/pnpm test:browser:ci --project chromium-classic-scrollbars --no-deps --reporter=list,json)$/,
   );
   assert.ok(command, "classic step must report through ci-test-report");
   const [, report, evidence, invocation] = command;
@@ -315,7 +311,7 @@ test("classic-scrollbar cases run exactly once, after the measurements, without 
       ]);
     return collect(listed.suites);
   };
-  const selected = list(invocation.split(/\s+/).slice(1));
+  const selected = list(invocation.replace(/^\.\/bin\/pnpm /, "").split(/\s+/));
   assert.ok(selected.length > 0, "the classic project must select tests");
   for (const spec of selected) {
     assert.ok(spec.tags.includes("classic-scrollbars"), spec.title);
@@ -382,14 +378,14 @@ test("required gate executes its real shell and rejects every unsuccessful lane"
   assert.doesNotMatch(required, /^ {8}if:/m);
   assert.match(
     required,
-    /^ {4}needs: \[javascript, native, measurements, browser\]$/m,
+    /^ {4}needs: \[javascript, native, measurements, browser_fixture, browser\]$/m,
   );
   assert.doesNotMatch(required, /continue-on-error/);
-  const lanes = ["JAVASCRIPT", "NATIVE", "MEASUREMENTS", "BROWSER"];
+  const lanes = ["JAVASCRIPT", "NATIVE", "MEASUREMENTS", "FIXTURE", "BROWSER"];
   for (const lane of lanes)
     assert.ok(
       required.includes(
-        `${lane}: \${{ needs.${lane.toLowerCase().replaceAll("_", "-")}.result }}`,
+        `${lane}: \${{ needs.${lane === "FIXTURE" ? "browser_fixture" : lane.toLowerCase()}.result }}`,
       ),
     );
   const script = required.match(/^ {8}run: \|\n((?: {10}.+\n?)+)/m)?.[1];
@@ -416,44 +412,138 @@ test("Hermit cache keys distinguish jobs that provision different tools", () => 
   assert.match(setup, /key: hermit-.*\$\{\{ github\.job \}\}/);
 });
 
-test("browser jobs use the version-matched pinned Playwright image without apt provisioning", () => {
+test("browser jobs use one immutable image matching the package pin, without per-job browser downloads", () => {
   const { jobs } = parse(workflow);
+  const setup = parse(read(".github/actions/setup/action.yml"));
   const version = JSON.parse(read("package.json")).devDependencies[
     "@playwright/test"
   ];
-  for (const lane of ["measurements", "browser"]) {
-    assert.match(
-      jobs[lane].container.image,
-      new RegExp(
-        `^mcr\\.microsoft\\.com/playwright:v${version.replaceAll(".", "\\.")}-noble@sha256:[a-f0-9]{64}$`,
-      ),
+  const image = `mcr.microsoft.com/playwright:v${version}-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27`;
+  for (const name of ["measurements", "browser"]) {
+    const job = jobs[name];
+    assert.doesNotMatch(
+      job.steps.map((step) => step.run ?? "").join("\n"),
+      /apt-get|playwright install|(?:^|\n)(?:\.\/bin\/)?cargo/,
     );
-    assert.equal(jobs[lane].container.options, "--init --ipc=host");
-    assert.equal(jobs[lane].defaults.run.shell, "bash");
-    const steps = jobs[lane].steps;
-    const trust = steps.find(
-      (step) => step.name === "Trust checked-out workspace",
+    assert.equal(job.container.image, image);
+    assert.equal(job.container.options, "--init --ipc=host");
+    assert.equal(job.defaults.run.shell, "bash");
+    assert.equal(job.env.HOME, "/root");
+    const trust = job.steps.find(
+      (step) => step.name === "Trust this container workspace",
     );
-    assert.ok(trust);
     assert.equal(
       trust.run,
       'git config --global --add safe.directory "$GITHUB_WORKSPACE"',
     );
+    assert.ok(
+      job.steps.indexOf(trust) <
+        job.steps.findIndex((step) => step.uses === "./.github/actions/setup"),
+    );
     assert.equal(trust.if, undefined);
     assert.equal(trust["continue-on-error"], undefined);
-    assert.ok(
-      steps.indexOf(trust) >
-        steps.findIndex((step) => step.uses === "./.github/actions/setup"),
+    assert.equal(job["timeout-minutes"], 15);
+    assert.equal(
+      job.steps.find((step) => step.uses === "./.github/actions/setup").with
+        .browsers,
+      "true",
     );
-    assert.ok(
-      steps.indexOf(trust) <
-        steps.findIndex((step) =>
-          step.run?.includes("-- pnpm test:browser:ci"),
-        ),
-    );
-
-    assert.doesNotMatch(job(lane), /apt-get|playwright install|run: cargo/);
   }
-  const setup = read(".github/actions/setup/action.yml");
-  assert.doesNotMatch(setup, /playwright install|Cache Playwright engines/);
+  for (const name of ["javascript", "native", "windows-native"])
+    assert.equal(jobs[name].container, undefined);
+  assert.equal(setup.inputs["browser-engine"].default, "all");
+  const configured = (name) =>
+    jobs[name].steps.find((step) => step.uses === "./.github/actions/setup")
+      .with;
+  assert.equal(
+    configured("browser")["browser-engine"],
+    `\${{ matrix.engine }}`,
+  );
+  assert.equal(configured("measurements")["browser-engine"], undefined);
+  const steps = setup.runs.steps,
+    verify = steps.find((step) => step.name === "Verify pinned browser image");
+  assert.equal(verify.if, "inputs.browsers == 'true'");
+  assert.equal(verify["continue-on-error"], undefined);
+  assert.equal(verify.run, "./bin/node scripts/check-browser-image.mjs");
+  assert.equal(verify.env.PLAYWRIGHT_ENGINE, `\${{ inputs.browser-engine }}`);
+  assert.ok(
+    steps.indexOf(verify) >
+      steps.findIndex(
+        (step) => step.run === "./bin/pnpm install --frozen-lockfile",
+      ),
+  );
+  assert.doesNotMatch(
+    read(".github/actions/setup/action.yml"),
+    /playwright install|apt-get|ms-playwright/,
+  );
+});
+
+test("image verification rejects version/image mismatch and never silently omits an engine", () => {
+  const version = JSON.parse(read("package.json")).devDependencies[
+    "@playwright/test"
+  ];
+  const info = {
+    driverVersion: version,
+    dockerImageName: `mcr.microsoft.com/playwright:v${version}-noble`,
+  };
+  assert.deepEqual(imageEngines(info, version, "all"), ["chromium", "webkit"]);
+  for (const engine of ["chromium", "webkit"])
+    assert.deepEqual(imageEngines(info, version, engine), [engine]);
+  for (const engine of [
+    "",
+    "firefox",
+    "chromium webkit",
+    "chromium;echo unexpected",
+  ])
+    assert.throws(() => imageEngines(info, version, engine));
+  for (const bad of [
+    {},
+    { ...info, driverVersion: "0.0.0" },
+    { ...info, dockerImageName: "untrusted/image" },
+  ])
+    assert.throws(() => imageEngines(bad, version, "all"));
+});
+
+test("setup calls pinned entry points and fails before caching an empty pnpm path", (t) => {
+  const { steps } = parse(read(".github/actions/setup/action.yml")).runs;
+  const verify = steps.find(
+    (step) => step.name === "Verify pinned tool entry points",
+  );
+  const store = steps.find((step) => step.id === "pnpm");
+  assert.ok(steps.indexOf(verify) < steps.indexOf(store));
+  assert.match(verify.run, /\.\/bin\/node --version/);
+  assert.match(verify.run, /\.\/bin\/pnpm --version/);
+  assert.doesNotMatch(
+    read(".github/actions/setup/action.yml"),
+    /GITHUB_PATH|HERMIT_PREPEND_PATH/,
+  );
+  const cwd = mkdtempSync(join(tmpdir(), "buzz-pnpm-path-"));
+  t.after(() => rmSync(cwd, { recursive: true, force: true }));
+  mkdirSync(join(cwd, "bin"));
+  writeFileSync(
+    join(cwd, "bin", "pnpm"),
+    '#!/bin/sh\n[ "$1 $2 $3" = "store path --silent" ] || exit 2\nprintf "%s" "$STORE"\nexit "$RESULT"\n',
+    { mode: 0o755 },
+  );
+  const output = join(cwd, "output");
+  const execute = (path, result = "0") => {
+    writeFileSync(output, "");
+    return spawnSync("bash", ["-eo", "pipefail", "-c", store.run], {
+      cwd,
+      env: {
+        ...process.env,
+        GITHUB_OUTPUT: output,
+        STORE: path,
+        RESULT: result,
+      },
+      encoding: "utf8",
+      timeout: 5000,
+    });
+  };
+  assert.equal(execute("/pinned store").status, 0);
+  assert.equal(readFileSync(output, "utf8"), "path=/pinned store\n");
+  assert.notEqual(execute("").status, 0);
+  assert.equal(readFileSync(output, "utf8"), "");
+  assert.equal(execute("", "7").status, 7);
+  assert.equal(readFileSync(output, "utf8"), "");
 });

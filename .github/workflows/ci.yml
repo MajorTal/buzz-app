@@ -30,15 +30,15 @@ jobs:
           persist-credentials: false
       - uses: ./.github/actions/setup
       - name: Lint and types
-        run: pnpm check
+        run: ./bin/pnpm check
       # check already ran TypeScript; do not repeat pnpm build's typecheck.
       - name: Frontend build
-        run: pnpm exec vite build
+        run: ./bin/pnpm exec vite build
       - name: All Vitest tests
         env:
           # Bound contention between suites that sign and verify large fixtures.
           BUZZ_TEST_WORKERS: "2"
-        run: node scripts/ci-test-report.mjs kind=vitest report=test-results/ci/vitest.json evidence=test-results/ci/vitest-timing.json title="Vitest tests" -- pnpm exec vitest run --reporter=default --reporter=json --outputFile=test-results/ci/vitest.json
+        run: ./bin/node scripts/ci-test-report.mjs kind=vitest report=test-results/ci/vitest.json evidence=test-results/ci/vitest-timing.json title="Vitest tests" -- ./bin/pnpm exec vitest run --reporter=default --reporter=json --outputFile=test-results/ci/vitest.json
       - name: Vitest timing evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -66,14 +66,14 @@ jobs:
           key: native
           save-if: ${{ github.event_name == 'push' }}
       - name: Rust formatting
-        run: cargo fmt --all --check
+        run: ./bin/cargo fmt --all --check
       - name: Rust lint
-        run: cargo clippy --workspace --locked --all-targets -- -D warnings
+        run: ./bin/cargo clippy --workspace --locked --all-targets -- -D warnings
       # --workspace includes Tauri, unlike the default Cargo member selection.
       - name: All Rust tests and doctests
-        run: cargo test --workspace --locked
+        run: ./bin/cargo test --workspace --locked
       - name: All Node integration tests
-        run: node --test tests/integration/*.test.mjs
+        run: ./bin/node --test tests/integration/*.test.mjs
 
   windows-native:
     if: github.event_name == 'workflow_dispatch'
@@ -107,29 +107,32 @@ jobs:
   measurements:
     if: github.event_name != 'workflow_dispatch'
     name: Browser measurements
-    # https://playwright.dev/docs/ci#via-containers
+    runs-on: ubuntu-24.04
+    # Match package.json's Playwright version and pin immutable browser/OS layers.
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
       options: --init --ipc=host
     defaults:
       run:
         shell: bash
-    runs-on: ubuntu-24.04
+    env:
+      HOME: /root
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup
-      # Container steps need their own Git trust for the host-owned checkout.
-      - name: Trust checked-out workspace
+      - name: Trust this container workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - uses: ./.github/actions/setup
+        with:
+          browsers: "true"
       # Preserve Chromium -> WebKit measurement dependencies; never shard or
       # overlap the two measurement projects on this runner.
       - name: Serial Chromium and WebKit measurements
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/browser/ci-report.json
-        run: node scripts/ci-test-report.mjs kind=playwright report=test-results/browser/ci-report.json evidence=test-results/browser/ci-timing.json title="Browser measurements" -- pnpm test:browser:ci --project '*-measurements' --workers=1 --reporter=list,json
+        run: ./bin/node scripts/ci-test-report.mjs kind=playwright report=test-results/browser/ci-report.json evidence=test-results/browser/ci-timing.json title="Browser measurements" -- ./bin/pnpm test:browser:ci --project '*-measurements' --workers=1 --reporter=list,json
       # Cases tagged @classic-scrollbars need Chromium's platform scrollbars,
       # which Linux always draws as classic ones. One file cannot join the
       # six-way engine matrix (empty shards are errors), so it runs here, and
@@ -138,7 +141,7 @@ jobs:
       - name: Chromium classic-scrollbar layout
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/browser-classic-scrollbars/ci-report.json
-        run: node scripts/ci-test-report.mjs kind=playwright report=test-results/browser-classic-scrollbars/ci-report.json evidence=test-results/browser-classic-scrollbars/ci-timing.json title="Browser classic scrollbars" -- pnpm test:browser:ci --project chromium-classic-scrollbars --no-deps --reporter=list,json
+        run: ./bin/node scripts/ci-test-report.mjs kind=playwright report=test-results/browser-classic-scrollbars/ci-report.json evidence=test-results/browser-classic-scrollbars/ci-timing.json title="Browser classic scrollbars" -- ./bin/pnpm test:browser:ci --project chromium-classic-scrollbars --no-deps --reporter=list,json
       - name: Measurement evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -154,46 +157,44 @@ jobs:
     name: Native browser fixture
     runs-on: ubuntu-24.04
     timeout-minutes: 15
+    outputs:
+      artifact-id: ${{ steps.fixture-upload.outputs.artifact-id }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      # Browser fixtures need only the pinned compiler, Cargo and standard library,
-      # not Hermit's full Rust archive (including docs).
-      - name: Install minimal pinned Rust for browser fixtures
-        shell: bash
-        run: |
-          pins=(bin/.rust-*.pkg)
-          test "${#pins[@]}" -eq 1
-          test -L "${pins[0]}"
-          version=${pins[0]#bin/.rust-}
-          version=${version%.pkg}
-          rustup toolchain install "$version" --profile minimal --no-self-update
-          rustc_path=$(rustup which --toolchain "$version" rustc)
-          toolchain_bin=$(dirname "$rustc_path")
-          test -x "$toolchain_bin/rustc"
-          test -x "$toolchain_bin/cargo"
-          echo "RUSTUP_TOOLCHAIN=$version" >> "$GITHUB_ENV"
-          echo "HERMIT_PREPEND_PATH=$toolchain_bin" >> "$GITHUB_ENV"
-      # This journey uses a real native plugin-manager bridge. Provision it
-      # before Playwright starts: a cold Rust install/build is test setup, not
-      # browser behavior, and must not consume the journey's subprocess budget.
+      - uses: ./.github/actions/setup
       - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
         with:
           key: browser-fixture
           save-if: ${{ github.event_name == 'push' }}
       - name: Build native browser fixture
-        run: cargo build --locked -p buzzodz-plugins --example fixture-bridge
+        timeout-minutes: 8
+        run: ./bin/cargo build --locked -p buzzodz-plugins --example fixture-bridge --target-dir target/browser-fixture
+      - name: Package same-revision native fixture
+        run: |
+          mkdir -p target/browser-artifact
+          cp target/browser-fixture/debug/examples/fixture-bridge target/browser-artifact/
+          git rev-parse HEAD > target/browser-artifact/revision
+          cd target/browser-artifact
+          sha256sum fixture-bridge > SHA256SUMS
+          tar -cf ../browser-fixture.tar fixture-bridge revision SHA256SUMS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        id: fixture-upload
         with:
-          name: native-browser-fixture
-          path: target/debug/examples/fixture-bridge
+          name: browser-fixture-${{ github.sha }}-${{ github.run_attempt }}
+          path: target/browser-fixture.tar
           if-no-files-found: error
           retention-days: 1
 
   browser:
+    if: github.event_name != 'workflow_dispatch'
+    name: Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/6)
+    # Measurements stay isolated on their own runner, not on our critical path.
+    # CI required still requires their success independently of these jobs.
     needs: [browser_fixture]
-    # https://playwright.dev/docs/ci#via-containers
+    runs-on: ubuntu-24.04
+    # Match package.json's Playwright version and pin immutable browser/OS layers.
     container:
       image: mcr.microsoft.com/playwright:v1.63.0-noble@sha256:eff16c30e6f3f4af0a03fa4b706120d5e9b0891c344a27d64559aff5900a4a27
       options: --init --ipc=host
@@ -201,12 +202,8 @@ jobs:
       run:
         shell: bash
     env:
-      BUZZ_BROWSER_FIXTURE: ${{ github.workspace }}/.browser-fixture/fixture-bridge
-    if: github.event_name != 'workflow_dispatch'
-    name: Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/6)
-    # Measurements stay isolated on their own runner, not on our critical path.
-    # CI required still requires their success independently of these jobs.
-    runs-on: ubuntu-24.04
+      HOME: /root
+      BUZZ_BROWSER_FIXTURE_DIR: target/ci-browser-fixture
     # Six file-level shards split the large file groups that remain together
     # with four or five shards, leaving room for setup inside the same deadline.
     timeout-minutes: 15
@@ -219,22 +216,30 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
-      - uses: ./.github/actions/setup
-      # Container steps need their own Git trust for the host-owned checkout.
-      - name: Trust checked-out workspace
+      - name: Trust this container workspace
         run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+      - uses: ./.github/actions/setup
         with:
-          name: native-browser-fixture
-          path: .browser-fixture
-      - name: Restore fixture executable permission
-        run: chmod +x .browser-fixture/fixture-bridge
+          browsers: "true"
+          browser-engine: ${{ matrix.engine }}
+      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          artifact-ids: ${{ needs.browser_fixture.outputs.artifact-id }}
+          merge-multiple: true
+          path: target/ci-browser-fixture
+      - name: Verify native browser fixture
+        run: |
+          cd target/ci-browser-fixture
+          tar -xf browser-fixture.tar
+          test "$(cat revision)" = "$(git rev-parse HEAD)"
+          sha256sum --check SHA256SUMS
+          test -x fixture-bridge
       # CI required enforces measurement success. --no-deps avoids repeating
       # measurements here; the matrix covers both engines on separate runners.
       - name: Functional journeys
         env:
           PLAYWRIGHT_JSON_OUTPUT_FILE: test-results/browser/ci-report.json
-        run: node scripts/ci-test-report.mjs kind=playwright report=test-results/browser/ci-report.json evidence=test-results/browser/ci-timing.json title="Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/6)" -- pnpm test:browser:ci --project ${{ matrix.engine }} --no-deps --shard=${{ matrix.shard }}/6 --reporter=list,json
+        run: ./bin/node scripts/ci-test-report.mjs kind=playwright report=test-results/browser/ci-report.json evidence=test-results/browser/ci-timing.json title="Browser journeys (${{ matrix.engine }}, ${{ matrix.shard }}/6)" -- ./bin/pnpm test:browser:ci --project ${{ matrix.engine }} --no-deps --shard=${{ matrix.shard }}/6 --reporter=list,json
       - name: Browser evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
@@ -246,7 +251,7 @@ jobs:
   required:
     name: ${{ github.event_name == 'workflow_dispatch' && 'Automatic CI (not requested)' || 'CI required' }}
     if: always() && github.event_name != 'workflow_dispatch'
-    needs: [javascript, native, measurements, browser]
+    needs: [javascript, native, measurements, browser_fixture, browser]
     runs-on: ubuntu-24.04
     timeout-minutes: 2
     steps:
@@ -255,8 +260,9 @@ jobs:
           JAVASCRIPT: ${{ needs.javascript.result }}
           NATIVE: ${{ needs.native.result }}
           MEASUREMENTS: ${{ needs.measurements.result }}
+          FIXTURE: ${{ needs.browser_fixture.result }}
           BROWSER: ${{ needs.browser.result }}
         run: |
-          for result in "$JAVASCRIPT" "$NATIVE" "$MEASUREMENTS" "$BROWSER"; do
+          for result in "$JAVASCRIPT" "$NATIVE" "$MEASUREMENTS" "$FIXTURE" "$BROWSER"; do
             test "$result" = success || exit 1
           done

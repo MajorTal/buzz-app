@@ -44,6 +44,17 @@ const GOOSE_API_KEYS: Record<string, { label: string; env: string }> = {
 export function gooseApiKey(provider: string) {
   return GOOSE_API_KEYS[provider];
 }
+export function effectiveGooseProvider(
+  provider: string,
+  environment: Record<string, string | null>,
+  savedKeys: string[],
+) {
+  const override = environment.GOOSE_PROVIDER;
+  if (typeof override === "string") return override;
+  if (override === undefined && savedKeys.includes("GOOSE_PROVIDER"))
+    return null;
+  return provider;
+}
 // Pi provider key variables from `pi --help`. Buzz never inherits shell-exported
 // keys, so these are the providers someone can sign in to from the agent form.
 export const PI_API_KEYS: Record<string, { label: string; env: string }> = {

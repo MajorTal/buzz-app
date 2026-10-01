@@ -250,6 +250,15 @@ provider, model, effort and environment variables.
   own workspace/filter inherit the global pair.
 - Changing the default harness in the card clears the default model and effort;
   values entered for the new harness before Save are kept.
+- The effort picker offers common values for the selected harness and keeps
+  custom values editable; support still depends on the selected model. Known Pi
+  and Goose providers show the same masked API key field as agent Create/Edit.
+  A key entered there is a write-only
+  global environment override, used by model lookup and inherited by agents
+  without their own key. Switching provider or harness drops an unsaved key.
+- Model choices include exact IDs. Catalogs over ten models have a local search
+  by name or ID; filtering does not change the selection. Environment removals
+  must be saved before browsing because lookup still inherits saved values.
 
 The store is `defaults.json` under app-data `agent-controller/`, not
 localStorage, written atomically with owner-only permissions (0600).

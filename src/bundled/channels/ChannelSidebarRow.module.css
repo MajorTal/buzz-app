@@ -112,7 +112,7 @@
   max-width: 100%;
   flex: 0 1 auto;
 }
-.row:has([data-channel-unread], [data-channel-activity]) .label {
+.row:has([data-channel-ordinary="true"]) .label {
   color: var(--text-navigation-unread);
   font-weight: var(--type-weight-semibold);
 }

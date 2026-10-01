@@ -21,7 +21,10 @@ import type { ThreadView } from "../relay/threads";
 // Actual React effects, ThreadPanel, MessageRow, session and HTTP verification run.
 // jsdom observes DOM commit, NOT browser layout/paint or native interaction.
 vi.mock("./MessageComposer", () => ({ MessageComposer: () => null }));
-vi.mock("./use-reading", () => ({ useReading: () => {} }));
+vi.mock("./use-reading", () => ({
+  Reading: () => null,
+  readingPositioned: () => {},
+}));
 
 function mount(session: RelaySession, channelId: string, messageId: string) {
   const container = document.createElement("div");

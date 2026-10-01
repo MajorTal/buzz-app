@@ -1,5 +1,5 @@
 diff --git a/lib/index.js b/lib/index.js
-index a183cc7b..44e2d963 100644
+index a183cc7b1669aab25467840540ce3bd1c025fb47..d960e2ea2a9435296756a64fe3a3773b429ab081 100644
 --- a/lib/index.js
 +++ b/lib/index.js
 @@ -6,6 +6,10 @@ import { jsx as c } from "react/jsx-runtime";
@@ -86,9 +86,16 @@ index a183cc7b..44e2d963 100644
              behavior: t ? "smooth" : "instant"
          });
      }), u = t ? "width" : "height", d = /* @__PURE__ */ new WeakMap, h = C(t => {
-@@ -266,7 +310,8 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -263,10 +307,15 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+         }
+         o.length && e.W(3, o);
+     });
++    // New reader input supersedes retained imperative targets. Capture runs
++    // before a button/key handler can issue the next intentional navigation.
++    const inputEvents = ["wheel", "touchmove", "keydown", "pointerdown"];
      return {
          D(f, u = f.parentElement) {
++            for (const type of inputEvents) u.addEventListener(type, a, { capture: true, passive: true });
              h.A(n = u), t && (i = "rtl" === getComputedStyle(u).direction), o = M(e, u, t, () => T(u[s], i), (t, n, o) => {
 -                if (o) {
 +                if (isMacWebKit()) interruptMomentum();
@@ -96,7 +103,7 @@ index a183cc7b..44e2d963 100644
                      const e = u.style, t = e[c];
                      e[c] = "hidden", p(() => {
                          e[c] = t;
-@@ -274,7 +319,7 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -274,7 +323,7 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
                  }
                  const r = e.T() + t;
                  r <= 0 || r >= e.O() + e.t() - e.o() ? u.scrollTo({
@@ -105,22 +112,21 @@ index a183cc7b..44e2d963 100644
                      behavior: "instant"
                  }) : u.scrollBy({
                      [l]: T(t, i),
-@@ -283,7 +328,7 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
+@@ -283,7 +332,9 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
              }), r[1](!0);
          },
          _() {
 -            h.X(), o && o.X(), r[1](!1), r = $();
++            a();
++            for (const type of inputEvents) n && n.removeEventListener(type, a, true);
 +            restoreOverflow && restoreOverflow(), h.X(), o && o.X(), r[1](!1), r = $();
          },
          P: (e, t) => (d.set(e, t), h.A(e), () => {
              d.delete(e), h.B(e);
-@@ -796,5 +841,4 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
-     });
+@@ -797,4 +848,3 @@ var {min: a, max: u, abs: d, floor: h} = Math, g = (e, t, n) => a(n, u(t, e)), v
  });
 -
 +
--export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
+ export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
+\ No newline at end of file
 -//# sourceMappingURL=index.js.map
-\ No newline at end of file
-+export { G as VList, j as Virtualizer, U as WindowVirtualizer, N as experimental_VGrid };
-\ No newline at end of file

@@ -61,6 +61,8 @@ export type ReadingHandle = Readonly<{
   view(messageIds: readonly string[], visible: () => boolean): void;
   /** Only message IDs actually visible to the active consumer; no caller timestamps. */
   observe(messageIds: readonly string[]): Promise<void>;
+  /** Bottom dwell through verified evidence; channel catch-up excludes attention. */
+  catchUp(messageId: string, rootId?: string): Promise<void>;
   dispose(): void;
 }>;
 export interface UnreadCapability {
@@ -195,6 +197,9 @@ export function createUnread({
   const messageForceKey = (channelId: string) => `message-force:${channelId}`;
   const visits = new Map<string, number>();
   const mutations = new Map<string, Promise<unknown>>();
+  // Explicit channel reads survive unrelated roster changes, but never their
+  // own revoke/regrant or a session/cache reset. Tokens cannot be revived.
+  const channelReadGenerations = new Map<string, object>();
   function serialize<T>(
     channelId: string,
     operation: () => Promise<T>,
@@ -291,7 +296,8 @@ export function createUnread({
       (target.kind === "thread" && rootId === target.rootId)
     );
   }
-  function isUnread({ event, channelId, rootId }: Evidence, state: ReadState) {
+  function isUnread(entry: Evidence, state: ReadState, dm: boolean) {
+    const { event, channelId, rootId } = entry;
     if (event.pubkey === viewer) return false;
     const frontier = effectiveFrontier(
       state,
@@ -310,11 +316,21 @@ export function createUnread({
           state.overrides[`thread:${rootId}`],
           effectiveFrontier(state, `thread:${rootId}`, channelId),
         ));
+    // Channel catch-up never acknowledges thread replies: retained evidence
+    // cannot prove nonparticipation, especially after reload. Only ordinary
+    // top-level messages inherit it; reply attention/direct thread dots survive.
+    const ordinary =
+      !threadReference(event) && !priority(entry, dm)
+        ? state.frontiers[`activity:${channelId}`]
+        : undefined;
+    const thread = rootId
+      ? state.frontiers[`thread-activity:${rootId}`]
+      : undefined;
+    const caughtUp = Math.max(frontier ?? -1, ordinary ?? -1, thread ?? -1);
     return (
       forcedMessages.get(channelId)?.has(event.id) ||
       !!reads.localUnread(`msg:${event.id}`) ||
-      frontier === undefined ||
-      event.created_at > frontier ||
+      event.created_at > caughtUp ||
       !!forced
     );
   }
@@ -378,7 +394,7 @@ export function createUnread({
       ...(kind ? { category: kind } : {}),
       ...(entry.mentioned ? { mentioned: true } : {}),
       ...(entry.rootId ? { rootId: entry.rootId } : {}),
-      unread: isUnread(entry, reads.state()),
+      unread: isUnread(entry, reads.state(), dm),
       forced: forcedMessages.get(channelId)?.has(messageId) ?? false,
       viewing,
     });
@@ -427,7 +443,37 @@ export function createUnread({
           (event.created_at === latest.created_at && event.id < latest.id))
       )
         latest = event;
-      if (!inTarget(entry, target) || !isUnread(entry, state)) continue;
+      if (!inTarget(entry, target) || !isUnread(entry, state, dm)) continue;
+      // Quiet ordinary sidebar activity at the channel bottom without reading
+      // the replies themselves. Late participation can still promote their dot.
+      if (
+        target.kind === "channel" &&
+        entry.rootId &&
+        !priority(entry, dm) &&
+        !forcedMessages.get(target.channelId)?.has(event.id) &&
+        !reads.localUnread(`msg:${event.id}`) &&
+        !reads.localUnread(`thread:${entry.rootId}`) &&
+        !overrideActive(
+          state.overrides[`msg:${event.id}`],
+          effectiveFrontier(
+            state,
+            `msg:${event.id}`,
+            target.channelId,
+            entry.rootId,
+          ),
+        ) &&
+        !overrideActive(
+          state.overrides[`thread:${entry.rootId}`],
+          effectiveFrontier(state, `thread:${entry.rootId}`, target.channelId),
+        ) &&
+        !overrideActive(
+          state.overrides[target.channelId],
+          effectiveFrontier(state, target.channelId),
+        ) &&
+        event.created_at <=
+          (state.frontiers[`activity:${target.channelId}`] ?? -1)
+      )
+        continue;
       count++;
       if (priority(entry, dm)) attention++;
     }
@@ -476,6 +522,9 @@ export function createUnread({
       });
     indexEvidence();
     const state = reads.state();
+    const dm =
+      channels.list().channels.find((channel) => channel.id === channelId)
+        ?.channelType === "dm";
     const grouped = new Map<string, ThreadActivityItem>();
     // Only unread thread activity is presented; most publishes have none.
     let presented: Map<string, string> | undefined;
@@ -487,7 +536,7 @@ export function createUnread({
       if (
         !rootId ||
         (!mentioned && !broadcast && !participants.has(rootId)) ||
-        !isUnread(evidence, state)
+        !isUnread(evidence, state, dm)
       )
         continue;
       const current = grouped.get(rootId);
@@ -641,6 +690,8 @@ export function createUnread({
   function purge() {
     // A revoke/regrant must not revive a transaction accepted under the old access epoch.
     epoch++;
+    for (const channelId of channelReadGenerations.keys())
+      if (!allowed(channelId)) channelReadGenerations.delete(channelId);
     const denied = new Set(
       [...known, ...forcedMessages.keys()].filter(
         (channel) => !allowed(channel),
@@ -866,6 +917,50 @@ export function createUnread({
       return event ? [event] : [];
     });
   }
+  // Queued explicit reads and manual intent share the same access fence.
+  function channelIntentValid(channelId: string) {
+    const generation = channelReadGenerations.get(channelId) ?? {};
+    channelReadGenerations.set(channelId, generation);
+    return () =>
+      !closed &&
+      channelReadGenerations.get(channelId) === generation &&
+      allowed(channelId);
+  }
+  // Capture evidence and time once per click, including every channel in a sweep.
+  function channelReadIntent(channelId: string, clickedAt: number) {
+    if (closed || !allowed(channelId))
+      throw new Error("Read target unavailable");
+    indexEvidence();
+    const rows = byChannel.get(channelId) ?? [];
+    // Explicit catch-up covers everything posted up to this click, including
+    // messages this client has not loaded: a cut at the newest retained message
+    // lets older activity arrive later and relight the channel. Snapshot it at
+    // invocation, not after a queued storage write. Frontiers merge by maximum,
+    // so a device clock running ahead also covers arrivals until real time
+    // passes it; automatic reading must never use the clock.
+    const cut = rows.reduce(
+      (newest, { event }) => Math.max(newest, event.created_at),
+      clickedAt,
+    );
+    const keys = new Set([channelId, messageForceKey(channelId)]);
+    for (const { event, rootId } of rows) {
+      keys.add(`msg:${event.id}`);
+      if (rootId) keys.add(`thread:${rootId}`);
+      // A retained top-level message establishes its thread's channel even
+      // when that thread's replies are outside our bounded evidence window.
+      if (!threadReference(event)) keys.add(`thread:${event.id}`);
+    }
+    const valid = channelIntentValid(channelId);
+    return async () => {
+      const result =
+        rows.length || reads.snapshot().capability === "frontier-sync"
+          ? await reads.read(channelId, cut, valid, true, [...keys])
+          : await reads.clearLocalUnread(channelId, [...keys], valid);
+      if (valid() && forcedMessages.delete(channelId))
+        publish(new Set([channelId]));
+      return result;
+    };
+  }
   const capability: UnreadCapability = Object.freeze<UnreadCapability>({
     snapshot,
     attention,
@@ -929,6 +1024,49 @@ export function createUnread({
             ids: new Set(verified),
             visible: () => valid() && visible(),
           });
+        },
+        async catchUp(id: string, rootId?: string) {
+          if (!valid()) return;
+          const target = rootId
+            ? { kind: "thread" as const, channelId, rootId }
+            : { kind: "channel" as const, channelId };
+          const event = requireMessage(target, id);
+          const key = rootId
+            ? `thread-activity:${rootId}`
+            : `activity:${channelId}`;
+          // A historical window is not the live bottom. Check retained evidence
+          // at invocation, not after a later arrival queues behind this intent.
+          indexEvidence();
+          const rows = byChannel.get(channelId) ?? [];
+          const newer = rows.some(
+            (entry) =>
+              entry.event.created_at > event.created_at &&
+              (rootId
+                ? entry.rootId === rootId
+                : !threadReference(entry.event) ||
+                  entry.event.tags.some(
+                    ([name, value]) => name === "broadcast" && value === "1",
+                  )),
+          );
+          if (newer) return;
+          // Replies can be newer than the last top-level row. Quiet that already
+          // retained activity too, without acknowledging the replies themselves.
+          const cut = rootId
+            ? event.created_at
+            : rows.reduce(
+                (latest, row) => Math.max(latest, row.event.created_at),
+                event.created_at,
+              );
+          if ((reads.state().frontiers[key] ?? -1) >= cut) return;
+          await reads.read(
+            key,
+            cut,
+            () =>
+              valid() &&
+              requireMessage(target, id) === event &&
+              (!rootId ||
+                (reads.localUnread(`thread:${rootId}`) ?? 0) <= manualRevision),
+          );
         },
         async observe(ids: readonly string[]) {
           if (!valid() || ids.length > 128) return;
@@ -1065,74 +1203,69 @@ export function createUnread({
       });
     },
     async markChannelRead(channelId) {
-      if (closed || !allowed(channelId))
-        throw new Error("Read target unavailable");
-      indexEvidence();
-      const rows = byChannel.get(channelId) ?? [];
-      // Snapshot the cut at invocation, not after a queued storage write. Do not
-      // substitute wall time or a preview timestamp for verified domain evidence.
-      const latest = rows.reduce<RelayEvent | undefined>(
-        (head, { event }) =>
-          !head || event.created_at > head.created_at ? event : head,
-        undefined,
-      );
-      const keys = new Set([channelId, messageForceKey(channelId)]);
-      for (const { event, rootId } of rows) {
-        keys.add(`msg:${event.id}`);
-        if (rootId) keys.add(`thread:${rootId}`);
-        // A retained top-level message establishes its thread's channel even
-        // when that thread's replies are outside our bounded evidence window.
-        if (!threadReference(event)) keys.add(`thread:${event.id}`);
-      }
-      const generation = epoch;
-      const valid = () => !closed && generation === epoch && allowed(channelId);
-      return serialize(channelId, async () => {
-        const result = latest
-          ? await reads.read(channelId, latest.created_at, valid, true, [
-              ...keys,
-            ])
-          : await reads.clearLocalUnread(channelId, [...keys], valid);
-        if (valid() && forcedMessages.delete(channelId))
-          publish(new Set([channelId]));
-        return result;
-      });
+      const read = channelReadIntent(channelId, Math.floor(Date.now() / 1000));
+      return serialize(channelId, read);
     },
     async markAllChannelsRead() {
       if (closed) throw new Error("Read target unavailable");
       // Decide the sweep from the list at invocation; channels granted later wait
       // for the next explicit action, like arrivals after a per-channel cut.
+      const clickedAt = Math.floor(Date.now() / 1000);
       const pending = channels
         .list()
         .channels.filter((channel) => allowed(channel.id))
-        .map((channel) => channel.id)
-        .filter((channelId) => {
-          const current = compute({ kind: "channel", channelId });
-          return (current.observedCount ?? 0) > 0 || current.manual !== "none";
-        });
+        .filter((channel) => {
+          const current = compute({ kind: "channel", channelId: channel.id });
+          // The sidebar can be quiet while unopened replies still have receipts.
+          // Explicit Mark all must consume retained unread intent, not styling.
+          return (
+            current.manual !== "none" ||
+            (byChannel.get(channel.id) ?? []).some(
+              (entry) =>
+                isUnread(entry, reads.state(), channel.channelType === "dm") ||
+                !!(
+                  entry.rootId && reads.localUnread(`thread:${entry.rootId}`)
+                ) ||
+                (!threadReference(entry.event) &&
+                  !!reads.localUnread(`thread:${entry.event.id}`)),
+            )
+          );
+        })
+        .map((channel) => ({
+          channelId: channel.id,
+          read: channelReadIntent(channel.id, clickedAt),
+        }));
       const results: ReadMutationResult[] = [];
       let failure: unknown;
       let failed = false;
-      for (const channelId of pending) {
-        // A grant revoked while earlier channels were written is no failure of
-        // the sweep: like a grant that arrives mid-sweep, it waits for the next
-        // explicit action rather than surfacing as an error.
-        if (!allowed(channelId)) continue;
-        try {
-          results.push(await capability.markChannelRead(channelId));
-        } catch (error) {
-          if (!failed) failure = error;
-          failed = true;
-        }
+      let prior = Promise.resolve();
+      for (const { channelId, read } of pending) {
+        // Reserve each channel's place now, before a newer manual action. Saves
+        // still run sequentially; a revoked channel is skipped when its turn arrives.
+        const before = prior;
+        const write = serialize(channelId, async () => {
+          await before;
+          if (allowed(channelId)) return read();
+        });
+        prior = write.then(
+          (result) => {
+            if (result) results.push(result);
+          },
+          (error) => {
+            if (!failed) failure = error;
+            failed = true;
+          },
+        );
       }
+      await prior;
       if (failed) throw failure;
       return results;
     },
     async markUnreadLocal(target) {
       const key = targetKey(target);
-      const generation = epoch;
+      const channelValid = channelIntentValid(target.channelId);
       const valid = () => {
-        if (closed || generation !== epoch || !allowed(target.channelId))
-          return false;
+        if (!channelValid()) return false;
         if (target.kind !== "channel")
           requireMessage(
             target,
@@ -1147,10 +1280,9 @@ export function createUnread({
     },
     async clearUnreadLocal(target) {
       const key = targetKey(target);
-      const generation = epoch;
+      const channelValid = channelIntentValid(target.channelId);
       const valid = () => {
-        if (closed || generation !== epoch || !allowed(target.channelId))
-          return false;
+        if (!channelValid()) return false;
         if (target.kind !== "channel")
           requireMessage(
             target,
@@ -1185,12 +1317,14 @@ export function createUnread({
     },
     stale() {
       epoch++;
+      channelReadGenerations.clear();
       freshness = "stale";
       reads.stale();
       publish();
     },
     clear() {
       epoch++;
+      channelReadGenerations.clear();
       repairAgain = false;
       indexed = false;
       events.clear();
@@ -1205,6 +1339,7 @@ export function createUnread({
     dispose() {
       closed = true;
       epoch++;
+      channelReadGenerations.clear();
       lifetime.abort();
       for (const stop of [...handles]) stop();
       stopRead();

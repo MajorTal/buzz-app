@@ -34,14 +34,42 @@ and supply evidence before their rows become observable.
 
 Reusable `ChannelTimeline` and `ThreadPanel` own the standard observation policy:
 focused active reading surface, visible document, settled positioning, fully
-visible rows, and 750 ms dwell. Scroll/content/focus changes cancel/restart dwell.
-Mounted virtualizer overscan, preload, selection, and composer focus are not
-reading. Automatic observations mark **individual messages**, never a prefix that
-could hide unseen siblings. Oversized rows that never fit fully are not auto-read.
+visible rows, and 300 ms dwell. Scroll/content/focus changes cancel/restart dwell. Owners explicitly wake the
+scheduler when positioning finishes, even if an empty history page changes no
+rows or geometry.
+The list and its own composer share a reading surface; focus anywhere in an open
+thread panel also qualifies, including its selected owning tab header. Inactive
+or hidden tab content and passive restoration do not qualify. Another pane, a
+dialog, background window, preload,
+and mounted virtualizer overscan do not qualify.
+
+Away from the bottom, observations mark individual fully visible messages. At the
+physical bottom, 300 ms visibility of the newest message's bottom edge also earns
+catch-up (including a message taller than the viewport):
+
+- `activity:<channel>` uses the newest retained verified event timestamp at dwell
+  completion, including replies newer than the visible top-level head. It reads
+  ordinary top-level backlog and quiets ordinary reply activity in the channel
+  aggregate. It never acknowledges
+  the replies themselves: direct thread/message selectors retain them. Mentions,
+  broadcasts, DMs, manual intent and currently known participating-thread activity
+  are not quieted. Missing retained participation cannot erase a reply's unread
+  state; later participation evidence can restore the sidebar attention dot.
+- `thread-activity:<root>` acknowledges replies through the newest reply only in
+  that thread. A collapsed newest reply, or one outside the bottom viewport in a
+  branch-ordered thread, cannot earn catch-up; visible rows still read individually.
+- Both keys use verified event timestamps, never wall time. Neither enters generic
+  channel/thread inheritance or remote override baselines. Automatic catch-up does
+  not clear manual-unread intent and uses the same cancellable reading lease.
+
+This intentionally relaxes the old individual-row-only policy for ordinary
+backlog and the thread being read, without reading unopened threads' replies.
 
 - `observedCount` is `null` when unknown or denied, never a fabricated zero.
   Otherwise it counts the bounded evidence currently known, excluding own messages,
-  auxiliary events and authorized deletions. It is **not an exact total or lower
+  auxiliary events and authorized deletions. The channel aggregate additionally
+  excludes ordinary replies quieted by its activity cutoff; direct thread and
+  message selectors still report those replies as unread. It is **not an exact total or lower
   bound**: missing markers/deletions can overcount; missing history can undercount.
 - `coverage` and `freshness` describe message evidence, separately from `sync()`.
   Evidence is capped at 4,096 events / 8 MiB. Repair queries the membership roster
@@ -65,17 +93,23 @@ could hide unseen siblings. Oversized rows that never fit fully are not auto-rea
 - `markThrough(target, messageId)` is explicit prefix intent through verified
   evidence. It can mark unloaded earlier messages read; do not use it for viewport
   observation. A channel prefix requires a top-level message, not a reply.
-- `markChannelRead(channelId)` snapshots the newest retained verified message
-  (including replies) when invoked, then atomically advances the channel frontier
-  and clears the channel's owned local manual-unread marks. It does not fetch
-  history, select the row, or substitute the wall clock for message evidence.
-  Arrivals beyond that timestamp remain unread; like other timestamp prefixes,
-  this also covers messages at or before the cut that arrive later.
-  With no message evidence, it clears only the channel's local mark and invents
-  no frontier. Success means local durability; publication may still be pending.
-- `markAllChannelsRead()` runs `markChannelRead` one channel at a time over the
-  accessible listed channels that still show unread evidence or a local mark, so
-  an already-read community costs no writes. One failing channel does not stop
+- `markChannelRead(channelId)` captures the greater of invocation-time integer
+  seconds and the newest retained verified message timestamp (including replies),
+  then atomically advances the explicit channel frontier and clears the channel's
+  owned local manual-unread marks. It does not fetch history or select the row.
+  Pre-click history arriving later stays read; events beyond the cutoff remain
+  unread. Same-second arrivals are covered too. An ahead-of-time device clock is
+  sticky because frontier merges take the maximum: correcting that clock does not
+  rewind the cutoff. Automatic reading never uses this clock-based action.
+  Empty evidence still saves the click cutoff on frontier-capable hosts; other
+  hosts retain local-only clearing for the empty case. Success means local
+  durability; publication may still be pending.
+- `markAllChannelsRead()` snapshots selected channel cutoffs/evidence at sweep
+  invocation and reserves each channel's mutation order before newer manual
+  actions. It saves one channel at a time, so a slow first write cannot
+  acknowledge post-click activity in a later channel. It selects accessible
+  listed channels with retained unread evidence or a local mark, including replies
+  quieted in the channel aggregate, so an already-read community costs no writes. One failing channel does not stop
   the sweep; the first failure is rethrown afterwards. A channel whose grant is
   revoked before its turn is skipped, not failed; like a grant that arrives
   mid-sweep, it waits for the next explicit action. The community rail's
@@ -87,9 +121,10 @@ could hide unseen siblings. Oversized rows that never fit fully are not auto-rea
   and retries pending publication. `ReadMutationResult.durability === "saved"`
   means the local transaction committed, not that the relay accepted it.
 
-The sidebar separates ordinary unread from directed attention. Any unread state,
-including activity that exists only in a relevant thread, strengthens the channel
-label. Ordinary unread renders no row marker. DMs, mentions, broadcasts, and
+The sidebar separates ordinary unread from directed attention. Ordinary backlog
+or local manual intent strengthens the channel label; protected attention alone
+retains its dot without bolding a caught-up channel. DMs retain unread bolding.
+Ordinary unread renders no row marker. DMs, mentions, broadcasts, and
 relevant thread replies add one accent dot; non-DM row numerals are omitted and DM
 avatars are reserved for promoted offscreen cues. Thread activity reuses that dot:
 its hover/focus/click popover groups unread replies by canonical thread root and
@@ -124,8 +159,8 @@ thread selector has observed unread replies or explicit thread-unread intent.
 Accessible names distinguish observed evidence, stale evidence and local-only
 intent; unknown/observed-zero omit the dot, not assert complete read history.
 Each mounted button subscribes to its own thread, without fetching thread history.
-Opening/hovering a button does not acknowledge replies; the existing focused
-viewport dwell in `ThreadPanel` supplies individual-message reading intent.
+Hovering a button does not acknowledge replies. Opening the panel qualifies as
+reading while focus remains in it; viewport/bottom dwell supplies the intent.
 Unread ancestry uses the same canonical marked-reference parser as thread opening
 and row projection (case-insensitive hex, last valid marker wins). Resolution still
 requires bounded, retained same-channel message evidence; references alone do not
@@ -136,9 +171,10 @@ grant access or trigger a read.
 | Intent | Durable frontier | Local manual-unread clears |
 | --- | --- | --- |
 | Automatic visible dwell | Individual verified message | None |
+| Automatic bottom dwell | Ordinary channel activity or that thread’s replies through verified evidence | None |
 | `markThrough(target, messageId)` | Explicit verified target prefix | That target only |
-| `markChannelRead(channelId)` | Channel through newest retained verified message, including replies | Channel, retained messages, verified same-channel reply roots, and threads whose top-level root is retained |
-| Channel read with no evidence | None | Channel only |
+| `markChannelRead(channelId)` | Channel through max(click time, newest retained verified message) | Channel, retained messages, verified same-channel reply roots, and threads whose top-level root is retained |
+| Channel read with no evidence | Click time on frontier-capable hosts; none otherwise | Channel only |
 | Mute/Unmute | None | None |
 
 Channel read does not clear other channels, unproven ancestry, or remote manual
@@ -178,6 +214,9 @@ The local state has a 96 KiB serialized-blob budget and wire publication a 40 Ki
 plaintext budget. Persisted local interaction order prioritizes newly read old
 history as well as current traffic. Only frontier-only hints can be pruned; older
 messages may look unread again. No synthetic channel prefix is introduced to fit.
+The automatic activity keys share these bounded-hint limits. Older clients can
+preserve/republish them but do not interpret their catch-up meaning; mixed-version
+sidebar behavior is not identical. No storage migration is required.
 Override groups, permanent clear floors, directly associated frontiers and possible
 inherited channel/thread frontiers are protected; capacity failure is visible,
 never floor truncation. Publication of any override-bearing state is deliberately

@@ -1,6 +1,7 @@
 import { test as base, expect } from "./fixture.mjs";
 import { streamEvidence } from "./stream-evidence.mjs";
 import { open } from "./timeline.mjs";
+import { holdReadingFocus, releaseReadingFocus } from "./reading.mjs";
 
 // Preserve the failing handoff and capture original-reader delivery on Linux.
 const test = base.extend({
@@ -165,6 +166,8 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   page,
   app,
 }, info) => {
+  // This journey measures sidebar intent, never reading the selected channel.
+  await holdReadingFocus(page);
   // Visible rows can precede the post-establishment catch-up. Force that late
   // ordering, then account for its head read before measuring cue-triggered work.
   app.relay.holdEose("alpha");
@@ -224,6 +227,7 @@ test("edge pills follow scroll and reveal the nearest unread without selection o
   );
   expect(transitionProperties).toEqual(["background-color", "color"]);
   await expect(cue(page, "above")).toHaveCount(0);
+  await releaseReadingFocus(page);
   // Keep actionable DMs below while moving only ordinary unread above: priority
   // is derived from the destinations on each edge, not from the whole roster.
   await scrollRowAbove(page, "alpha");

@@ -30,7 +30,7 @@ import { continuesMessageGroup } from "./message-grouping";
 import { MessageComposer } from "./MessageComposer";
 import styles from "./Messages.module.css";
 import { rejectUnhandledFileDrop } from "./use-file-drop";
-import { useReading } from "./use-reading";
+import { Reading, readingPositioned } from "./use-reading";
 import { useMessageReveal } from "./use-message-reveal";
 import type { PageNavigation } from "../navigation/service";
 import { messageViewKey } from "./view-key";
@@ -64,12 +64,19 @@ export type ThreadPanelProps = {
 export function ThreadPanel(props: ThreadPanelProps) {
   const tabbed = !!usePanelTabHost();
   const { close } = props;
+  const viewKey = messageViewKey(
+    props.session,
+    props.scope,
+    props.channelId,
+    props.messageId,
+  );
   return (
     <aside
       className={
         close ? styles.thread : `${styles.thread} ${styles.embeddedThread}`
       }
       data-attachment-drop-zone=""
+      data-reading-surface=""
       onDragOver={rejectUnhandledFileDrop}
       onDrop={rejectUnhandledFileDrop}
       aria-label="Thread"
@@ -80,16 +87,10 @@ export function ThreadPanel(props: ThreadPanelProps) {
         }
       }}
     >
-      {!tabbed && close && <ThreadHeader close={close} />}
-      <OwnedThreadPanel
-        key={messageViewKey(
-          props.session,
-          props.scope,
-          props.channelId,
-          props.messageId,
-        )}
-        {...props}
-      />
+      {!tabbed && close && (
+        <ThreadHeader key={`header:${viewKey}`} close={close} />
+      )}
+      <OwnedThreadPanel key={viewKey} {...props} />
     </aside>
   );
 }
@@ -287,6 +288,7 @@ function ThreadMessages({
   const agentPubkeys = useKnownAgentPubkeys(session, profiles);
   const scroller = useRef<HTMLElement>(null);
   const positioned = useRef(false);
+  const readingSettled = useRef(false);
   const [initialPositioned, setInitialPositioned] = useState(false);
   const follow = useRef(true);
   const jumpingToLatest = useRef(false);
@@ -366,6 +368,8 @@ function ThreadMessages({
     // Exact lookup can finish before context. Preserve this row's reading
     // position through prepended history without refocusing it after opening.
     targetAnchor.current = selectedOffset();
+    readingSettled.current = true;
+    readingPositioned(scroller.current);
     navigation?.complete({ status: "opened" });
   }, [navigation, selectedOffset]);
   const prepareTarget = useCallback(() => {
@@ -428,7 +432,6 @@ function ThreadMessages({
     else if (snapshot.targetStatus === "error")
       navigation.complete({ status: "failed", reason: "unavailable" });
   }, [navigation, rootTarget, snapshot.status, snapshot.targetStatus]);
-  useReading({ session, channelId, scroller, settled: positioned });
   const [sent, setSent] = useState<string>();
   const [replyFocus, setReplyFocus] = useState(0);
   const focusReply = useCallback(() => {
@@ -600,6 +603,7 @@ function ThreadMessages({
     if (follow.current) element.scrollTop = element.scrollHeight;
     positioned.current = true;
     setInitialPositioned(true);
+    readingPositioned(element);
     if (jumpingToLatest.current) {
       setShowJumpToLatest(false);
     } else {
@@ -627,6 +631,25 @@ function ThreadMessages({
     tree,
     expanded,
   ]);
+  // Main's retained presentation can be usable before the initial history walk
+  // finishes. That is not yet automatic reading intent. Exact revealed targets
+  // remain individually readable; later background refreshes keep earned readiness.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: active can complete an exact background visit in the preceding layout effect without changing the snapshot.
+  useLayoutEffect(() => {
+    if (
+      !positioned.current ||
+      readingSettled.current ||
+      (navigation && !rootTarget && revealed.current !== navigation.signal)
+    )
+      return;
+    if (
+      snapshot.status === "ready" &&
+      (snapshot.direction === "older" || !snapshot.canLoadMore)
+    ) {
+      readingSettled.current = true;
+      readingPositioned(scroller.current);
+    }
+  }, [active, navigation, rootTarget, revealed, snapshot]);
   // An own send can land in the middle of a branch, not at the list bottom.
   // biome-ignore lint/correctness/useExhaustiveDependencies: Retry DOM lookup after history or branch visibility changes.
   useLayoutEffect(() => {
@@ -812,6 +835,24 @@ function ThreadMessages({
   };
   return (
     <MessageEditScope>
+      <Reading
+        session={session}
+        channelId={channelId}
+        scroller={scroller}
+        settled={readingSettled}
+        rootId={snapshot.root?.id}
+        // A visible exact reply can outlive its unavailable root. Until resolved,
+        // observe rows individually; an absent root must not mean channel catch-up.
+        latestMessageId={
+          snapshot.root
+            ? snapshot.replies.reduce<ChannelMessage | undefined>(
+                (latest, row) =>
+                  !latest || row.createdAt > latest.createdAt ? row : latest,
+                undefined,
+              )?.id
+            : undefined
+        }
+      />
       <section
         ref={scroller}
         data-message-scroller

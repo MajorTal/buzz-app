@@ -25,7 +25,10 @@ import type { ChannelMessage, ChannelWindow } from "../relay/contracts";
 // metrics reproduce the event ordering measured separately in Chromium/WebKit.
 // Reading geometry/dwell has its own real-hook boundary suite. This fixture
 // deliberately supplies only the DOM shape needed for positioning.
-vi.mock("./use-reading", () => ({ useReading: vi.fn() }));
+vi.mock("./use-reading", () => ({
+  useReading: vi.fn(),
+  readingPositioned: vi.fn(),
+}));
 const hooks = vi.hoisted(() => ({
   refs: [] as { current: unknown }[],
   states: [] as unknown[],
@@ -1154,6 +1157,7 @@ it("wires the shared reading hook to its owned scroller and settled position", (
   expect(useReading).toHaveBeenCalledWith({
     session: expect.any(Object),
     channelId: "channel",
+    latestMessageId: expect.any(String),
     scroller: expect.objectContaining({ current: expect.anything() }),
     settled: expect.objectContaining({ current: expect.any(Boolean) }),
   });

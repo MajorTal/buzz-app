@@ -27,7 +27,11 @@ import { decodeReadState, signReadState } from "../../../dev/read-state.mjs";
 const owners: ReturnType<typeof createRelaySession>[] = [];
 afterEach(() => {
   for (const owner of owners.splice(0)) owner.dispose();
+  vi.restoreAllMocks();
 });
+/** The device clock, in seconds, that an explicit channel read captures. */
+const clock = (seconds: number) =>
+  vi.spyOn(Date, "now").mockReturnValue(seconds * 1000);
 function setup(
   options: ChannelStoreOptions = {},
   signer = true,
@@ -39,6 +43,7 @@ function setup(
   let journal: ReadJournal | undefined = preloaded?.(newReadJournal());
   let hold: Promise<void> | undefined;
   let commitHold: Promise<void> | undefined;
+  let committedSignal: (() => void) | undefined;
   let started: (() => void) | undefined;
   let failNextSave = false;
   let failure: Error | undefined;
@@ -64,6 +69,8 @@ function setup(
       if (commitHold) {
         const wait = commitHold;
         commitHold = undefined;
+        committedSignal?.();
+        committedSignal = undefined;
         await wait;
       }
       return journal;
@@ -151,10 +158,15 @@ function setup(
      * like a storage transaction still committing when relay events arrive. */
     holdCommit() {
       let release = () => {};
+      let signal = () => {};
+      const committed = new Promise<void>((resolve) => {
+        signal = resolve;
+      });
+      committedSignal = signal;
       commitHold = new Promise<void>((resolve) => {
         release = resolve;
       });
-      return release;
+      return { committed, release };
     },
   };
 }
@@ -1422,7 +1434,7 @@ it("without a signer, own descendants do not require read frontiers to clear a f
   expect(h.journal()?.state.frontiers[`msg:${peer.id}`]).toBe(11);
 });
 
-it("channel read atomically clears owned marks through the latest reply, preserving other channels and later arrivals", async () => {
+it("channel read atomically clears owned marks through the click, preserving other channels and later arrivals", async () => {
   const h = setup();
   h.grant("room");
   h.grant("other");
@@ -1450,15 +1462,21 @@ it("channel read atomically clears owned marks through the latest reply, preserv
   await unread.markUnreadLocal({ kind: "channel", channelId: "other" });
   const before = h.journal();
   const release = h.holdSave();
+  clock(25);
   const pending = unread.markChannelRead("room");
-  // Arrival is beyond the captured frontier while its durable transaction waits.
-  const later = message(h.alice, "room", "later", 21);
-  h.emit([later]);
+  // The cut is the click, not the moment its durable transaction completes.
+  clock(30);
+  h.emit([
+    // Posted before the click but only loaded afterwards: read.
+    message(h.alice, "room", "missed", 22),
+    // Posted after the click while the save waits: unread.
+    message(h.alice, "room", "later", 26),
+  ]);
   expect(h.snapshot().manual).toBe("local-only");
   release();
   expect(await pending).toMatchObject({ durability: "saved", sync: "pending" });
   expect(h.journal()?.revision).toBe((before?.revision ?? 0) + 1);
-  expect(h.journal()?.state.frontiers).toEqual({ room: 20 });
+  expect(h.journal()?.state.frontiers).toEqual({ room: 25 });
   expect(h.journal()?.localUnread).toEqual({
     other: before?.localUnread.other,
   });
@@ -1490,6 +1508,8 @@ it("mark all serialises channel reads over listed channels, skips read ones and 
     message(h.alice, "room", "one", 11),
     message(h.alice, "other", "two", 12),
   ]);
+  // A clock behind the evidence leaves each cut at its channel's newest message.
+  clock(0);
   const unread = h.session.unread;
   const results = await unread.markAllChannelsRead();
   expect(results).toHaveLength(2);
@@ -1529,45 +1549,68 @@ it("mark all serialises channel reads over listed channels, skips read ones and 
   ).toBe(0);
 });
 
-it("mark all skips a channel whose grant is revoked mid-sweep instead of failing", async () => {
-  const h = setup();
-  h.grant("room");
-  h.grant("other");
-  h.emit([
-    message(h.alice, "room", "one", 11),
-    message(h.alice, "other", "two", 12),
-  ]);
-  const cut = { room: 11, other: 12 };
-  const [first, second] = h.session.channels
-    .list()
-    .channels.map((channel) => channel.id)
-    .filter((id) => id in cut) as (keyof typeof cut)[];
-  assert(first && second);
-  // Let the initial journal save settle so the hold lands on the sweep's write.
-  await flush();
-  // The first channel's write is still committing when the second grant goes.
-  const release = h.holdCommit();
-  const sweep = h.session.unread.markAllChannelsRead();
-  await flush();
-  expect(h.journal()?.state.frontiers).toEqual({ [first]: cut[first] });
-  h.emit([roster(h.relay, second, [], 20)]);
-  release();
-  const results = await sweep;
-  expect(results).toHaveLength(1);
-  expect(results[0]?.durability).toBe("saved");
-  // The revoked channel earned neither a frontier nor a failure.
-  expect(h.journal()?.state.frontiers).toEqual({ [first]: cut[first] });
-});
+it.each(["revoke", "grant"] as const)(
+  "mark all keeps untouched channels and click-time cuts across a mid-sweep %s",
+  async (action) => {
+    const h = setup();
+    const cut = { room: 11, other: 12, third: 13 };
+    for (const [id, timestamp] of Object.entries(cut)) {
+      h.grant(id);
+      h.emit([message(h.alice, id, id, timestamp)]);
+    }
+    clock(20);
+    const [first, second, third] = h.session.channels
+      .list()
+      .channels.map((channel) => channel.id);
+    assert(first && second && third);
+    await flush();
+    const held = h.holdCommit();
+    const sweep = h.session.unread.markAllChannelsRead();
+    // Attach before releasing the save so a regression is an assertion failure,
+    // not an unhandled rejection while the ordering gate is held.
+    const result = expect(sweep).resolves.toHaveLength(
+      action === "revoke" ? 2 : 3,
+    );
+    try {
+      await held.committed;
+      expect(h.journal()?.state.frontiers).toEqual({ [first]: 20 });
+      if (action === "revoke") h.emit([roster(h.relay, second, [], 30)]);
+      else {
+        h.grant("new", 30);
+        h.emit([message(h.alice, "new", "not selected", 31)]);
+      }
+      clock(40);
+      h.emit([message(h.alice, third, "after the click", 35)]);
+    } finally {
+      held.release();
+    }
+    await result;
+    expect(h.journal()?.state.frontiers).toEqual({
+      [first]: 20,
+      ...(action === "grant" ? { [second]: 20 } : {}),
+      [third]: 20,
+    });
+    expect(
+      h.session.unread.snapshot({ kind: "channel", channelId: third })
+        .observedCount,
+    ).toBe(1);
+  },
+);
 
-it("channel read clears local intent without fabricating a frontier when no messages are known", async () => {
-  const h = setup();
-  h.grant("room");
-  await h.session.unread.markUnreadLocal(h.target);
-  await h.session.unread.markChannelRead("room");
-  expect(h.journal()?.state.frontiers).toEqual({});
-  expect(h.snapshot()).toMatchObject({ observedCount: null, manual: "none" });
-  expect(h.host.sign).not.toHaveBeenCalled();
-});
+it.each([true, false])(
+  "empty channel read saves a click cutoff only with frontier support (%s)",
+  async (signer) => {
+    const h = setup({}, signer);
+    h.grant("room");
+    clock(20);
+    await h.session.unread.markUnreadLocal(h.target);
+    await h.session.unread.markChannelRead("room");
+    expect(h.journal()?.state.frontiers).toEqual(signer ? { room: 20 } : {});
+    expect(h.snapshot()).toMatchObject({ observedCount: null, manual: "none" });
+    h.emit([message(h.alice, "room", "late history", 15)]);
+    expect(h.snapshot().observedCount).toBe(signer ? 0 : 1);
+  },
+);
 
 it.each(["clearCache", "dispose", "revoke-regrant"] as const)(
   "channel read rejects delayed intent after %s without clearing saved marks",
@@ -1611,6 +1654,7 @@ it("channel read cannot use another channel, deleted content or auxiliary events
       content: "",
     }),
   ]);
+  clock(0);
   await h.session.unread.markChannelRead("room");
   expect(h.journal()?.state.frontiers).toEqual({ room: 11 });
   await expect(h.session.unread.markChannelRead("denied")).rejects.toThrow(
@@ -1711,6 +1755,7 @@ it.each(["channel", "thread", "message"] as const)(
     const held = h.holdSaveStarted();
     const messageRead = unread.markMessageRead("room", row.id);
     const pending = [messageRead];
+    clock(15);
     try {
       await held.started;
       pending.push(unread.markChannelRead("room"));
@@ -1719,7 +1764,7 @@ it.each(["channel", "thread", "message"] as const)(
       held.release();
     }
     await Promise.all(pending);
-    expect(h.journal()?.state.frontiers.room).toBe(11);
+    expect(h.journal()?.state.frontiers.room).toBe(15);
     expect(h.journal()?.localUnread[key]).toBeGreaterThan(0);
     expect(unread.snapshot(target).manual).toBe("local-only");
   },
@@ -1758,9 +1803,14 @@ it.each(["markThrough", "clearUnreadLocal", "markChannelRead"] as const)(
 
 it.each(
   (["clearCache", "dispose", "revoke-regrant"] as const).flatMap((action) =>
-    (["markUnreadLocal", "markMessageRead", "markMessageUnread"] as const).map(
-      (markAction) => ({ action, markAction }),
-    ),
+    (
+      [
+        "markUnreadLocal",
+        "clearUnreadLocal",
+        "markMessageRead",
+        "markMessageUnread",
+      ] as const
+    ).map((markAction) => ({ action, markAction })),
   ),
 )(
   "queued $markAction stays invalid after $action",
@@ -1777,8 +1827,8 @@ it.each(
     try {
       await held.started;
       const mark =
-        markAction === "markUnreadLocal"
-          ? h.session.unread.markUnreadLocal(h.target)
+        markAction === "markUnreadLocal" || markAction === "clearUnreadLocal"
+          ? h.session.unread[markAction](h.target)
           : h.session.unread[markAction]("room", row.id);
       pending.push(expect(mark).rejects.toThrow());
       if (action === "revoke-regrant") {
@@ -1833,5 +1883,334 @@ it.each(["markMessageRead", "markMessageUnread"] as const)(
     const h = setup();
     h.grant("room");
     await expect(h.session.unread[action]("room", "missing")).rejects.toThrow();
+  },
+);
+
+it("bottom catch-up preserves mentions, broadcasts, participating threads and later activity", async () => {
+  const h = setup();
+  h.grant("room");
+  const own = message(h.viewer, "room", "my thread", 11);
+  const reply = message(h.alice, "room", "reply to me", 12, [
+    ["e", own.id, "", "reply"],
+  ]);
+  const ordinaryRoot = message(h.alice, "room", "their thread", 13);
+  const ordinaryReply = message(h.alice, "room", "ordinary reply", 14, [
+    ["e", ordinaryRoot.id, "", "reply"],
+  ]);
+  const mention = message(h.alice, "room", "mention", 15, [
+    ["p", h.viewer.pubkey],
+  ]);
+  const broadcast = message(h.alice, "room", "broadcast", 16, [
+    ["broadcast", "1"],
+  ]);
+  const bottom = message(h.alice, "room", "bottom", 20);
+  h.emit([own, reply, ordinaryRoot, ordinaryReply, mention, broadcast, bottom]);
+  const lease = h.session.unread.reading("room");
+  await lease.catchUp(bottom.id);
+  expect(h.journal()?.state.frontiers).toEqual({ "activity:room": 20 });
+  expect(h.snapshot()).toMatchObject({ observedCount: 3, attentionCount: 3 });
+  expect(h.session.unread.attention("room", reply.id).unread).toBe(true);
+  expect(
+    h.session.unread.snapshot({
+      kind: "thread",
+      channelId: "room",
+      rootId: ordinaryRoot.id,
+    }).observedCount,
+  ).toBe(1);
+  h.emit([
+    message(h.alice, "room", "late old ordinary", 19),
+    message(h.alice, "room", "new", 21),
+  ]);
+  expect(h.snapshot()).toMatchObject({ observedCount: 4, attentionCount: 3 });
+  // Participation discovered later must restore protected attention, not inherit catch-up.
+  h.emit([
+    message(h.viewer, "room", "earlier participation", 13, [
+      ["e", ordinaryRoot.id, "", "reply"],
+    ]),
+  ]);
+  expect(h.session.unread.attention("room", ordinaryReply.id)).toMatchObject({
+    category: "thread",
+    unread: true,
+  });
+  lease.dispose();
+});
+
+it("ordinary catch-up never clears DM attention", async () => {
+  const h = setup();
+  h.grant("room");
+  const row = message(h.alice, "room", "direct", 11);
+  h.emit([
+    row,
+    signed(h.relay, {
+      kind: 39000,
+      created_at: 20,
+      content: "",
+      tags: [
+        ["d", "room"],
+        ["name", "DM"],
+        ["t", "dm"],
+      ],
+    }),
+  ]);
+  const lease = h.session.unread.reading("room");
+  await lease.catchUp(row.id);
+  expect(h.snapshot()).toMatchObject({ observedCount: 1, attentionCount: 1 });
+  lease.dispose();
+});
+
+it("thread bottom catch-up clears only its thread and preserves local and remote manual intent", async () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.viewer, "room", "root", 11);
+  const other = message(h.viewer, "room", "other root", 12);
+  const reply = message(h.alice, "room", "mention", 13, [
+    ["e", root.id, "", "reply"],
+    ["p", h.viewer.pubkey],
+  ]);
+  const sibling = message(h.alice, "room", "other reply", 14, [
+    ["e", other.id, "", "reply"],
+  ]);
+  h.emit([root, other, reply, sibling]);
+  const thread = {
+    kind: "thread" as const,
+    channelId: "room",
+    rootId: root.id,
+  };
+  await h.session.unread.markUnreadLocal(thread);
+  const lease = h.session.unread.reading("room");
+  await lease.catchUp(reply.id, root.id);
+  expect(h.journal()?.state.frontiers).toEqual({
+    [`thread-activity:${root.id}`]: 13,
+  });
+  expect(h.session.unread.snapshot(thread)).toMatchObject({
+    observedCount: 0,
+    manual: "local-only",
+  });
+  expect(h.session.unread.attention("room", sibling.id).unread).toBe(true);
+  // Real encrypted marker: automatic thread catch-up must not retire a remote override.
+  clock(30);
+  const marker = await signReadState(
+    {
+      slot: "a".repeat(32),
+      createdAt: 30,
+      blob: {
+        v: 1,
+        client_id: "peer",
+        contexts: {
+          [`ov_s:thread:${root.id}`]: 1,
+          [`ov_c:thread:${root.id}`]: 0,
+          [`ov_b:thread:${root.id}`]: 0,
+        },
+      },
+    },
+    h.viewer.secret,
+  );
+  h.emit([marker]);
+  await flush();
+  expect(h.session.unread.attention("room", reply.id).unread).toBe(true);
+  lease.dispose();
+});
+
+it("catch-up rejects historical heads, failed storage and expired leases without saving intent", async () => {
+  const h = setup();
+  h.grant("room");
+  const old = message(h.alice, "room", "old", 11);
+  const bottom = message(h.alice, "room", "bottom", 20);
+  h.emit([old, bottom]);
+  const lease = h.session.unread.reading("room");
+  await lease.catchUp(old.id);
+  expect(h.journal()?.state.frontiers ?? {}).toEqual({});
+  await flush();
+  h.failSave();
+  await expect(lease.catchUp(bottom.id)).rejects.toThrow("disk full");
+  expect(h.snapshot().observedCount).toBe(2);
+  const held = h.holdSaveStarted();
+  const pending = lease.catchUp(bottom.id);
+  const rejected = expect(pending).rejects.toThrow("expired");
+  await held.started;
+  lease.dispose();
+  held.release();
+  await rejected;
+  expect(h.journal()?.state.frontiers).toEqual({});
+});
+
+it("mark all captures later channels at invocation, not after the first save", async () => {
+  const h = setup();
+  h.grant("room");
+  h.grant("other");
+  h.emit([
+    message(h.alice, "room", "one", 11),
+    message(h.alice, "other", "two", 12),
+  ]);
+  await flush();
+  const ids = h.session.channels.list().channels.map((channel) => channel.id);
+  const second = ids[1];
+  assert(second);
+  clock(20);
+  const held = h.holdSaveStarted();
+  const sweep = h.session.unread.markAllChannelsRead();
+  await held.started;
+  clock(30);
+  h.emit([message(h.alice, second, "after click", 21)]);
+  held.release();
+  await sweep;
+  expect(h.journal()?.state.frontiers).toEqual({ room: 20, other: 20 });
+  expect(
+    h.session.unread.snapshot({ kind: "channel", channelId: second })
+      .observedCount,
+  ).toBe(1);
+});
+
+it("channel bottom quiets replies newer than the top-level head; Mark all still reads their receipts", async () => {
+  const h = setup();
+  h.grant("room");
+  const root = message(h.alice, "room", "root", 11);
+  const reply = message(h.alice, "room", "newer reply", 15, [
+    ["e", root.id, "", "reply"],
+  ]);
+  h.emit([root, reply]);
+  const unread = h.session.unread;
+  const thread = {
+    kind: "thread" as const,
+    channelId: "room",
+    rootId: root.id,
+  };
+  const lease = unread.reading("room");
+  await lease.catchUp(root.id);
+  expect(h.journal()?.state.frontiers).toEqual({ "activity:room": 15 });
+  expect(h.snapshot().observedCount).toBe(0);
+  expect(unread.snapshot(thread).observedCount).toBe(1);
+  // Same visible head, newer retained activity: another dwell can quiet it too.
+  const next = message(h.alice, "room", "next reply", 16, [
+    ["e", root.id, "", "reply"],
+  ]);
+  h.emit([next]);
+  expect(h.snapshot().observedCount).toBe(1);
+  await lease.catchUp(root.id);
+  expect(h.snapshot().observedCount).toBe(0);
+  expect(unread.snapshot(thread).observedCount).toBe(2);
+  clock(20);
+  expect(await unread.markAllChannelsRead()).toHaveLength(1);
+  expect(unread.snapshot(thread).observedCount).toBe(0);
+  expect(await unread.markAllChannelsRead()).toEqual([]);
+  lease.dispose();
+});
+
+it.each(["none", "grant", "revoke"])(
+  "Mark all preserves newer channel and thread unread intent across unrelated %s",
+  async (change) => {
+    const h = setup();
+    h.grant("room");
+    h.grant("other");
+    const roots = [
+      message(h.alice, "room", "one", 11),
+      message(h.alice, "other", "two", 12),
+    ];
+    h.emit(roots);
+    await flush();
+    const second = h.session.channels.list().channels[1]?.id;
+    const root = roots.find((row) =>
+      row.tags.some(([key, id]) => key === "h" && id === second),
+    );
+    assert(second && root);
+    const held = h.holdSaveStarted();
+    const sweep = h.session.unread.markAllChannelsRead();
+    await held.started;
+    const channel = { kind: "channel" as const, channelId: second };
+    const thread = {
+      kind: "thread" as const,
+      channelId: second,
+      rootId: root.id,
+    };
+    const markChannel = h.session.unread.markUnreadLocal(channel);
+    const markThread = h.session.unread.markUnreadLocal(thread);
+    if (change === "grant") h.grant("unrelated");
+    if (change === "revoke") {
+      // Revoke a third, unselected channel, leaving both selected channels valid.
+      h.grant("unrelated");
+      h.emit([roster(h.relay, "unrelated", [], 20)]);
+    }
+    held.release();
+    await Promise.all([sweep, markChannel, markThread]);
+    expect(h.session.unread.snapshot(channel).manual).toBe("local-only");
+    expect(h.session.unread.snapshot(thread).manual).toBe("local-only");
+  },
+);
+
+it.each(["channel", "thread", "message"] as const)(
+  "queued %s manual clear survives an unrelated grant",
+  async (kind) => {
+    const h = setup();
+    h.grant("room");
+    const row = message(h.alice, "room", "root", 11);
+    h.emit([row]);
+    const target =
+      kind === "channel"
+        ? h.target
+        : kind === "thread"
+          ? { kind, channelId: "room", rootId: row.id }
+          : { kind, channelId: "room", messageId: row.id };
+    const held = h.holdSaveStarted();
+    const mark = h.session.unread.markUnreadLocal(target);
+    let clear: Promise<unknown> | undefined;
+    try {
+      await held.started;
+      clear = h.session.unread.clearUnreadLocal(target);
+      h.grant("unrelated");
+    } finally {
+      held.release();
+    }
+    await Promise.all([mark, clear]);
+    expect(h.session.unread.snapshot(target).manual).toBe("none");
+    expect(h.journal()?.localUnread).toEqual({});
+  },
+);
+
+it.each(["channel", "thread", "message"] as const)(
+  "cleared %s override floors do not block reply quieting, but active overrides do",
+  async (target) => {
+    const h = setup();
+    h.grant("room");
+    const root = message(h.alice, "room", "root", 11);
+    const reply = message(h.alice, "room", "reply", 12, [
+      ["e", root.id, "", "reply"],
+    ]);
+    h.emit([root, reply]);
+    const key =
+      target === "channel"
+        ? "room"
+        : target === "thread"
+          ? `thread:${root.id}`
+          : `msg:${reply.id}`;
+    const marker = async (set: number, clear: number) => {
+      clock(30 + set);
+      return signReadState(
+        {
+          slot: "a".repeat(32),
+          createdAt: 30 + set,
+          blob: {
+            v: 1,
+            client_id: "peer",
+            contexts: {
+              [`ov_s:${key}`]: set,
+              [`ov_c:${key}`]: clear,
+              [`ov_b:${key}`]: 0,
+            },
+          },
+        },
+        h.viewer.secret,
+      );
+    };
+    h.emit([await marker(0, 1)]);
+    await flush();
+    const lease = h.session.unread.reading("room");
+    await lease.catchUp(root.id);
+    expect(h.snapshot().observedCount).toBe(0);
+    expect(h.session.unread.attention("room", reply.id).unread).toBe(true);
+    h.emit([await marker(2, 1)]);
+    await flush();
+    expect(h.snapshot().observedCount).toBeGreaterThan(0);
+    expect(h.session.unread.attention("room", reply.id).unread).toBe(true);
+    lease.dispose();
   },
 );

@@ -580,6 +580,13 @@ function ChannelWorkspace({
     showingThread?.navigation,
     setThread,
   ]);
+  // Retargeting the retained thread is a new opening, not a passive rerender.
+  const threadChannelId = showingThread?.channelId;
+  const threadMessageId = showingThread?.messageId;
+  const threadInstance = useMemo(
+    () => ({ queries, scope, threadChannelId, threadMessageId }),
+    [queries, scope, threadChannelId, threadMessageId],
+  );
   type Opening = PanelOpening;
   const opened = entries.find(
     (entry) => panelTabId(entry) === tabState.selected,
@@ -1642,6 +1649,7 @@ function ChannelWorkspace({
                         ? [
                             {
                               id: "thread",
+                              instance: threadInstance,
                               label: "Thread",
                               icon: (
                                 <ChatCircleIcon

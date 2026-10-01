@@ -50,6 +50,10 @@ export function UnreadBadge({
   const count = snapshot.observedCount;
   const manual = snapshot.manual !== "none";
   const unread = manual || (count ?? 0) > 0;
+  // Bold tracks ordinary backlog; protected attention has its own dot.
+  const ordinary =
+    manual ||
+    (dm ? (count ?? 0) > 0 : (count ?? 0) > (snapshot.attentionCount ?? 0));
   const threadCount = activity.items?.length ?? 0;
   if (!unread && !threadCount && label === undefined) return null;
   const priority = dm || (snapshot.attentionCount ?? 0) > 0;
@@ -61,12 +65,13 @@ export function UnreadBadge({
   return (
     <>
       {label !== undefined && (
-        <span data-channel-unread-title={unread || undefined}>{label}</span>
+        <span data-channel-unread-title={ordinary || undefined}>{label}</span>
       )}
       {unread && (
         <span
           className={styles.unreadState}
           data-channel-unread=""
+          data-channel-ordinary={ordinary || undefined}
           data-priority={priority}
           role="img"
           aria-label={unreadLabel}

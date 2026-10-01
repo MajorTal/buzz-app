@@ -1,6 +1,11 @@
 import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open, settle } from "./timeline.mjs";
+import {
+  readJournal as journal,
+  holdReadingFocus,
+  releaseReadingFocus,
+} from "./reading.mjs";
 
 const alphaId = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 test.use({
@@ -16,24 +21,9 @@ const history = (page) =>
 const alpha = (page) => page.getByRole("button", { name: /^Alpha/ });
 const composer = (page) =>
   page.getByRole("textbox", { name: "Message #Alpha", exact: true });
-// Observe the real durable result, never seed state or call an engine test hook.
-async function journal(page) {
-  return page.evaluate(
-    () =>
-      new Promise((resolve, reject) => {
-        const request = indexedDB.open("buzz-read-state-v1", 1);
-        request.onerror = () => reject(request.error);
-        request.onsuccess = () => {
-          const db = request.result;
-          const tx = db.transaction("partitions", "readonly");
-          const read = tx.objectStore("partitions").getAll();
-          read.onsuccess = () => resolve(read.result[0]);
-          read.onerror = () => reject(read.error);
-          tx.oncomplete = () => db.close();
-        };
-      }),
-  );
-}
+// Focus outside the reading surface. The timeline and its own composer both
+// read after dwell; a focused sidebar row selects and reads nothing.
+const park = (page) => alpha(page).focus();
 async function visible(page) {
   return history(page).evaluate((element) => {
     const viewport = element.getBoundingClientRect();
@@ -143,29 +133,23 @@ test("built sidebar → visible dwell → durable journal → encrypted broker p
     "aria-label",
     /^500 observed unread messages/,
   );
-  await composer(page).focus();
+  await park(page);
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
-  await page.clock.runFor(900); // Composer focus is not reading, even past dwell.
+  await page.clock.runFor(900); // Sidebar focus is not reading, even past dwell.
   expect((await journal(page)).state.frontiers).toEqual({});
   expect(app.report.readPublications).toEqual([]);
   const ids = await visible(page);
   expect(ids.length).toBeGreaterThan(0);
-  const before = Number(
-    (await alpha(page).getByRole("img").getAttribute("aria-label")).split(
-      " ",
-    )[0],
-  );
-  await history(page).focus();
-  await page.clock.runFor(300);
+  // Typing under the conversation is reading it: the composer shares the
+  // timeline's edit scope, so its focus earns the same dwell as the list's.
+  await composer(page).focus();
+  await page.clock.runFor(299);
   expect((await journal(page)).state.frontiers).toEqual({});
-  await page.clock.runFor(750);
+  await page.clock.runFor(1);
   await expect
     .poll(async () => Object.keys((await journal(page)).state.frontiers).sort())
-    .toEqual(ids.map((id) => `msg:${id}`).sort());
-  await expect(alpha(page).getByRole("img")).toHaveAttribute(
-    "aria-label",
-    new RegExp(`^${before - ids.length} observed unread messages`),
-  );
+    .toEqual([`activity:${alphaId}`, ...ids.map((id) => `msg:${id}`)].sort());
+  await expect(alpha(page).getByRole("img")).toHaveCount(0);
   await page.clock.resume();
   const stored = await journal(page);
   expect(stored.state.frontiers[alphaId]).toBeUndefined();
@@ -186,10 +170,7 @@ test("built sidebar → visible dwell → durable journal → encrypted broker p
   await settle(page);
   expect((await journal(page)).slot).toBe(stored.slot);
   expect((await journal(page)).state.frontiers).toEqual(stored.state.frontiers);
-  await expect(alpha(page).getByRole("img")).toHaveAttribute(
-    "aria-label",
-    new RegExp(`^${before - ids.length} observed unread messages`),
-  );
+  await expect(alpha(page).getByRole("img")).toHaveCount(0);
 });
 
 test("focus cancellation and local manual-unread survive dwell/reload until explicit mark-through", async ({
@@ -236,7 +217,7 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
       }),
     )
     .toEqual({ status: "reconciled", completeness: "snapshot" });
-  await composer(page).focus();
+  await park(page);
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await history(page).focus();
   const ids = await visible(page);
@@ -255,8 +236,8 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
       ),
     )
     .toBe(true);
-  await page.clock.runFor(300);
-  await composer(page).focus();
+  await page.clock.runFor(299);
+  await park(page);
   await page.clock.runFor(900);
   await page.clock.resume();
   await options(page);
@@ -276,7 +257,7 @@ test("focus cancellation and local manual-unread survive dwell/reload until expl
       exact: true,
     }),
   ).toBeVisible();
-  await composer(page).focus();
+  await park(page);
   await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
   await history(page).focus();
   await page.clock.runFor(1000);
@@ -319,8 +300,10 @@ test("a surviving window publishes a closed window's durable read intent", async
   context,
   app,
 }) => {
+  await page.clock.install();
+  await holdReadingFocus(page);
   await open(page, app);
-  await composer(page).focus();
+  await park(page);
   const survivor = await context.newPage();
   app.watchPageErrors(survivor);
   survivor.on("console", (message) => {
@@ -328,24 +311,41 @@ test("a surviving window publishes a closed window's durable read intent", async
       app.report.consoleErrors.push(message.text());
   });
   try {
+    await holdReadingFocus(survivor);
     await open(survivor, app);
-    await composer(survivor).focus();
+    await park(survivor);
     await options(survivor);
     await survivor.getByText("Unread status", { exact: true }).click();
     await expect(
       survivor.getByText(/Read sync: frontier-sync · reconciled/),
     ).toBeVisible();
+    for (const window of [page, survivor])
+      await window.evaluate(() =>
+        window.fixtureRelay.snapshot().session.unread.ensure(),
+      );
+    await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    expect((await journal(page)).state.frontiers).toEqual({});
     await page.bringToFront();
+    const ids = await visible(page);
+    expect(ids.length).toBeGreaterThan(0);
+    await releaseReadingFocus(page);
     await history(page).focus();
+    await page.clock.runFor(300);
+    // One dwell writes catch-up, then each visible message. A positive revision
+    // alone can be an intermediate durable state, not the publication baseline.
     await expect
-      .poll(async () => (await journal(page)).revision)
-      .toBeGreaterThan(0);
+      .poll(async () =>
+        Object.keys((await journal(page)).state.frontiers).sort(),
+      )
+      .toEqual([`activity:${alphaId}`, ...ids.map((id) => `msg:${id}`)].sort());
+    await park(page);
     const stored = await journal(page);
     await expect(
       survivor.getByText(/Read sync: frontier-sync · pending/),
     ).toBeVisible();
     expect(app.report.readPublications).toEqual([]);
     await page.close(); // Cancel the origin publisher before its normal five-second debounce.
+    await survivor.clock.resume(); // The controlled clock is shared by this context.
     await expect
       .poll(() => app.report.readPublications.length, { timeout: 12000 })
       .toBe(1);
@@ -382,7 +382,7 @@ test.describe("explicit mark-through with membership activity", () => {
         );
         const lastChat = loaded.findLast((event) => event.kind === 9);
         await open(page, app);
-        await composer(page).focus();
+        await park(page);
         await expect(
           history(page).locator("[data-membership-row]"),
         ).toHaveCount(1);
@@ -431,4 +431,34 @@ test.describe("explicit mark-through with membership activity", () => {
       },
     );
   }
+});
+
+test.describe("automatic catch-up after membership rows", () => {
+  test.use({
+    membershipActivity: true,
+    historyCounts: { [alphaId]: 20, beta: 1 },
+  });
+  test("own-composer focus quiets a channel whose last visible row is membership activity", async ({
+    page,
+    app,
+  }) => {
+    await open(page, app);
+    await expect(
+      history(page).locator("[data-membership-row]"),
+    ).toBeInViewport();
+    await composer(page).focus();
+    const latest = app.histories
+      .get(`primary/${alphaId}`)
+      .findLast((row) => row.kind === 9);
+    await expect
+      .poll(
+        async () =>
+          (await journal(page))?.state.frontiers[`activity:${alphaId}`],
+      )
+      .toBe(latest.created_at);
+    await expect(alpha(page).getByText("Alpha", { exact: true })).toHaveCSS(
+      "font-weight",
+      "400",
+    );
+  });
 });

@@ -14,7 +14,7 @@ import { useRowProfiles } from "../relay/react";
 import { geometryFor, geometrySignature } from "./geometry";
 import { readView, writeView } from "../../shared/view-state";
 import styles from "./Messages.module.css";
-import { useReading } from "./use-reading";
+import { readingPositioned, useReading } from "./use-reading";
 import { useMessageReveal } from "./use-message-reveal";
 import type { PageNavigation } from "../navigation/service";
 import { messageViewKey } from "./view-key";
@@ -293,7 +293,13 @@ function Timeline({
     prepare: prepareTarget,
     complete: completeTarget,
   });
-  useReading({ session: queries, channelId, scroller, settled });
+  useReading({
+    session: queries,
+    channelId,
+    scroller,
+    settled,
+    latestMessageId: window.rows.filter((row) => !row.membership).at(-1)?.id,
+  });
   const prepend =
     !!edges.current.first &&
     edges.current.first !== rows[0]?.id &&
@@ -453,6 +459,7 @@ function Timeline({
           recordPosition(scroller.current);
         if (!restore && !follow.current) {
           settled.current = true;
+          readingPositioned(scroller.current);
           return;
         }
         restorePosition();
@@ -487,6 +494,7 @@ function Timeline({
         }
       }
       settled.current = true;
+      readingPositioned(scroller.current);
       if (scroller.current) updateJumpToLatest(scroller.current);
     });
     return () => {

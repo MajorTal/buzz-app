@@ -265,6 +265,13 @@ function messagesHarness(
         screen.queryByRole("region", { name: "Thread messages" }) ?? element;
       return element;
     },
+    rerenderProps() {
+      mounted?.rerender(
+        <div role="application" onKeyDown={bubble}>
+          <ThreadPanel {...props} />
+        </div>,
+      );
+    },
     resize(value: number) {
       height = value;
     },
@@ -421,6 +428,132 @@ it("keeps initial thread loading until available content has been positioned", (
   expect(within(section).getByText("root")).toBeVisible();
   expect(within(section).queryByText("Loading thread…")).toBeNull();
 });
+it("keeps seeded rows usable but unread until the initial legacy walk settles", async () => {
+  vi.useFakeTimers();
+  const h = messagesHarness(ordinaryNavigation());
+  h.resize(600);
+  vi.mocked(document.hasFocus).mockReturnValue(true);
+  vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([
+    new DOMRect(0, 0, 500, 500),
+  ] as unknown as DOMRectList);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 500, 500),
+  );
+  const observe = vi.fn(async () => {});
+  const reading = vi.fn(() => ({
+    view: vi.fn(),
+    observe,
+    catchUp: vi.fn(async () => {}),
+    dispose: vi.fn(),
+  }));
+  Object.assign(h.session.unread, {
+    sync: () => ({ capability: "frontier-sync" }),
+    reading,
+  });
+  h.snapshot.status = "loading";
+  h.snapshot.readKind = "refresh";
+  h.render();
+  h.element.focus();
+  expect(h.element).not.toHaveAttribute("data-positioning");
+  expect(h.element.querySelector("[data-thread-rows]")).not.toHaveAttribute(
+    "inert",
+  );
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  expect(reading).not.toHaveBeenCalled();
+
+  h.snapshot.status = "ready";
+  h.snapshot.readKind = undefined;
+  h.snapshot.direction = "forward";
+  h.snapshot.canLoadMore = true;
+  h.snapshot.replies = [{ ...row, id: "reply", content: "reply" }];
+  h.render();
+  expect(h.view.loadMore).toHaveBeenCalledOnce();
+  h.snapshot.status = "loading";
+  h.snapshot.readKind = "older";
+  h.render();
+  expect(h.element).not.toHaveAttribute("data-positioning");
+  expect(h.element.querySelector("[data-thread-rows]")).not.toHaveAttribute(
+    "inert",
+  );
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  expect(reading).not.toHaveBeenCalled();
+
+  // The empty continuation changes neither rows nor geometry. Readiness must
+  // wake the existing reader, without a new focus or scroll gesture.
+  h.snapshot.status = "ready";
+  h.snapshot.readKind = undefined;
+  h.snapshot.canLoadMore = false;
+  h.render();
+  expect(h.element).not.toHaveAttribute("data-positioning");
+  await act(() => vi.advanceTimersByTimeAsync(299));
+  expect(observe).not.toHaveBeenCalled();
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  expect(observe).toHaveBeenCalledExactlyOnceWith([row.id, "reply"]);
+});
+it.each([false, true])(
+  "reads a background-completed exact thread after fresh dwell (deactivate before reveal=%s)",
+  async (deactivateBeforeReveal) => {
+    vi.useFakeTimers();
+    const navigation = ordinaryNavigation();
+    navigation.target.threadRootId = "different-root";
+    const h = messagesHarness(navigation);
+    h.props.active = deactivateBeforeReveal;
+    h.resize(600);
+    vi.mocked(document.hasFocus).mockReturnValue(true);
+    vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([
+      new DOMRect(0, 0, 500, 500),
+    ] as unknown as DOMRectList);
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+      new DOMRect(0, 0, 500, 500),
+    );
+    const observe = vi.fn(async () => {});
+    const reading = vi.fn(() => ({
+      view: vi.fn(),
+      observe,
+      catchUp: vi.fn(async () => {}),
+      dispose: vi.fn(),
+    }));
+    Object.assign(h.session.unread, {
+      sync: () => ({ capability: "frontier-sync" }),
+      reading,
+    });
+    h.snapshot.status = "loading";
+    h.snapshot.targetStatus = "loading";
+    h.render();
+    // The workspace owns inactive tab inertness and focus, not ThreadPanel.
+    const host = screen.getByRole("application");
+    host.setAttribute("inert", "");
+    (document.activeElement as HTMLElement).blur();
+    h.snapshot.targetStatus = "ready";
+    h.snapshot.target = row;
+    h.render();
+    h.snapshot.status = "ready";
+    h.render();
+    if (deactivateBeforeReveal) {
+      expect(navigation.complete).not.toHaveBeenCalled();
+      // Props alone complete the background visit; the snapshot is unchanged.
+      h.props.active = false;
+      h.rerenderProps();
+    }
+    expect(navigation.complete).toHaveBeenCalledExactlyOnceWith({
+      status: "opened",
+    });
+    await act(() => vi.advanceTimersByTimeAsync(300));
+    expect(observe).not.toHaveBeenCalled();
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+
+    h.props.active = true;
+    h.rerenderProps();
+    host.removeAttribute("inert");
+    h.element.focus();
+    await act(() => vi.advanceTimersByTimeAsync(299));
+    expect(observe).not.toHaveBeenCalled();
+    await act(() => vi.advanceTimersByTimeAsync(1));
+    expect(observe).toHaveBeenCalledExactlyOnceWith([row.id]);
+    expect(h.element).toHaveFocus();
+    expect(HTMLElement.prototype.scrollIntoView).not.toHaveBeenCalled();
+  },
+);
 it("keeps older-page loading quiet and retry between root and replies", () => {
   const h = messagesHarness();
   h.snapshot.direction = "older";
@@ -899,4 +1032,54 @@ it("without close, the embedded thread keeps its reader but has no close header 
     key: "Escape",
   });
   expect(close).toHaveBeenCalledOnce();
+});
+
+it("observes a visible reply before its root resolves, then enables thread catch-up", async () => {
+  vi.useFakeTimers();
+  const h = messagesHarness();
+  const reply = {
+    ...row,
+    id: "c".repeat(64),
+    content: "available reply",
+    createdAt: 2,
+  };
+  h.snapshot.root = undefined;
+  h.snapshot.replies = [reply];
+  h.resize(600);
+  const observe = vi.fn(async () => {});
+  const catchUp = vi.fn(async (_id: string, rootId?: string) => {
+    if (!rootId)
+      throw new Error("A thread reply cannot advance the channel frontier");
+  });
+  h.props.session = {
+    ...h.session,
+    unread: {
+      ...h.session.unread,
+      sync: () =>
+        ({ capability: "frontier-sync" }) as ReturnType<
+          RelaySession["unread"]["sync"]
+        >,
+      reading: () => ({ view() {}, observe, catchUp, dispose() {} }),
+    },
+  };
+  vi.spyOn(document, "hasFocus").mockReturnValue(true);
+  vi.spyOn(document, "visibilityState", "get").mockReturnValue("visible");
+  vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([
+    new DOMRect(0, 0, 500, 500),
+  ] as unknown as DOMRectList);
+  vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue(
+    new DOMRect(0, 0, 500, 500),
+  );
+  h.render();
+  screen.getByRole("button", { name: "Close thread" }).focus();
+  await act(() => vi.advanceTimersByTimeAsync(299));
+  expect(observe).not.toHaveBeenCalled();
+  await act(() => vi.advanceTimersByTimeAsync(1));
+  expect(observe).toHaveBeenCalledExactlyOnceWith([reply.id]);
+  expect(catchUp).not.toHaveBeenCalled();
+
+  h.snapshot.root = row;
+  h.render();
+  await act(() => vi.advanceTimersByTimeAsync(300));
+  expect(catchUp).toHaveBeenCalledExactlyOnceWith(reply.id, row.id);
 });

@@ -1,5 +1,10 @@
 import { test, expect } from "./fixture.mjs";
 import { open, end, settle, wheel } from "./timeline.mjs";
+import {
+  holdReadingFocus,
+  releaseReadingFocus,
+  readJournal,
+} from "./reading.mjs";
 
 test.use({
   pluginFixtures: true,
@@ -257,7 +262,23 @@ test("loaded virtual rows reveal per attempt without thread reads or live-update
       ),
     )
     .toBeGreaterThan(80);
+  const detachedTop = await history.evaluate((element) => element.scrollTop);
   app.append("primary", "alpha", "Second detached arrival");
+  // A row can remeasure after newer reader input (for example, media loading).
+  // Preserve the detached position through that measurement, not just the count
+  // before Virtua has delivered it. Finish native wheel movement before taking
+  // the exact baseline; the driver regression, not this settled browser check,
+  // controls cancellation inside the retained command's 150ms lifetime.
+  await history
+    .locator("[data-message-id]")
+    .last()
+    .evaluate((row) => {
+      row.style.paddingBottom = "24px";
+    });
+  await settle(page, history);
+  expect(await history.evaluate((element) => element.scrollTop)).toBe(
+    detachedTop,
+  );
   await expect(jump).toHaveAccessibleName("1 new message");
   await jump.focus();
   await page.keyboard.press("Enter");
@@ -790,18 +811,26 @@ readTest(
   "settings blocks reading and focus in a retained thread",
   async ({ page, app }) => {
     await page.clock.install();
+    await holdReadingFocus(page);
     await open(page, app);
     await page.evaluate(() =>
       window.fixtureRelay.snapshot().session.unread.ensure(),
     );
-    expect(await openTarget(page, target(app))).toEqual({ status: "opened" });
-    await page
-      .getByRole("button", {
-        name: /^Close (?:thread|Thread tab)$/,
-        exact: true,
-      })
-      .focus();
+
     await page.clock.pauseAt(await page.evaluate(() => Date.now() + 1000));
+    await releaseReadingFocus(page);
+    const opening = openTarget(page, target(app));
+    // Exact reveal requires real focus for two animation frames. Advance one
+    // frame at a time until its owner completes, without earning reading dwell.
+    await expect
+      .poll(async () => {
+        await page.clock.runFor(16);
+        return status(page);
+      })
+      .toBe("opened");
+    expect(await opening).toEqual({ status: "opened" });
+    expect((await readJournal(page)).state.frontiers).toEqual({});
+    expect(app.report.readPublications).toEqual([]);
     const before = app.report.readPublications.length;
     const row = page.locator(
       `[aria-label="Thread messages"] [data-message-id="${app.exact.target.id}"]`,
@@ -827,6 +856,7 @@ readTest(
         .evaluate((element) => element.contains(document.activeElement)),
     ).toBe(false);
     await page.clock.runFor(10000);
+    expect((await readJournal(page)).state.frontiers).toEqual({});
     expect(app.report.readPublications.length).toBe(before);
     await page
       .getByRole("button", { name: "Close Channel settings tab", exact: true })

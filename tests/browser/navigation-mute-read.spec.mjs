@@ -1,6 +1,7 @@
 import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
+import { holdReadingFocus } from "./reading.mjs";
 
 // Browser-only boundary: real shared-menu focus/dismissal, production broker,
 // IndexedDB reload and app-global preference startup. Policy matrices live in Vitest.
@@ -18,6 +19,8 @@ test("channel menu mute/read persist without selecting the row; failed mute rema
   await page.addInitScript(() => {
     localStorage.setItem("buzz-appearance.v1", "dark");
   });
+  // Sidebar actions and reload must not read the selected conversation.
+  await holdReadingFocus(page);
   await open(page, app);
   // Context menus make the rest of the page aria-hidden while open.
   const sidebar = page.getByRole("navigation", {
@@ -138,8 +141,13 @@ test("channel menu mute/read persist without selecting the row; failed mute rema
   await expect(
     menu.getByRole("menuitem", { name: "Unmute", exact: true }),
   ).toBeVisible();
+  // The explicit cut is the click, not the newest loaded message: capture the
+  // page clock on both sides of it rather than tolerating an arbitrary range.
+  const seconds = () => page.evaluate(() => Math.floor(Date.now() / 1000));
+  const clickedAfter = await seconds();
   await menu.getByRole("menuitem", { name: "Mark as Read" }).click();
   await expect(menu).toHaveCount(0);
+  const clickedBefore = await seconds();
   await expect(beta).toBeFocused();
   await expect(badge(beta)).toHaveCount(0);
   await expect(badge(alpha)).toHaveAttribute(
@@ -155,8 +163,8 @@ test("channel menu mute/read persist without selecting the row; failed mute rema
       () =>
         app.report.readPublications.some(
           ({ blob }) =>
-            blob.contexts.beta ===
-            app.histories.get("primary/beta").at(-1).created_at,
+            blob.contexts.beta >= clickedAfter &&
+            blob.contexts.beta <= clickedBefore,
         ),
       { timeout: 12000 },
     )

@@ -18,7 +18,10 @@ import type { MessageComposerProps } from "./MessageComposer";
 import type { MessageRowProps } from "./MessageRow";
 import { ThreadPanel } from "./ThreadPanel";
 
-vi.mock("./use-reading", () => ({ useReading: () => {} }));
+vi.mock("./use-reading", () => ({
+  Reading: () => null,
+  readingPositioned: () => {},
+}));
 vi.mock("../relay/react", () => {
   const profiles = new Map();
   return { useRowProfiles: () => profiles };

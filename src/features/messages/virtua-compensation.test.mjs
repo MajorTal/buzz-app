@@ -377,3 +377,64 @@ it("drops retired targets, cancels pending delivery on disposal, and can remount
   h.flush();
   expect(h.received).toEqual([[retained], [remounted]]);
 });
+
+// The timer stays at zero: measurement delivery is explicitly inside the
+// retained command's 150ms lifetime, not after an input-settle helper expires it.
+it.each(["wheel", "touchmove", "keydown", "pointerdown"])(
+  "%s retires a pending imperative target before late measurement",
+  async (type) => {
+    const c = setup({ platform: "Linux x86_64", offset: 0 });
+    c.store.W(
+      3,
+      Array.from({ length: 20 }, (_, index) => [index, 100]),
+    );
+    await c.driver.V(() => c.store.u(19) + c.store.h(19) - c.store.o(), false);
+    expect(c.viewport.scrollTop).toBe(1500);
+    c.viewport.dispatchEvent(Object.assign(new Event(type), { deltaY: -500 }));
+    c.viewport.scrollTop = 1000;
+    c.viewport.dispatchEvent(new Event("scroll"));
+    c.calls.length = 0;
+    c.store.W(5, [21, false]);
+    c.store.W(3, [[20, 120]]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(c.viewport.scrollTop).toBe(1000);
+    expect(c.calls).toEqual([]);
+    // A fresh navigation still owns its target and corrects later measurements.
+    await c.driver.V(() => c.store.t() - c.store.o(), false);
+    c.store.W(3, [[20, 140]]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(c.viewport.scrollTop).toBe(1640);
+    c.driver._();
+  },
+);
+
+it.each(["input", "dispose"])(
+  "%s invalidates an already queued imperative measurement replay",
+  async (cancel) => {
+    const c = setup({ platform: "Linux x86_64", offset: 0 });
+    await c.driver.V(() => 1500, false);
+    c.calls.length = 0;
+    c.store.W(3, [[19, 120]]); // queue the replay, but do not run it yet
+    if (cancel === "input") c.viewport.dispatchEvent(new Event("wheel"));
+    else c.driver._();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(c.calls).toEqual([]);
+    if (cancel === "input") c.driver._();
+  },
+);
+
+it("removes cancellation listeners on disposal and reattaches on remount", async () => {
+  const c = setup({ platform: "Linux x86_64", offset: 0 });
+  const remove = vi.spyOn(c.viewport, "removeEventListener");
+  c.driver._();
+  for (const type of ["wheel", "touchmove", "keydown", "pointerdown"])
+    expect(remove).toHaveBeenCalledWith(type, expect.any(Function), true);
+  c.driver.D({}, c.viewport);
+  await c.driver.V(() => 1500, false);
+  c.viewport.dispatchEvent(new Event("wheel"));
+  c.calls.length = 0;
+  c.store.W(3, [[19, 120]]);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(c.calls).toEqual([]);
+  c.driver._();
+});

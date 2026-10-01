@@ -460,9 +460,6 @@ function ReviewShell({
           inert={!commentsOpen}
           aria-hidden={!commentsOpen || undefined}
           aria-label="Media comments"
-          onFocusCapture={() => {
-            if (attachment.kind === "video") video.current?.pause();
-          }}
           data-attachment-drop-zone=""
           onDragOver={rejectUnhandledFileDrop}
           onDrop={rejectUnhandledFileDrop}
@@ -492,19 +489,26 @@ function ReviewShell({
                     />
                   </div>
                 )}
-                <MessageComposer
-                  extensions={extensions}
-                  session={session}
-                  scope={scope}
-                  channelId={channelId}
-                  channelName={channelName}
-                  threadRootId={rootId}
-                  editMessages={editMessages}
-                  {...(attachment.kind === "video" && includeTime
-                    ? { mediaTimeSeconds: currentTime }
-                    : {})}
-                  hideMediaTimeIndicator
-                />
+                <div
+                  className={styles.mediaReviewComposer}
+                  onFocusCapture={() => {
+                    if (attachment.kind === "video") video.current?.pause();
+                  }}
+                >
+                  <MessageComposer
+                    extensions={extensions}
+                    session={session}
+                    scope={scope}
+                    channelId={channelId}
+                    channelName={channelName}
+                    threadRootId={rootId}
+                    editMessages={editMessages}
+                    {...(attachment.kind === "video" && includeTime
+                      ? { mediaTimeSeconds: currentTime }
+                      : {})}
+                    hideMediaTimeIndicator
+                  />
+                </div>
               </MessageEditScope>
             ) : (
               <p className={styles.empty} role={error ? "alert" : "status"}>

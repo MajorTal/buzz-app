@@ -1088,6 +1088,9 @@ button.mediaPreview {
   width: 2rem;
   height: 2rem;
 }
+.mediaReviewComposer {
+  display: contents;
+}
 .mediaReviewTimeOption {
   display: flex;
   align-items: center;

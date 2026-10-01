@@ -221,6 +221,38 @@ it("publishes unchecked video review comments without a time prefix", async () =
   );
 });
 
+it.each(["pointer", "keyboard"] as const)(
+  "pauses video only when %s focus enters the comment composer",
+  async (input) => {
+    const { user } = await setupReview({ kind: "video" });
+    const checkbox = await screen.findByRole("checkbox", {
+      name: "Comment at current frame",
+    });
+    const video = document.querySelector("video");
+    assert.exists(video);
+    const pause = vi.spyOn(video, "pause");
+    if (input === "keyboard") {
+      // jsdom has no layout; expose tab stops to the viewer's focus trap.
+      vi.spyOn(HTMLElement.prototype, "getClientRects").mockReturnValue([
+        new DOMRect(0, 0, 100, 20),
+      ] as unknown as DOMRectList);
+    }
+
+    await user.click(checkbox);
+
+    expect(checkbox).toHaveFocus();
+    expect(checkbox).not.toBeChecked();
+    expect(pause).not.toHaveBeenCalled();
+
+    const composer = screen.getByRole("textbox", { name: "Reply to thread" });
+    if (input === "keyboard") await user.tab();
+    else await user.click(composer);
+
+    expect(composer).toHaveFocus();
+    expect(pause).toHaveBeenCalledOnce();
+  },
+);
+
 it("publishes image review comments as plain replies without a frame checkbox", async () => {
   const { root, sign, user } = await setupReview({ kind: "image" });
   await screen.findByRole("dialog", { name: "Image viewer" });
@@ -251,6 +283,7 @@ it("seeks the review video from a timecode reply when the thread has one video",
   const video = dialog.querySelector("video");
   assert.exists(video);
   const play = vi.fn(async () => {});
+  const pause = vi.spyOn(video, "pause");
   // jsdom does not implement media playback, so play() needs a test stub.
   Object.defineProperty(video, "play", { configurable: true, value: play });
 
@@ -259,6 +292,7 @@ it("seeks the review video from a timecode reply when the thread has one video",
   // jsdom media time remains at initialTime until the seek handler sets it.
   expect(video.currentTime).toBe(42);
   expect(play).toHaveBeenCalledTimes(1);
+  expect(pause).not.toHaveBeenCalled();
 });
 
 it("opens the sole reply video from a timestamp in the thread at the requested frame", async () => {

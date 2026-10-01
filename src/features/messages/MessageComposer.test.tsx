@@ -3178,3 +3178,67 @@ describe("project resource picker", () => {
     );
   });
 });
+
+it("keeps a composed message unchanged through caret keys at its end and refuses a Right Arrow committed as text in either form", async () => {
+  const h = mount();
+  await h.user.type(h.input(), "Hello!");
+  await h.user.keyboard("{Shift>}{Enter}{/Shift}world");
+  expect(h.input()).toHaveValue("Hello!\nworld");
+  const html = h.input().innerHTML;
+  for (let i = 0; i < 3; i++) await h.user.keyboard("{ArrowRight}");
+  for (const key of [
+    "ArrowLeft",
+    "ArrowUp",
+    "ArrowDown",
+    "Shift",
+    "Meta",
+    "Escape",
+  ])
+    await h.user.keyboard(`{${key}}`);
+  // jsdom does not model Home and End on a contenteditable element.
+  for (const key of ["Home", "End"]) {
+    fireEvent.keyDown(h.input(), { key, code: key });
+    fireEvent.keyUp(h.input(), { key, code: key });
+  }
+  expect(h.input()).toHaveValue("Hello!\nworld");
+  expect(h.input().innerHTML).toBe(html);
+  expect(h.messages.send).not.toHaveBeenCalled();
+  // The desktop build committed Right Arrow's raw keyboard-layout translation
+  // U+001D; AppKit's function-key character for the key is U+F703. Neither
+  // has a glyph, so each assertion names its form rather than the character.
+  for (const [label, character] of [
+    ["Right Arrow's layout translation U+001D", "\u001D"],
+    ["Right Arrow's function-key character U+F703", "\uF703"],
+  ] as const) {
+    let prevented = false;
+    act(() => {
+      h.input().focus();
+      prevented = !h.input().dispatchEvent(
+        new InputEvent("beforeinput", {
+          bubbles: true,
+          cancelable: true,
+          inputType: "insertText",
+          data: character,
+        }),
+      );
+    });
+    expect(prevented, label).toBe(true);
+    expect(h.input(), label).toHaveValue("Hello!\nworld");
+    expect(h.input().innerHTML, label).toBe(html);
+  }
+  // The keydown such a press arrives as: `key` is the control character while
+  // `code` and the legacy key code still name Right Arrow. It is claimed before
+  // the native path can type it, and neither sends nor edits the message.
+  let prevented = false;
+  act(() => {
+    prevented = !fireEvent.keyDown(h.input(), {
+      key: "\u001D",
+      code: "ArrowRight",
+      keyCode: 39,
+    });
+  });
+  expect(prevented).toBe(true);
+  expect(h.input()).toHaveValue("Hello!\nworld");
+  expect(h.input().innerHTML).toBe(html);
+  expect(h.messages.send).not.toHaveBeenCalled();
+});

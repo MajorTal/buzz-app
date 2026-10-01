@@ -79,6 +79,62 @@ export type EditorDecoration = {
   content: ReactNode;
   editAsText?: boolean;
 };
+/** Characters a caret or function key leaves in the document when the host's
+ * native text-input path commits the key as if typed. In the desktop build a
+ * Right Arrow press can reach WebKit as a key event whose text is the key's raw
+ * keyboard-layout translation, U+001D, rather than AppKit's function-key
+ * character U+F703: the arrows translate to U+001C through U+001F, Home and End
+ * to U+0001 and U+0004, Page Up and Page Down to U+000B and U+000C. WebKit
+ * blanks a key event's text only for the private-use block U+F700 through
+ * U+F7FF, so such an event types the control character and never moves the
+ * caret. The private-use block is refused as well (NSUpArrowFunctionKey U+F700
+ * through NSModeSwitchFunctionKey U+F747). No font has a glyph for any of these
+ * and no layout types them as prose; the whole Unicode Control category (C0,
+ * DEL and C1) is covered, except the tab, newline and carriage return that
+ * typed text legitimately holds. */
+const CONTROL_CHARACTERS = /[\p{Cc}\uF700-\uF747]/gu;
+/** The control characters typed text holds: tab, newline and carriage return. */
+const TYPED_CONTROLS = /[\t\n\r]/u;
+/** True when a native text insertion holds only control characters. Text that
+ * mixes them with real characters is not control text and passes untouched. */
+function controlCharacterText(text: string | null | undefined) {
+  return (
+    !!text &&
+    !TYPED_CONTROLS.test(text) &&
+    !text.replace(CONTROL_CHARACTERS, "")
+  );
+}
+/** Caret keys by physical code and by legacy key code, the two identities WebKit
+ * still derives from the hardware key when it reports a layout translation as
+ * `key`. Pressing such a key must move the caret, not type the character. */
+const CARET_KEYS = new Map<string | number, string>([
+  ["ArrowLeft", "ArrowLeft"],
+  ["ArrowRight", "ArrowRight"],
+  ["ArrowUp", "ArrowUp"],
+  ["ArrowDown", "ArrowDown"],
+  ["Home", "Home"],
+  ["End", "End"],
+  ["PageUp", "PageUp"],
+  ["PageDown", "PageDown"],
+  [33, "PageUp"],
+  [34, "PageDown"],
+  [35, "End"],
+  [36, "Home"],
+  [37, "ArrowLeft"],
+  [38, "ArrowUp"],
+  [39, "ArrowRight"],
+  [40, "ArrowDown"],
+]);
+/** The key a keydown names, restoring a caret key the host reported as a control
+ * character (Right Arrow arrives as U+001D) from its code. */
+function keyboardKey(
+  event: Pick<globalThis.KeyboardEvent, "key" | "code" | "keyCode">,
+) {
+  if (!controlCharacterText(event.key)) return event.key;
+  return (
+    CARET_KEYS.get(event.code) ?? CARET_KEYS.get(event.keyCode) ?? event.key
+  );
+}
 export type EditableInputProps = Omit<
   HTMLAttributes<ComposerInputElement>,
   "onChange" | "onInput"
@@ -772,7 +828,16 @@ export function EditableInput({
       (forward ? redo : undo)(editor.state, editor.dispatch);
       editor.focus();
     };
-    const syncNativeSelection = () => {
+    /** Adopts the DOM selection as the editor's. A range spanning the whole
+     * document becomes AllSelection, so deleting a DOM select-all also clears
+     * block structure, unless `directional`: a Shift move that has just
+     * reached both document edges keeps its anchor and head, so reversing it
+     * shrinks the range from its head rather than from AllSelection's fixed
+     * start. */
+    const syncNativeSelection = ({
+      scroll = false,
+      directional = false,
+    } = {}) => {
       const selection = editor.dom.ownerDocument.getSelection();
       if (
         !selection?.anchorNode ||
@@ -806,9 +871,79 @@ export function EditableInput({
       // A Shift+Arrow range covering all inline content still has a direction.
       // Do not turn an already-synchronized editor range into AllSelection.
       if (text.eq(editor.state.selection)) return;
-      const next = all ? new AllSelection(doc) : text;
-      if (!next.eq(editor.state.selection))
-        editor.dispatch(editor.state.tr.setSelection(next));
+      const next = all && !directional ? new AllSelection(doc) : text;
+      if (next.eq(editor.state.selection)) return;
+      const tr = editor.state.tr.setSelection(next);
+      editor.dispatch(scroll ? tr.scrollIntoView() : tr);
+    };
+    /** Moves the caret for a caret key the host reported as a control character.
+     * Left unhandled, such a keydown types the character instead of moving, so
+     * the move happens here: in document terms across an inline leaf, where
+     * WebKit offers extra caret positions around uneditable nodes, and otherwise
+     * through the browser's own caret motion with the platform's modifier
+     * meanings (word and line ends sideways, paragraph and document ends
+     * vertically). Page keys scroll without moving the caret, and Home and End
+     * do so too on Apple platforms unless extending the selection. */
+    const moveCaret = (key: string, event: globalThis.KeyboardEvent) => {
+      const mac = isApplePlatform(navigator.platform);
+      const boundary = mac ? event.metaKey : event.ctrlKey;
+      const extend = event.shiftKey;
+      const sideways = key === "ArrowLeft" || key === "ArrowRight";
+      if (sideways && !event.altKey && !boundary) {
+        const { $head, anchor, empty } = editor.state.selection;
+        const backward = key === "ArrowLeft";
+        const leaf = $head.textOffset
+          ? null
+          : backward
+            ? $head.nodeBefore
+            : $head.nodeAfter;
+        // Only an inline leaf is stepped over in document terms. A block beside
+        // the head, as after select-all, is left to the browser's caret motion.
+        if ((empty || extend) && leaf?.isInline && !leaf.isText) {
+          const head = backward
+            ? $head.pos - leaf.nodeSize
+            : $head.pos + leaf.nodeSize;
+          editor.dispatch(
+            editor.state.tr
+              .setSelection(
+                TextSelection.create(
+                  editor.state.doc,
+                  extend ? anchor : head,
+                  head,
+                ),
+              )
+              .scrollIntoView(),
+          );
+          return true;
+        }
+      }
+      const selection = editor.dom.ownerDocument.getSelection();
+      if (!selection || typeof selection.modify !== "function") return true;
+      const alter = extend ? "extend" : "move";
+      if (sideways)
+        selection.modify(
+          alter,
+          key === "ArrowLeft" ? "left" : "right",
+          boundary ? "lineboundary" : event.altKey ? "word" : "character",
+        );
+      else if (key === "ArrowUp" || key === "ArrowDown")
+        selection.modify(
+          alter,
+          key === "ArrowUp" ? "backward" : "forward",
+          boundary
+            ? "documentboundary"
+            : event.altKey
+              ? "paragraphboundary"
+              : "line",
+        );
+      else if ((key === "Home" || key === "End") && (extend || !mac))
+        selection.modify(
+          alter,
+          key === "Home" ? "backward" : "forward",
+          mac ? "documentboundary" : "lineboundary",
+        );
+      syncNativeSelection({ scroll: true, directional: true });
+      return true;
     };
     const adjacent = (backward: boolean, arrow: boolean, extend: boolean) => {
       const { from, to, head, anchor, empty } = editor.state.selection;
@@ -945,6 +1080,14 @@ export function EditableInput({
           },
         },
         handleTextInput(_view, from, to, text, defaultTransaction) {
+          // A caret key committed natively as a control character is refused:
+          // with no transaction the document stays as it was, and ProseMirror
+          // redraws the changed DOM from that state. Only the beforeinput seam
+          // can stop the DOM change itself; this seam covers an insertion that
+          // arrived without one, or one that was not cancelable. No key yields
+          // such a character beside real text, so mixed text is left alone
+          // rather than reshaped under the native selection that describes it.
+          if (controlCharacterText(text)) return true;
           // Provenance is not an inheritable formatting mark. Replacing text,
           // including an identical string, revokes the identity it touches.
           const source = projection();
@@ -995,7 +1138,8 @@ export function EditableInput({
           const primary = isApplePlatform(navigator.platform)
             ? event.metaKey && !event.ctrlKey
             : event.ctrlKey && !event.metaKey;
-          const key = event.key.toLowerCase();
+          const named = keyboardKey(event);
+          const key = named.toLowerCase();
           if (primary && !event.altKey && !event.shiftKey && key === "a")
             return selectAll(editor.state, editor.dispatch);
           const format =
@@ -1028,14 +1172,17 @@ export function EditableInput({
             historyCommand(event.shiftKey || key === "y");
             return true;
           }
-          if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+          if (named === "ArrowLeft" || named === "ArrowRight") {
             if (
               !event.altKey &&
               !primary &&
-              adjacent(event.key === "ArrowLeft", true, event.shiftKey)
+              adjacent(named === "ArrowLeft", true, event.shiftKey)
             )
               return true;
           }
+          // A caret key reported as a control character would be typed as that
+          // character by the native path. Move the caret here instead.
+          if (named !== event.key) return moveCaret(named, event);
           if (
             event.key === "Tab" &&
             !event.altKey &&
@@ -1100,6 +1247,18 @@ export function EditableInput({
           },
           beforeinput(_view, event) {
             if (!event.isComposing) syncNativeSelection();
+            // The host's native text-input path can commit a caret key as a
+            // control character (Right Arrow arrives as U+001D, or as AppKit's
+            // U+F703) typed as text. Cancel it before the DOM changes;
+            // handleTextInput refuses what arrives anyway.
+            if (
+              event.inputType === "insertText" &&
+              event.cancelable &&
+              controlCharacterText(event.data)
+            ) {
+              event.preventDefault();
+              return true;
+            }
             if (event.inputType.startsWith("delete")) {
               separateHistory = true;
               // Some native deletion commands arrive without a keydown. A selected

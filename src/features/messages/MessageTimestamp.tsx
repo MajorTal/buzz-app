@@ -1,6 +1,35 @@
 import { Tooltip } from "../../shared/design-system/ui/Tooltip";
 import styles from "./Messages.module.css";
 
+// Retain only the current locale/zone pair, never message content. Resolve the
+// defaults on each render so a running app still follows OS timezone changes.
+let formats:
+  | {
+      locale: string;
+      timeZone: string;
+      clock: Intl.DateTimeFormat;
+      full: Intl.DateTimeFormat;
+    }
+  | undefined;
+function timestampFormats() {
+  const { locale, timeZone } = new Intl.DateTimeFormat().resolvedOptions();
+  if (formats?.locale !== locale || formats.timeZone !== timeZone) {
+    formats = {
+      locale,
+      timeZone,
+      clock: new Intl.DateTimeFormat(undefined, {
+        hour: "numeric",
+        minute: "2-digit",
+      }),
+      full: new Intl.DateTimeFormat(undefined, {
+        dateStyle: "full",
+        timeStyle: "long",
+      }),
+    };
+  }
+  return formats;
+}
+
 /** One date source for the byline and the compact continuation clock. */
 export function MessageTimestamp({
   createdAt,
@@ -10,10 +39,7 @@ export function MessageTimestamp({
   compact?: boolean;
 }) {
   const date = new Date(createdAt * 1000);
-  const clock = new Intl.DateTimeFormat(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
+  const { clock, full } = timestampFormats();
   const label = compact
     ? clock
         .formatToParts(date)
@@ -22,10 +48,7 @@ export function MessageTimestamp({
         .join("")
         .trim()
     : clock.format(date);
-  const fullDate = date.toLocaleString(undefined, {
-    dateStyle: "full",
-    timeStyle: "long",
-  });
+  const fullDate = full.format(date);
   return (
     // The action bar can sit over the byline; keep the date hint non-interactive
     // so it cannot intercept nearby controls when their paint layers overlap.

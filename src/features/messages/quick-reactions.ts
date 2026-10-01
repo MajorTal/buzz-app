@@ -66,7 +66,15 @@ export function useQuickReactions(
 ) {
   const [entries, setEntries] = useState(() => quickReactions(scope, catalog));
   useEffect(() => {
-    const update = () => setEntries(quickReactions(scope, catalog));
+    const update = () => {
+      const next = quickReactions(scope, catalog);
+      setEntries((current) =>
+        current.length === next.length &&
+        current.every((entry, index) => entry === next[index])
+          ? current
+          : next,
+      );
+    };
     update();
     const storage = (event: StorageEvent) => {
       if (event.key === key(scope)) update();

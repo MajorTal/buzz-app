@@ -69,6 +69,8 @@ struct HarnessOption {
     status: &'static str,
     #[serde(skip_serializing_if = "Option::is_none")]
     install_supported: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    update_supported: Option<bool>,
     default_args: &'static [&'static str],
     providers: &'static [ProviderOption],
 }
@@ -154,12 +156,14 @@ struct PiTools {
     node: Option<PathBuf>,
 }
 
-fn pi_choice(user: PiTools, managed: PiTools) -> (Option<PathBuf>, &'static str) {
+fn pi_choice(user: PiTools, managed: PiTools) -> (Option<PathBuf>, &'static str, bool) {
     // An existing, complete user install always wins. Otherwise use the
     // app-owned pair only when its pinned Node can run its npm shims.
-    let selected = if user.cli.is_some() && user.adapter.is_some() && user.node.is_some() {
+    let user_ready = user.cli.is_some() && user.adapter.is_some() && user.node.is_some();
+    let managed_selected = !user_ready && managed.adapter.is_some() && managed.node.is_some();
+    let selected = if user_ready {
         user
-    } else if managed.adapter.is_some() && managed.node.is_some() {
+    } else if managed_selected {
         PiTools {
             cli: managed.cli.or(user.cli),
             ..managed
@@ -172,12 +176,21 @@ fn pi_choice(user: PiTools, managed: PiTools) -> (Option<PathBuf>, &'static str)
         selected.adapter.is_some(),
         selected.node.is_some(),
     );
-    (selected.adapter, status)
+    (selected.adapter, status, managed_selected)
+}
+
+#[cfg(any(target_os = "macos", target_os = "linux"))]
+fn pi_current(app_data: &std::path::Path) -> bool {
+    crate::managed_pi::current(app_data)
+}
+#[cfg(not(any(target_os = "macos", target_os = "linux")))]
+fn pi_current(_: &std::path::Path) -> bool {
+    true
 }
 
 fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
     let goose = installed_goose();
-    let (pi, pi_status) = pi_choice(
+    let (pi, pi_status, pi_managed) = pi_choice(
         PiTools {
             cli: buzz_agent_controller::installed("pi"),
             adapter: buzz_agent_controller::installed("buzz-pi-acp"),
@@ -196,6 +209,7 @@ fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
             available: true,
             status: "ready",
             install_supported: None,
+            update_supported: None,
             default_args: &[],
             // Windows refuses Databricks sign-in (DATABRICKS_WINDOWS): omit it.
             providers: &[
@@ -222,6 +236,7 @@ fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
                 "cli-needed"
             },
             install_supported: Some(cfg!(any(target_os = "macos", target_os = "linux"))),
+            update_supported: None,
             default_args: &["acp"],
             providers: GOOSE_PROVIDERS,
         },
@@ -237,6 +252,7 @@ fn harness_options(app_data: &std::path::Path) -> Vec<HarnessOption> {
                 any(target_os = "macos", target_os = "linux"),
                 any(target_arch = "x86_64", target_arch = "aarch64")
             ))),
+            update_supported: Some(pi_managed && pi_status == "ready" && !pi_current(app_data)),
             default_args: &[],
             // Pi reports signed-in providers through its model catalog.
             providers: &[],
@@ -1037,22 +1053,46 @@ async fn start_guarded(
                 replay_floor,
             },
         );
-        Ok((request, ticket, host.credentials.clone()))
+        let pi = host.controller.pi_launch_context(&id, request.2);
+        Ok((request, ticket, host.credentials.clone(), pi))
     })
     .await?;
-    let ((credential, pubkey, revision, _workspace), ticket, credentials) = prepared;
+    let ((credential, pubkey, revision, _workspace), ticket, credentials, pi) = prepared;
+    let probed_pi = matches!(&pi, Ok(Some(_)));
+    let preflight = match pi {
+        Ok(Some(pi)) => crate::pi_models::verify(pi)
+            .await
+            .map(|pi| buzz_agent_controller::pi::LaunchPreflight::new(Some(pi))),
+        Ok(None) => Ok(buzz_agent_controller::pi::LaunchPreflight::new(None)),
+        Err(error) => Err(error),
+    };
+    if probed_pi && preflight.is_ok() {
+        let target = id.clone();
+        run(owner.clone(), move |host| {
+            host.starts
+                .get(&target)
+                .filter(|pending| pending.ticket == ticket)
+                .ok_or(START_CANCELLED)?;
+            Ok(())
+        })
+        .await?;
+    }
     // OS permission prompts never hold the controller. Stop/quit invalidate the
     // ticket while the OS owns its dialog; a late key cannot start a listener.
-    let acquired = tauri::async_runtime::spawn_blocking(move || {
-        if !restore && replay_floor.is_none() && guard.is_none() {
-            credentials.retry();
-        }
-        credentials.read(&credential, &pubkey)
-    })
-    .await
-    .map_err(|_| "Native credential operation failed".to_owned())
-    .and_then(|v| v)
-    .and_then(|v| v.ok_or("Saved agent key is unavailable; nothing was started".into()));
+    let acquired = if preflight.is_ok() {
+        tauri::async_runtime::spawn_blocking(move || {
+            if !restore && replay_floor.is_none() && guard.is_none() {
+                credentials.retry();
+            }
+            credentials.read(&credential, &pubkey)
+        })
+        .await
+        .map_err(|_| "Native credential operation failed".to_owned())
+        .and_then(|v| v)
+        .and_then(|v| v.ok_or("Saved agent key is unavailable; nothing was started".into()))
+    } else {
+        Err(preflight.as_ref().err().unwrap().clone())
+    };
     let target = id.clone();
     if acquired.is_ok() {
         run(owner.clone(), move |host| {
@@ -1082,10 +1122,14 @@ async fn start_guarded(
         // The OS credential prompt can outlast the agent (e.g. its listener
         // exited); eligibility must still hold right before Restart enables it.
         check_guard(host, &id, guard)?;
-        if let Err(error) =
-            host.controller
-                .action_with_key(&id, action, revision, &key, replay_floor)
-        {
+        if let Err(error) = host.controller.action_with_preflight(
+            &id,
+            action,
+            revision,
+            &key,
+            replay_floor,
+            &preflight?,
+        ) {
             host.controller.record_error(&id, error);
         }
         host.snapshot()

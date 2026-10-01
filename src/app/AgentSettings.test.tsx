@@ -94,6 +94,7 @@ function setupHarnesses(
   } = {},
   pi: {
     installSupported?: boolean;
+    updateSupported?: boolean;
     installPi?: NonNullable<AgentControlHost["installPi"]>;
   } = {},
 ) {
@@ -126,6 +127,9 @@ function setupHarnesses(
       ...(pi.installSupported !== undefined
         ? { installSupported: pi.installSupported }
         : {}),
+      ...(pi.updateSupported !== undefined
+        ? { updateSupported: pi.updateSupported }
+        : {}),
       providers: [],
     },
   ];
@@ -155,21 +159,27 @@ it.each(["cli-needed", "adapter-needed", "ready"] as const)(
     } else {
       expect(copyPi).toBeVisible();
       expect(
-        screen.getByText("npm install -g @earendil-works/pi-coding-agent"),
+        screen.getByText(
+          "npm install -g '@earendil-works/pi-coding-agent@>=0.99.0'",
+        ),
       ).toBeVisible();
       expect(
         screen.getByText(
-          /git\+https:\/\/github.com\/salman1993\/buzz-pi-acp.git#86b201e/,
+          /git\+https:\/\/github.com\/salman1993\/buzz-pi-acp.git#72015de/,
         ),
       ).toBeVisible();
       const write = vi
         .spyOn(navigator.clipboard, "writeText")
         .mockResolvedValue();
+      await user.click(screen.getByRole("button", { name: "Copy Pi command" }));
+      expect(write).toHaveBeenCalledWith(
+        "npm install -g '@earendil-works/pi-coding-agent@>=0.99.0'",
+      );
       await user.click(
         screen.getByRole("button", { name: "Copy Adapter command" }),
       );
       expect(write).toHaveBeenCalledWith(
-        "npm install -g --install-links=true 'git+https://github.com/salman1993/buzz-pi-acp.git#86b201e'",
+        "npm install -g --install-links=true 'git+https://github.com/salman1993/buzz-pi-acp.git#72015de'",
       );
       expect(await screen.findByRole("status", { name: "" })).toHaveTextContent(
         "Adapter command copied.",
@@ -196,7 +206,9 @@ it("offers manual copying when clipboard access fails", async () => {
     "Select it to copy manually.",
   );
   expect(
-    screen.getByText("npm install -g @earendil-works/pi-coding-agent"),
+    screen.getByText(
+      "npm install -g '@earendil-works/pi-coding-agent@>=0.99.0'",
+    ),
   ).toBeVisible();
 });
 
@@ -405,6 +417,54 @@ it.each([
   },
 );
 
+it("offers no Pi update or command for a current or user-global Pi install", async () => {
+  setupHarnesses(
+    "ready",
+    {},
+    { installSupported: true, updateSupported: false, installPi: vi.fn() },
+  );
+  const pi = within(await screen.findByRole("list")).getAllByRole(
+    "listitem",
+  )[2];
+  if (!pi) throw new Error("Missing Pi row");
+  expect(within(pi).getByText("Ready")).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Update Pi" })).toBeNull();
+  expect(
+    screen.queryByRole("button", { name: "Copy Adapter command" }),
+  ).toBeNull();
+  expect(screen.queryByText(/buzz-pi-acp.git#/)).toBeNull();
+});
+
+it("updates an outdated app-owned Pi and tells the user to restart running agents", async () => {
+  const user = userEvent.setup();
+  const installPi = vi.fn().mockResolvedValue({
+    ready: true,
+    restarted: 0,
+    restartFailures: 0,
+    logPath: "/fixture/pi-install.log",
+    output: "done",
+    error: null,
+  });
+  setupHarnesses(
+    "ready",
+    {},
+    {
+      installSupported: true,
+      updateSupported: true,
+      installPi,
+    },
+  );
+  const pi = within(await screen.findByRole("list")).getAllByRole(
+    "listitem",
+  )[2];
+  if (!pi) throw new Error("Missing Pi row");
+  await user.click(within(pi).getByRole("button", { name: "Update Pi" }));
+  expect(installPi).toHaveBeenCalledTimes(1);
+  expect(
+    await screen.findByText(/Restart running Pi agents to use them/),
+  ).toBeVisible();
+});
+
 it("keeps Pi install progress and report across Settings remounts without taking the agent-write lane", async () => {
   const user = userEvent.setup();
   let complete!: (report: GooseInstallReport) => void;
@@ -445,12 +505,16 @@ it("keeps Pi install progress and report across Settings remounts without taking
     error: null,
   });
   expect(
-    await screen.findByText("Pi installed. Restarted 1 waiting agents."),
+    await screen.findByText(
+      /Pi and its adapter are up to date.*Restarted 1 waiting agents\./,
+    ),
   ).toBeVisible();
   cleanup();
   render(<AgentSettings control={control} />, { wrapper: ToastProvider });
   expect(
-    await screen.findByText("Pi installed. Restarted 1 waiting agents."),
+    await screen.findByText(
+      /Pi and its adapter are up to date.*Restarted 1 waiting agents\./,
+    ),
   ).toBeVisible();
   expect(screen.queryByRole("button", { name: "Copy Pi command" })).toBeNull();
 });

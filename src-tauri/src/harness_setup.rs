@@ -390,11 +390,10 @@ pub(crate) async fn pi_install<R: tauri::Runtime>(
         if ["pi", "buzz-pi-acp", "node"]
             .iter()
             .all(|name| buzz_agent_controller::installed(name).is_some())
-            || ["pi", "buzz-pi-acp", "node"]
-                .iter()
-                .all(|name| buzz_agent_controller::managed_tool(&app_data, name).is_some())
         {
-            return Err("Pi is already installed; click Check again".into());
+            return Err(
+                "Pi is installed user-globally; update it with npm, then click Check again".into(),
+            );
         }
         let waiting = agents.waiting_for_pi().await?;
         let path = app_data.join("agent-controller/pi-install.log");

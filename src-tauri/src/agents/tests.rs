@@ -149,10 +149,11 @@ fn managed_pi_detection_prefers_a_complete_user_install_and_requires_managed_nod
         adapter: path("managed-adapter"),
         node: path("managed-node"),
     };
-    let (command, status) = pi_choice(empty(), managed());
+    let (command, status, managed_selected) = pi_choice(empty(), managed());
     assert_eq!(command, path("managed-adapter"));
     assert_eq!(status, "ready");
-    let (command, status) = pi_choice(
+    assert!(managed_selected);
+    let (command, status, managed_selected) = pi_choice(
         PiTools {
             cli: path("user-pi"),
             adapter: path("user-adapter"),
@@ -162,7 +163,8 @@ fn managed_pi_detection_prefers_a_complete_user_install_and_requires_managed_nod
     );
     assert_eq!(command, path("user-adapter"));
     assert_eq!(status, "ready");
-    let (command, status) = pi_choice(
+    assert!(!managed_selected);
+    let (command, status, managed_selected) = pi_choice(
         PiTools {
             cli: path("user-pi"),
             ..empty()
@@ -174,7 +176,8 @@ fn managed_pi_detection_prefers_a_complete_user_install_and_requires_managed_nod
     );
     assert_eq!(command, path("managed-adapter"));
     assert_eq!(status, "ready");
-    let (command, status) = pi_choice(
+    assert!(managed_selected);
+    let (command, status, managed_selected) = pi_choice(
         empty(),
         PiTools {
             node: None,
@@ -183,6 +186,7 @@ fn managed_pi_detection_prefers_a_complete_user_install_and_requires_managed_nod
     );
     assert!(command.is_none());
     assert_eq!(status, "cli-needed");
+    assert!(!managed_selected);
 }
 
 #[test]
@@ -443,6 +447,7 @@ fn real_ipc_snapshot_save_cas_stop_and_launch_gate() {
         before["harnessOptions"][2]["status"] == "ready"
     );
     assert_eq!(before["harnessOptions"][2]["defaultArgs"], json!([]));
+    assert_eq!(before["harnessOptions"][2]["updateSupported"], false);
     // Pi's signed-in providers come from its catalog, never a static list.
     assert_eq!(before["harnessOptions"][2]["providers"], json!([]));
     assert_eq!(
@@ -639,6 +644,141 @@ fn queued_restore_skips_agent_stopped_after_launch() {
     assert!(after["agents"][0]["error"].is_null());
 }
 
+// A real subprocess gate, shared by the model and launch admission regressions.
+#[cfg(unix)]
+struct PiProbeGate(PathBuf);
+#[cfg(unix)]
+impl PiProbeGate {
+    fn new(root: &std::path::Path) -> Self {
+        use std::os::unix::fs::PermissionsExt;
+        let tools = root.join("pi-tools");
+        std::fs::create_dir(&tools).unwrap();
+        let fifo =
+            std::ffi::CString::new(tools.join("release").as_os_str().as_encoded_bytes()).unwrap();
+        assert_eq!(unsafe { libc::mkfifo(fifo.as_ptr(), 0o600) }, 0);
+        for name in ["pi", "node", "buzz-pi-acp"] {
+            let script = if name == "pi" {
+                format!(
+                "#!/bin/sh\n[ \"$1\" = --version ] || exit 1\n/bin/sleep 300 &\nhelper=$!\nprintf '%s %s\\n' \"$$\" \"$helper\" > '{}'\nread release < '{}'\nkill \"$helper\"\nwait \"$helper\"\nprintf '0.99.1\\n'\n",
+                tools.join("started").display(), tools.join("release").display()
+            )
+            } else {
+                "#!/bin/sh\nexit 0\n".into()
+            };
+            let file = tools.join(name);
+            std::fs::write(&file, script).unwrap();
+            std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
+        }
+        Self(tools)
+    }
+    async fn started(&self) -> Vec<i32> {
+        tokio::time::timeout(std::time::Duration::from_secs(3), async {
+            let mut ticks = tokio::time::interval(std::time::Duration::from_millis(10));
+            loop {
+                ticks.tick().await;
+                if let Ok(text) = std::fs::read_to_string(self.0.join("started")) {
+                    let pids: Vec<i32> = text
+                        .split_whitespace()
+                        .filter_map(|v| v.parse().ok())
+                        .collect();
+                    if pids.len() == 2 {
+                        break pids;
+                    }
+                }
+            }
+        })
+        .await
+        .expect("Pi probe never started")
+    }
+    fn release(&self) {
+        use std::{io::Write, os::unix::fs::OpenOptionsExt};
+        if let Ok(mut fifo) = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .custom_flags(libc::O_NONBLOCK)
+            .open(self.0.join("release"))
+        {
+            let _ = fifo.write_all(b"continue\n");
+        }
+    }
+}
+#[cfg(unix)]
+impl Drop for PiProbeGate {
+    fn drop(&mut self) {
+        self.release();
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn pi_model_probe_leaves_stop_usable_and_cancel_retires_its_group() {
+    let (dir, _host, _app, view) = fixture();
+    let id = seed(dir.path());
+    let gate = PiProbeGate::new(dir.path());
+    let ticket = invoke(&view, "agent_models_begin", json!({})).unwrap();
+    let lookup = {
+        let view = view.clone();
+        let workspace = dir.path().to_owned();
+        let adapter = gate.0.join("buzz-pi-acp");
+        let ticket = ticket.clone();
+        tokio::task::spawn_blocking(move || {
+            invoke(
+                &view,
+                "agent_models_run",
+                json!({"ticket": ticket, "request": {
+                    "host":"", "filter":"", "action":"connect", "edit":{
+                        "name":"Pi draft", "systemPrompt":"", "workspace":workspace,
+                        "harness":{"command":adapter,"args":[],"provider":"","model":""}, "environment":{}
+                    }
+                }}),
+            )
+        })
+    };
+    let pids = gate.started().await;
+    let stop = {
+        let view = view.clone();
+        tokio::task::spawn_blocking(move || {
+            invoke(
+                &view,
+                "agent_control_action",
+                json!({"id":id,"action":"stop"}),
+            )
+        })
+    };
+    // Observe recovery before releasing the version probe's explicit gate.
+    let stopped = tokio::time::timeout(std::time::Duration::from_secs(2), stop).await;
+    if stopped.is_err() {
+        gate.release();
+    }
+    assert_eq!(
+        stopped
+            .expect("Stop blocked behind Pi verification")
+            .unwrap()
+            .unwrap()["agents"][0]["enabled"],
+        false
+    );
+    invoke(&view, "agent_models_cancel", json!({"ticket":ticket})).unwrap();
+    assert!(lookup.await.unwrap().is_err());
+    tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        loop {
+            let running = pids.iter().any(|pid| {
+                let output = std::process::Command::new("/bin/ps")
+                    .args(["-o", "stat=", "-p", &pid.to_string()])
+                    .output()
+                    .unwrap();
+                let state = String::from_utf8(output.stdout).unwrap();
+                !state.trim().is_empty() && !state.trim().starts_with('Z')
+            });
+            if !running {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("Cancelled probe still running");
+}
+
 // Unix-only: the synthetic bundle relies on executable-mode scripts.
 #[cfg(unix)]
 mod overlap {
@@ -801,6 +941,57 @@ mod overlap {
             .await
             .expect("task did not finish")
             .unwrap()
+    }
+
+    #[tokio::test]
+    async fn stop_during_pi_version_probe_fences_the_late_result() {
+        let (dir, host, _app, view) = fixture();
+        let ids = seed_pair(dir.path());
+        let probe = PiProbeGate::new(dir.path());
+        let path = dir.path().join("store/agents.json");
+        let mut saved: Value = serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        saved["agents"][0]["harness"] =
+            json!({"command":probe.0.join("buzz-pi-acp"),"args":[],"provider":"","model":""});
+        std::fs::write(path, serde_json::to_vec(&saved).unwrap()).unwrap();
+        let credentials = Gate::install(&host, dir.path(), &["cred-ab"]);
+        let starting = {
+            let host = host.clone();
+            let id = ids[0].clone();
+            tokio::spawn(start(host, id, Action::Start, false, None, None))
+        };
+        probe.started().await;
+        let stop = {
+            let view = view.clone();
+            let id = ids[0].clone();
+            tokio::task::spawn_blocking(move || {
+                invoke(
+                    &view,
+                    "agent_control_action",
+                    json!({"id":id,"action":"stop"}),
+                )
+            })
+        };
+        let stopped = tokio::time::timeout(std::time::Duration::from_secs(2), stop).await;
+        probe.release();
+        credentials.release["cred-ab"].send(()).unwrap();
+        assert_eq!(
+            stopped
+                .expect("Stop blocked behind Pi verification")
+                .unwrap()
+                .unwrap()["agents"][0]["enabled"],
+            false
+        );
+        assert_eq!(
+            within(starting).await.err().as_deref(),
+            Some(START_CANCELLED)
+        );
+        assert!(
+            credentials.idle(),
+            "Stopped launch opened credentials after the probe"
+        );
+        let snapshot = invoke(&view, "agent_control_snapshot", json!({})).unwrap();
+        assert_eq!(agent(&snapshot, &ids[0])["enabled"], false);
+        assert_eq!(agent(&snapshot, &ids[0])["status"], "stopped");
     }
 
     // A is ahead of B in restore's sorted queue; only B has a usable test key.
@@ -2028,7 +2219,7 @@ fn pi_model_lookup_waits_out_brief_host_contention() {
     std::fs::create_dir(&tools).unwrap();
     for tool in ["pi", "node", "buzz-pi-acp"] {
         let file = tools.join(tool);
-        std::fs::write(&file, "#!/bin/sh\nread request\nprintf '%s\\n' '{\"id\":\"catalog\",\"type\":\"response\",\"command\":\"get_available_models\",\"success\":true,\"data\":{\"models\":[{\"provider\":\"databricks\",\"id\":\"model-a\"}]}}'\n").unwrap();
+        std::fs::write(&file, "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '0.99.1\\n'; exit 0; fi\nread request\nprintf '%s\\n' '{\"id\":\"catalog\",\"type\":\"response\",\"command\":\"get_available_models\",\"success\":true,\"data\":{\"models\":[{\"provider\":\"databricks\",\"id\":\"model-a\"}]}}'\n").unwrap();
         std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
     // Another native operation (for example a snapshot refresh) briefly holds
@@ -2072,7 +2263,7 @@ fn pi_connection_test_prompts_the_draft_selection() {
     std::fs::create_dir(&tools).unwrap();
     for tool in ["pi", "node", "buzz-pi-acp"] {
         let file = tools.join(tool);
-        std::fs::write(&file, "#!/bin/sh\nread request\ncase \"$*\" in *'--model model-a'*) stop=stop;; *) stop=error;; esac\nprintf '{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"stopReason\":\"%s\",\"errorMessage\":\"401\"}}\\n' \"$stop\"\n").unwrap();
+        std::fs::write(&file, "#!/bin/sh\nif [ \"$1\" = --version ]; then printf '0.99.1\\n'; exit 0; fi\nread request\ncase \"$*\" in *'--model model-a'*) stop=stop;; *) stop=error;; esac\nprintf '{\"type\":\"message_end\",\"message\":{\"role\":\"assistant\",\"stopReason\":\"%s\",\"errorMessage\":\"401\"}}\\n' \"$stop\"\n").unwrap();
         std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
     let test = |model: &str| {

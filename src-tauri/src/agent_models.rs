@@ -279,7 +279,7 @@ pub(crate) async fn agent_models_run<R: tauri::Runtime>(
                 if request.action == Operation::Disconnect {
                     return Err("Pi credentials are managed by Pi".into());
                 }
-                let context = prepared?;
+                let context = crate::pi_models::verify(prepared?).await?.into_context();
                 if request.action == Operation::Test {
                     let harness = &edit.harness;
                     crate::pi_models::test(context, &harness.provider, &harness.model).await?;

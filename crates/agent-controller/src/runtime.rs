@@ -18,6 +18,15 @@ impl RuntimeBundle {
         key: &crate::Secret,
         defaults: &crate::BuildDefaults,
     ) -> Result<Command> {
+        self.command_checked(agent, key, defaults, None)
+    }
+    fn command_checked(
+        &self,
+        agent: &Agent,
+        key: &crate::Secret,
+        defaults: &crate::BuildDefaults,
+        preflight: Option<&crate::pi::LaunchPreflight>,
+    ) -> Result<Command> {
         agent.validate()?;
         let harness = defaults.resolve(&agent.harness, &agent.environment);
         if key.pubkey() != agent.pubkey {
@@ -118,6 +127,7 @@ impl RuntimeBundle {
                 crate::pi::PiContext::new(&agent.harness, &agent.workspace, &agent.environment)
             })
             .transpose()?;
+        let pi = crate::pi::verify_launch(pi, preflight)?;
         let (args, environment, tools_path) = if let Some(pi) = &pi {
             (
                 pi.adapter_args(&agent.harness)?,
@@ -497,6 +507,30 @@ impl Controller {
         let agent = self.edited_agent(id, revision, edit)?;
         crate::pi::PiContext::new(&agent.harness, &agent.workspace, &agent.environment)
     }
+    pub fn pi_launch_context(
+        &self,
+        id: &str,
+        revision: u64,
+    ) -> Result<Option<crate::pi::PiContext>> {
+        let agent = self
+            .store
+            .agents()?
+            .into_iter()
+            .find(|agent| agent.id == id)
+            .ok_or("Agent no longer exists")?;
+        if agent.revision != revision {
+            return Err("Saved settings changed; retry Start".into());
+        }
+        let agent = crate::agent_defaults::effective(&agent, &self.store.defaults()?);
+        if Path::new(&agent.harness.command)
+            .file_name()
+            .and_then(|name| name.to_str())
+            != Some("buzz-pi-acp")
+        {
+            return Ok(None);
+        }
+        crate::pi::PiContext::new(&agent.harness, &agent.workspace, &agent.environment).map(Some)
+    }
     /// Resolve unsaved Create drafts against the same native defaults as a saved start.
     pub fn effective_draft(&self, mut edit: AgentEdit) -> Result<AgentEdit> {
         let mut environment = draft_environment(edit.environment);
@@ -760,8 +794,33 @@ impl Controller {
         key: &crate::Secret,
         replay_floor: Option<u64>,
     ) -> Result<()> {
+        self.action_checked(id, action, revision, key, replay_floor, None)
+    }
+    pub fn action_with_preflight(
+        &mut self,
+        id: &str,
+        action: Action,
+        revision: u64,
+        key: &crate::Secret,
+        replay_floor: Option<u64>,
+        preflight: &crate::pi::LaunchPreflight,
+    ) -> Result<()> {
+        self.action_checked(id, action, revision, key, replay_floor, Some(preflight))
+    }
+    fn action_checked(
+        &mut self,
+        id: &str,
+        action: Action,
+        revision: u64,
+        key: &crate::Secret,
+        replay_floor: Option<u64>,
+        preflight: Option<&crate::pi::LaunchPreflight>,
+    ) -> Result<()> {
         if self.credential_request(id)?.2 != revision {
             return Err("Saved settings changed while opening credentials; retry Start".into());
+        }
+        if let Some(preflight) = preflight {
+            preflight.check(&self.pi_launch_context(id, revision)?)?;
         }
         self.store.enabled(id, true)?;
         if matches!(action, Action::Restart) {
@@ -770,7 +829,7 @@ impl Controller {
                 return Ok(());
             }
         }
-        match self.start_with_key(id, Some(key), replay_floor) {
+        match self.start_with_key(id, Some(key), replay_floor, preflight) {
             Ok(()) => {
                 self.errors.remove(id);
             }
@@ -793,13 +852,14 @@ impl Controller {
             .collect())
     }
     fn start(&mut self, id: &str) -> Result<()> {
-        self.start_with_key(id, None, None)
+        self.start_with_key(id, None, None, None)
     }
     fn start_with_key(
         &mut self,
         id: &str,
         supplied: Option<&crate::Secret>,
         replay_floor: Option<u64>,
+        preflight: Option<&crate::pi::LaunchPreflight>,
     ) -> Result<()> {
         if let Some(run) = self.running.get_mut(id) {
             if run.process.alive()? {
@@ -842,7 +902,11 @@ impl Controller {
             .prefix("agent-")
             .tempdir_in(&runs)
             .map_err(|_| "Could not create private runtime directory")?;
-        let mut command = bundle.command(&agent, key)?;
+        let mut command = if let Some(preflight) = preflight {
+            bundle.command_checked(&agent, key, &crate::build_defaults(), Some(preflight))?
+        } else {
+            bundle.command(&agent, key)?
+        };
         // Per-send startup input, never saved configuration or inherited environment.
         if let Some(floor) = replay_floor {
             command.env("BUZZ_ACP_REPLAY_FLOOR", floor.to_string());

@@ -190,7 +190,9 @@ async fn installed_pi_catalog_uses_production_context() {
         environment: BTreeMap::new(),
     })
     .unwrap();
-    let models = fetch(context).await.unwrap();
+    let models = fetch(verify(context).await.unwrap().into_context())
+        .await
+        .unwrap();
     assert!(!models.is_empty());
     println!(
         "Production Pi catalog: {} models, {} providers",

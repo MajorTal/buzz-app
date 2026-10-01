@@ -5,16 +5,17 @@ use std::{
     fs::File,
     path::{Path, PathBuf},
     process::Stdio,
-    time::Duration,
+    time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 // Old Buzz: desktop/src-tauri/src/commands/agent_discovery/managed_node.rs:8-43,
 // :300-323, :362-424. Checksums are pinned to the official Node v24.18.0 tarballs.
 const VERSION: &str = "v24.18.0";
 const MAX_ARCHIVE: u64 = 90 * 1024 * 1024;
-const PI: &str = "@earendil-works/pi-coding-agent";
-const ADAPTER: &str = "git+https://github.com/salman1993/buzz-pi-acp.git#86b201e";
-const NPM_FAILED: &str = "npm couldn't install Pi; see the install log. If your network blocks the public npm registry, set your mirror in ~/.npmrc or npm_config_registry, then try again, or use the commands below.";
+// Native steering needs Pi's steer disposition, added in 0.99.0.
+const PI: &str = "@earendil-works/pi-coding-agent@>=0.99.0";
+const ADAPTER: &str = "git+https://github.com/salman1993/buzz-pi-acp.git#72015de";
+const NPM_FAILED: &str = "npm couldn't install Pi or its adapter; see the install log. If your network blocks the public npm registry, set your mirror in ~/.npmrc or npm_config_registry, then try again, or use the commands below.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Artifact {
@@ -66,6 +67,7 @@ fn refuse_linked_prefix(prefix: &Path) -> Result<(), String> {
         prefix.join("lib/node_modules/buzz-pi-acp"),
         prefix.join("cache"),
         prefix.join("etc"),
+        prefix.join("releases"),
     ] {
         match std::fs::symlink_metadata(&path) {
             Ok(meta) if meta.file_type().is_symlink() || !meta.is_dir() => {
@@ -284,6 +286,7 @@ fn npm_command(
     node: &Path,
     app_data: &Path,
     home: &Path,
+    prefix: &Path,
     package: &str,
     install_links: bool,
 ) -> Result<tokio::process::Command, String> {
@@ -292,7 +295,6 @@ fn npm_command(
         .parent()
         .ok_or("Invalid managed Node path")?
         .join("lib/node_modules/npm/bin/npm-cli.js");
-    let prefix = app_data.join("node-tools");
     let mut command = tokio::process::Command::new(node);
     scrub(&mut command, home, bin, app_data)?;
     command
@@ -306,6 +308,60 @@ fn npm_command(
     Ok(command)
 }
 
+fn adapter_rev() -> &'static str {
+    ADAPTER.rsplit_once('#').map_or(ADAPTER, |(_, rev)| rev)
+}
+
+/// The release an app-owned shim points at: `../releases/<id>/bin/<name>`.
+fn release_id(shim: &Path) -> Option<String> {
+    let target = std::fs::read_link(shim).ok()?;
+    let rest = target.strip_prefix("../releases").ok()?;
+    rest.components()
+        .next()?
+        .as_os_str()
+        .to_str()
+        .map(str::to_owned)
+}
+
+/// Whether both app-owned shims point at a release of the pinned adapter.
+pub(crate) fn current(app_data: &Path) -> bool {
+    let bin = app_data.join("node-tools/bin");
+    ["pi", "buzz-pi-acp"].iter().all(|name| {
+        release_id(&bin.join(name))
+            .is_some_and(|id| id.split_once('.').map(|(rev, _)| rev) == Some(adapter_rev()))
+    })
+}
+
+// Each shim moves by rename, so a starting agent sees an old or a new complete
+// release. Pi moves first because the previous adapter also runs on newer Pi.
+fn activate(tools: &Path, id: &str) -> Result<(), String> {
+    let bin = tools.join("bin");
+    std::fs::create_dir_all(&bin).map_err(|_| "Could not create app-owned tools directory")?;
+    for name in ["pi", "buzz-pi-acp"] {
+        let staged = bin.join(format!(".{name}.{id}"));
+        let _ = std::fs::remove_file(&staged);
+        std::os::unix::fs::symlink(
+            Path::new("../releases").join(id).join("bin").join(name),
+            &staged,
+        )
+        .and_then(|()| std::fs::rename(&staged, bin.join(name)))
+        .map_err(|_| "Could not activate the new Pi install")?;
+    }
+    Ok(())
+}
+
+// Keep the previous release for agents still running from it.
+fn prune(releases: &Path, keep: &[&str]) {
+    let Ok(entries) = std::fs::read_dir(releases) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if !keep.iter().any(|id| entry.file_name() == *id) {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
+    }
+}
+
 pub(crate) async fn install(
     setup: &HarnessSetup,
     app_data: &Path,
@@ -315,14 +371,35 @@ pub(crate) async fn install(
     let spec = artifact(std::env::consts::OS, std::env::consts::ARCH)
         .ok_or("Managed Node is unavailable on this platform")?;
     let node = install_node(setup, app_data, &home, &log, spec).await?;
-    let prefix = app_data.join("node-tools");
-    refuse_linked_prefix(&prefix)?;
-    std::fs::create_dir_all(&prefix).map_err(|_| "Could not create app-owned npm prefix")?;
-    for (package, install_links) in [(PI, false), (ADAPTER, true)] {
-        refuse_linked_prefix(&prefix)?;
-        let mut command = npm_command(&node, app_data, &home, package, install_links)?;
-        run_step(setup, &mut command, &log, NPM_FAILED).await?;
+    let tools = app_data.join("node-tools");
+    refuse_linked_prefix(&tools)?;
+    let releases = tools.join("releases");
+    std::fs::create_dir_all(&releases).map_err(|_| "Could not create app-owned npm prefix")?;
+    let millis = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |elapsed| elapsed.as_millis());
+    let id = format!("{}.{millis}", adapter_rev());
+    let prefix = releases.join(&id);
+    std::fs::create_dir(&prefix).map_err(|_| "Could not create app-owned npm prefix")?;
+    let result = async {
+        for (package, install_links) in [(PI, false), (ADAPTER, true)] {
+            refuse_linked_prefix(&tools)?;
+            refuse_linked_prefix(&prefix)?;
+            let mut command = npm_command(&node, app_data, &home, &prefix, package, install_links)?;
+            run_step(setup, &mut command, &log, NPM_FAILED).await?;
+        }
+        Ok::<_, String>(())
     }
+    .await;
+    if let Err(error) = result {
+        let _ = std::fs::remove_dir_all(&prefix);
+        return Err(error);
+    }
+    let previous = release_id(&tools.join("bin/buzz-pi-acp"));
+    activate(&tools, &id)?;
+    let mut keep = vec![id.as_str()];
+    keep.extend(previous.as_deref());
+    prune(&releases, &keep);
     Ok(true)
 }
 
@@ -432,6 +509,7 @@ mod tests {
             "lib/node_modules/@earendil-works/pi-coding-agent",
             "lib/node_modules/buzz-pi-acp",
             "etc",
+            "releases",
         ] {
             let path = prefix.join(destination);
             std::fs::create_dir_all(path.parent().unwrap()).unwrap();
@@ -441,13 +519,68 @@ mod tests {
         }
         assert!(refuse_linked_prefix(&prefix).is_ok());
     }
+    #[cfg(unix)]
+    #[test]
+    fn activation_swaps_both_shims_to_a_complete_release_and_prunes_older_ones() {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = tempfile::tempdir().unwrap();
+        let tools = dir.path().join("node-tools");
+        let release = |id: &str| {
+            let bin = tools.join("releases").join(id).join("bin");
+            std::fs::create_dir_all(&bin).unwrap();
+            for name in ["pi", "buzz-pi-acp"] {
+                std::fs::write(bin.join(name), id).unwrap();
+                std::fs::set_permissions(bin.join(name), std::fs::Permissions::from_mode(0o755))
+                    .unwrap();
+            }
+        };
+        let adapter = || std::fs::read_to_string(tools.join("bin/buzz-pi-acp")).unwrap();
+        // An install from before releases: npm's own shim into node-tools/lib.
+        std::fs::create_dir_all(tools.join("bin")).unwrap();
+        std::os::unix::fs::symlink(
+            "../lib/node_modules/buzz-pi-acp/dist/index.js",
+            tools.join("bin/buzz-pi-acp"),
+        )
+        .unwrap();
+        assert!(!current(dir.path()));
+
+        let old = "86b201e.1";
+        let pinned = format!("{}.2", adapter_rev());
+        let newer = format!("{}.3", adapter_rev());
+        release(old);
+        activate(&tools, old).unwrap();
+        assert_eq!(adapter(), old);
+        assert!(!current(dir.path()));
+
+        release(&pinned);
+        activate(&tools, &pinned).unwrap();
+        assert!(current(dir.path()));
+        assert_eq!(adapter(), pinned);
+        assert_eq!(
+            std::fs::read_to_string(tools.join("bin/pi")).unwrap(),
+            pinned
+        );
+        assert!(buzz_agent_controller::managed_tool(dir.path(), "buzz-pi-acp").is_some());
+
+        release(&newer);
+        std::fs::create_dir_all(tools.join("releases/failed.4")).unwrap();
+        prune(&tools.join("releases"), &[newer.as_str(), pinned.as_str()]);
+        let mut left: Vec<_> = std::fs::read_dir(tools.join("releases"))
+            .unwrap()
+            .map(|entry| entry.unwrap().file_name().into_string().unwrap())
+            .collect();
+        left.sort();
+        assert_eq!(left, [pinned, newer]);
+    }
     #[test]
     fn npm_installs_only_the_two_approved_packages_into_the_app_owned_prefix() {
         let node = Path::new("/app/data/runtimes/node/v24.18.0/darwin-arm64/bin/node");
+        let prefix = Path::new("/app/data/node-tools/releases/72015de.1");
         let pi = npm_command(
             node,
             Path::new("/app/data"),
             Path::new("/temporary/home"),
+            prefix,
             PI,
             false,
         )
@@ -456,6 +589,7 @@ mod tests {
             node,
             Path::new("/app/data"),
             Path::new("/temporary/home"),
+            prefix,
             ADAPTER,
             true,
         )
@@ -473,7 +607,7 @@ mod tests {
                 "install",
                 "--global",
                 "--prefix",
-                "/app/data/node-tools",
+                "/app/data/node-tools/releases/72015de.1",
                 PI
             ]
         );
@@ -484,7 +618,7 @@ mod tests {
                 "install",
                 "--global",
                 "--prefix",
-                "/app/data/node-tools",
+                "/app/data/node-tools/releases/72015de.1",
                 "--install-links=true",
                 ADAPTER
             ]

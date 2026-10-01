@@ -15,9 +15,9 @@ import styles from "./AgentSettings.module.css";
 
 const acpHint =
   "Buzz talks to harnesses through the Agent Client Protocol (ACP). Goose supports it natively. Pi needs a small adapter, `buzz-pi-acp`. Your existing CLI setup and sign-in are left untouched.";
-const piCommand = "npm install -g @earendil-works/pi-coding-agent";
+const piCommand = "npm install -g '@earendil-works/pi-coding-agent@>=0.99.0'";
 const adapterCommand =
-  "npm install -g --install-links=true 'git+https://github.com/salman1993/buzz-pi-acp.git#86b201e'";
+  "npm install -g --install-links=true 'git+https://github.com/salman1993/buzz-pi-acp.git#72015de'";
 const labels = {
   ready: "Ready",
   "cli-needed": "CLI needed",
@@ -150,7 +150,7 @@ export function AgentSettings({
                       {option?.status ? labels[option.status] : "Unknown"}
                     </span>
                     {option?.label === "Pi" &&
-                      option.status !== "ready" &&
+                      (option.status !== "ready" || option.updateSupported) &&
                       option.installSupported &&
                       control.installPi &&
                       !piResult?.ready && (
@@ -168,7 +168,7 @@ export function AgentSettings({
                             void control.installPi?.().catch(() => {});
                           }}
                         >
-                          Install
+                          {option.status === "ready" ? "Update Pi" : "Install"}
                         </Button>
                       )}
                     {option?.label === "Goose" &&
@@ -203,7 +203,8 @@ export function AgentSettings({
             )}
             {!installingPi && piResult?.ready && pi?.status === "ready" && (
               <p role="status">
-                Pi installed. Restarted {piResult.restarted} waiting agents.
+                Pi and its adapter are up to date. Restart running Pi agents to
+                use them. Restarted {piResult.restarted} waiting agents.
                 {piResult.restartFailures > 0 &&
                   ` ${piResult.restartFailures} agents could not restart; check Agents.`}
               </p>

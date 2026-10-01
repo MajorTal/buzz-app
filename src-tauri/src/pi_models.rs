@@ -8,17 +8,71 @@ use tokio::io::{AsyncBufReadExt, AsyncReadExt, AsyncWriteExt, BufReader};
 const FAILURE: &str = "Pi models unavailable. Check Pi sign-in and extension configuration, then retry or enter a custom ID";
 
 // Extensions may spawn helpers. Cancellation must retire the whole lookup group.
-struct LookupChild(tokio::process::Child);
+struct LookupChild {
+    child: tokio::process::Child,
+    #[cfg(unix)]
+    group: Option<u32>,
+}
+impl LookupChild {
+    fn new(child: tokio::process::Child) -> Self {
+        Self {
+            #[cfg(unix)]
+            group: child.id(),
+            child,
+        }
+    }
+}
 impl Drop for LookupChild {
     fn drop(&mut self) {
         #[cfg(unix)]
-        if let Some(pid) = self.0.id() {
+        if let Some(pid) = self.group {
             unsafe {
                 libc::kill(-(pid as i32), libc::SIGKILL);
             }
         }
-        let _ = self.0.start_kill();
+        let _ = self.child.start_kill();
     }
+}
+
+/// Used by Start and ticket-owned model work, outside controller admission.
+pub(crate) async fn verify(
+    context: PiContext,
+) -> Result<buzz_agent_controller::pi::VerifiedPiContext, String> {
+    let mut command = tokio::process::Command::from(context.version_command());
+    command.kill_on_drop(true);
+    let mut child = LookupChild::new(
+        command
+            .spawn()
+            .map_err(|_| context.version_error("Could not verify the Pi CLI version"))?,
+    );
+    let result = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        let stdout = child
+            .child
+            .stdout
+            .take()
+            .ok_or("Could not verify the Pi CLI version")?;
+        let mut output = String::new();
+        stdout
+            .take(129)
+            .read_to_string(&mut output)
+            .await
+            .map_err(|_| "Could not verify the Pi CLI version")?;
+        if output.len() > 128
+            || !child
+                .child
+                .wait()
+                .await
+                .map_err(|_| "Could not verify the Pi CLI version")?
+                .success()
+        {
+            return Err("Could not verify the Pi CLI version");
+        }
+        Ok(output)
+    })
+    .await
+    .map_err(|_| context.version_error("Pi CLI version check timed out"))?
+    .map_err(|error| context.version_error(error))?;
+    context.accept_version(&result)
 }
 
 type Output = BufReader<tokio::io::Take<tokio::process::ChildStdout>>;
@@ -52,9 +106,9 @@ fn spawn(
     command.envs(context.environment).env("PATH", context.path);
     #[cfg(unix)]
     command.process_group(0);
-    let mut child = LookupChild(command.spawn().map_err(|_| "Could not start Pi")?);
-    let stdin = child.0.stdin.take().ok_or(FAILURE)?;
-    let stdout = child.0.stdout.take().ok_or(FAILURE)?;
+    let mut child = LookupChild::new(command.spawn().map_err(|_| "Could not start Pi")?);
+    let stdin = child.child.stdin.take().ok_or(FAILURE)?;
+    let stdout = child.child.stdout.take().ok_or(FAILURE)?;
     Ok((
         child,
         stdin,

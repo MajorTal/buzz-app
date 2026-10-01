@@ -5,10 +5,14 @@ use crate::{
 };
 use std::{
     collections::BTreeMap,
+    io::{Read, Seek, SeekFrom},
     path::{Path, PathBuf},
+    process::{Command, Stdio},
+    time::{Duration, Instant},
 };
 
 /// Native only: contains local environment values, never serialized over IPC.
+#[derive(PartialEq)]
 pub struct PiContext {
     pub command: PathBuf,
     pub workspace: PathBuf,
@@ -92,6 +96,39 @@ impl PiContext {
         })
     }
 
+    /// A prompt-free probe; callers own its bounded lifetime and cancellation.
+    pub fn version_command(&self) -> Command {
+        let mut command = version_command(&self.command, &self.path);
+        command.current_dir(&self.workspace);
+        command
+    }
+    pub fn version_error(&self, reason: &str) -> String {
+        format!(
+            "{reason}. Update the Pi CLI at {} to version 0.99.0 or later, then retry",
+            self.command.display()
+        )
+    }
+    pub fn accept_version(self, output: &str) -> Result<VerifiedPiContext> {
+        let version = output.trim();
+        let parts = version
+            .split('.')
+            .map(str::parse::<u64>)
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .unwrap_or_default();
+        if parts.len() != 3 {
+            return Err(self.version_error("Could not verify the Pi CLI version"));
+        }
+        if (parts[0], parts[1], parts[2]) < (0, 99, 0) {
+            return Err(self.version_error(&format!("Pi CLI {version} is too old")));
+        }
+        Ok(VerifiedPiContext(self))
+    }
+    fn verify(self) -> Result<VerifiedPiContext> {
+        let output =
+            version_output(self.version_command()).map_err(|error| self.version_error(&error))?;
+        self.accept_version(&output)
+    }
+
     pub fn catalog_args(&self) -> Result<Vec<String>> {
         let mut result = Vec::new();
         let mut args = self.args.iter();
@@ -166,6 +203,112 @@ impl PiContext {
         }
         Ok(args)
     }
+}
+
+/// Verification stays native and cannot be serialized or supplied over IPC.
+pub struct VerifiedPiContext(PiContext);
+impl VerifiedPiContext {
+    pub fn into_context(self) -> PiContext {
+        self.0
+    }
+}
+/// A captured launch check, including the absence of Pi. Launch re-resolves the
+/// effective settings and rejects changes made while this check was pending.
+pub struct LaunchPreflight(Option<PiContext>);
+impl LaunchPreflight {
+    pub fn new(pi: Option<VerifiedPiContext>) -> Self {
+        Self(pi.map(|pi| pi.0))
+    }
+    pub(crate) fn check(&self, pi: &Option<PiContext>) -> Result<()> {
+        if &self.0 != pi {
+            return Err("Pi launch settings changed; retry Start".into());
+        }
+        Ok(())
+    }
+}
+pub(crate) fn verify_launch(
+    pi: Option<PiContext>,
+    preflight: Option<&LaunchPreflight>,
+) -> Result<Option<PiContext>> {
+    if let Some(preflight) = preflight {
+        preflight.check(&pi)?;
+        return Ok(pi);
+    }
+    pi.map(|pi| pi.verify().map(|pi| pi.0)).transpose()
+}
+fn version_command(command: &Path, path: &std::ffi::OsStr) -> Command {
+    let mut probe = Command::new(command);
+    probe
+        .arg("--version")
+        .env_clear()
+        .env("PATH", path)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null());
+    for name in [
+        "HOME",
+        "TMPDIR",
+        "USER",
+        "LOGNAME",
+        "LANG",
+        "SSL_CERT_FILE",
+        "SSL_CERT_DIR",
+    ] {
+        if let Some(value) = std::env::var_os(name) {
+            probe.env(name, value);
+        }
+    }
+    #[cfg(unix)]
+    {
+        use std::os::unix::process::CommandExt;
+        probe.process_group(0);
+    }
+    probe
+}
+
+// No pipe reader can outlive the probe, even if a wrapper's helper keeps stdout
+// open. The tiny file is private and output is never included in an error.
+fn version_output(mut probe: Command) -> Result<String> {
+    const FAILED: &str = "Could not verify the Pi CLI version";
+    let mut output = tempfile::tempfile().map_err(|_| FAILED)?;
+    probe.stdout(output.try_clone().map_err(|_| FAILED)?);
+    let mut child = probe.spawn().map_err(|_| FAILED)?;
+    let deadline = Instant::now() + Duration::from_secs(5);
+    let result = loop {
+        if output.metadata().map_or(true, |meta| meta.len() > 128) {
+            break Err(FAILED);
+        }
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                break if status.success() {
+                    Ok(())
+                } else {
+                    Err(FAILED)
+                }
+            }
+            Err(_) => break Err(FAILED),
+            Ok(None) if Instant::now() >= deadline => break Err("Pi CLI version check timed out"),
+            Ok(None) => std::thread::sleep(Duration::from_millis(25)),
+        }
+    };
+    // Retire helpers on success too; --version has no continuing work.
+    #[cfg(unix)]
+    unsafe {
+        libc::kill(-(child.id() as i32), libc::SIGKILL);
+    }
+    let _ = child.kill();
+    child.wait().map_err(|_| FAILED)?;
+    result?;
+    output.seek(SeekFrom::Start(0)).map_err(|_| FAILED)?;
+    let mut version = String::new();
+    output
+        .take(129)
+        .read_to_string(&mut version)
+        .map_err(|_| FAILED)?;
+    if version.len() > 128 {
+        return Err(FAILED.into());
+    }
+    Ok(version)
 }
 
 /// Selection constraints shared by catalog discovery and ACP launch.

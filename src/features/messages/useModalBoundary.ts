@@ -1,7 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react";
 
 const FOCUSABLE =
-  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+  'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"]):not([disabled])';
 
 /** Makes a portalled viewer a real modal and restores its connected opener. */
 export function useModalBoundary(
@@ -34,14 +34,12 @@ export function useModalBoundary(
     }
     initialFocus.current?.focus({ preventScroll: true });
     const keydown = (event: KeyboardEvent) => {
-      // Portalled confirmations own their keyboard handling through Base UI.
-      const modal =
+      // Portalled dialogs, including non-modal controls, own their focus through Base UI.
+      const popup =
         event.target instanceof Element
-          ? event.target.closest(
-              '[role="alertdialog"][aria-modal="true"], [role="dialog"][aria-modal="true"]',
-            )
+          ? event.target.closest('[role="alertdialog"], [role="dialog"]')
           : null;
-      if (modal && !container.contains(modal)) return;
+      if (popup && !container.contains(popup)) return;
       if (event.key === "Escape") {
         event.preventDefault();
         closeRef.current();

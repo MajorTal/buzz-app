@@ -258,7 +258,7 @@ test("section disclosure toggles content and honors reduced motion", async ({
 });
 
 // Browser layout verifies the header contract, including inline icon sizing.
-test("top bar keeps unboxed 28px controls, 16px icons and no Bestie launcher", async ({
+test("top bar keeps ghost navigation and glass Search and Bestie controls", async ({
   page,
   app,
 }, info) => {
@@ -280,7 +280,13 @@ test("top bar keeps unboxed 28px controls, 16px icons and no Bestie launcher", a
     const box = await icon.boundingBox();
     expect([box.width, box.height]).toEqual([16, 16]);
   }
-  await expect(header.locator('img[src="/bestie.png"]')).toHaveCount(0);
+  const bestie = header.getByRole("button", { name: "Bestie", exact: true });
+  await expect(bestie.locator('img[src="/bestie.png"]')).toBeVisible();
+  for (const control of [
+    bestie,
+    header.getByRole("button", { name: "Search Buzz", exact: true }),
+  ])
+    await expect(control).toHaveAttribute("data-icon-variant", "chrome");
   await page.mouse.move(700, 500);
   for (const control of await header
     .locator('[data-icon-variant="ghost"]')
@@ -324,6 +330,16 @@ test("top bar keeps unboxed 28px controls, 16px icons and no Bestie launcher", a
     path: info.outputPath("top-bar.png"),
     clip: { x: 0, y: 0, width: 1440, height: 100 },
   });
+  await bestie.click();
+  await expect(bestie).toHaveAttribute("aria-expanded", "true");
+  await expect(
+    page.getByRole("heading", { name: "Meet your Bestie" }),
+  ).toBeVisible();
+  await page
+    .getByRole("button", { name: "Close Bestie panel", exact: true })
+    .click();
+  await expect(bestie).toHaveAttribute("aria-expanded", "false");
+  await expect(bestie).toBeFocused();
 });
 
 // Real responsive layout owns the Settings overlay and the desktop sidebar.

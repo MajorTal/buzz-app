@@ -9,6 +9,7 @@ import { ConversationService } from "../../src/features/conversation/service";
 import { bundledPlugins } from "../../src/bundled";
 import { ThreadPanel } from "../../src/features/messages/ThreadPanel";
 import { MessageComposer } from "../../src/features/messages/MessageComposer";
+import { VideoPlayer } from "../../src/features/messages/VideoPlayer";
 import { MediaReviewViewer } from "../../src/features/messages/MediaReviewViewer";
 import { ChannelTimeline } from "../../src/features/messages/ChannelTimeline";
 import styles from "../../src/features/messages/Messages.module.css";
@@ -429,6 +430,36 @@ Object.assign(window, {
     styles,
   },
 });
+function PortraitVideoFixture() {
+  const video = useRef<HTMLVideoElement>(null);
+  return (
+    <div
+      style={{
+        position: "fixed",
+        inset: 0,
+        padding: 24,
+        display: "grid",
+        gridTemplateColumns: "minmax(0, 1fr) 320px",
+        gridTemplateRows: "48px minmax(0, 1fr)",
+      }}
+    >
+      <div style={{ gridColumn: "1 / -1" }} />
+      <div
+        data-testid="portrait-video-stage"
+        className={styles.mediaReviewStage}
+      >
+        <VideoPlayer
+          source="/tests/fixtures/message-gallery/assets/sample.mp4"
+          videoRef={video}
+          onTime={() => {}}
+          onError={() => {}}
+        />
+      </div>
+      <aside />
+    </div>
+  );
+}
+
 function Fixture() {
   const [selected, select] = useState(0),
     [scope, setScope] = useState("fixture"),
@@ -550,7 +581,11 @@ if (!container) throw new Error("Missing fixture container");
 createRoot(container).render(
   <StrictMode>
     <ToastProvider>
-      <Fixture />
+      {new URLSearchParams(location.search).has("portraitVideo") ? (
+        <PortraitVideoFixture />
+      ) : (
+        <Fixture />
+      )}
     </ToastProvider>
   </StrictMode>,
 );

@@ -18,10 +18,10 @@ import {
 import {
   CircleNotchIcon,
   SmileyIcon,
-  ThumbsUpIcon,
   CheckIcon,
   GearIcon,
   UserIcon,
+  PlugIcon,
 } from "../../shared/design-system/icons/index";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
@@ -423,11 +423,7 @@ export function ProfileButton({
               key={action.key}
               onClick={() => setSelectedAction(action)}
             >
-              {action.pluginId === "buzz.feedback" && (
-                <MenuIcon>
-                  <ThumbsUpIcon size={16} aria-hidden="true" />
-                </MenuIcon>
-              )}
+              <MenuIcon>{action.icon ?? <PlugIcon size={17} />}</MenuIcon>
               {action.title}
             </MenuItem>
           ))}

@@ -102,7 +102,9 @@ handler, plus scoped HTTP(S) opening for
 [Tauri window customization](https://v2.tauri.app/learn/window-customization/).
 
 The top-right group contains enabled plugin launchers (Bestie supplies the snake),
-a page finder, and the local avatar. `ProfileButton.tsx` subscribes to the community
+a page finder, and the local avatar. Search and plugin launchers use the shared
+glass icon-button style; sidebar and history controls remain ghost buttons.
+`ProfileButton.tsx` subscribes to the community
 service's local default profile and opens an anchored account dropdown containing
 local presence controls and Settings; there is no separate top-bar Settings button.
 The avatar dot shows local intent (Online/Away/Offline). The shared account menu
@@ -261,10 +263,10 @@ steps), Home/End, and double-click to reset. Each page retains its chosen split
 while the panel closes and reopens; widths clamp to the available space. Narrow
 overlay layouts hide this divider and keep their normal responsive sizing.
 
-Pointer-opened secondary panels fade and slide in over 180ms and out over 120ms
-with the shared strong ease-out curve. Desktop panels travel 12px; overlays travel
-their full width. The desktop split stays in place until the exit finishes, so
-closing content never collapses mid-transition. Keyboard actions stay immediate;
+Pointer-opened secondary panels fade and slide in over 180ms with the shared
+strong ease-out curve. Desktop panels travel 12px on entry and close immediately,
+so the main view reclaims its width without waiting for an invisible exit. Overlays
+travel their full width and exit over 120ms. Keyboard actions stay immediate;
 reduced motion uses only a fade. Resizing remains immediate.
 `features/panels/PanelDock` retains inert, accessibility-hidden closing content until
 its CSS transitions finish, cancels stale cleanup on reopening, and leaves selection

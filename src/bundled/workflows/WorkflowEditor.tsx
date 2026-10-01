@@ -4,6 +4,7 @@ import { Textarea } from "../../shared/design-system/ui/Textarea";
 import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import {
   DotsThreeIcon,
+  LightningIcon,
   PencilSimpleIcon,
 } from "../../shared/design-system/icons";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
@@ -14,6 +15,7 @@ import {
   MenuTrigger,
   MenuPopup,
   MenuCheckboxItem,
+  MenuIcon,
 } from "../../shared/design-system/ui/Menu";
 import { Switch } from "../../shared/design-system/ui/Switch";
 import { Tabs } from "../../shared/design-system/ui/Tabs";
@@ -171,6 +173,9 @@ export function WorkflowEditor({
         changeHeader(yamlWithWorkflowEnabled(yaml, enabled), { enabled })
       }
     >
+      <MenuIcon>
+        <LightningIcon size={14} />
+      </MenuIcon>
       Enable
     </MenuCheckboxItem>
   );

@@ -24,6 +24,13 @@ import {
   MenuRadioGroup,
   MenuRadioItem,
 } from "../../shared/design-system/ui/Menu";
+import {
+  PopoverRoot,
+  PopoverTrigger,
+  PopoverPopup,
+} from "../../shared/design-system/ui/Popover";
+import { Button } from "../../shared/design-system/ui/Button";
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
 import { formatMediaTime } from "./media-timecode";
 import styles from "./VideoPlayer.module.css";
@@ -69,6 +76,8 @@ export function VideoControls({
   const [duration, setDuration] = useState(0);
   const [volume, setVolume] = useState(1);
   const [muted, setMuted] = useState(false);
+  const [volumeMotion, setVolumeMotion] = useState(false);
+  const audibleVolume = muted ? 0 : volume;
   const [rate, setRate] = useState(savedSpeed);
   const [hover, setHover] = useState<number>();
   const [notice, setNotice] = useState<string>();
@@ -158,27 +167,17 @@ export function VideoControls({
     videoRef.current.dispatchEvent(new Event("timeupdate"));
   };
   const playButton = (
-    <button
-      data-buzz-ui=""
-      type="button"
-      className={inline ? styles.center : styles.play}
-      aria-label={playing ? "Pause video" : "Play video"}
-      onClick={toggle}
-    >
-      {playing ? (
-        <PauseIcon
-          size={inline ? 24 : 18}
-          weight="fill"
-          color="var(--text-standard)"
-        />
-      ) : (
-        <PlayIcon
-          size={inline ? 24 : 18}
-          weight="fill"
-          color="var(--text-standard)"
-        />
-      )}
-    </button>
+    <span className={inline ? styles.center : styles.play}>
+      <IconButton
+        size={inline ? "md" : "sm"}
+        variant={inline ? "media" : "ghost"}
+        aria-label={playing ? "Pause video" : "Play video"}
+        onClick={toggle}
+        icon={
+          playing ? <PauseIcon weight="fill" /> : <PlayIcon weight="fill" />
+        }
+      />
+    </span>
   );
   return (
     <>
@@ -192,18 +191,109 @@ export function VideoControls({
         ref={inline ? corners : undefined}
         className={styles.controls}
         data-inline={inline || undefined}
+        data-playing={playing || undefined}
         data-review-chrome={inline ? undefined : ""}
       >
         {!inline && playButton}
+        <PopoverRoot>
+          <PopoverTrigger
+            openOnHover
+            delay={100}
+            closeDelay={100}
+            render={
+              <IconButton
+                size="sm"
+                aria-label="Video volume"
+                icon={
+                  muted || volume === 0 ? (
+                    <SpeakerSlashIcon />
+                  ) : (
+                    <SpeakerHighIcon />
+                  )
+                }
+              />
+            }
+          />
+          <PopoverPopup
+            aria-label="Video volume controls"
+            collisionAvoidance={{ side: "none", align: "shift" }}
+            side="top"
+            align="center"
+            sideOffset={8}
+            size="compact"
+            padding="list"
+            colorMode="dark"
+            initialFocus={(type) => type === "keyboard"}
+            render={<div className={styles.volumePopup} />}
+          >
+            <div
+              className={styles.volumeSlider}
+              data-volume-motion={volumeMotion || undefined}
+            >
+              <div className={styles.volumeTrack} aria-hidden="true">
+                <span
+                  className={styles.volumeFill}
+                  style={{ transform: `scaleY(${audibleVolume})` }}
+                />
+                <span
+                  className={styles.volumeKnob}
+                  style={{ transform: `translateY(${-audibleVolume * 100}%)` }}
+                />
+              </div>
+              <input
+                type="range"
+                tabIndex={0}
+                aria-label="Video volume"
+                aria-orientation="vertical"
+                min={0}
+                max={1}
+                step={0.05}
+                value={
+                  // Native media can report float32 noise beyond the .05 step's precision.
+                  Number(audibleVolume.toFixed(2))
+                }
+                onChange={(event) => {
+                  if (!videoRef.current) return;
+                  setVolumeMotion(false);
+                  videoRef.current.volume = Number(event.currentTarget.value);
+                  videoRef.current.muted = false;
+                }}
+              />
+            </div>
+            <IconButton
+              size="sm"
+              aria-label={muted || volume === 0 ? "Unmute video" : "Mute video"}
+              onClick={(event) => {
+                const video = videoRef.current;
+                if (!video) return;
+                setVolumeMotion(event.detail > 0);
+                video.muted = !(muted || volume === 0);
+                if (!video.muted && video.volume === 0) video.volume = 1;
+              }}
+              icon={
+                muted || volume === 0 ? (
+                  <SpeakerSlashIcon />
+                ) : (
+                  <SpeakerHighIcon />
+                )
+              }
+            />
+          </PopoverPopup>
+        </PopoverRoot>
         <span className={styles.time}>{videoTime(time)}</span>
         <div
           className={styles.timeline}
           onPointerMove={(event) => {
+            if (event.pointerType !== "mouse") return;
             const bounds = event.currentTarget.getBoundingClientRect();
             setHover(
               Math.max(
                 0,
-                Math.min(1, (event.clientX - bounds.left) / bounds.width),
+                Math.min(
+                  1,
+                  (event.clientX - bounds.left - 1) /
+                    Math.max(1, bounds.width - 2),
+                ),
               ),
             );
           }}
@@ -211,6 +301,7 @@ export function VideoControls({
         >
           <input
             type="range"
+            tabIndex={0}
             aria-label={inline ? "Video progress" : "Video timeline"}
             aria-valuetext={`${videoTime(time)} / ${videoTime(duration)}`}
             min={0}
@@ -225,38 +316,46 @@ export function VideoControls({
             }
             onChange={(event) => seek(Number(event.currentTarget.value))}
           />
-          {!inline && hover !== undefined && duration > 0 && (
+          {hover !== undefined && duration > 0 && (
             <span
-              className={styles.hoverTime}
-              style={{ left: `${hover * 100}%` }}
+              className={styles.seekPreview}
+              style={{ left: `calc(1px + (100% - 2px) * ${hover})` }}
+              aria-hidden="true"
+              data-seek-preview=""
             >
-              {videoTime(hover * duration)} / {videoTime(duration)}
+              <span className={styles.hoverTime}>
+                {videoTime(hover * duration)}
+              </span>
             </span>
           )}
           {duration > 0 &&
             markers
               .filter((marker) => marker.seconds <= duration)
               .map((marker) => (
-                <button
-                  data-buzz-ui=""
+                <span
                   key={marker.id}
-                  type="button"
                   className={styles.marker}
                   style={{ left: `${(marker.seconds / duration) * 100}%` }}
-                  aria-label={`Seek to ${marker.label}, ${marker.author}`}
-                  title={`${marker.label} · ${marker.author}: ${marker.text}`}
-                  onClick={() => {
-                    seek(marker.seconds);
-                    onMarker?.(marker.id, marker.seconds);
-                  }}
                 >
-                  <Avatar
-                    size="fill"
-                    src={marker.picture}
-                    alt=""
-                    fallback={marker.author}
+                  <IconButton
+                    size="sm"
+                    variant="avatar"
+                    aria-label={`Seek to ${marker.label}, ${marker.author}`}
+                    title={`${marker.label} · ${marker.author}: ${marker.text}`}
+                    onClick={() => {
+                      seek(marker.seconds);
+                      onMarker?.(marker.id, marker.seconds);
+                    }}
+                    icon={
+                      <Avatar
+                        size="fill"
+                        src={marker.picture}
+                        alt=""
+                        fallback={marker.author}
+                      />
+                    }
                   />
-                </button>
+                </span>
               ))}
         </div>
         <span className={`${styles.time} ${styles.duration}`}>
@@ -265,16 +364,29 @@ export function VideoControls({
         <div className={styles.speed}>
           <MenuRoot modal={false}>
             <MenuTrigger
-              render={<button data-buzz-ui="" type="button" />}
+              openOnHover
+              delay={100}
+              closeDelay={100}
+              render={
+                <Button variant="ghost" size="sm">
+                  {rate}x
+                </Button>
+              }
               aria-label={`Playback speed: ${rate}x`}
             >
               {rate}x
             </MenuTrigger>
             <MenuPopup
               side="top"
-              align="end"
+              align="center"
+              sideOffset={8}
               size="compact"
-              render={<div className="dark" data-color-mode="dark" />}
+              render={
+                <div
+                  className={`${styles.speedPopup} dark`}
+                  data-color-mode="dark"
+                />
+              }
             >
               <MenuRadioGroup
                 value={String(rate)}
@@ -300,43 +412,6 @@ export function VideoControls({
               </MenuRadioGroup>
             </MenuPopup>
           </MenuRoot>
-        </div>
-        <div className={styles.volume}>
-          <button
-            data-buzz-ui=""
-            type="button"
-            aria-label={muted || volume === 0 ? "Unmute video" : "Mute video"}
-            onClick={() => {
-              const video = videoRef.current;
-              if (!video) return;
-              video.muted = !(muted || volume === 0);
-              if (!video.muted && video.volume === 0) video.volume = 1;
-            }}
-          >
-            {muted || volume === 0 ? (
-              <SpeakerSlashIcon size={18} />
-            ) : (
-              <SpeakerHighIcon size={18} />
-            )}
-          </button>
-          <input
-            type="range"
-            aria-label="Video volume"
-            min={0}
-            max={1}
-            step={0.05}
-            value={muted ? 0 : volume}
-            style={
-              {
-                "--progress": `${(muted ? 0 : volume) * 100}%`,
-              } as CSSProperties
-            }
-            onChange={(event) => {
-              if (!videoRef.current) return;
-              videoRef.current.volume = Number(event.currentTarget.value);
-              videoRef.current.muted = false;
-            }}
-          />
         </div>
       </div>
     </>
@@ -430,12 +505,14 @@ export function VideoPlayer({
           )}
         </div>
       )}
-      <VideoControls
-        videoRef={videoRef}
-        {...(markers ? { markers } : {})}
-        {...(onMarker ? { onMarker } : {})}
-      />
-      {children}
+      <div className={styles.reviewControls} data-review-chrome="">
+        <VideoControls
+          videoRef={videoRef}
+          {...(markers ? { markers } : {})}
+          {...(onMarker ? { onMarker } : {})}
+        />
+        {children}
+      </div>
     </div>
   );
 }

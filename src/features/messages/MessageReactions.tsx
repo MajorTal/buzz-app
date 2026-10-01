@@ -148,16 +148,7 @@ export function MessageReactionControls(props: Props) {
             reaction.events.some((event) => event.authorId === session.viewer),
         );
         return (
-          <span
-            key={content}
-            className={styles.quickReaction}
-            onPointerEnter={(event) => {
-              event.currentTarget.style.setProperty(
-                "--reaction-hover-rotation",
-                `${Math.random() * 20 - 10}deg`,
-              );
-            }}
-          >
+          <span key={content} className={styles.quickReaction}>
             <IconButton
               size="sm"
               variant="ghost"

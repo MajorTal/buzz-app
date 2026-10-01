@@ -1,6 +1,10 @@
+import { BestieIcon } from "../../shared/design-system/icons";
 import type { PluginModule } from "../../plugins/api";
 import { FullPageSurface } from "../../shared/design-system/ui/FullPageSurface";
-import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
+import {
+  PanelHeader,
+  PanelHeaderLabel,
+} from "../../shared/design-system/ui/PanelHeader";
 
 export const inject = ["pages", "panels"];
 export const apply: PluginModule["apply"] = (ctx) => {
@@ -26,7 +30,14 @@ function BestiePage() {
     <div className="h-full min-h-0">
       <FullPageSurface aria-label="Bestie">
         <div className="flex h-full min-h-0 flex-col">
-          <PanelHeader title="Bestie" />
+          <PanelHeader
+            title={
+              <PanelHeaderLabel
+                title="Bestie"
+                icon={<BestieIcon size="1rem" />}
+              />
+            }
+          />
           <div className="min-h-0 flex-1 overflow-auto">
             <Bestie />
           </div>

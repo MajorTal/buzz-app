@@ -302,28 +302,34 @@ it("returns to the current thumbnail position and keeps focus trapped until arri
   release();
 });
 
-it("fades out a zoomed photo without returning the crop to the thumbnail", () => {
-  const { animate, release } = setup("image");
-  fireEvent.click(screen.getByRole("link", { name: "Open image attachment" }), {
-    detail: 1,
-  });
-  act(() => animate.mock.results[0]?.value.onfinish?.());
-  fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-  const exitStart = animate.mock.calls.length;
-  fireEvent.click(
-    screen.getByRole("button", { name: "Close fullscreen viewer" }),
-    { detail: 1 },
-  );
-  expect(animate.mock.calls[exitStart]?.[0]).toEqual([
-    { opacity: 1 },
-    { opacity: 0 },
-  ]);
-  // Escape remains immediate, even during a pending pointer dismissal.
-  fireEvent.keyDown(document, { key: "Escape" });
-  expect(screen.queryByRole("dialog")).toBeNull();
-  expect(animate.mock.results[exitStart]?.value.onfinish).toBeNull();
-  release();
-});
+it.each(["Zoom in", "Zoom out"])(
+  "fades out a photo after %s without returning its transform to the thumbnail",
+  (action) => {
+    const { animate, release } = setup("image");
+    fireEvent.click(
+      screen.getByRole("link", { name: "Open image attachment" }),
+      {
+        detail: 1,
+      },
+    );
+    act(() => animate.mock.results[0]?.value.onfinish?.());
+    fireEvent.click(screen.getByRole("button", { name: action }));
+    const exitStart = animate.mock.calls.length;
+    fireEvent.click(
+      screen.getByRole("button", { name: "Close fullscreen viewer" }),
+      { detail: 1 },
+    );
+    expect(animate.mock.calls[exitStart]?.[0]).toEqual([
+      { opacity: 1 },
+      { opacity: 0 },
+    ]);
+    // Escape remains immediate, even during a pending pointer dismissal.
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(animate.mock.results[exitStart]?.value.onfinish).toBeNull();
+    release();
+  },
+);
 
 it("finishes a pending return immediately if the viewport changes", () => {
   const { release } = setup("image");
@@ -515,21 +521,29 @@ it.each([false, true])(
   },
 );
 
-it("preserves the photo zoom when the comments layout changes", () => {
-  const { animate, release } = setup("image", false, true);
-  fireEvent.click(screen.getByRole("link", { name: "Open image attachment" }), {
-    detail: 0,
-  });
-  const media = screen.getByRole("dialog").querySelector("[data-review-media]");
-  fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
-  const transform = media?.getAttribute("style");
-  fireEvent.click(screen.getByRole("button", { name: "Hide comments" }), {
-    detail: 1,
-  });
-  expect(media?.getAttribute("style")).toBe(transform);
-  expect(animate).not.toHaveBeenCalled();
-  release();
-});
+it.each(["Zoom in", "Zoom out"])(
+  "preserves the photo zoom after %s when the comments layout changes",
+  (action) => {
+    const { animate, release } = setup("image", false, true);
+    fireEvent.click(
+      screen.getByRole("link", { name: "Open image attachment" }),
+      {
+        detail: 0,
+      },
+    );
+    const media = screen
+      .getByRole("dialog")
+      .querySelector("[data-review-media]");
+    fireEvent.click(screen.getByRole("button", { name: action }));
+    const transform = media?.getAttribute("style");
+    fireEvent.click(screen.getByRole("button", { name: "Hide comments" }), {
+      detail: 1,
+    });
+    expect(media?.getAttribute("style")).toBe(transform);
+    expect(animate).not.toHaveBeenCalled();
+    release();
+  },
+);
 
 it("keeps an unfinished entrance intact until the close action reverses it and hides the shell before retirement", () => {
   const { animate, cancel, release } = setup("image");

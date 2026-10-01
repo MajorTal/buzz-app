@@ -1,6 +1,10 @@
+import { BellIcon } from "../../shared/design-system/icons";
 import type { PluginModule } from "../../plugins/api";
 import { FullPageSurface } from "../../shared/design-system/ui/FullPageSurface";
-import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
+import {
+  PanelHeader,
+  PanelHeaderLabel,
+} from "../../shared/design-system/ui/PanelHeader";
 
 export const inject = ["pages"];
 export const apply: PluginModule["apply"] = (ctx) => {
@@ -19,7 +23,11 @@ function InboxPage() {
     <div className="h-full min-h-0">
       <FullPageSurface aria-label="Inbox">
         <div className="flex h-full min-h-0 flex-col">
-          <PanelHeader title="Inbox" />
+          <PanelHeader
+            title={
+              <PanelHeaderLabel title="Inbox" icon={<BellIcon size="1rem" />} />
+            }
+          />
           <div className="grid flex-1 place-items-center p-6 text-body-sm text-muted">
             <p>Content coming soon</p>
           </div>

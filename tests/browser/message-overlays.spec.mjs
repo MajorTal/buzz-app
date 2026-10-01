@@ -55,8 +55,19 @@ test("video speed options escape the thread and restore focus after selection an
     .getByRole("button", { name: "Playback speed: 1x" })
     .first();
   await expect(trigger).toBeVisible();
-  // Put the speed control just below the scroller's top edge: the old inline
-  // fieldset loses its upper options behind that boundary.
+  await expect(
+    page.getByRole("slider", { name: "Video progress", exact: true }).first(),
+  ).toBeEnabled();
+  // Model the constrained grid cell that hosts ThreadPanel in the app.
+  // A height on a plain block wrapper does not constrain the panel itself.
+  await page
+    .getByRole("complementary", { name: "Thread", exact: true })
+    .evaluate((panel) => {
+      Object.assign(panel.parentElement.style, {
+        display: "grid",
+        height: "400px",
+      });
+    });
   await trigger.evaluate((button) => {
     const scroller = button.closest("[data-message-scroller]");
     scroller.scrollTop +=
@@ -64,8 +75,18 @@ test("video speed options escape the thread and restore focus after selection an
       scroller.getBoundingClientRect().top -
       40;
   });
-  await page.locator("[data-video-preview]").first().hover();
-  await trigger.click();
+  await expect
+    .poll(() =>
+      trigger.evaluate((button) => {
+        const scroller = button.closest("[data-message-scroller]");
+        return (
+          button.getBoundingClientRect().top -
+          scroller.getBoundingClientRect().top
+        );
+      }),
+    )
+    .toBeCloseTo(40, 0);
+  await trigger.press("Enter");
   const menu = page.getByRole("menu", { name: /^Playback speed:/ });
   await expect(menu).toBeVisible();
   // The scoped dark owner must keep the explicit floating recipe, not the
@@ -401,46 +422,66 @@ test("enlarged media review reflows comments and keeps playback controls reachab
     .poll(() => stage.evaluate((el) => el.getBoundingClientRect().width))
     .toBeGreaterThan(700);
   const speed = review.getByRole("button", { name: "Playback speed: 1x" });
-  const mute = review.getByRole("button", { name: /^(Unmute|Mute) video$/ });
+  const volumeTrigger = review.getByRole("button", {
+    name: "Video volume",
+    exact: true,
+  });
   const reaction = review.getByRole("button", {
     name: "React 😂 at current frame",
     exact: true,
   });
+  const mute = page
+    .getByRole("dialog", { name: "Video volume controls", exact: true })
+    .getByRole("button", { name: /^(Unmute|Mute) video$/ });
+  const expectReachable = async (control) => {
+    await expect(control).toBeInViewport();
+    await expect
+      .poll(() =>
+        control.evaluate((el) => {
+          const r = el.getBoundingClientRect();
+          return (
+            r.left >= 0 &&
+            r.right <= innerWidth &&
+            el.contains(
+              document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2),
+            )
+          );
+        }),
+      )
+      .toBe(true);
+  };
   for (const width of [1024, 800]) {
     await page.setViewportSize({ width, height: 768 });
-    await stage.hover();
+    await stage.hover({ position: { x: 8, y: 8 } });
     for (const control of [
       speed,
-      mute,
+      volumeTrigger,
       reaction,
-      review.getByRole("slider", { name: "Video volume", exact: true }),
       review.getByRole("slider", { name: "Video timeline", exact: true }),
     ]) {
-      await expect(control).toBeInViewport();
-      await expect
-        .poll(() =>
-          control.evaluate((el) => {
-            const r = el.getBoundingClientRect();
-            return (
-              r.left >= 0 &&
-              r.right <= innerWidth &&
-              el.contains(
-                document.elementFromPoint(
-                  r.x + r.width / 2,
-                  r.y + r.height / 2,
-                ),
-              )
-            );
-          }),
-        )
-        .toBe(true);
+      await expectReachable(control);
     }
+    await volumeTrigger.hover();
+    await expectReachable(mute);
+    await mute.press("Escape");
+    await expect(mute).toBeHidden();
   }
+  await stage.hover({ position: { x: 8, y: 8 } });
+  await volumeTrigger.hover();
+  const volume = page.getByRole("slider", {
+    name: "Video volume",
+    exact: true,
+  });
+  await expect(volume).toBeInViewport();
+  await volume.press("Escape");
   await speed.click();
   await page.getByRole("menuitemradio", { name: "2x", exact: true }).click();
   await expect(video).toHaveJSProperty("playbackRate", 2);
   const wasMuted = await video.evaluate((el) => el.muted);
-  await stage.hover();
+  await stage.hover({ position: { x: 8, y: 8 } });
+  await volumeTrigger.hover();
+  await expectReachable(mute);
+  await expect(video).toHaveJSProperty("muted", wasMuted);
   await mute.click();
   await expect(video).toHaveJSProperty("muted", !wasMuted);
   await reaction.click();

@@ -430,6 +430,13 @@ export const ROLE_GROUPS: RoleGroup[] = [
         use: "Gray native scrollbar thumb on a transparent track, including vendor shadow roots.",
         status: "core",
       },
+      {
+        token: "scrollbar-thumb-quiet",
+        variable: "--scrollbar-thumb-quiet",
+        pointsAt: "border-standard at 90% opacity",
+        use: "Quiet sidebar and navigation-tab scrollbar thumb, revealed on interaction.",
+        status: "core",
+      },
     ],
   },
   {

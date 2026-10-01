@@ -171,12 +171,29 @@ it("controls playback, speed and sound without native controls", async () => {
   fireEvent.click(screen.getByRole("button", { name: "Playback speed: 1x" }));
   fireEvent.click(screen.getByRole("menuitemradio", { name: "1.5x" }));
   expect(video.playbackRate).toBe(1.5);
+  fireEvent.click(screen.getByRole("button", { name: "Video volume" }));
+  expect(video.muted).toBe(false);
+  expect(video.volume).toBe(1);
   fireEvent.change(screen.getByRole("slider", { name: "Video volume" }), {
     target: { value: "0.5" },
   });
   expect(video.volume).toBe(0.5);
+  fireEvent.volumeChange(video);
   fireEvent.click(screen.getByRole("button", { name: "Mute video" }));
   expect(video.muted).toBe(true);
+  fireEvent.volumeChange(video);
+  const volume = screen.getByRole("slider", { name: "Video volume" });
+  expect(volume).toHaveValue("0");
+  fireEvent.click(screen.getByRole("button", { name: "Unmute video" }));
+  fireEvent.volumeChange(video);
+  expect(video.muted).toBe(false);
+  expect(volume).toHaveValue("0.5");
+  fireEvent.change(volume, { target: { value: "0" } });
+  fireEvent.volumeChange(video);
+  fireEvent.click(screen.getByRole("button", { name: "Unmute video" }));
+  fireEvent.volumeChange(video);
+  expect(video.volume).toBe(1);
+  expect(volume).toHaveValue("1");
 });
 
 it("keeps play available after a rejected playback request", async () => {
@@ -216,7 +233,9 @@ it("keeps the focus loop out of the collapsing comments panel", async () => {
   const toggle = screen.getByRole("button", { name: "Show comments" });
   toggle.focus();
   fireEvent.keyDown(toggle, { key: "Tab", shiftKey: true });
-  expect(screen.getByRole("slider", { name: "Video volume" })).toHaveFocus();
+  expect(
+    screen.getByRole("button", { name: "Playback speed: 1x" }),
+  ).toHaveFocus();
 });
 
 it("seeks ten seconds with arrow keys, updates the timeline, and omits gesture feedback", async () => {
@@ -258,6 +277,7 @@ it("leaves editing, native sliders, speed menus, and modified arrow keys alone",
   const video = document.querySelector("video");
   if (!video) throw new Error("Missing video element");
   video.currentTime = 25;
+  fireEvent.click(screen.getByRole("button", { name: "Video volume" }));
   const composer = screen.getByRole("textbox", { name: "Reply to thread" });
   for (const target of [
     composer,
@@ -337,6 +357,7 @@ it("preserves Space in the composer and on focused controls", async () => {
   if (!video) throw new Error("Missing video element");
   const play = vi.spyOn(video, "play");
   const pause = vi.spyOn(video, "pause");
+  fireEvent.click(screen.getByRole("button", { name: "Video volume" }));
   for (const target of [
     screen.getByRole("textbox", { name: "Reply to thread" }),
     screen.getByRole("button", { name: "Close fullscreen viewer" }),

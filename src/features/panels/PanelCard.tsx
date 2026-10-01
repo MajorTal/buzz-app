@@ -1,7 +1,10 @@
 import { usePanelTabHost } from "./PanelWorkspace";
 import type { Ref } from "react";
 import { Panel } from "../../shared/design-system/ui/Panel";
-import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
+import {
+  PanelHeader,
+  PanelHeaderLabel,
+} from "../../shared/design-system/ui/PanelHeader";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { XIcon } from "../../shared/design-system/icons/index";
 import type { PanelProps, RegisteredPanel } from "./service";
@@ -37,7 +40,16 @@ export function PanelCard({
           <div className={styles.card}>
             {!tabbed && (
               <PanelHeader
-                title={panel.title}
+                title={
+                  panel.launcher ? (
+                    <PanelHeaderLabel
+                      title={panel.title}
+                      icon={<img src={panel.launcher.icon} alt="" />}
+                    />
+                  ) : (
+                    panel.title
+                  )
+                }
                 actions={
                   <IconButton
                     size="toolbar"

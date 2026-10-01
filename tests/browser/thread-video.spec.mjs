@@ -43,6 +43,7 @@ test("channel thread hands off to a stable video viewer", async ({
   await expect
     .poll(() => thread.locator("video").evaluate((video) => video.readyState))
     .toBeGreaterThanOrEqual(2);
+  await thread.locator("[data-video-preview]").hover();
   await thread.getByRole("button", { name: "Open video fullscreen" }).click();
   const dialog = page.getByRole("dialog", { name: "Video review" });
   await expect(dialog).toBeVisible();
@@ -119,6 +120,7 @@ test.describe("public channel preview", () => {
     await expect
       .poll(() => thread.locator("video").evaluate((video) => video.readyState))
       .toBeGreaterThanOrEqual(2);
+    await thread.locator("[data-video-preview]").hover();
     await thread.getByRole("button", { name: "Open video fullscreen" }).click();
     const dialog = page.getByRole("dialog", { name: "Video review" });
     await expect(dialog).toBeVisible();

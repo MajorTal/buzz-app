@@ -263,8 +263,8 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     await page.evaluate(() => {
       window.retainedTerminal = document.querySelector(".xterm");
     });
-    await expect(launcher).toHaveAttribute("aria-pressed", "true");
-    await expect(launcher).toHaveAttribute("data-icon-variant", "tint");
+    await expect(launcher).toHaveAttribute("aria-expanded", "true");
+    await expect(launcher).toHaveAttribute("data-icon-variant", "ghost");
     await page.mouse.move(0, 0);
     const expectToken = async (node, property, token) => {
       const value = await node.evaluate(
@@ -280,8 +280,8 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
       );
       await expect(node).toHaveCSS(property, value);
     };
-    await expectToken(launcher, "color", "--purple-12");
-    await expectToken(launcher, "background-color", "--purple-3");
+    await expectToken(launcher, "color", "--text-standard");
+    await expectToken(launcher, "background-color", "--interaction-pressed");
     const restart = button("Restart");
     await expect(restart).toHaveClass("buzz-button");
     await expect(restart).toHaveCSS("border-top-width", "0px");
@@ -315,6 +315,8 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     await expect(hide).toHaveCSS("outline-width", "2px");
     for (const mode of ["light", "dark"]) {
       if (mode === "dark") await button("Toggle theme").click();
+      await expectToken(launcher, "color", "--text-standard");
+      await expectToken(launcher, "background-color", "--interaction-pressed");
       for (const width of [1280, 800, 390]) {
         await page.setViewportSize({ width, height: 844 });
         await expect(hide).toBeInViewport();
@@ -372,7 +374,8 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
     });
     await hide.click();
     await expect(drawer).toHaveCount(0);
-    await expect(launcher).toHaveAttribute("aria-pressed", "false");
+    await expect(launcher).toHaveAttribute("aria-expanded", "false");
+    await expect(launcher).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     await launcher.click();
     expect(
       await page.evaluate(

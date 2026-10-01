@@ -8,9 +8,9 @@ test("app startup preserves shared search control styling and interaction", asyn
   await page.goto("/");
   const search = page.getByRole("button", { name: "Search Buzz", exact: true });
   await expect(search).toBeVisible();
-  // Vary the shared ghost-button role: a copied feature-level color must fail.
+  // Vary the shared glass-button role: a copied feature-level color must fail.
   await page.locator("html").evaluate((element) => {
-    element.style.setProperty("--interaction-hover", "rgb(123, 45, 67)");
+    element.style.setProperty("--bg-glass-primary-hover", "rgb(123, 45, 67)");
   });
   await search.hover();
   await expect(search).toHaveCSS("background-color", "rgb(123, 45, 67)");

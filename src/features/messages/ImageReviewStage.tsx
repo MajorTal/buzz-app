@@ -21,9 +21,10 @@ import {
 import styles from "./Messages.module.css";
 import { downloadNativeMedia } from "./native-download";
 
-const MIN_ZOOM = 1;
+const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 4;
 const ZOOM_STEP = 0.25;
+const ZOOM_PRESETS = [0.5, 1, 1.5, 2];
 
 type Point = Readonly<{ x: number; y: number }>;
 
@@ -68,7 +69,8 @@ export function ImageReviewStage({
     constrain,
   } = useImageViewport(stage, image, source);
   const idle = useMediaControls(stage, source);
-  const pannable = zoom > MIN_ZOOM;
+  const pannable = zoom > 1;
+  const nextZoom = ZOOM_PRESETS.find((preset) => preset > zoom) ?? MIN_ZOOM;
   const { departing, prepare } = useImageGalleryMotion(
     stage,
     image,
@@ -81,7 +83,7 @@ export function ImageReviewStage({
       const item = attachments[index];
       if (!item || item.url === selected?.url) return;
       prepare(index > selectedIndex ? 1 : -1);
-      setBoundedZoom(MIN_ZOOM);
+      setBoundedZoom(1);
       const active = document.activeElement;
       const keepsNavigationFocus =
         (active === previousButton.current && index > 0) ||
@@ -149,7 +151,7 @@ export function ImageReviewStage({
       aria-label="Image gallery"
       tabIndex={-1}
       data-controls-idle={idle || undefined}
-      data-review-zoomed={pannable || undefined}
+      data-review-zoomed={zoom !== 1 || undefined}
       className={`${styles.imageReviewStage} ${pannable ? styles.imageReviewPannable : ""} ${dragging ? styles.imageReviewDragging : ""}`}
       onPointerDown={(event) => {
         if (!pannable || event.button !== 0) return;
@@ -189,9 +191,10 @@ export function ImageReviewStage({
         {
           url: selected.url,
           source,
-          transform: pannable
-            ? `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`
-            : "none",
+          transform:
+            zoom === 1
+              ? "none"
+              : `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
         },
       ].map((item) => {
         const current = item.url === selected.url;
@@ -228,7 +231,7 @@ export function ImageReviewStage({
         {attachments.length > 1 && (
           <div className={styles.imageReviewSwitcher}>
             <IconButton
-              size="compact"
+              size="sm"
               type="button"
               ref={previousButton}
               aria-label="Previous image"
@@ -240,7 +243,7 @@ export function ImageReviewStage({
               {selectedIndex + 1} / {attachments.length}
             </span>
             <IconButton
-              size="compact"
+              size="sm"
               type="button"
               ref={nextButton}
               aria-label="Next image"
@@ -252,44 +255,34 @@ export function ImageReviewStage({
         )}
         <div className={styles.imageReviewZoom}>
           <IconButton
-            size="compact"
+            size="sm"
             type="button"
             aria-label="Zoom out"
             disabled={zoom <= MIN_ZOOM}
             onClick={() => setBoundedZoom(zoom - ZOOM_STEP)}
             icon={<MinusIcon size={16} aria-hidden="true" />}
           />
-          <input
-            type="range"
-            aria-label="Image zoom"
-            min={MIN_ZOOM}
-            max={MAX_ZOOM}
-            step={ZOOM_STEP}
-            value={zoom}
-            onChange={(event) =>
-              setBoundedZoom(Number(event.currentTarget.value))
-            }
-          />
+          <Button
+            variant="ghost"
+            size="sm"
+            type="button"
+            aria-label={`Image zoom: ${Math.round(zoom * 100)}%. Zoom to ${nextZoom * 100}%`}
+            onClick={() => setBoundedZoom(nextZoom)}
+          >
+            {Math.round(zoom * 100)}%
+          </Button>
           <IconButton
-            size="compact"
+            size="sm"
             type="button"
             aria-label="Zoom in"
             disabled={zoom >= MAX_ZOOM}
             onClick={() => setBoundedZoom(zoom + ZOOM_STEP)}
             icon={<PlusIcon size={16} aria-hidden="true" />}
           />
-          <Button
-            size="sm"
-            type="button"
-            aria-label="Reset image zoom"
-            onClick={() => setBoundedZoom(MIN_ZOOM)}
-          >
-            {Math.round(zoom * 100)}%
-          </Button>
         </div>
         {nativeSource && source && (
           <IconButton
-            size="compact"
+            size="sm"
             type="button"
             aria-label="Download image"
             title="Download image"
@@ -303,14 +296,14 @@ export function ImageReviewStage({
           />
         )}
         {downloadErrorSource === source && (
-          <span role="alert">Download failed</span>
+          <span role="alert">Download failed. Try again.</span>
         )}
         {proxySource && !nativeSource && (
           <IconButton
             nativeButton={false}
             role="link"
             render={<a href={source} download />}
-            size="compact"
+            size="sm"
             aria-label="Download image"
             title="Download image"
             icon={<DownloadIcon size={17} />}
@@ -331,7 +324,7 @@ export function ImageReviewStage({
                 }}
               />
             }
-            size="compact"
+            size="sm"
             aria-label="Open image in browser"
             title="Open image in browser"
             icon={<ArrowSquareOutIcon size={17} />}

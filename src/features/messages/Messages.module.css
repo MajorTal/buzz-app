@@ -401,7 +401,15 @@
   overflow: hidden;
   border-radius: inherit;
   clip-path: var(--media-corner-clip, none);
-  background: var(--affordance-subtle-hover);
+  background: var(--surface-inset);
+}
+.attachmentImagePixels::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: inherit;
+  pointer-events: none;
 }
 .attachmentImage.mediaPlaceholder {
   border-radius: var(--media-preview-radius);
@@ -847,6 +855,7 @@ html[data-keyboard-navigation] .audioSeek:focus-visible {
 .mediaPreview {
   --media-preview-radius: 16px;
   --media-controls-inset: 6px;
+  container: media-preview / inline-size;
   position: relative;
   display: block;
   width: min(32rem, 100%, calc(min(28rem, 56vh) * var(--media-ratio, 16 / 9)));
@@ -916,15 +925,18 @@ button.mediaPreview {
   font-variant-numeric: tabular-nums;
 }
 @media (hover: hover) and (pointer: fine) {
+  .mediaPreview[data-video-preview]:not(:hover):not(:has(:focus-visible)):not(
+      :has([aria-expanded="true"])
+    )
+    .mediaExpand
+    button {
+    opacity: 0;
+    pointer-events: none;
+  }
   .mediaPreview[data-playing]:not(:hover):not(:has(:focus-visible)):not(
       :has([aria-expanded="true"])
     )
     .mediaPlay,
-  .mediaPreview[data-playing]:not(:hover):not(:has(:focus-visible)):not(
-      :has([aria-expanded="true"])
-    )
-    .mediaExpand
-    button,
   .mediaPreview[data-playing]:not(:hover):not(:has(:focus-visible)):not(
       :has([aria-expanded="true"])
     )
@@ -956,30 +968,24 @@ button.mediaPreview {
 .mediaViewer {
   position: relative;
   display: grid;
-  place-items: center;
+  grid-template-rows: auto minmax(0, 1fr);
   width: min(90rem, 100%);
   height: min(54rem, calc(100vh - 4rem));
   overflow: hidden;
   border-radius: var(--radius-card);
-  background: var(--surface-inverse);
+  background: var(--surface-panel);
   box-shadow: var(--elevation-popover);
 }
-.mediaViewerDragRegion {
-  position: absolute;
-  z-index: 1;
-  top: 0;
-  right: var(--space-16);
-  left: 0;
-  height: var(--size-panel-header);
+.mediaViewer[data-color-mode="dark"] {
+  color: var(--text-standard);
+  --text-primary: var(--text-standard);
 }
-.mediaViewerClose {
-  position: absolute;
-  z-index: 2;
-  top: var(--space-4);
-  right: var(--space-4);
+.mediaViewerHeading {
+  width: 100%;
 }
 .mediaViewerImage,
 .mediaViewerVideo {
+  min-height: 0;
   display: block;
   width: 100%;
   height: 100%;
@@ -1029,13 +1035,27 @@ button.mediaPreview {
 }
 .mediaReviewHeading {
   grid-column: 1 / -1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  min-height: var(--size-panel-header);
-  padding: var(--space-3) var(--space-4);
-  color: var(--text-standard);
+  min-width: 0;
   background: var(--surface-panel);
+}
+/* The layout owns the native drag target; shared header actions keep their input. */
+.mediaReviewHeading > header,
+.mediaViewerHeading > header {
+  pointer-events: none;
+}
+.mediaReviewHeading [class~="panel-header-actions"],
+.mediaViewerHeading [class~="panel-header-actions"] {
+  pointer-events: auto;
+}
+.mediaReviewHeading [class~="panel-header-title"],
+.mediaViewerHeading [class~="panel-header-title"] {
+  flex: 1 1 0;
+}
+.mediaReviewHeading [class~="panel-header-actions"] {
+  flex-shrink: 0;
+}
+.mediaReviewThreadHeading [class~="panel-header"]::after {
+  content: none;
 }
 .mediaReviewStage {
   display: grid;
@@ -1045,13 +1065,6 @@ button.mediaPreview {
   min-height: 0;
   padding: var(--space-4);
   background: var(--surface-inverse);
-}
-.mediaReviewStage video,
-.mediaReviewStage img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
 }
 .mediaReviewConversation {
   display: flex;
@@ -1072,13 +1085,12 @@ button.mediaPreview {
   position: sticky;
   top: 0;
   z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: var(--space-4) 0 var(--space-3);
+  flex-shrink: 0;
+  margin-bottom: var(--space-2);
   background: var(--surface-panel);
 }
-.mediaReviewThreadHeading span {
+.mediaReviewCommentCount {
+  padding-inline: var(--space-2);
   color: var(--text-subtle);
   font-size: var(--text-caption);
   font-variant-numeric: tabular-nums;
@@ -1098,15 +1110,12 @@ button.mediaPreview {
   align-items: center;
   gap: var(--space-2);
   padding: var(--space-3) var(--space-4) 0;
-  border-top: 1px solid var(--border-standard);
+  flex-wrap: wrap;
   color: var(--text-subtle);
   font-size: var(--text-caption);
 }
 .mediaReviewTimeOption > span {
-  padding: var(--space-1) var(--space-2);
-  border-radius: var(--radius-chip);
-  background: var(--affordance-selected);
-  color: var(--text-standard);
+  color: var(--text-subtle);
   font-family: var(--font-mono);
   font-weight: var(--text-label--font-weight);
   font-variant-numeric: tabular-nums;
@@ -1152,11 +1161,9 @@ button.mediaPreview {
 .imageReviewToolbar {
   width: max-content;
   max-width: calc(100% - 2rem);
-  color: var(--text-standard);
-  border: 1px solid var(--rim-shade);
-  border-radius: var(--radius-control);
-  background: var(--surface-panel);
-  transition: opacity 160ms ease-out;
+  color: var(--text-on-media);
+  border-radius: var(--size-control-sm);
+  isolation: isolate;
   position: absolute;
   z-index: 2;
   left: 50%;
@@ -1164,38 +1171,28 @@ button.mediaPreview {
   translate: -50% 0;
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-1) var(--space-3);
+  padding: var(--space-1) var(--space-2);
 }
-.imageReviewToolbar button,
-.imageReviewToolbar a {
-  color: var(--text-standard);
-  background: transparent;
-  transition:
-    background-color 120ms ease-out,
-    scale 100ms ease-out;
+.imageReviewToolbar::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  @apply media-glass;
 }
-@media (hover: hover) and (pointer: fine) {
-  .imageReviewToolbar button:enabled:hover,
-  .imageReviewToolbar a:hover {
-    background: var(--affordance-subtle-hover);
-  }
-}
-.imageReviewToolbar button:enabled:active,
-.imageReviewToolbar a:active {
-  background: var(--affordance-subtle-pressed);
-  scale: 0.94;
-}
-html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
-  outline: 2px solid var(--text-standard);
-  outline-offset: 2px;
+.imageReviewToolbar::before,
+.imageReviewToolbar > * {
+  opacity: var(--image-control-opacity, 1);
+  transition: opacity var(--duration-state) var(--easing-enter);
 }
 .imageReviewZoom > button {
   flex-shrink: 0;
   white-space: nowrap;
-}
-.imageReviewZoom input {
-  accent-color: var(--text-standard);
 }
 @media (hover: hover) and (pointer: fine) {
   /* Programmatic gallery focus can remain :focus-visible after a mouse click. */
@@ -1206,14 +1203,13 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
       :focus-visible
     ):not(:has(:focus-visible))
     .imageReviewToolbar {
-    opacity: 0;
+    --image-control-opacity: 0;
     pointer-events: none;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .imageReviewToolbar button,
-  .imageReviewToolbar a,
-  .imageReviewToolbar {
+  .imageReviewToolbar::before,
+  .imageReviewToolbar > * {
     transition: none;
   }
 }
@@ -1224,10 +1220,6 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
   align-items: center;
   gap: var(--space-1);
 }
-.imageReviewSwitcher {
-  padding-right: var(--space-2);
-  border-right: 1px solid var(--border-prominent);
-}
 .imageReviewSwitcher > span,
 .imageReviewPercent {
   min-width: 2.8rem;
@@ -1235,32 +1227,11 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
-.imageReviewZoom input {
-  width: min(9rem, 18vw);
-  accent-color: var(--affordance-prominent);
-}
 @media (max-width: 40.625rem) {
   .imageReviewToolbar {
-    width: auto;
-    max-width: none;
-    right: var(--space-2);
+    max-width: calc(100% - 1rem);
     bottom: var(--space-2);
-    left: var(--space-2);
-    translate: 0 0;
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: var(--space-1);
-    border-radius: var(--radius-control);
-  }
-  .imageReviewZoom {
-    min-width: 0;
-  }
-  .imageReviewZoom input {
-    width: 100%;
-    min-width: 3rem;
-  }
-  .imageReviewSwitcher {
-    padding-right: var(--space-1);
+    gap: var(--space-1) var(--space-2);
   }
 }
 
@@ -1546,7 +1517,14 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
   color: var(--text-subtle);
 }
 .mediaReviewUnavailable {
-  color: var(--text-inverse);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  max-width: 100%;
+  padding: var(--space-4);
+  color: var(--text-standard);
 }
 
 .composer[data-file-drag] {
@@ -1574,7 +1552,7 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
 }
 .quickReactionGlyph {
   pointer-events: none;
-  transition: transform 160ms cubic-bezier(0.23, 1, 0.32, 1);
+  transition: transform 120ms cubic-bezier(0.23, 1, 0.32, 1);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1582,12 +1560,25 @@ html[data-keyboard-navigation] .imageReviewToolbar :focus-visible {
 @media (hover: hover) and (pointer: fine) and (
     prefers-reduced-motion: no-preference
   ) {
-  .quickReaction:hover .quickReactionGlyph {
-    transform: scale(3) rotate(var(--reaction-hover-rotation, 0deg));
+  html:not([data-keyboard-input])
+    .quickReaction
+    button:enabled:hover
+    .quickReactionGlyph {
+    transform: translateY(-1px) scale(1.12);
   }
-  .quickReaction:hover {
-    position: relative;
-    z-index: 1;
+  html:not([data-keyboard-input])
+    .quickReaction
+    button:enabled:active
+    .quickReactionGlyph {
+    transform: scale(0.96);
+  }
+}
+html[data-keyboard-input] .quickReactionGlyph {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .quickReactionGlyph {
+    transition: none;
   }
 }
 @media (hover: hover) and (pointer: fine) {
@@ -1932,20 +1923,11 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
 }
 .mediaPreview[data-video-preview] .mediaVideo,
 .mediaPreview[data-video-preview] .mediaPoster {
-  object-fit: cover;
+  object-fit: contain;
 }
 .mediaPreview[data-video-preview] .mediaExpand {
   top: 0.5rem;
   right: 0.5rem;
-}
-/* Shared chrome controls own their glass, colors, focus ring and shape. */
-.mediaPreview[data-video-preview] .mediaExpand button {
-  transition:
-    background-color 120ms ease-out,
-    scale 100ms ease-out;
-}
-.mediaPreview[data-video-preview] .mediaExpand button:enabled:active {
-  scale: 0.94;
 }
 .darkReviewBackdrop {
   padding: calc(var(--space-8) + var(--space-2));
@@ -1962,61 +1944,21 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
     --media-preview-radius,
     calc(var(--radius-control) + var(--space-1))
   );
-  background: var(--surface-inset);
+  background: var(--surface-panel);
 }
 .mediaReviewViewer[data-color-mode="dark"] .mediaReviewStage {
-  background: var(--surface-base);
+  background: var(--surface-panel);
   padding: 0;
 }
-.mediaReviewViewer[data-color-mode="dark"] .mediaReviewHeading {
-  background: var(--surface-inset);
-  color: var(--text-standard);
-  border-bottom: 1px solid var(--border-standard);
-  gap: var(--space-3);
-  min-height: 3rem;
-}
-.mediaReviewHeading > span {
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.mediaReviewViewer[data-color-mode="dark"] .mediaReviewHeading button {
-  transition:
-    background-color 120ms ease-out,
-    scale 100ms ease-out;
-}
-.mediaReviewViewer[data-color-mode="dark"]
-  .mediaReviewHeading
-  button:enabled:active {
-  scale: 0.94;
-}
 .mediaReviewViewer[data-color-mode="dark"] .mediaReviewConversation {
-  border-left: 1px solid var(--border-standard);
+  border-inline-start: 1px solid var(--border-standard);
 }
 .mediaReviewViewer[data-comments-hidden] {
   grid-template-columns: minmax(0, 1fr) minmax(0, 0px);
 }
-.mediaReviewThreadHeading strong {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.mediaReviewViewer[data-color-mode="dark"] .mediaReviewThreadHeading {
-  border-bottom: 1px solid var(--border-standard);
-  margin: 0 calc(-1 * var(--space-4)) var(--space-3);
-  padding: var(--space-4);
-}
-.mediaReviewViewer[data-color-mode="dark"] .mediaReviewThreadHeading > span {
-  border-radius: calc(var(--radius-row) * 0.8);
-  background: var(--border-standard);
-  padding: var(--space-half) var(--space-2);
-}
 .mediaReviewViewer[data-color-mode="dark"] .mediaReviewComment {
-  padding: var(--space-3);
-  margin-bottom: var(--space-3);
-  border-radius: calc(var(--radius-row) * 0.8);
-  background: var(--surface-panel);
+  padding-block: var(--space-2);
+  margin-bottom: var(--space-2);
 }
 .mediaReviewComment[data-selected] {
   outline: 1px solid var(--border-prominent);
@@ -2037,8 +1979,6 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
   background: var(--affordance-subtle-hover);
 }
 .mediaReviewViewer[data-color-mode="dark"] .threadNote {
-  border: 1px dashed var(--surface-popover);
-  border-radius: calc(var(--radius-row) * 0.8);
   padding: var(--space-6) var(--space-3);
   text-align: center;
 }
@@ -2057,9 +1997,10 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
   color: var(--text-standard);
   color-scheme: dark;
   --text: var(--text-standard);
+  --text-primary: var(--text-standard);
   --text-muted: var(--text-metadata);
   --text-secondary: var(--text-metadata);
-  --surface: var(--surface-inset);
+  --surface: var(--surface-panel);
   --surface-input: var(--surface-inset);
   /* Legacy reaction roles must resolve here, not inherit the app root's mode. */
   --surface-control: var(--affordance-subtle);
@@ -2152,9 +2093,7 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
     visibility 0s 200ms;
 }
 .mediaPreview[data-video-preview] .mediaExpand button {
-  transition:
-    opacity 160ms ease-out,
-    scale 100ms ease-out;
+  transition: opacity var(--duration-fast) var(--easing-state);
 }
 @container media-review (max-width: 51.25rem) {
   .mediaReviewViewer[data-color-mode="dark"] .mediaReviewConversation {

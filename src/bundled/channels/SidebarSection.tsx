@@ -15,8 +15,11 @@ import {
 import {
   ArrowsDownUpIcon,
   CaretDownIcon,
+  CaretUpIcon,
   DotsThreeIcon,
   PlusIcon,
+  TextAaIcon,
+  TimerIcon,
 } from "../../shared/design-system/icons";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import type { RelaySession } from "../../features/relay/session";
@@ -145,9 +148,15 @@ export function SidebarSection({
                       }}
                     >
                       <MenuRadioItem closeOnClick={false} value="recent">
+                        <MenuIcon>
+                          <TimerIcon size={14} />
+                        </MenuIcon>
                         Recent
                       </MenuRadioItem>
                       <MenuRadioItem closeOnClick={false} value="alpha">
+                        <MenuIcon>
+                          <TextAaIcon size={14} />
+                        </MenuIcon>
                         A–Z
                       </MenuRadioItem>
                     </MenuRadioGroup>
@@ -160,6 +169,13 @@ export function SidebarSection({
                   setMenuOpen(false);
                 }}
               >
+                <MenuIcon>
+                  {open ? (
+                    <CaretUpIcon size={14} />
+                  ) : (
+                    <CaretDownIcon size={14} />
+                  )}
+                </MenuIcon>
                 {open ? "Collapse section" : "Expand section"}
               </MenuItem>
             </MenuPopup>

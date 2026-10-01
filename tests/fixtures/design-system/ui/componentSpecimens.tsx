@@ -61,7 +61,10 @@ import { Button } from "../../../../src/shared/design-system/ui/Button";
 import { IconButton } from "../../../../src/shared/design-system/ui/IconButton";
 import { NavigationItem } from "../../../../src/shared/design-system/ui/NavigationItem";
 import { NavigationSection } from "../../../../src/shared/design-system/ui/NavigationSection";
-import { PanelHeader } from "../../../../src/shared/design-system/ui/PanelHeader";
+import {
+  PanelHeader,
+  PanelHeaderLabel,
+} from "../../../../src/shared/design-system/ui/PanelHeader";
 import { Tabs } from "../../../../src/shared/design-system/ui/Tabs";
 
 import { ComponentAnatomy } from "./ComponentAnatomy";
@@ -924,6 +927,40 @@ function PanelHeaderSpecimen() {
               icon={<ArrowLeftIcon size={18} aria-hidden="true" />}
             />
           }
+          actions={actions}
+        />
+      </SpecimenGroup>
+      <SpecimenGroup
+        label="Static identity — aligned with navigation tabs"
+        code={`<PanelHeader
+  title={
+    <PanelHeaderLabel
+      title="Conversation"
+      icon={<ChatCircleIcon size="1rem" />}
+    />
+  }
+  actions={actions}
+/>`}
+      >
+        <PanelHeader
+          title={
+            <PanelHeaderLabel
+              title="Conversation"
+              icon={<ChatCircleIcon size="1rem" />}
+            />
+          }
+          actions={actions}
+        />
+      </SpecimenGroup>
+      <SpecimenGroup
+        label="Media detail — compact label without an icon"
+        code={`<PanelHeader
+  title={<PanelHeaderLabel title="Image" />}
+  actions={actions}
+/>`}
+      >
+        <PanelHeader
+          title={<PanelHeaderLabel title="Image" />}
           actions={actions}
         />
       </SpecimenGroup>

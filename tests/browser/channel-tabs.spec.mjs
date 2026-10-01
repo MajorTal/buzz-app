@@ -270,3 +270,93 @@ test("channel tab sets restore conversations and keep replies and sends scoped",
     page.getByRole("button", { name: "Channel settings", exact: true }),
   ).toBeFocused();
 });
+
+// Scrollbar geometry and scrollIntoView's effect on the fixed action need a browser.
+test("crowded tab strip scrolls only horizontally with Add tab fixed and a thin scrollbar", async ({
+  page,
+  app,
+}, testInfo) => {
+  await open(page, app);
+  await page
+    .getByRole("button", { name: "Toggle tab pane", exact: true })
+    .click();
+  const workspace = page.locator("[data-panel-workspace]");
+  const add = workspace.getByRole("button", { name: "Add tab", exact: true });
+  const list = workspace.getByRole("tablist", { name: "Panel tabs" });
+  const header = workspace.locator(":scope > header");
+  await expect(workspace.getByRole("searchbox")).toBeFocused();
+  await page.locator("[data-panel-dock]").evaluate(async (el) => {
+    await Promise.allSettled(
+      el.getAnimations().map((animation) => animation.finished),
+    );
+  });
+  const initial = await add.boundingBox();
+  const height = (await header.boundingBox()).height;
+  const tabBounds = await workspace.getByRole("tab").first().boundingBox();
+  const expectTabPosition = async () => {
+    const bounds = await workspace.getByRole("tab").last().boundingBox();
+    expect(bounds.y).toBeCloseTo(tabBounds.y, 1);
+    expect(bounds.height).toBeCloseTo(tabBounds.height, 1);
+  };
+  for (let i = 0; i < 5; i++) {
+    await add.click();
+    await expect(workspace.getByRole("tab")).toHaveCount(i + 2);
+    await expect(workspace.getByRole("searchbox")).toBeFocused();
+  }
+  const tabs = workspace.getByRole("tab");
+  const closeButtons = workspace.getByRole("button", {
+    name: "Close New tab tab",
+    exact: true,
+  });
+  const activeClose = closeButtons.last();
+  const inactiveClose = closeButtons.nth(4);
+  const thumbColor = () =>
+    list.evaluate(
+      (el) => getComputedStyle(el, "::-webkit-scrollbar-thumb").backgroundColor,
+    );
+  await add.hover();
+  await expect(activeClose).toHaveCSS("opacity", "1");
+  await expect(inactiveClose).toHaveCSS("opacity", "0");
+  await tabs.nth(4).hover();
+  await expect(inactiveClose).toHaveCSS("opacity", "1");
+  await expect(activeClose).toHaveCSS("opacity", "1");
+  await add.hover();
+  await expect(inactiveClose).toHaveCSS("opacity", "0");
+  await expectTabPosition();
+  await expect.poll(thumbColor).toBe("rgba(0, 0, 0, 0)");
+  await list.hover();
+  await expectTabPosition();
+  await expect.poll(thumbColor).not.toBe("rgba(0, 0, 0, 0)");
+  const geometry = await list.evaluate((el) => ({
+    overflow: el.scrollWidth > el.clientWidth,
+    scrollbar: el.offsetHeight - el.clientHeight,
+    nativeWidth: getComputedStyle(el).scrollbarWidth,
+    trackHeight: getComputedStyle(el, "::-webkit-scrollbar").height,
+  }));
+  expect(geometry.overflow).toBe(true);
+  await expect(list).toHaveCSS("overflow-y", "hidden");
+  expect(geometry.scrollbar).toBeLessThanOrEqual(4);
+  expect(geometry.nativeWidth).toBe("auto");
+  expect(geometry.trackHeight).toBe("4px");
+  expect((await add.boundingBox()).x).toBeCloseTo(initial.x, 1);
+  expect((await header.boundingBox()).height).toBeCloseTo(height, 1);
+  await workspace.getByRole("tab").last().press("Home");
+  await expect(workspace.getByRole("tab").first()).toBeFocused();
+  await expect(closeButtons.first()).toHaveCSS("opacity", "1");
+  await expect(list).toHaveJSProperty("scrollTop", 0);
+  await expectTabPosition();
+  expect((await add.boundingBox()).x).toBeCloseTo(initial.x, 1);
+  await workspace.getByRole("tab").first().press("End");
+  await expect(workspace.getByRole("tab").last()).toBeFocused();
+  await expect(list).toHaveJSProperty("scrollTop", 0);
+  await expectTabPosition();
+  expect((await add.boundingBox()).x).toBeCloseTo(initial.x, 1);
+  // Hover leaving hides the thumb even when keyboard focus stays in the tabs.
+  await add.hover();
+  await expect.poll(thumbColor).toBe("rgba(0, 0, 0, 0)");
+  expect((await header.boundingBox()).height).toBeCloseTo(height, 1);
+  await list.hover();
+  await expectTabPosition();
+  await expect.poll(thumbColor).not.toBe("rgba(0, 0, 0, 0)");
+  await page.screenshot({ path: testInfo.outputPath("crowded-tabs.png") });
+});

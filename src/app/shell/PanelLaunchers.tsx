@@ -13,12 +13,12 @@ export function PanelLaunchers({
   launch(panel: RegisteredPanel, trigger: HTMLButtonElement): void;
 }) {
   return panels
-    .filter((panel) => panel.launcher && panel.pluginId !== "buzz.bestie")
+    .filter((panel) => panel.launcher)
     .map((panel) => (
       <IconButton
         type="button"
         key={`${panel.key}:${panel.revision}`}
-        variant="ghost"
+        variant="chrome"
         shape="round"
         aria-label={panel.title}
         title={panel.title}

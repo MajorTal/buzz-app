@@ -27,7 +27,7 @@ const nativeRecipes = new Map([
     "src/features/messages/VideoPlayer.module.css",
     new Set([
       ".controls button",
-      '.controls input[type="range"]',
+      '.controls input[type="range"],\n.volumeSlider input[type="range"]',
       ".speedMenu button",
       ".reactions > fieldset > button",
       ".controls button:enabled:hover,\n  .reactions > fieldset > button:enabled:hover",

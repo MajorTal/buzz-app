@@ -6,7 +6,10 @@ import {
 } from "../../shared/design-system/icons/index";
 import { Button } from "../../shared/design-system/ui/Button";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { PanelHeader } from "../../shared/design-system/ui/PanelHeader";
+import {
+  PanelHeader,
+  PanelHeaderLabel,
+} from "../../shared/design-system/ui/PanelHeader";
 import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   PanelProps,
@@ -82,35 +85,32 @@ function Content({
       data-terminal-version={version}
     >
       <PanelHeader
-        variant="compact"
-        icon={
-          <TerminalWindowIcon
-            size={16}
-            aria-hidden="true"
-            style={{ flexShrink: 0 }}
-          />
-        }
         title={
-          <div className={styles.identity}>
-            <h2 className="text-label text-primary">BuzzTerm</h2>
-            <span
-              className="text-body-sm text-secondary"
-              title={entry?.context.channelId ?? context.channelId}
-            >
-              #{entry?.context.channelName ?? context.channelName}
-            </span>
-            {entry?.context.threadId && (
+          <PanelHeaderLabel
+            title="BuzzTerm"
+            icon={<TerminalWindowIcon size="1rem" />}
+          >
+            <div className={styles.identity}>
               <span
-                className="text-mono-sm text-secondary font-mono"
-                title={entry.context.threadId}
+                className="text-body-sm text-secondary"
+                title={entry?.context.channelId ?? context.channelId}
               >
-                Thread {entry.context.threadId.slice(0, 8)}
+                #{entry?.context.channelName ?? context.channelName}
               </span>
-            )}
-            <span className="text-body-sm text-secondary">
-              {entry?.status ?? (sessions.available ? "ended" : "desktop only")}
-            </span>
-          </div>
+              {entry?.context.threadId && (
+                <span
+                  className="text-mono-sm text-secondary font-mono"
+                  title={entry.context.threadId}
+                >
+                  Thread {entry.context.threadId.slice(0, 8)}
+                </span>
+              )}
+              <span className="text-body-sm text-secondary">
+                {entry?.status ??
+                  (sessions.available ? "ended" : "desktop only")}
+              </span>
+            </div>
+          </PanelHeaderLabel>
         }
         actions={
           <>

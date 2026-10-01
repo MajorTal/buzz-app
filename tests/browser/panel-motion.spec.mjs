@@ -1,7 +1,7 @@
 import { test, expect } from "./fixture.mjs";
 import { openPage } from "./navigation.mjs";
 
-// Exercise generic panel motion independently of the hidden Bestie launcher.
+// Exercise generic panel motion independently of the bundled Bestie content.
 test.use({ companionFixture: true });
 
 // Capture real CSS transitions at the DOM-change boundary, before rendering can
@@ -173,6 +173,13 @@ test("joined header seams, drag feedback, and pointer-only overlay motion", asyn
     await expect(dock).toHaveAttribute("inert");
     await expect(dock).toHaveAttribute("data-motion-held", "true");
     await expect(dock).toHaveCSS("transition-duration", "0.12s");
+    // Reverse the held overlay exit; its old completion cannot remove live content.
+    await launch.click();
+    await expect(dock).not.toHaveAttribute("data-closing");
+    await release();
+    await expect(close).toBeVisible();
+    await close.click();
+    await expect(dock).toHaveAttribute("data-motion-held", "true");
     await release();
     await expect(dock).toHaveCount(0);
 
@@ -305,7 +312,7 @@ for (const destination of ["Messages", "Projects"]) {
 }
 
 for (const destination of ["Messages", "Projects"]) {
-  test(`${destination} desktop panel enters and exits without collapsing its split early`, async ({
+  test(`${destination} desktop panel closes immediately and reopens at its saved width`, async ({
     page,
     app,
   }) => {
@@ -342,28 +349,17 @@ for (const destination of ["Messages", "Projects"]) {
       ).toBe(true);
       await release();
       await expect(dock).toHaveCSS("transform", "none");
-      const split = await dock.evaluate((el) => ({
-        width: getComputedStyle(el).width,
-        columns: getComputedStyle(el.parentElement).gridTemplateColumns,
-      }));
+      const width = await dock.evaluate((el) => getComputedStyle(el).width);
+      // The observer holds every real transition. A retained desktop exit would
+      // stay mounted here, so this proves close does not wait for its fade.
       await close.click();
-      await expect(dock).toHaveAttribute("data-motion-held", "true");
-      await expect(dock).toHaveAttribute("inert");
-      await expect(dock).toHaveCSS("transition-duration", "0.12s");
-      expect(
-        await dock.evaluate((el) => ({
-          width: getComputedStyle(el).width,
-          columns: getComputedStyle(el.parentElement).gridTemplateColumns,
-        })),
-      ).toEqual(split);
-      // Reverse the held exit: stale completion must not remove the reopened dock.
+      await expect(dock).toHaveCount(0);
       await launch.click();
       await expect(dock).not.toHaveAttribute("data-closing");
+      await expect(dock).toHaveCSS("width", width);
       await release();
       await expect(close).toBeVisible();
       await close.click();
-      await expect(dock).toHaveAttribute("data-motion-held", "true");
-      await release();
       await expect(dock).toHaveCount(0);
       await launch.press("Enter");
       await expect(dock).toHaveCSS("transition-duration", "0s");

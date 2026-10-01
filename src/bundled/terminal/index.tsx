@@ -53,11 +53,10 @@ export const apply: PluginModule["apply"] = (ctx) => {
     return (
       <IconButton
         size="toolbar"
-        variant={pressed ? "tint" : "ghost"}
         icon={<TerminalWindowIcon size={16} aria-hidden="true" />}
         aria-label="Toggle channel terminal"
         title={`Terminal (${formatBinding(TOGGLE_BINDING, isApplePlatform(navigator.platform)).text})`}
-        aria-pressed={pressed}
+        aria-expanded={pressed}
         onClick={(event) => {
           event.currentTarget.focus();
           toggle(target);

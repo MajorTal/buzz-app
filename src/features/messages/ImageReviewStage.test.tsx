@@ -45,6 +45,60 @@ function gesture(stage: HTMLElement, type: string, scale: number) {
   fireEvent(stage, event);
   return event;
 }
+it.each(["{Enter}", " "])(
+  "cycles image zoom presets with %s while keeping focus on the indicator",
+  async (key) => {
+    const user = userEvent.setup();
+    const { image, stage } = setup();
+    const cycle = screen.getByRole("button", { name: /^Image zoom:/ });
+    expect(cycle).toHaveTextContent("100%");
+    cycle.focus();
+    for (const percent of [150, 200, 50, 100, 150]) {
+      await user.keyboard(key);
+      expect(cycle).toHaveTextContent(`${percent}%`);
+      expect(cycle).toHaveFocus();
+      expect(image.style.transform).toBe(
+        percent === 100
+          ? "none"
+          : `translate(0px, 0px) scale(${percent / 100})`,
+      );
+    }
+    fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
+    expect(cycle).toHaveTextContent("125%");
+    fireEvent.click(cycle);
+    expect(cycle).toHaveTextContent("150%");
+    fireEvent.wheel(stage, { ctrlKey: true, deltaY: -10000 });
+    expect(cycle).toHaveTextContent("400%");
+    expect(screen.getByRole("button", { name: "Zoom in" })).toBeDisabled();
+    fireEvent.click(cycle);
+    expect(cycle).toHaveTextContent("50%");
+  },
+);
+
+it("zooms out to a centered 50% minimum with buttons and pinch gestures", () => {
+  const { stage, image } = setup();
+  const minus = screen.getByRole("button", { name: "Zoom out" });
+  const cycle = screen.getByRole("button", { name: /^Image zoom:/ });
+  expect(minus).toBeEnabled();
+  fireEvent.click(minus);
+  expect(cycle).toHaveTextContent("75%");
+  fireEvent.click(minus);
+  expect(cycle).toHaveTextContent("50%");
+  expect(minus).toBeDisabled();
+  fireEvent.wheel(stage, { ctrlKey: true, deltaY: 10000 });
+  fireEvent.wheel(stage, { deltaX: 100, deltaY: 100 });
+  expect(cycle).toHaveTextContent("50%");
+  expect(image.style.transform).toBe("translate(0px, 0px) scale(0.5)");
+  expect(stage).toHaveAttribute("data-review-zoomed");
+  fireEvent.click(cycle);
+  expect(cycle).toHaveTextContent("100%");
+  expect(stage).not.toHaveAttribute("data-review-zoomed");
+  gesture(stage, "gesturestart", 1);
+  gesture(stage, "gesturechange", 0.1);
+  gesture(stage, "gestureend", 0.1);
+  expect(cycle).toHaveTextContent("50%");
+});
+
 it("pinches around the cursor and pans with two-finger scroll within image bounds", () => {
   const { stage, image } = setup();
   expect(
@@ -56,14 +110,16 @@ it("pinches around the cursor and pans with two-finger scroll within image bound
     }),
   ).toBe(false);
   expect(
-    screen.getByRole("button", { name: "Reset image zoom" }),
+    screen.getByRole("button", { name: /^Image zoom:/ }),
   ).toHaveTextContent("200%");
   expect(image.style.transform).toContain("translate(-50px, 0px)");
   fireEvent.wheel(stage, { deltaX: 60, deltaY: 40 });
   expect(image.style.transform).toContain("translate(-110px, -40px)");
   fireEvent.wheel(stage, { deltaX: 10000, deltaY: 10000 });
   expect(image.style.transform).toContain("translate(-250px, -200px)");
-  fireEvent.click(screen.getByRole("button", { name: "Reset image zoom" }));
+  fireEvent.click(screen.getByRole("button", { name: /^Image zoom:/ }));
+  expect(image.style.transform).toBe("translate(0px, 0px) scale(0.5)");
+  fireEvent.click(screen.getByRole("button", { name: /^Image zoom:/ }));
   expect(image.style.transform).toBe("none");
 });
 it("handles WebKit cumulative pinch scale without also applying wheel zoom", () => {
@@ -82,9 +138,8 @@ it("handles WebKit cumulative pinch scale without also applying wheel zoom", () 
 });
 it("reclamps the image after resizing and leaves toolbar wheel input alone", () => {
   const { stage, image } = setup();
-  fireEvent.change(screen.getByRole("slider", { name: "Image zoom" }), {
-    target: { value: "2" },
-  });
+  const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+  for (let step = 0; step < 4; step++) fireEvent.click(zoomIn);
   fireEvent.wheel(stage, { deltaY: 1000 });
   vi.spyOn(stage, "getBoundingClientRect").mockReturnValue(
     new DOMRect(0, 0, 1000, 300),
@@ -92,7 +147,7 @@ it("reclamps the image after resizing and leaves toolbar wheel input alone", () 
   fireEvent(window, new Event("resize"));
   expect(image.style.transform).toContain("translate(0px, -150px)");
   expect(
-    fireEvent.wheel(screen.getByRole("slider", { name: "Image zoom" }), {
+    fireEvent.wheel(zoomIn, {
       deltaY: 100,
     }),
   ).toBe(true);
@@ -110,32 +165,41 @@ it("reveals idle controls on movement and clears its timer on unmount", () => {
   expect(vi.getTimerCount()).toBe(0);
 });
 
-it("resets zoom for another image without replacing the toolbar", () => {
-  const attachments = [
-    { url: "https://fixture.test/one.png", kind: "image" as const },
-    { url: "https://fixture.test/two.png", kind: "image" as const },
-  ];
-  const props = {
-    attachments,
-    media: (url: string) => url,
-    select: () => {},
-    onOpenLink: () => false,
-  };
-  const { rerender } = render(
-    <ImageReviewStage {...props} selectedUrl="https://fixture.test/one.png" />,
-  );
-  const zoomIn = screen.getByRole("button", { name: "Zoom in" });
-  fireEvent.click(zoomIn);
-  zoomIn.focus();
-  rerender(
-    <ImageReviewStage {...props} selectedUrl="https://fixture.test/two.png" />,
-  );
-  expect(
-    screen.getByRole("button", { name: "Reset image zoom" }),
-  ).toHaveTextContent("100%");
-  expect(screen.getByRole("button", { name: "Zoom in" })).toBe(zoomIn);
-  expect(zoomIn).toHaveFocus();
-});
+it.each(["Zoom in", "Zoom out"])(
+  "resets zoom after %s for another image without replacing the toolbar",
+  (action) => {
+    const attachments = [
+      { url: "https://fixture.test/one.png", kind: "image" as const },
+      { url: "https://fixture.test/two.png", kind: "image" as const },
+    ];
+    const props = {
+      attachments,
+      media: (url: string) => url,
+      select: () => {},
+      onOpenLink: () => false,
+    };
+    const { rerender } = render(
+      <ImageReviewStage
+        {...props}
+        selectedUrl="https://fixture.test/one.png"
+      />,
+    );
+    const zoomIn = screen.getByRole("button", { name: "Zoom in" });
+    fireEvent.click(screen.getByRole("button", { name: action }));
+    zoomIn.focus();
+    rerender(
+      <ImageReviewStage
+        {...props}
+        selectedUrl="https://fixture.test/two.png"
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: /^Image zoom:/ }),
+    ).toHaveTextContent("100%");
+    expect(screen.getByRole("button", { name: "Zoom in" })).toBe(zoomIn);
+    expect(zoomIn).toHaveFocus();
+  },
+);
 
 it("loads the original animated image and releases the transform after resetting zoom", () => {
   const url = "https://fixture.test/animated.gif";
@@ -155,7 +219,7 @@ it("loads the original animated image and releases the transform after resetting
   expect(image).toHaveStyle({ transform: "none" });
   fireEvent.click(screen.getByRole("button", { name: "Zoom in" }));
   expect(image.style.transform).toContain("scale(1.25)");
-  fireEvent.click(screen.getByRole("button", { name: "Reset image zoom" }));
+  fireEvent.click(screen.getByRole("button", { name: "Zoom out" }));
   expect(screen.getByRole("img")).toBe(image);
   expect(image).toHaveStyle({ transform: "none" });
 });
@@ -228,7 +292,7 @@ it("navigates the gallery with buttons and left/right keys, resetting zoom and s
     "https://fixture.test/three.png",
   );
   expect(
-    screen.getByRole("button", { name: "Reset image zoom" }),
+    screen.getByRole("button", { name: /^Image zoom:/ }),
   ).toHaveTextContent("100%");
   expect(screen.getByRole("button", { name: "Next image" })).toBeDisabled();
   fireEvent.keyDown(close, { key: "ArrowRight" });
@@ -267,12 +331,11 @@ it.each(["{Enter}", " "])(
   },
 );
 
-it("leaves arrow keys to the comment editor, zoom slider, modifiers, and other overlays", () => {
+it("leaves arrow keys to the comment editor, modifiers, and other overlays", () => {
   gallery();
   for (const target of [
     screen.getByRole("textbox", { name: "Comment" }),
     screen.getByTestId("rich-comment"),
-    screen.getByRole("slider", { name: "Image zoom" }),
   ]) {
     expect(fireEvent.keyDown(target, { key: "ArrowRight" })).toBe(true);
   }

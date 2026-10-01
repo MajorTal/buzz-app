@@ -59,6 +59,7 @@
   .dock {
     --panel-motion-duration: var(--duration-panel-enter);
     --panel-motion-distance: 100%;
+    --panel-motion-exit-duration: var(--duration-fast);
     position: absolute;
     inset: 0 0 0 auto;
     width: min(26.25rem, 100%);
@@ -86,10 +87,7 @@
 .motion[data-closing] {
   opacity: 0;
   transform: translateX(var(--panel-motion-distance, var(--space-3)));
-  transition-duration: min(
-    var(--panel-motion-duration, var(--duration-panel-enter)),
-    var(--duration-fast)
-  );
+  transition-duration: var(--panel-motion-exit-duration, 0s);
   pointer-events: none;
 }
 @starting-style {
@@ -201,6 +199,9 @@ html[data-keyboard-input] :is(.subviewBase, .subview) {
 }
 .workspace > header [class="panel-header-title"] {
   overflow: hidden;
+}
+.workspace > header [class="panel-header-actions"] {
+  flex-shrink: 0;
 }
 .workspaceBody {
   display: grid;

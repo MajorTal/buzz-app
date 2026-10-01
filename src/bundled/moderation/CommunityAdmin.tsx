@@ -14,6 +14,8 @@ import {
   CrownIcon,
   DotsThreeIcon,
   ShieldIcon,
+  MinusIcon,
+  UserIcon,
 } from "../../shared/design-system/icons/index";
 import { AlertDialog } from "../../shared/design-system/ui/AlertDialog";
 import { Avatar } from "../../shared/design-system/ui/Avatar";
@@ -24,6 +26,7 @@ import { Input } from "../../shared/design-system/ui/Input";
 import { InputGroup } from "../../shared/design-system/ui/InputGroup";
 import {
   MenuItem,
+  MenuIcon,
   MenuPopup,
   MenuRadioGroup,
   MenuRadioItem,
@@ -335,6 +338,15 @@ function Members({
                           key={action}
                           onClick={() => setPending({ member, action })}
                         >
+                          <MenuIcon>
+                            {action === "promote" ? (
+                              <ShieldIcon size={14} />
+                            ) : action === "demote" ? (
+                              <UserIcon size={14} />
+                            ) : (
+                              <MinusIcon size={14} />
+                            )}
+                          </MenuIcon>
                           {verb[action]}
                         </MenuItem>
                       ))}

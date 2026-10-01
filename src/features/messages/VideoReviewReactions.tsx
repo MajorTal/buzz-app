@@ -1,3 +1,4 @@
+import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { useState, useSyncExternalStore, type RefObject } from "react";
 import type { RelaySession } from "../relay/session";
 import type { ConversationExtensions } from "../conversation/contracts";
@@ -52,21 +53,21 @@ export function VideoReviewReactions({
     <div className={styles.reactions} data-review-chrome="">
       <fieldset aria-label="React at current frame">
         {["😂", "😍", "😮", "🙌", "👍", "👎"].map((emoji) => (
-          <button
-            data-buzz-ui=""
-            type="button"
+          <IconButton
+            size="sm"
             key={emoji}
             disabled={disabled}
             aria-label={`React ${emoji} at current frame`}
             onClick={() => select(emoji)}
-          >
-            <span
-              className={`${styles.reactionEmoji}${emoji === "🙌" ? ` ${styles.raisedHandsEmoji}` : ""}`}
-              aria-hidden="true"
-            >
-              {emoji}
-            </span>
-          </button>
+            icon={
+              <span
+                className={`${styles.reactionEmoji}${emoji === "🙌" ? ` ${styles.raisedHandsEmoji}` : ""}`}
+                aria-hidden="true"
+              >
+                {emoji}
+              </span>
+            }
+          />
         ))}
         {extensions && (
           <ReactionTool

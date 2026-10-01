@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import {
   ArchiveIcon,
+  ArrowClockwiseIcon,
   EyeSlashIcon,
   SignOutIcon,
   TrashIcon,
+  WarningCircleIcon,
 } from "../../shared/design-system/icons";
 import {
   MenuIcon,
@@ -54,6 +56,9 @@ export function ChannelLifecycleMenu({
       <>
         {separator && <MenuSeparator />}
         <MenuItem disabled>
+          <MenuIcon>
+            <WarningCircleIcon size={14} />
+          </MenuIcon>
           Channel actions unavailable on this connection
         </MenuItem>
       </>
@@ -68,6 +73,9 @@ export function ChannelLifecycleMenu({
           disabled={disabled}
           onClick={() => setRetry((value) => value + 1)}
         >
+          <MenuIcon>
+            <ArrowClockwiseIcon size={14} />
+          </MenuIcon>
           Retry channel permissions
         </MenuItem>
       </>
@@ -111,12 +119,20 @@ export function ChannelLifecycleMenu({
           )}
           {state.deleteUnavailable && (
             <>
-              <MenuItem disabled>Delete check unavailable</MenuItem>
+              <MenuItem disabled>
+                <MenuIcon>
+                  <WarningCircleIcon size={14} />
+                </MenuIcon>
+                Delete check unavailable
+              </MenuItem>
               <MenuItem
                 closeOnClick={false}
                 disabled={disabled}
                 onClick={() => setRetry((value) => value + 1)}
               >
+                <MenuIcon>
+                  <ArrowClockwiseIcon size={14} />
+                </MenuIcon>
                 Retry Delete check
               </MenuItem>
             </>

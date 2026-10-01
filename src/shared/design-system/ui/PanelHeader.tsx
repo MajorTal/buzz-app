@@ -30,3 +30,26 @@ export function PanelHeader({
     </header>
   );
 }
+
+/** Static identity aligned with the navigation tabs, without adding a tab stop. */
+export function PanelHeaderLabel({
+  title,
+  icon,
+  children,
+}: {
+  title: string;
+  icon?: ReactNode;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="panel-header-label">
+      {icon && (
+        <span className="panel-header-label-icon" aria-hidden="true">
+          {icon}
+        </span>
+      )}
+      <h2>{title}</h2>
+      {children}
+    </div>
+  );
+}

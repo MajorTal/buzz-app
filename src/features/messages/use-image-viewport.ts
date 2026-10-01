@@ -69,7 +69,7 @@ export function useImageViewport(
   const zoomTo = useCallback(
     (value: number, anchor?: Point) => {
       if (!Number.isFinite(value)) return;
-      const zoom = Math.max(1, Math.min(4, value));
+      const zoom = Math.max(0.5, Math.min(4, value));
       const previous = current.current;
       const ratio = zoom / previous.zoom;
       update(

@@ -9,3 +9,37 @@
   scrollbar-width: thin;
   scrollbar-color: var(--border-prominent) transparent;
 }
+
+/* Match the sidebar's quiet thumb without changing geometry on hover.
+   Keep this with the defaults: picker imports also load outside the base layer. */
+.buzz-tabs[data-variant="navigation"] .buzz-tabs-list {
+  --tab-scrollbar-thumb: transparent;
+  scrollbar-width: thin;
+  scrollbar-color: var(--tab-scrollbar-thumb) transparent;
+}
+.buzz-tabs[data-variant="navigation"] .buzz-tabs-list:hover {
+  --tab-scrollbar-thumb: var(--scrollbar-thumb-quiet);
+}
+@media (hover: none) {
+  .buzz-tabs[data-variant="navigation"] .buzz-tabs-list {
+    --tab-scrollbar-thumb: var(--scrollbar-thumb-quiet);
+  }
+}
+@supports selector(::-webkit-scrollbar) {
+  .buzz-tabs[data-variant="navigation"] .buzz-tabs-list {
+    scrollbar-width: auto;
+    scrollbar-color: auto;
+  }
+}
+.buzz-tabs[data-variant="navigation"] .buzz-tabs-list::-webkit-scrollbar {
+  height: var(--space-1);
+}
+.buzz-tabs[data-variant="navigation"] .buzz-tabs-list::-webkit-scrollbar-thumb {
+  border-top: 1px solid transparent;
+  background: var(--tab-scrollbar-thumb);
+  background-clip: padding-box;
+  border-radius: var(--radius-pill);
+}
+.buzz-tabs[data-variant="navigation"] .buzz-tabs-list::-webkit-scrollbar-track {
+  background: transparent;
+}

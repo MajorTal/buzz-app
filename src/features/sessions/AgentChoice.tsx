@@ -1,12 +1,17 @@
 import { useIdentityNames } from "../identity-names/react";
 import { Button } from "../../shared/design-system/ui/Button";
-import { RobotIcon, CaretUpIcon } from "../../shared/design-system/icons/index";
+import {
+  ArrowClockwiseIcon,
+  RobotIcon,
+  CaretUpIcon,
+} from "../../shared/design-system/icons/index";
 import { useAgentChoices } from "../agents/use-choices";
 import {
   MenuRoot,
   MenuTrigger,
   MenuPopup,
   MenuItem,
+  MenuIcon,
   MenuRadioGroup,
   MenuRadioItem,
   MenuNote,
@@ -280,6 +285,9 @@ export function AgentChoice({
         )}
         {(agents.status === "error" || !!agents.error) && (
           <MenuItem closeOnClick={false} onClick={() => void library.refresh()}>
+            <MenuIcon>
+              <ArrowClockwiseIcon size={14} />
+            </MenuIcon>
             Retry agent list
           </MenuItem>
         )}

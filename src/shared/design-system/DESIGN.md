@@ -417,9 +417,9 @@ show these contracts and their compositions.
 ## Compositions
 
 PanelHeader owns one consistent header frame: leading `navigation`, title/icon,
-and trailing `actions`. Use a toolbar IconButton with ArrowLeft for a local back
-action and X for closing the panel. The default 2.5rem (40px at the default root size)
-minimum height aligns conversation,
+and trailing `actions`. `PanelHeaderLabel` supplies the smaller tab-aligned
+label role; omit its optional icon for image and video detail titles. Use a toolbar IconButton with ArrowLeft for a local back
+action and X for closing the panel. The default 2.5rem (40px at the default root size) minimum height aligns conversation,
 thread, profile, tabbed workspace, and Todos headers. The compact variant shares
 this height. Headers use 0.25rem inline padding (matching the centered 2rem controls’
 block inset), 1rem identity icons, and
@@ -427,6 +427,9 @@ block inset), 1rem identity icons, and
 tabs use 1rem icons or fill avatars and 0.5rem leading padding.
 Header spacing, icons, and controls scale with rem; separators remain
 1px hairlines. Titles and actions may wrap when their content needs more room.
+Static identities use PanelHeaderLabel to share navigation tabs’ icon slot,
+regular title weight, and leading inset without adding a tab stop. Terminal context
+can follow the label; Inbox and Bestie use the same composition.
 Navigation state, focus restoration, and content transitions belong to the host.
 
 Composer pickers reuse PopoverPopup and anchor above the whole composer with a
@@ -524,12 +527,9 @@ remain above the stack. Content updates do not restart expiry; timeout changes d
 Tabs with content use renderPanel, which lets Base UI connect each tab and panel.
 Route navigation uses NavigationItem with aria-current instead. Tabs can also
 compose NavigationItem through the `navigation` variant: these retain tab
-semantics, use 12rem widths with ellipsis and a subtle selected fill, accept
-avatars/icons, and place a sibling close
-button over reserved trailing space. Navigation tab strips scroll horizontally with a
-thin native scrollbar. The main
-channel header uses the same control with a single non-closable tab with
-`showSelection={false}` (no selection or hover fill); channel
+semantics, use 12rem widths with ellipsis and a subtle selected fill, accept avatars/icons, and place a sibling close
+button over reserved trailing space. Close buttons stay visible on the active tab; inactive tabs reveal them on hover or keyboard focus. Touch devices keep close buttons visible. Navigation tab strips scroll only horizontally. Their rounded thumb uses the sidebar’s quiet scrollbar role, with a 3px visible thumb in the header’s 4px bottom inset. The tab row keeps its vertical position as overflow starts or stops. It appears only while the strip is hovered; touch devices retain the thumb without requiring hover. The main
+channel header uses the same control with a single non-closable tab with `showSelection={false}` (no selection or hover fill); channel
 actions remain in the header action slot. The settings launcher uses
 `data-highlight-expanded="false"` to preserve disclosure semantics without a
 sticky pressed treatment; the selected tab owns the open-state indicator.

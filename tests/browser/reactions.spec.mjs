@@ -49,13 +49,12 @@ test("reaction plus opens a visible emoji-only picker, restores focus and publis
         return Math.round(Math.hypot(matrix.a, matrix.b) * 1000) / 1000;
       }),
     )
-    .toBe(3);
+    .toBe(1.12);
   const rotation = await glyph.evaluate((element) => {
     const matrix = new DOMMatrix(getComputedStyle(element).transform);
     return (Math.atan2(matrix.b, matrix.a) * 180) / Math.PI;
   });
-  expect(rotation).toBeGreaterThanOrEqual(-10);
-  expect(rotation).toBeLessThanOrEqual(10);
+  expect(rotation).toBe(0);
   expect(await shortcut.boundingBox()).toEqual(shortcutBox);
   expect(await neighbor.boundingBox()).toEqual(neighborBox);
 

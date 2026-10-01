@@ -1,6 +1,10 @@
 import { prepareReviewEntrance } from "./use-review-entrance";
 import { useMediaCorners } from "./use-media-corners";
 import { VideoPlayer, VideoControls } from "./VideoPlayer";
+import {
+  PanelHeader,
+  PanelHeaderLabel,
+} from "../../shared/design-system/ui/PanelHeader";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import {
   useEffect,
@@ -307,24 +311,27 @@ function MediaViewer({
       }}
     >
       <section
-        className={styles.mediaViewer}
+        className={`${styles.mediaViewer} dark`}
+        data-color-mode="dark"
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <div className={styles.mediaViewerDragRegion} data-tauri-drag-region />
-        <span className={styles.mediaViewerClose}>
-          <IconButton
-            size="compact"
-            variant="solid"
-            shape="round"
-            ref={closeButton}
-            type="button"
-            aria-label="Close fullscreen viewer"
-            onClick={close}
-            icon={<XIcon size={20} aria-hidden="true" />}
+        <div className={styles.mediaViewerHeading} data-tauri-drag-region>
+          <PanelHeader
+            title={<PanelHeaderLabel title={title} />}
+            actions={
+              <IconButton
+                size="compact"
+                ref={closeButton}
+                type="button"
+                aria-label="Close fullscreen viewer"
+                onClick={close}
+                icon={<XIcon size={20} aria-hidden="true" />}
+              />
+            }
           />
-        </span>
+        </div>
         {children}
       </section>
     </div>

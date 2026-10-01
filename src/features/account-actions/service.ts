@@ -1,5 +1,5 @@
 import { Service, type Context } from "@deepseek-ai/cordis";
-import type { ComponentType } from "react";
+import type { ComponentType, ReactNode } from "react";
 import {
   createContributions,
   type Contribution,
@@ -8,6 +8,7 @@ import {
 export type AccountAction = Readonly<{
   id: string;
   title: string;
+  icon?: ReactNode;
   component: ComponentType<{
     open: boolean;
     onOpenChange(open: boolean): void;

@@ -104,7 +104,7 @@ test("thread actions and growing reactions paint beyond the scroller without mov
         return Math.round(Math.hypot(matrix.a, matrix.b) * 1000) / 1000;
       }),
     )
-    .toBe(3);
+    .toBe(1.12);
   expect(
     await glyph.evaluate((node) => {
       const rect = node.getBoundingClientRect();

@@ -1,6 +1,8 @@
 import {
   EnvelopeIcon,
   EnvelopeOpenIcon,
+  PencilSimpleIcon,
+  TrashIcon,
 } from "../../shared/design-system/icons";
 import {
   createContext,
@@ -263,6 +265,9 @@ export function MessageManagementItems({
           }
           onClick={() => act(() => editor.current?.(row))}
         >
+          <MenuIcon>
+            <PencilSimpleIcon size={14} />
+          </MenuIcon>
           Edit message
         </MenuItem>
       )}
@@ -288,6 +293,9 @@ export function MessageManagementItems({
             )
           }
         >
+          <MenuIcon>
+            <TrashIcon size={14} />
+          </MenuIcon>
           Delete message
         </MenuItem>
       )}

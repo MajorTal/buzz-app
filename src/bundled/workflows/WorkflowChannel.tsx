@@ -9,8 +9,18 @@ import type {
   WorkflowCapability,
   WorkflowDefinition,
 } from "../../features/workflows/types";
-import { HashIcon } from "../../shared/design-system/icons";
-import { MenuItem, MenuSeparator } from "../../shared/design-system/ui/Menu";
+import {
+  EyeSlashIcon,
+  HashIcon,
+  ListBulletsIcon,
+  PlayIcon,
+  TrashIcon,
+} from "../../shared/design-system/icons";
+import {
+  MenuIcon,
+  MenuItem,
+  MenuSeparator,
+} from "../../shared/design-system/ui/Menu";
 import { Button } from "../../shared/design-system/ui/Button";
 import { ConfirmAction } from "./ConfirmAction";
 import { WorkflowEditor } from "./WorkflowEditor";
@@ -393,6 +403,13 @@ export function WorkflowChannel({
                   disabled={!capability.availability.history}
                   onClick={() => setReadRuns((value) => !value)}
                 >
+                  <MenuIcon>
+                    {readRuns ? (
+                      <EyeSlashIcon size={14} />
+                    ) : (
+                      <ListBulletsIcon size={14} />
+                    )}
+                  </MenuIcon>
                   {readRuns ? "Hide runs" : "Read runs"}
                 </MenuItem>
                 {!readonly && (
@@ -406,6 +423,9 @@ export function WorkflowChannel({
                       }
                       onClick={trigger}
                     >
+                      <MenuIcon>
+                        <PlayIcon size={14} />
+                      </MenuIcon>
                       Run now
                     </MenuItem>
                     {enable}
@@ -419,6 +439,9 @@ export function WorkflowChannel({
                       }
                       onClick={() => setConfirmDelete(true)}
                     >
+                      <MenuIcon>
+                        <TrashIcon size={14} />
+                      </MenuIcon>
                       Delete workflow
                     </MenuItem>
                   </>

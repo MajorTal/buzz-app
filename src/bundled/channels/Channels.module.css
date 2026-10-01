@@ -181,8 +181,7 @@
   );
 }
 .channelList:is(:hover, :focus-within) {
-  scrollbar-color: color-mix(in srgb, var(--border-standard) 90%, transparent)
-    transparent;
+  scrollbar-color: var(--scrollbar-thumb-quiet) transparent;
 }
 .channelList::-webkit-scrollbar {
   width: 5px;
@@ -198,7 +197,7 @@
   transition: background-color 90ms cubic-bezier(0.23, 1, 0.32, 1);
 }
 .channelList:is(:hover, :focus-within)::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--border-standard) 90%, transparent);
+  background: var(--scrollbar-thumb-quiet);
   background-clip: padding-box;
 }
 .channelListContent {
@@ -411,8 +410,7 @@
     pointer-events: auto;
   }
   .channelList {
-    scrollbar-color: color-mix(in srgb, var(--border-standard) 90%, transparent)
-      transparent;
+    scrollbar-color: var(--scrollbar-thumb-quiet) transparent;
   }
 }
 .preferenceNotice {
@@ -504,6 +502,7 @@
   .panelStack {
     --panel-motion-duration: var(--duration-panel-enter);
     --panel-motion-distance: 100%;
+    --panel-motion-exit-duration: var(--duration-fast);
     position: absolute;
     grid-column: 1;
     inset: 0 0 0 auto;
@@ -523,6 +522,7 @@
   .panelStack {
     --panel-motion-duration: var(--duration-panel-enter);
     --panel-motion-distance: 100%;
+    --panel-motion-exit-duration: var(--duration-fast);
     position: absolute;
     grid-column: 1;
     inset: 0 0 0 auto;

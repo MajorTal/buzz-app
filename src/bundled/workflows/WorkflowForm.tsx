@@ -7,6 +7,7 @@ import {
   PlusIcon,
   SmileyIcon,
   TrashIcon,
+  TimerIcon,
   WebhooksLogoIcon,
   XIcon,
 } from "../../shared/design-system/icons";
@@ -18,6 +19,7 @@ import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { Input } from "../../shared/design-system/ui/Input";
 import {
   MenuItem,
+  MenuIcon,
   MenuPopup,
   MenuRoot,
   MenuTrigger,
@@ -156,10 +158,21 @@ export function WorkflowForm({
         />
         <MenuPopup size="compact">
           <MenuItem onClick={() => addStep(after, "send_message")}>
+            <MenuIcon>
+              <ChatCircleIcon size={14} />
+            </MenuIcon>
             Add Send Message
           </MenuItem>
-          <MenuItem onClick={() => addStep(after, "delay")}>Add Delay</MenuItem>
+          <MenuItem onClick={() => addStep(after, "delay")}>
+            <MenuIcon>
+              <TimerIcon size={14} />
+            </MenuIcon>
+            Add Delay
+          </MenuItem>
           <MenuItem onClick={() => addStep(after, "call_webhook")}>
+            <MenuIcon>
+              <WebhooksLogoIcon size={14} />
+            </MenuIcon>
             Add Call Webhook
           </MenuItem>
         </MenuPopup>

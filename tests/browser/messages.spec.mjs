@@ -80,27 +80,15 @@ test("media review stage contains portrait video and image media", async ({
 }) => {
   await withMessagesFixture(page, async () => {
     await page.setViewportSize({ width: 900, height: 700 });
-    await page.evaluate(() => {
-      const styles = window.messagesFixture.styles;
-      const host = document.createElement("div");
-      host.dataset.testid = "portrait-video-harness";
-      host.style.cssText =
-        "position:fixed;inset:0;padding:24px;display:grid;grid-template-columns:minmax(0,1fr) 320px;grid-template-rows:auto minmax(0,1fr);";
-      host.innerHTML = `
-        <div style="grid-column:1 / -1;height:48px"></div>
-        <div data-testid="portrait-video-stage" class="${styles.mediaReviewStage}">
-          <video data-testid="portrait-video" style="aspect-ratio:9 / 16"></video>
-        </div>
-        <aside></aside>
-      `;
-      document.body.append(host);
-    });
+    const fixtureUrl = page.url();
+    await page.goto(`${fixtureUrl}?portraitVideo`);
     const stage = page.getByTestId("portrait-video-stage");
-    const video = page.getByTestId("portrait-video");
+    const video = stage.locator("video");
+    await video.evaluate((element) => {
+      element.style.aspectRatio = "9 / 16";
+    });
     containedWithin(await visibleBox(video), await visibleBox(stage));
-    await page
-      .getByTestId("portrait-video-harness")
-      .evaluate((host) => host.remove());
+    await page.goto(fixtureUrl);
 
     await page
       .getByRole("button", { name: "Review image", exact: true })
@@ -143,7 +131,7 @@ test("dark media review controls keep local colors when opened from light mode",
     await page.mouse.move(0, 0);
     for (const button of [close, comments]) {
       await expect(button).toHaveCSS("color", "rgb(255, 255, 255)");
-      await expect(button).toHaveCSS("background-color", "rgb(35, 35, 35)");
+      await expect(button).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
     }
     await comments.hover();
     await expect(comments).toHaveCSS("background-color", "rgb(46, 46, 46)");
@@ -160,7 +148,8 @@ test("dark media review controls keep local colors when opened from light mode",
       await page.evaluate((mode) => {
         document.documentElement.dataset.colorMode = mode;
       }, mode);
-      await expect(close).toHaveCSS("background-color", "rgb(35, 35, 35)");
+      await expect(close).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+      await expect(close).toHaveCSS("color", "rgb(255, 255, 255)");
     }
     await close.click();
     await expect(dialog).toBeHidden();
@@ -170,31 +159,29 @@ test("dark media review controls keep local colors when opened from light mode",
   });
 });
 
-test("inline video controls hide only while playing off-hover on fine pointers", async ({
+test("inline video controls follow playback, hover and keyboard focus", async ({
   page,
 }) => {
   await withMessagesFixture(page, async () => {
-    await page.evaluate(() => {
-      const styles = window.messagesFixture.styles;
-      const host = document.createElement("div");
-      host.dataset.testid = "video-controls-harness";
-      host.style.cssText = "position:fixed;left:32px;top:32px;";
-      host.innerHTML = `
-        <div data-testid="playing-preview" class="${styles.mediaPreview}" data-playing="true" style="--media-ratio:16 / 9;width:320px">
-          <video class="${styles.mediaVideo}"></video>
-          <span data-testid="playing-play" class="${styles.mediaPlay}"><button type="button">Play</button></span>
-          <span data-testid="playing-time" class="${styles.mediaTime}">0:01</span>
-          <span data-testid="playing-expand" class="${styles.mediaExpand}"><button type="button">Expand</button></span>
-        </div>
-        <div data-testid="idle-preview" class="${styles.mediaPreview}" style="--media-ratio:16 / 9;width:320px;margin-top:24px">
-          <video class="${styles.mediaVideo}"></video>
-          <span data-testid="idle-play" class="${styles.mediaPlay}"><button type="button">Play</button></span>
-          <span data-testid="idle-time" class="${styles.mediaTime}">0:00</span>
-          <span data-testid="idle-expand" class="${styles.mediaExpand}"><button type="button">Expand</button></span>
-        </div>
-      `;
-      document.body.append(host);
+    await page.goto(
+      new URL("/tests/fixtures/media-review.html", page.url()).href,
+    );
+    const preview = page.locator("[data-video-preview]").first();
+    const video = preview.locator("video");
+    const play = preview.getByRole("button", {
+      name: "Play video",
+      exact: true,
     });
+    const expand = preview.getByRole("button", {
+      name: "Open video fullscreen",
+    });
+    const timeline = preview.getByRole("slider", { name: "Video progress" });
+    const controlRow = timeline.locator("..").locator("..");
+    const controls = () => [
+      preview.getByRole("button", { name: /^(Play|Pause) video$/ }),
+      controlRow.locator(":scope > span").first(),
+      expand,
+    ];
     const finePointer = await page.evaluate(
       () => matchMedia("(hover: hover) and (pointer: fine)").matches,
     );
@@ -202,37 +189,63 @@ test("inline video controls hide only while playing off-hover on fine pointers",
       !finePointer,
       "Browser project does not expose a hover-capable fine pointer.",
     );
-    // Expand fades the button itself so its backdrop can sample video throughout
-    // the transition; the positioning wrapper deliberately stays opaque.
-    const controls = (state) => [
-      page.getByTestId(`${state}-play`),
-      page.getByTestId(`${state}-time`),
-      page.getByTestId(`${state}-expand`).getByRole("button"),
-    ];
-    const preview = page.getByTestId("playing-preview");
-    await visibleBox(preview);
-    for (const control of controls("playing")) {
-      await expect(control).toHaveCSS("opacity", "0");
-    }
-    await preview.hover();
-    for (const control of controls("playing")) {
-      await expect(control).toHaveCSS("opacity", "1");
-    }
+    await expect(timeline).toBeEnabled();
     await page.mouse.move(1, 1);
-    for (const control of controls("playing")) {
+    await expect(play).toHaveCSS("opacity", "1");
+    await expect(expand).toHaveCSS("opacity", "0");
+    await preview.hover({ position: { x: 8, y: 8 } });
+    await expect(expand).toHaveCSS("opacity", "1");
+    await page.mouse.move(1, 1);
+    await expect(expand).toHaveCSS("opacity", "0");
+    await play.focus();
+    await page.keyboard.press("Tab");
+    await expect(
+      preview.getByRole("button", { name: "Video volume", exact: true }),
+    ).toBeFocused();
+    await expect(expand).toHaveCSS("opacity", "1");
+    await page
+      .getByRole("link", { name: "Open image attachment", exact: true })
+      .first()
+      .focus();
+    await expect(expand).toHaveCSS("opacity", "0");
+    // Keep playback active throughout the visibility assertions, independent of clip length.
+    await video.evaluate((element) => {
+      element.loop = true;
+    });
+    await play.click();
+    await expect(video).toHaveJSProperty("paused", false);
+    await page.mouse.move(1, 1);
+    for (const control of controls())
       await expect(control).toHaveCSS("opacity", "0");
-    }
-    await page.getByTestId("playing-play").getByRole("button").focus();
-    for (const control of controls("playing")) {
+    await preview.hover({ position: { x: 8, y: 8 } });
+    for (const control of controls())
       await expect(control).toHaveCSS("opacity", "1");
-    }
-    await page.getByRole("button", { name: "First root" }).focus();
-    for (const control of controls("playing")) {
+    await page.mouse.move(1, 1);
+    for (const control of controls())
       await expect(control).toHaveCSS("opacity", "0");
-    }
-    for (const control of controls("idle")) {
+    await preview.getByRole("button", { name: "Pause video" }).focus();
+    await page.keyboard.press("Tab");
+    await expect(
+      preview.getByRole("button", { name: "Video volume", exact: true }),
+    ).toBeFocused();
+    for (const control of controls())
       await expect(control).toHaveCSS("opacity", "1");
-    }
+    await page
+      .getByRole("link", { name: "Open image attachment", exact: true })
+      .first()
+      .focus();
+    for (const control of controls())
+      await expect(control).toHaveCSS("opacity", "0");
+    await preview.hover({ position: { x: 8, y: 8 } });
+    await preview.getByRole("button", { name: "Pause video" }).click();
+    await expect(video).toHaveJSProperty("paused", true);
+    await page.mouse.move(1, 1);
+    await expect(play).toHaveCSS("opacity", "1");
+    await expect(controlRow.locator(":scope > span").first()).toHaveCSS(
+      "opacity",
+      "1",
+    );
+    await expect(expand).toHaveCSS("opacity", "0");
   });
 });
 

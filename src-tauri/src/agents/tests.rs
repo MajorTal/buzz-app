@@ -2534,3 +2534,74 @@ fn startup_parks_metadata_without_credentials_or_runtime_and_follows_removal() {
     assert_eq!(reopened["agents"], json!([]));
     assert_eq!(reopened["inventoryWarnings"], json!([]));
 }
+
+#[tokio::test]
+async fn protection_registration_waits_for_initialization_without_retrying() {
+    use buzz_agent_controller::security::Request;
+    let dir = tempfile::tempdir().unwrap();
+    let root = dir.path().to_path_buf();
+    let (release, held) = std::sync::mpsc::channel();
+    let host = AgentHost::initialize_with(move || {
+        held.recv().map_err(|_| "Initialization gate closed")?;
+        Host::open(
+            root.join("store"),
+            root.join("legacy"),
+            root.join("workspace"),
+            Err(RUNTIME_GATE.into()),
+            Arc::new(RejectingCredentials),
+        )
+    });
+    let calls = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+    let counted = calls.clone();
+    let executable = dir.path().join("launcher");
+    std::fs::write(&executable, "synthetic launcher bytes").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    let mut registration = std::pin::pin!(run(host.clone(), move |h| {
+        counted.fetch_add(1, Ordering::SeqCst);
+        h.controller.security(Request::Register {
+            provider: "fixture.security".into(),
+            executable,
+        })
+    }));
+    assert_pending(registration.as_mut()).await;
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    release.send(()).unwrap();
+    assert!(registration.await.unwrap()["lease"].is_string());
+    assert_eq!(calls.load(Ordering::SeqCst), 1);
+    let snapshot = run(host.clone(), |h| h.controller.security(Request::Snapshot))
+        .await
+        .unwrap();
+    assert_eq!(snapshot["availableProviders"], json!(["fixture.security"]));
+    host.shutdown().unwrap();
+}
+
+#[tokio::test]
+async fn initialization_failure_and_shutdown_refuse_queued_registration() {
+    for shutdown in [false, true] {
+        let (release, held) = std::sync::mpsc::channel();
+        let host = AgentHost::initialize_with(move || {
+            held.recv().map_err(|_| "Initialization gate closed")?;
+            Err("Synthetic initialization failure".into())
+        });
+        let mut registration = std::pin::pin!(run::<()>(host.clone(), |_| {
+            panic!("registration must not execute without a usable host")
+        }));
+        assert_pending(registration.as_mut()).await;
+        if shutdown {
+            host.shutdown().unwrap();
+        }
+        release.send(()).unwrap();
+        assert_eq!(
+            registration.await.unwrap_err(),
+            if shutdown {
+                "Agent host is shutting down"
+            } else {
+                "Synthetic initialization failure"
+            }
+        );
+    }
+}

@@ -23,3 +23,13 @@ cargo test -p buzz-agent-controller real_listeners_protect_future_run_controls_a
 The test uses two real ACP listeners and the production launch/supervisor functions, with a synthetic relay and ACP worker. It overrides only the resulting command's relay URL to a local plaintext fixture; saved records retain valid secure origins. Explicit gates hold A inside its sandbox before B's controls exist, check both directions of control-file protection, swap the source launcher before B's first task, kill B during a prompt, and verify successful recovery and subsequent work. OAuth/temp writes and paired supervisor cleanup are also checked. The controller start wiring has separate ordinary lifecycle tests. This does not attest real Goose, app UI, human acceptance, or non-macOS behavior.
 
 The native host verifies executable availability and identity, but the provider is responsible for enforcing the supplied policy and every protected path. This contract requires a trusted native caller; plugin exposure is a separate layer.
+
+## Desktop plugin API
+
+The desktop `agentSecurity` service exposes this capability to trusted installed plugins. Policy UI, experimental opt-in and enforcement belong to the external provider plugin.
+
+Use `ctx.agentSecurity` from a plugin scope. `register(executable)` returns an asynchronous disposable lease. Scope disposal unregisters that lease, including registration that completes after disposal. Native requests wait for host initialization; successful registration retries eligible start-on-launch agents without blocking plugin activation. The desktop host adds the plugin store to the protected control paths.
+
+`snapshot()` returns the defaults revision, default binding, per-agent bindings and available provider IDs. `saveDefaults(revision, policy)` uses the defaults revision; `saveAgent(id, revision, policy)` uses the agent revision from `agentControl`. A null policy explicitly clears a binding.
+
+Plugin ownership scoping prevents accidental service misuse; it is not a hostile-JavaScript permission boundary. Providers remain responsible for enforcing the native launch contract above.

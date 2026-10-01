@@ -1,83 +1,150 @@
-import { buildTerminalBanner } from "./banner";
+import {
+  bannerColors,
+  buildTerminalBanner,
+  drawTerminalBanner,
+  type BannerPulse,
+} from "./banner";
 import styles from "./Terminal.module.css";
 
-/** One bounded, non-interactive welcome per screen; shell output keeps flowing. */
-export function createSplash(element: HTMLElement) {
+/** One bounded welcome per screen; output continues beneath the decoration. */
+export function createSplash(element: HTMLElement, focus: () => void) {
   let consumed = false;
   let overlay: HTMLDivElement | undefined;
+  let canvas: HTMLCanvasElement | undefined;
+  let context: CanvasRenderingContext2D | null = null;
+  let banner: ReturnType<typeof buildTerminalBanner> = null;
+  let colors: ReturnType<typeof bannerColors> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
+  let frame = 0,
+    elapsed = 0,
+    previous = 0;
+  const reduced = matchMedia("(prefers-reduced-motion: reduce)");
+  const hover = matchMedia("(hover: hover) and (pointer: fine)");
+  const pointer = {
+    x: 0.5,
+    y: 0.5,
+    targetX: 0.5,
+    targetY: 0.5,
+    strength: 0,
+    inside: false,
+  };
+  let pulses: BannerPulse[] = [];
+  const draw = () => {
+    if (context && banner && colors)
+      drawTerminalBanner(context, banner, colors, elapsed, pointer, pulses);
+  };
+  const tick = (now: number) => {
+    frame = 0;
+    if (!overlay || document.hidden || reduced.matches) return;
+    const dt = previous ? Math.min(now - previous, 80) : 0;
+    previous = now;
+    elapsed += dt;
+    const follow = 1 - Math.exp(-dt / 160);
+    pointer.x += (pointer.targetX - pointer.x) * follow;
+    pointer.y += (pointer.targetY - pointer.y) * follow;
+    pointer.strength += ((pointer.inside ? 1 : 0) - pointer.strength) * follow;
+    pulses = pulses.filter((pulse) => elapsed - pulse.at < 1200);
+    draw();
+    frame = requestAnimationFrame(tick);
+  };
+  const resume = () => {
+    cancelAnimationFrame(frame);
+    frame = 0;
+    previous = 0;
+    pointer.inside = false;
+    pointer.strength = 0;
+    pulses = [];
+    draw();
+    if (overlay && context && banner && !document.hidden && !reduced.matches)
+      frame = requestAnimationFrame(tick);
+  };
+  const leave = () => {
+    pointer.inside = false;
+  };
   const dismiss = () => {
     consumed = true;
     if (timer) clearTimeout(timer);
     timer = undefined;
+    cancelAnimationFrame(frame);
+    frame = 0;
+    document.removeEventListener("visibilitychange", resume);
+    window.removeEventListener("blur", leave);
+    reduced.removeEventListener("change", resume);
     overlay?.remove();
     overlay = undefined;
+    canvas = undefined;
+    context = null;
+    banner = null;
+    colors = undefined;
+    pulses = [];
   };
   const layout = () => {
-    if (!overlay) return;
-    const art = document.createElement("pre");
-    art.className = styles.splashArt ?? "";
-    // The art has its own fixed glyph grid, not xterm's preference-scaled
-    // line boxes. Measure that grid before deciding whether the wordmark fits.
-    art.style.width = "1ch";
-    art.style.height = "1.2em";
-    overlay.replaceChildren(art);
-    const cell = art.getBoundingClientRect();
-    art.style.removeProperty("width");
-    art.style.removeProperty("height");
-    const columns = Math.min(Math.floor(element.clientWidth / cell.width), 160);
-    // Keep enough decorative rows for the frame and honeycomb. In a shallow
-    // drawer scale the artwork as a whole, rather than discarding the wordmark.
-    const rows = Math.min(
-      Math.max(Math.floor(element.clientHeight / cell.height), 24),
-      48,
-    );
-    const banner = buildTerminalBanner(columns, rows, cell.height / cell.width);
-    if (!banner) {
-      const mark = document.createElement("span");
-      mark.dataset.layer = "head";
-      mark.textContent = "buzz term";
-      mark.style.setProperty("--splash-hue", "280");
-      art.append(mark);
-    } else {
-      // A font can fall back for block glyphs with different advances than spaces.
-      // Place cells explicitly so one glyph's width cannot shift the rest of a row.
-      art.classList.add(styles.splashGrid ?? "");
-      art.style.gridTemplateColumns = `repeat(${banner.cells[0]?.length ?? 1}, 1ch)`;
-      art.style.gridTemplateRows = `repeat(${banner.cells.length}, 1.2em)`;
-      art.style.transform = `translate(-50%, -50%) scale(${Math.min(1, element.clientHeight / (rows * cell.height))})`;
-      for (const [rowIndex, row] of banner.cells.entries()) {
-        for (const [column, cell] of row.entries()) {
-          if (!cell.layer || cell.char === " ") continue;
-          const position =
-            cell.layer === "head"
-              ? cell.t
-              : column / Math.max(1, row.length - 1);
-          const glyph = document.createElement("span");
-          glyph.dataset.layer = cell.layer;
-          glyph.style.setProperty(
-            "--splash-hue",
-            String(Math.round(position * 24) * 12 + 15),
-          );
-          glyph.style.gridColumn = String(column + 1);
-          glyph.style.gridRow = String(rowIndex + 1);
-          glyph.textContent = cell.char;
-          art.append(glyph);
-        }
-      }
-    }
-    overlay.replaceChildren(art);
+    if (!overlay || !canvas || !context) return;
+    const { clientWidth: width, clientHeight: height } = element;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    canvas.width = Math.round(width * dpr);
+    canvas.height = Math.round(height * dpr);
+    context.setTransform(dpr, 0, 0, dpr, 0, 0);
+    banner = buildTerminalBanner(width, height);
+    colors = bannerColors(overlay);
+    draw();
+  };
+  const position = (event: PointerEvent | MouseEvent) => {
+    const rect = element.getBoundingClientRect();
+    return {
+      x: (event.clientX - rect.left) / rect.width,
+      y: (event.clientY - rect.top) / rect.height,
+    };
   };
   return {
     show() {
-      if (consumed || !element.isConnected || !element.clientHeight) return;
+      if (
+        consumed ||
+        !element.isConnected ||
+        !element.clientWidth ||
+        !element.clientHeight
+      )
+        return;
       consumed = true;
       overlay = document.createElement("div");
       overlay.className = styles.splash ?? "";
       overlay.dataset.terminalSplash = "";
       overlay.setAttribute("aria-hidden", "true");
+      canvas = document.createElement("canvas");
+      canvas.className = styles.splashArt ?? "";
+      canvas.textContent = "buzz";
+      overlay.append(canvas);
       element.append(overlay);
+      context = canvas.getContext("2d");
+      // Keep xterm focused and do not turn artwork clicks into terminal mouse input.
+      overlay.addEventListener("pointerdown", (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        focus();
+      });
+      overlay.addEventListener("click", (event) => {
+        if (reduced.matches) return;
+        pulses = [...pulses.slice(-2), { ...position(event), at: elapsed }];
+      });
+      overlay.addEventListener("pointermove", (event) => {
+        if (reduced.matches || !hover.matches || event.pointerType !== "mouse")
+          return;
+        const { x, y } = position(event);
+        pointer.targetX = x;
+        pointer.targetY = y;
+        if (!pointer.inside && pointer.strength < 0.01) {
+          pointer.x = x;
+          pointer.y = y;
+        }
+        pointer.inside = true;
+      });
+      overlay.addEventListener("pointerleave", leave);
+      overlay.addEventListener("pointercancel", leave);
+      document.addEventListener("visibilitychange", resume);
+      window.addEventListener("blur", leave);
+      reduced.addEventListener("change", resume);
       layout();
+      resume();
       timer = setTimeout(dismiss, 3000);
     },
     layout,

@@ -21,12 +21,12 @@ export function createScreen(
   const element = document.createElement("div");
   element.dataset.buzzUi = "";
   element.className = `${styles.emulator} text-mono font-mono`;
-  const splash = createSplash(element);
   const terminal = new Terminal({
     cursorBlink: true,
     scrollback: 5000,
     minimumContrastRatio: 4.5,
   });
+  const splash = createSplash(element, () => terminal.focus());
   const fit = new FitAddon();
   terminal.loadAddon(fit);
   // xterm 5.5.0's public onData drops the producer's wasUserInput flag.
@@ -96,7 +96,6 @@ export function createScreen(
         attributeFilter: ["data-color-mode", "style", "class"],
       });
       element.addEventListener("keydown", splash.dismiss);
-      element.addEventListener("pointerdown", splash.dismiss);
       update();
       // Loaded mono metrics can differ from the fallback used on first mount.
       void document.fonts.ready.then(update);
@@ -106,7 +105,6 @@ export function createScreen(
         observer.disconnect();
         appearance.disconnect();
         element.removeEventListener("keydown", splash.dismiss);
-        element.removeEventListener("pointerdown", splash.dismiss);
         splash.dismiss();
         element.remove();
         if (detach === cleanup) detach = undefined;

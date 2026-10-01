@@ -30,34 +30,46 @@ test("real xterm retains output across detach, handles input and resize, and doe
     await button("Paint terminal").click();
     await page.clock.runFor(50); // Let xterm parse/paint, then hold the welcome open.
     await expect(splash).toBeVisible();
-    await expect(splash.locator('[data-layer="head"]')).not.toHaveCount(0);
-    await page.evaluate(() => document.fonts.ready);
-    const rightEdge = await splash.evaluate((element) => {
-      const xs = [];
-      const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
-      while (walker.nextNode()) {
-        const text = walker.currentNode;
-        for (let i = 0; i < text.length; i++) {
-          if (!"▜▐▟".includes(text.textContent[i])) continue;
-          const range = document.createRange();
-          range.setStart(text, i);
-          range.setEnd(text, i + 1);
-          xs.push(range.getBoundingClientRect().x);
+    const art = splash.locator("canvas");
+    await expect(art).toBeVisible();
+    // Canvas rendering and CSS color resolution require real browser engines.
+    const assertArtColors = async () => {
+      const pixels = await art.evaluate((canvas) => {
+        const { data } = canvas
+          .getContext("2d")
+          .getImageData(0, 0, canvas.width, canvas.height);
+        let warm = 0,
+          neutral = 0,
+          coloredOutsideWord = 0;
+        const colors = new Set();
+        for (let i = 0; i < data.length; i += 4) {
+          const [r, g, b] = data.slice(i, i + 3);
+          const y = Math.floor(i / 4 / canvas.width);
+          if (r - b > 10) {
+            warm++;
+            colors.add(`${r},${g},${b}`);
+            if (y < canvas.height * 0.1 || y > canvas.height * 0.9)
+              coloredOutsideWord++;
+          } else if (r === g && g === b && r > 40 && r < 240) neutral++;
         }
-      }
-      return xs;
-    });
-    expect(rightEdge.length).toBeGreaterThan(5);
-    expect(Math.max(...rightEdge) - Math.min(...rightEdge)).toBeLessThan(1);
-
-    const colors = await splash
-      .locator('[data-layer="head"]')
-      .evaluateAll((nodes) =>
-        nodes.map((node) => getComputedStyle(node).color),
-      );
-    expect(new Set(colors).size).toBeGreaterThan(8);
-    await expect(splash).toHaveCSS("--splash-lightness", "72%");
-    await expect(splash).toHaveCSS("--splash-chroma", "0.12");
+        return { warm, neutral, coloredOutsideWord, colors: colors.size };
+      });
+      expect(pixels.warm).toBeGreaterThan(100);
+      expect(pixels.colors).toBeGreaterThan(8);
+      expect(pixels.coloredOutsideWord).toBe(0);
+    };
+    await assertArtColors();
+    await expect(splash).toHaveCSS("--splash-field-opacity", "0.15");
+    const beforeMotion = await art.evaluate((canvas) => canvas.toDataURL());
+    await page.clock.runFor(100);
+    expect(await art.evaluate((canvas) => canvas.toDataURL())).not.toBe(
+      beforeMotion,
+    );
+    await button("Paint terminal").focus();
+    await splash.click();
+    await expect(page.locator(".xterm-helper-textarea")).toBeFocused();
+    await expect(splash).toBeVisible();
+    await expect(input).toHaveText('""');
     await page.screenshot({
       path: test.info().outputPath("buzzterm-light.png"),
     });
@@ -136,8 +148,8 @@ test("real xterm retains output across detach, handles input and resize, and doe
     await expect
       .poll(() => xterm.evaluate((el) => getComputedStyle(el).backgroundColor))
       .not.toBe(lightBackground);
-    await expect(splash).toHaveCSS("--splash-lightness", "80%");
-    await expect(splash).toHaveCSS("--splash-chroma", "0.16");
+    await expect(splash).toHaveCSS("--splash-field-opacity", "0.25");
+    await assertArtColors();
     await assertAnsiContrast();
     expect(await assertSystemAppearance()).toBe(12);
     await page.screenshot({
@@ -203,8 +215,12 @@ test("real xterm retains output across detach, handles input and resize, and doe
     await button("Paint terminal").click();
     await page.clock.runFor(50);
     await expect(splash).toBeVisible();
-    await expect(splash).toHaveCSS("animation-name", "none");
+    const reducedFrame = await art.evaluate((canvas) => canvas.toDataURL());
+    await splash.click();
     await page.clock.runFor(2000);
+    expect(await art.evaluate((canvas) => canvas.toDataURL())).toBe(
+      reducedFrame,
+    );
     await expect(splash).toBeVisible();
     await page.clock.runFor(1000);
     await expect(splash).toHaveCount(0); // 3s, not the old 4.5s.
@@ -218,7 +234,8 @@ test("real xterm retains output across detach, handles input and resize, and doe
     await page.clock.pauseAt(new Date("2026-01-01T03:00:00Z"));
     await button("Paint terminal").click();
     await page.clock.runFor(50);
-    await expect(splash).toHaveText("buzz term");
+    await expect(art).toBeVisible();
+    await assertArtColors();
     await button("Toggle mount").click();
     await button("Toggle theme").click();
     await button("Toggle mount").click();
@@ -342,10 +359,10 @@ test("terminal shared controls keep focus, recovery and layout in both modes", a
             await page.evaluate(() => window.terminalPanel.releaseClose());
           }
           await page.clock.runFor(50);
-          await expect(splash.locator('[data-layer="head"]')).toHaveCount(151);
+          await expect(splash.locator("canvas")).toBeVisible();
           const bounds = await splash.evaluate((el) => {
             const frame = el.getBoundingClientRect();
-            const art = el.querySelector("pre").getBoundingClientRect();
+            const art = el.querySelector("canvas").getBoundingClientRect();
             return (
               art.top >= frame.top - 1 &&
               art.bottom <= frame.bottom + 1 &&

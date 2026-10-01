@@ -701,6 +701,29 @@ export const ROLE_GROUPS: RoleGroup[] = [
   },
 
   {
+    id: "terminal-art",
+    name: "Terminal artwork",
+    description: "Warm palette endpoints for the decorative terminal welcome.",
+    roles: [
+      {
+        token: "art-terminal-start",
+        variable: "--art-terminal-start",
+        pointsAt: "orange 9",
+        use: "The orange endpoint of terminal welcome lettering.",
+        status: "proposed",
+        owner: "Terminal",
+      },
+      {
+        token: "art-terminal-end",
+        variable: "--art-terminal-end",
+        pointsAt: "amber 9",
+        use: "The amber endpoint of terminal welcome lettering.",
+        status: "proposed",
+        owner: "Terminal",
+      },
+    ],
+  },
+  {
     id: "surfaces",
     name: "Structural surfaces",
     description:

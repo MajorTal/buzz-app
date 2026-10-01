@@ -44,18 +44,23 @@ boundary inside the otherwise legacy channel screen, not a second rounded Panel.
 Xterm reads `bg-panel`, `text-primary` and the purple selection tint; its mono
 size, leading and tracking follow the host's type ramp without double scaling.
 The host still owns global styles, appearance and keyboard-only focus; no viewer
-preferences or second reset are imported. The original rainbow remains confined
-to the non-interactive welcome art, not terminal colors or ordinary controls.
+preferences or second reset are imported. Decorative color stays confined to the
+welcome lettering, not terminal colors or ordinary controls.
 
-The original BuzzTerm wordmark, beveled frame and honeycomb geometry appears once
-per new shell, after its first output, for at most 3 seconds. Its rainbow lettering
-and honeycomb use brighter pastels in light mode and adjust with the host mode. It is a static,
-non-interactive overlay (also safe for reduced motion), never PTY input or
-scrollback. Typing/clicking dismisses it immediately; hide/reopen does not replay
-it. The artwork measures its own glyph grid and scales as a whole in shallow
-drawers, independently of xterm line spacing. Narrow panels fall back to a compact
-wordmark. Session actions use labeled shared icon buttons so short drawers retain
-terminal rows at enlarged text sizes.
+A compact “buzz” wordmark appears once per new shell, after its first output,
+for at most 3 seconds. A canvas draws spaced, hatched hexagons; the lettering and
+neutral background share the same slow wave. The orange/amber artwork roles use
+mode-specific OKLCH adjustments. Background hexagons have 15% group opacity in
+light mode and 25% in dark mode. The artwork scales to narrow and shallow drawers
+independently of xterm text size.
+
+Mouse movement gently disturbs the field; clicks send a small outward pulse
+without dismissing the welcome or writing terminal input. Typing dismisses it
+immediately, and hide/reopen does not replay it. Reduced motion renders a static
+frame and disables pointer effects. Animation pauses in hidden documents, and
+all animation/listeners are released when the welcome ends. Session actions use
+labeled shared icon buttons so short drawers retain terminal rows at enlarged
+text sizes.
 
 ## Public shell context
 

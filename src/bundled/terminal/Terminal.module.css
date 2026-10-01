@@ -36,52 +36,30 @@
   margin: 0;
 }
 .splash {
-  /* Brand ceremony, not UI signal: a mode-aware rainbow confined to the art. */
-  --splash-lightness: 72%;
-  --splash-chroma: 0.12;
+  --splash-start: oklch(
+    from var(--art-terminal-start) calc(l + 0.02) calc(c * 1.29) h
+  );
+  --splash-end: oklch(
+    from var(--art-terminal-end) calc(l + 0.02) calc(c * 1.29) h
+  );
+  --splash-field-opacity: 0.15;
   position: absolute;
   inset: 0;
-  display: grid;
-  place-items: center;
   overflow: hidden;
   background: var(--surface-panel);
-  pointer-events: none;
   user-select: none;
 }
 [data-color-mode="dark"] .splash {
-  --splash-lightness: 80%;
-  --splash-chroma: 0.16;
+  --splash-start: oklch(
+    from var(--art-terminal-start) calc(l + 0.02) calc(c * 1.21) calc(h + 1)
+  );
+  --splash-end: oklch(
+    from var(--art-terminal-end) calc(l + 0.02) calc(c * 1.21) calc(h + 1)
+  );
+  --splash-field-opacity: 0.25;
 }
 .splashArt {
-  position: absolute;
-  left: 50%;
-  top: 50%;
-  transform: translate(-50%, -50%);
-  margin: 0;
-  font: inherit;
-  line-height: 1.2;
-  white-space: pre;
-}
-.splashGrid {
-  display: grid;
-}
-.splashGrid > span {
-  min-width: 0;
-  overflow: hidden;
-}
-.splashArt [data-layer="head"] {
-  color: oklch(var(--splash-lightness) var(--splash-chroma) var(--splash-hue));
-}
-.splashArt [data-layer="bevel_hi"] {
-  color: oklch(var(--splash-lightness) 0.12 var(--splash-hue));
-}
-.splashArt [data-layer="bevel_lo"] {
-  color: var(--text-subtle);
-}
-.splashArt [data-layer="field"] {
-  color: color-mix(
-    in srgb,
-    oklch(var(--splash-lightness) var(--splash-chroma) var(--splash-hue)) 55%,
-    var(--surface-panel)
-  );
+  display: block;
+  width: 100%;
+  height: 100%;
 }

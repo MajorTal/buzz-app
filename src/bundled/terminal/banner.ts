@@ -1,282 +1,175 @@
-// BuzzTerm geometry ported from block/buzz at b9392d9d,
-// desktop/src/features/terminal/terminalBanner.ts. Decoration only; never PTY input.
-export type TerminalBannerLayer = "field" | "head" | "bevel_hi" | "bevel_lo";
+/** Compact three-cell strokes on a staggered hexagon field. Decoration only. */
+const WORDMARK = Array.from({ length: 12 }, (_, y) =>
+  [..."buzz"].flatMap((letter, index) => [
+    ...Array.from({ length: 8 }, (_, x) => {
+      if (y < 3) return letter === "b" && x < 3;
+      const bar = y < 5 || y >= 10;
+      if (letter === "b") return x < 3 || x >= 5 || bar;
+      if (letter === "u") return x < 3 || x >= 5 || y >= 10;
+      const diagonal = Math.round(5 * (1 - (y - 3) / 8));
+      return bar || (x >= diagonal && x < diagonal + 3);
+    }),
+    ...(index < 3 ? [false, false] : []),
+  ]),
+);
 
-export type TerminalBannerCell = Readonly<{
-  char: string;
-  layer?: TerminalBannerLayer;
-  t: number;
-}>;
+export function buildTerminalBanner(width: number, height: number) {
+  const cell = Math.min(
+    12,
+    (width - 24) / 40,
+    (height - 24) / ((16 * Math.sqrt(3)) / 2),
+  );
+  if (cell < 1) return null;
+  const rowHeight = (cell * Math.sqrt(3)) / 2;
+  const columns = Math.min(160, Math.floor((width - 24) / cell));
+  const rows = Math.min(80, Math.floor((height - 24) / rowHeight));
+  const left = Math.floor((columns - 38) / 2);
+  const top = Math.floor((rows - 12) / 2);
+  const ox = (width - columns * cell) / 2;
+  const oy = (height - rows * rowHeight) / 2;
+  const cells = Array.from({ length: columns * rows }, (_, index) => {
+    const x = index % columns,
+      y = Math.floor(index / columns);
+    return {
+      x,
+      y,
+      cx: ox + (x + 0.25 + (y % 2) * 0.5) * cell,
+      cy: oy + (y + 0.5) * rowHeight,
+      ink: WORDMARK[y - top]?.[x - left] ?? false,
+      field:
+        Math.sin(x * 0.13 + y * 0.085) * 1.4 +
+        Math.cos(y * 0.24 - x * 0.07) +
+        Math.sin(x * 0.055 - y * 0.19) * 0.7,
+      seed: Math.abs((Math.sin(x * 127.1 + y * 311.7) * 43758.5453) % 1),
+      edge: Math.min(
+        1,
+        (Math.min(x, columns - 1 - x, y * 1.4, (rows - 1 - y) * 1.4) + 1) / 4,
+      ),
+    };
+  });
+  return { width, height, cell, cells };
+}
 
-export type TerminalBanner = Readonly<{
-  cells: readonly (readonly TerminalBannerCell[])[];
-}>;
-
-const HEX = [
-  [0, 1, "_"],
-  [0, 2, "_"],
-  [1, 0, "/"],
-  [1, 3, "\\"],
-  [2, 0, "\\"],
-  [2, 1, "_"],
-  [2, 2, "_"],
-  [2, 3, "/"],
-] as const;
-
-const GLYPHS: Readonly<Record<string, readonly string[]>> = {
-  b: ["██     ", "██▄▄▄  ", "██▀▀██ ", "██  ██ ", "██████ "],
-  u: ["       ", "██  ██ ", "██  ██ ", "██  ██ ", "▀█████ "],
-  z: ["       ", "██████ ", "   ▄██ ", " ▄██▀  ", "██████ "],
-  t: [" ██    ", "█████  ", " ██    ", " ██    ", "  ███  "],
-  e: ["       ", " ▄███▄ ", "██▄▄▄█ ", "██     ", " ▀███▀ "],
-  r: ["       ", "██ ▄██ ", "███▀▀  ", "██     ", "██     "],
-  m: ["        ", "██▄██▄██", "██ ██ ██", "██ ██ ██", "██ ██ ██"],
-  " ": ["   ", "   ", "   ", "   ", "   "],
+type Banner = NonNullable<ReturnType<typeof buildTerminalBanner>>;
+export type BannerPointer = { x: number; y: number; strength: number };
+export type BannerPulse = { x: number; y: number; at: number };
+export type BannerColors = {
+  surface: string;
+  ink: readonly string[];
+  field: readonly string[];
+  opacity: number;
 };
 
-const INK_FRAME = {
-  topLeft: "▛",
-  topRight: "▜",
-  bottomLeft: "▙",
-  bottomRight: "▟",
-  top: "▀",
-  bottom: "▄",
-  left: "▌",
-  right: "▐",
-} as const;
-const LAYERS: readonly TerminalBannerLayer[] = [
-  "field",
-  "head",
-  "bevel_hi",
-  "bevel_lo",
-];
-type TerminalBannerEmitter =
-  | "field"
-  | "top_row"
-  | "left_rail"
-  | "right_rail"
-  | "bottom_row"
-  | "wordmark";
-const EMITTERS: readonly TerminalBannerEmitter[] = [
-  "field",
-  "top_row",
-  "left_rail",
-  "right_rail",
-  "bottom_row",
-  "wordmark",
-];
-
-function trimRight(value: string): string {
-  return value.replace(/\s+$/, "");
-}
-
-function wordmark(gap: number): readonly string[] {
-  const rows = Array.from({ length: 5 }, () => "");
-  for (const [index, letter] of [..."buzz term"].entries()) {
-    const glyph = GLYPHS[letter];
-    if (!glyph) continue;
-    for (let row = 0; row < rows.length; row += 1) {
-      rows[row] += glyph[row] + (index < 8 ? " ".repeat(gap) : "");
-    }
-  }
-  return rows.map(trimRight).filter((row) => row.trim());
-}
-
-function fitWordmark(columns: number): readonly string[] | null {
-  for (const gap of [3, 2, 1, 0]) {
-    const mark = wordmark(gap);
-    if (Math.max(...mark.map((row) => row.length)) <= columns) return mark;
-  }
-  return null;
-}
-
-function stableRandom(band: number, index: number): number {
-  let value = 2166136261;
-  for (const code of [...`${band}:${index}`].map((char) =>
-    char.charCodeAt(0),
-  )) {
-    value = Math.imul(value ^ code, 16777619);
-  }
-  return (value >>> 0) / 0xffffffff;
-}
-
-function completeHexes(columns: number, rows: number) {
-  const cells: { band: number; index: number; y: number; x: number }[] = [];
-  for (let band = 0, y = -2; y < rows; band += 1, y += 2) {
-    for (
-      let index = 0, x = -6 + (band % 2 ? 3 : 0);
-      x < columns;
-      index += 1, x += 6
-    ) {
-      if (
-        HEX.every(
-          ([dy, dx]) =>
-            y + dy >= 0 && y + dy < rows && x + dx >= 0 && x + dx < columns,
-        )
-      ) {
-        cells.push({ band, index, y, x });
-      }
-    }
-  }
-  return cells;
-}
-
-export function buildTerminalBanner(
-  columns: number,
-  rows: number,
-  cellAspect: number,
-): TerminalBanner | null {
-  const mark = fitWordmark(columns - 10);
-  if (!mark || rows < mark.length + 6) return null;
-
-  const width = Math.max(...mark.map((row) => row.length));
-  const height = mark.length;
-  const paddingX = columns >= width + 24 ? 6 : 2;
-  const paddingY = rows >= height + 12 ? 2 : 1;
-  const innerWidth = Math.min(columns - 4, width + paddingX * 2);
-  const frameWidth = innerWidth + 2;
-  const frameHeight = height + paddingY * 2 + 2;
-  const left = Math.floor((columns - frameWidth) / 2);
-  const top = Math.floor((rows - frameHeight) / 2);
-  const centerX = left + frameWidth / 2;
-  const centerY = top + frameHeight / 2;
-  const grid: TerminalBannerCell[][] = Array.from({ length: rows }, () =>
-    Array.from({ length: columns }, () => ({ char: " ", t: 0 })),
-  );
-  const emitted = new Set<TerminalBannerEmitter>();
-  const put = (
-    y: number,
-    x: number,
-    char: string,
-    layer: TerminalBannerLayer,
-    t = 0,
-    emitter?: TerminalBannerEmitter,
-  ) => {
-    if (y >= 0 && y < rows && x >= 0 && x < columns) {
-      const row = grid[y];
-      if (row) row[x] = { char, layer, t };
-      if (emitter) emitted.add(emitter);
-    }
+/** Resolve CSS colors through the browser, including short hex and named colors. */
+export function bannerColors(element: HTMLElement): BannerColors {
+  const css = getComputedStyle(element);
+  const swatch = document.createElement("canvas");
+  swatch.width = swatch.height = 1;
+  const context = swatch.getContext("2d", { willReadFrequently: true });
+  const ramp = (start: string, end: string) => {
+    if (!context) return [start];
+    return Array.from({ length: 64 }, (_, index) => {
+      context.clearRect(0, 0, 1, 1);
+      context.fillStyle = `color-mix(in srgb, ${start}, ${end} ${(index / 63) * 100}%)`;
+      context.fillRect(0, 0, 1, 1);
+      const [r, g, b] = context.getImageData(0, 0, 1, 1).data;
+      return `rgb(${r}, ${g}, ${b})`;
+    });
   };
+  const role = (name: string) => css.getPropertyValue(name).trim();
+  return {
+    surface: role("--surface-panel"),
+    ink: ramp(role("--splash-start"), role("--splash-end")),
+    field: ramp(role("--border-standard"), role("--border-prominent")),
+    opacity: Number(role("--splash-field-opacity")),
+  };
+}
 
-  const halfWidth = frameWidth / 2;
-  const halfHeight = (frameHeight / 2) * cellAspect;
-  const viewportHalfWidth = columns / 2;
-  const viewportHalfHeight = (rows / 2) * cellAspect;
-  for (const hex of completeHexes(columns, rows)) {
-    if (
-      HEX.some(
-        ([offsetY, offsetX]) =>
-          hex.y + offsetY >= top - 1 &&
-          hex.y + offsetY < top + frameHeight + 1 &&
-          hex.x + offsetX >= left - 2 &&
-          hex.x + offsetX < left + frameWidth + 2,
-      )
-    ) {
-      continue;
-    }
-    const dx = hex.x + 1.5 - centerX;
-    const dy = (hex.y + 1 - centerY) * cellAspect;
-    const ellipse = Math.hypot(dx / halfWidth, dy / halfHeight);
-    if (ellipse <= 1) continue;
-    const viewport = Math.max(
-      Math.abs(dx) / viewportHalfWidth,
-      Math.abs(dy) / viewportHalfHeight,
+export function drawTerminalBanner(
+  context: CanvasRenderingContext2D,
+  banner: Banner,
+  colors: BannerColors,
+  elapsed: number,
+  pointer: BannerPointer,
+  pulses: readonly BannerPulse[],
+) {
+  const { width, height, cell, cells } = banner;
+  const time = elapsed / 1000;
+  context.clearRect(0, 0, width, height);
+  context.fillStyle = colors.surface;
+  context.fillRect(0, 0, width, height);
+  for (const p of cells) {
+    const distance = Math.hypot(
+      (p.cx - pointer.x * width) / cell,
+      (p.cy - pointer.y * height) / cell,
     );
-    const ray =
-      ellipse <= viewport
-        ? 0
-        : Math.min(
-            1,
-            Math.max(0, (viewport * (ellipse - 1)) / (ellipse - viewport)),
-          );
-    if (
-      ray > 0.55 &&
-      stableRandom(hex.band, hex.index) < ((ray - 0.55) / 0.45) ** 1.3
-    )
-      continue;
-    for (const [offsetY, offsetX, char] of HEX)
-      put(hex.y + offsetY, hex.x + offsetX, char, "field", ray * ray, "field");
-  }
-
-  for (
-    let y = Math.max(0, top - 1);
-    y < Math.min(rows, top + frameHeight + 1);
-    y += 1
-  ) {
-    for (
-      let x = Math.max(0, left - 2);
-      x < Math.min(columns, left + frameWidth + 2);
-      x += 1
-    ) {
-      const row = grid[y];
-      if (row) row[x] = { char: " ", t: 0 };
+    let pulseWave = 0;
+    for (const pulse of pulses) {
+      const age = (elapsed - pulse.at) / 1200;
+      const radius = Math.hypot(
+        (p.cx - pulse.x * width) / cell,
+        (p.cy - pulse.y * height) / cell,
+      );
+      const ring = (radius - age * 30) / 3;
+      pulseWave +=
+        Math.cos(ring) *
+        Math.exp(-ring * ring * 0.5) *
+        Math.sin(Math.PI * age) *
+        (1 - age) *
+        0.3;
     }
-  }
-
-  const frame = INK_FRAME;
-  put(top, left, frame.topLeft, "bevel_hi", 0, "top_row");
-  for (let x = 0; x < innerWidth; x += 1)
-    put(top, left + x + 1, frame.top, "bevel_hi", 0, "top_row");
-  put(top, left + frameWidth - 1, frame.topRight, "bevel_hi", 0, "top_row");
-  for (let y = top + 1; y < top + frameHeight - 1; y += 1) {
-    put(y, left, frame.left, "bevel_hi", 0, "left_rail");
-    put(y, left + frameWidth - 1, frame.right, "bevel_lo", 0, "right_rail");
-  }
-  put(
-    top + frameHeight - 1,
-    left,
-    frame.bottomLeft,
-    "bevel_lo",
-    0,
-    "bottom_row",
-  );
-  for (let x = 0; x < innerWidth; x += 1)
-    put(
-      top + frameHeight - 1,
-      left + x + 1,
-      frame.bottom,
-      "bevel_lo",
+    const ripple =
+      Math.sin(distance * 0.65 - time * 3) *
+        Math.exp(-distance / 18) *
+        pointer.strength *
+        0.65 +
+      Math.max(-0.2, Math.min(0.2, pulseWave));
+    const wave =
+      p.field + Math.sin(p.y * 0.17 + time * 0.36) * 0.55 + ripple * 2.4;
+    const phase = wave * 1.25 + time * 0.22 + 4.5;
+    const blend = ((phase % 2) + 2) % 2;
+    const ramp = p.ink ? colors.ink : colors.field;
+    context.strokeStyle =
+      ramp[Math.round((blend > 1 ? 2 - blend : blend) * (ramp.length - 1))] ??
+      colors.surface;
+    const neutral =
+      Math.min(
+        1,
+        (0.3 + (0.38 * (wave + 3.6)) / 7.2 + Math.max(0, ripple) * 0.22) / 0.65,
+      ) * colors.opacity;
+    context.globalAlpha = Math.max(
       0,
-      "bottom_row",
+      Math.min(1, (p.ink ? 0.92 * (1 + ripple * 0.35) : neutral) * p.edge),
     );
-  put(
-    top + frameHeight - 1,
-    left + frameWidth - 1,
-    frame.bottomRight,
-    "bevel_lo",
-    0,
-    "bottom_row",
-  );
-
-  const markLeft = left + Math.floor((frameWidth - width) / 2);
-  const markTop = top + paddingY + 1;
-  const ink = mark.flatMap((row, y) =>
-    [...row].flatMap((char, x) => (char === " " ? [] : [{ char, x, y }])),
-  );
-  if (ink.length === 0) return null;
-  const minX = Math.min(...ink.map(({ x }) => x));
-  const maxX = Math.max(...ink.map(({ x }) => x));
-  const span = Math.max(1, maxX - minX);
-  for (const cell of ink)
-    put(
-      markTop + cell.y,
-      markLeft + cell.x,
-      cell.char,
-      "head",
-      (cell.x - minX) / span,
-      "wordmark",
-    );
-
-  const seen = new Map<TerminalBannerLayer, number[]>();
-  for (const row of grid)
-    for (const cell of row)
-      if (cell.layer)
-        seen.set(cell.layer, [...(seen.get(cell.layer) ?? []), cell.t]);
-  if (LAYERS.some((layer) => !seen.has(layer))) return null;
-  if (EMITTERS.some((emitter) => !emitted.has(emitter))) return null;
-  const sweep = seen.get("head") ?? [];
-  if (Math.min(...sweep) !== 0 || Math.max(...sweep) !== 1) return null;
-
-  return { cells: grid };
+    context.lineWidth = 0.8 + Math.max(0, ripple) * 0.65;
+    // A quarter-cell gap between neighboring hexagon faces.
+    const size = ((cell * 0.75 * 2) / Math.sqrt(3)) * (1 + ripple * 0.12);
+    const x = p.cx - size / 2,
+      y = p.cy - size / 2;
+    const hatch = Math.sin(wave * 2 + time * 0.4 + p.seed * 0.45) > 0.3;
+    context.setLineDash(hatch ? [] : [1, 1.6]);
+    context.beginPath();
+    for (let corner = 0; corner < 6; corner++) {
+      const angle = (corner * Math.PI) / 3 - Math.PI / 2;
+      const hx = p.cx + (Math.cos(angle) * size) / 2,
+        hy = p.cy + (Math.sin(angle) * size) / 2;
+      if (corner === 0) context.moveTo(hx, hy);
+      else context.lineTo(hx, hy);
+    }
+    context.closePath();
+    context.stroke();
+    if (hatch) {
+      context.save();
+      context.clip();
+      context.setLineDash([]);
+      context.beginPath();
+      for (let d = 3; d < size * 2; d += 3) {
+        context.moveTo(x + Math.max(0, d - size), y + Math.min(size, d));
+        context.lineTo(x + Math.min(size, d), y + Math.max(0, d - size));
+      }
+      context.stroke();
+      context.restore();
+    }
+  }
+  context.globalAlpha = 1;
 }

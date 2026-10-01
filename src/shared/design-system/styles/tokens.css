@@ -482,6 +482,8 @@
    ============================================================ */
 
 :root {
+  --art-terminal-start: var(--orange-9);
+  --art-terminal-end: var(--amber-9);
   --gradient-1: var(--gradient-sky-field);
   --gradient-2: var(--gradient-peach-field);
   --gradient-3: var(--gradient-blue-hour);

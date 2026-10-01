@@ -1,5 +1,6 @@
 import { assert, describe, expect, it, vi } from "vitest";
 import { createRelaySession } from "./session";
+import type { HeadPersistence } from "./persistence";
 import {
   bounds,
   flush,
@@ -394,5 +395,232 @@ it("projects explicit visibility and replaces description-only changes without e
     expect(queries.list().channels[0]?.channelType).toBe("session");
   } finally {
     store.dispose();
+  }
+});
+
+/** Two joined channels discovered in one short page, so the list is ready. */
+async function discovered(test: ReturnType<typeof setup>) {
+  test.queries.ensureList();
+  test
+    .next()
+    .respond([
+      roster(relay, "a", [viewer.pubkey]),
+      metadata(relay, "a", "Alpha"),
+      roster(relay, "b", [viewer.pubkey]),
+      metadata(relay, "b", "Beta"),
+    ]);
+  await vi.waitFor(() =>
+    expect(test.queries.list()).toMatchObject({
+      status: "ready",
+      channels: [{ id: "a" }, { id: "b" }],
+    }),
+  );
+  await vi.waitFor(() =>
+    expect(test.store.session.live.snapshot().roster.state).toBe("verified"),
+  );
+}
+it("refreshes one channel's roster with an exact read and merges it without dropping other channels", async () => {
+  const test = setup();
+  const { queries, next, pending } = test;
+  const agent = keypair().pubkey;
+  try {
+    await discovered(test);
+    const listener = vi.fn();
+    const unsubscribe = queries.subscribeList(listener);
+    const refreshing = queries.refreshRoster?.("a");
+    expect(pending).toHaveLength(1);
+    const request = next();
+    expect(request.filters).toEqual([
+      {
+        kinds: [39002],
+        authors: [relay.pubkey],
+        "#d": ["a"],
+        "#p": [viewer.pubkey],
+        limit: 2,
+      },
+    ]);
+    request.respond([
+      roster(relay, "a", [viewer.pubkey, agent], 1_700_000_001),
+    ]);
+    await expect(refreshing).resolves.toBeUndefined();
+    expect(queries.list()).toMatchObject({
+      status: "ready",
+      channels: [
+        { id: "a", name: "Alpha", members: [agent, viewer.pubkey].sort() },
+        { id: "b", name: "Beta", members: [viewer.pubkey] },
+      ],
+    });
+    expect(listener).toHaveBeenCalledOnce();
+    await flush();
+    // One exact read; no viewer-wide roster page followed it.
+    expect(pending).toHaveLength(0);
+    unsubscribe();
+  } finally {
+    test.store.dispose();
+  }
+});
+it("keeps a cached denial and never reads for a channel it does not authorize", async () => {
+  const scripted = scriptedTransport(viewer.pubkey, relay.pubkey);
+  const agent = keypair().pubkey;
+  // A restored launch snapshot: alpha's membership is display-only until a
+  // fresh relay roster confirms it.
+  const persistence: HeadPersistence = {
+    read: async () => [],
+    readStartup: async () => ({
+      discovery: {
+        savedAt: Date.now(),
+        relayAuthor: relay.pubkey,
+        events: [
+          roster(relay, "alpha", [viewer.pubkey]),
+          metadata(relay, "alpha", "Alpha"),
+        ],
+      },
+    }),
+    writeStartup: async () => {},
+    write: async () => {},
+    remove: async () => {},
+    retain: async () => {},
+    clear: async () => {},
+    close: () => {},
+  };
+  const owner = createRelaySession(scripted.transport, {
+    persistence,
+    prepared: true,
+  });
+  const queries = owner.session.channels;
+  try {
+    await owner.restore();
+    expect(queries.list()).toMatchObject({
+      status: "ready",
+      channels: [{ id: "alpha", cached: true }],
+    });
+    // The exact viewer-scoped read omits the restored roster: a cached denial.
+    const resolving = queries.resolve?.(["alpha"]);
+    expect(scripted.pending).toHaveLength(1);
+    scripted.next().respond([]);
+    await expect(resolving).resolves.toBeUndefined();
+    expect(queries.get?.("alpha")).toBeUndefined();
+    expect(queries.list().channels).toEqual([]);
+    queries.ensureList();
+    await vi.waitFor(() => expect(scripted.pending).toHaveLength(1));
+    scripted
+      .next()
+      .respond([
+        roster(relay, "beta", [viewer.pubkey]),
+        metadata(relay, "beta", "Beta"),
+      ]);
+    await vi.waitFor(() =>
+      expect(queries.list()).toMatchObject({
+        status: "ready",
+        channels: [{ id: "beta" }],
+      }),
+    );
+    // A denied id is not this method's to re-read: no request leaves, and the
+    // denial stands. Fresh admission belongs to `resolve` and the full pass.
+    await expect(queries.refreshRoster?.("alpha")).resolves.toBeUndefined();
+    expect(scripted.pending).toHaveLength(0);
+    const refreshing = queries.refreshRoster?.("beta");
+    expect(scripted.pending).toHaveLength(1);
+    scripted
+      .next()
+      .respond([roster(relay, "beta", [viewer.pubkey, agent], 1_700_000_001)]);
+    await expect(refreshing).resolves.toBeUndefined();
+    expect(queries.list()).toMatchObject({
+      status: "ready",
+      channels: [{ id: "beta", members: [agent, viewer.pubkey].sort() }],
+    });
+    expect(queries.get?.("alpha")).toBeUndefined();
+  } finally {
+    owner.dispose();
+  }
+});
+it.each(["idle", "loading", "error"] as const)(
+  "rejects a roster refresh without reading while the list is %s",
+  async (status) => {
+    const test = setup();
+    const { queries, next, pending } = test;
+    try {
+      if (status !== "idle") queries.ensureList();
+      if (status === "error") {
+        next().fail(new Error("offline"));
+        await vi.waitFor(() => expect(queries.list().status).toBe("error"));
+      }
+      expect(queries.list().status).toBe(status);
+      const outstanding = pending.length;
+      await expect(queries.refreshRoster?.("a")).rejects.toThrow(/not ready/);
+      expect(pending).toHaveLength(outstanding);
+      expect(queries.list().status).toBe(status);
+    } finally {
+      test.store.dispose();
+    }
+  },
+);
+it.each<[string, (agent: string) => ReturnType<typeof roster>[]]>([
+  [
+    "a roster signed by another key",
+    (agent) => [roster(keypair(), "a", [viewer.pubkey, agent], 1_700_000_001)],
+  ],
+  [
+    "another channel's roster",
+    (agent) => [roster(relay, "b", [viewer.pubkey, agent], 1_700_000_001)],
+  ],
+  [
+    "two rosters",
+    (agent) => [
+      roster(relay, "a", [viewer.pubkey, agent], 1_700_000_001),
+      roster(relay, "a", [viewer.pubkey, agent], 1_700_000_002),
+    ],
+  ],
+])(
+  "rejects %s from an exact roster read and leaves the list unchanged",
+  async (_response, answer) => {
+    const test = setup();
+    const { queries, next, pending } = test;
+    const agent = keypair().pubkey;
+    try {
+      await discovered(test);
+      const before = queries.list();
+      const refreshing = queries.refreshRoster?.("a");
+      next().respond(answer(agent));
+      await expect(refreshing).rejects.toThrow(/read budget/);
+      expect(queries.list()).toBe(before);
+      await flush();
+      expect(pending).toHaveLength(0);
+    } finally {
+      test.store.dispose();
+    }
+  },
+);
+it("does not commit a roster read that lands after the list stopped being ready", async () => {
+  const test = setup();
+  const { queries, pending } = test;
+  const agent = keypair().pubkey;
+  try {
+    await discovered(test);
+    queries.refreshList?.();
+    await vi.waitFor(() => expect(pending).toHaveLength(1));
+    const refreshing = queries.refreshRoster?.("a");
+    expect(pending).toHaveLength(2);
+    const page = pending.find((request) =>
+      request.filters.some((filter) => filter["#p"] && !filter["#d"]),
+    );
+    const exact = pending.find((request) =>
+      request.filters.some((filter) => filter["#d"]),
+    );
+    pending.splice(0);
+    page?.fail(new Error("offline"));
+    await vi.waitFor(() => expect(queries.list().status).toBe("error"));
+    exact?.respond([roster(relay, "a", [viewer.pubkey, agent], 1_700_000_001)]);
+    // Committing now would publish a ready list over the failed rediscovery.
+    await expect(refreshing).rejects.toThrow(/Stale roster refresh/);
+    expect(queries.list()).toMatchObject({
+      status: "error",
+      channels: [
+        { id: "a", members: [viewer.pubkey] },
+        { id: "b", members: [viewer.pubkey] },
+      ],
+    });
+  } finally {
+    test.store.dispose();
   }
 });

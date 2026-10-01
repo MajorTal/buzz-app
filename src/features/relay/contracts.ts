@@ -154,6 +154,10 @@ export interface ChannelQueries {
   /** Bounded discovery lookup; never inserts public previews into list(). */
   get?(channelId: string): ChannelSummary | undefined;
   resolve?(channelIds: readonly string[], options?: ReadOptions): Promise<void>;
+  /** Exact re-read of one already-listed channel's roster, merged into the
+   * ready list. `resolve` admits channels the list lacks; this confirms a
+   * membership change on one it already carries, without a full rediscovery. */
+  refreshRoster?(channelId: string, options?: ReadOptions): Promise<void>;
   subscribeList(listener: () => void): () => void;
   window(channelId: string): ChannelWindow;
   subscribeWindow(channelId: string, listener: () => void): () => void;

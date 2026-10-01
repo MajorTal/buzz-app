@@ -1233,7 +1233,9 @@ export function createChannelStore(
    *   just-created channel is confirmed by one exact `#d` read instead of the
    *   full viewer-roster rediscovery. Skipping such ids would send every create
    *   back through the full pass. See "admits a created ... channel through the
-   *   store's exact read without rediscovering the roster".
+   *   store's exact read without rediscovering the roster". Ids the store
+   *   already authorizes stay skipped: a member addition to a joined channel is
+   *   confirmed by `refreshRoster` below, not by widening this filter.
    * - Events apply through `applyDiscovery`, which always commits the list as
    *   `ready`. Only resolve into a list discovery has already made ready; on an
    *   idle, loading or error list this would publish a ready list holding just
@@ -1357,6 +1359,64 @@ export function createChannelStore(
         throw new Error("Channel metadata capacity unavailable");
     }
   }
+  /** Re-read one authorized channel's relay-signed roster and merge it into the
+   * ready list: one exact `#d` read of a single 39002, instead of the full
+   * viewer-roster rediscovery, when an agent is added to a joined channel.
+   *
+   * This is a separate entry point because `resolve` deliberately skips ids the
+   * store already authorizes: its exact read carries cached-denial semantics for
+   * restored channels, which a member addition must not inherit. The agent-add
+   * path in work-sessions.ts `refresh` guards this method with real-store tests
+   * in work-sessions.test.ts; the merge itself is covered in store.test.ts.
+   * - Only an id the store authorizes is read. Admitting a channel the list lacks
+   *   is `resolve`'s job, and a denied id never regains access here: the method
+   *   returns without a read, so cached denials stay as they were.
+   * - The roster applies through `applyDiscovery`, which always commits the list
+   *   as `ready`, so this rejects unless discovery has already made the list
+   *   ready (the same guard `resolve` relies on; see its docstring).
+   * - The read is viewer-scoped (`#p`), so the relay never answers with a roster
+   *   this viewer is absent from. An omitted roster changes nothing: revocation
+   *   by omission stays with the complete viewer-roster pass and live traffic. */
+  async function refreshRoster(channelId: string, settings?: ReadOptions) {
+    if (disposed || !transport || !discovery || options.cachedOnly)
+      throw new Error("Relay is unavailable");
+    if (list.status !== "ready")
+      throw new Error("Channel list is not ready for a roster refresh");
+    if (!discovery.authorized(channelId)) return;
+    const generation = epoch;
+    const events = await transport.read(
+      [
+        {
+          kinds: [39002],
+          authors: [transport.relayAuthor],
+          "#d": [channelId],
+          "#p": [transport.viewer],
+          limit: 2,
+        },
+      ],
+      { ...settings, fresh: true },
+    );
+    settings?.signal?.throwIfAborted();
+    // A list that stopped being ready in flight needs the full pass to become
+    // ready again; committing this roster now would hide that from the user.
+    if (disposed || generation !== epoch || list.status !== "ready")
+      throw new DOMException("Stale roster refresh", "AbortError");
+    if (
+      events.length > 1 ||
+      events.some(
+        (event) =>
+          event.kind !== 39002 ||
+          event.pubkey !== transport.relayAuthor ||
+          tag(event, "d") !== channelId ||
+          !hasTag(event, "p", transport.viewer),
+      )
+    )
+      throw new ReadError(
+        "invalid-response",
+        "Channel roster refresh exceeded its read budget",
+      );
+    if (events.length) applyDiscovery(events);
+  }
   const cachedResolutions = new Set<string>();
   function revalidateCached(channelId: string) {
     if (
@@ -1463,6 +1523,7 @@ export function createChannelStore(
     list: () => list,
     get: (id: string) => discovery?.get(id),
     resolve,
+    refreshRoster,
     subscribeList: (listener: Listener) => subscribe(listListeners, listener),
     window: (channelId: string) =>
       windows.get(channelId)?.snapshot ?? idleWindow(channelId),

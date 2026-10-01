@@ -160,9 +160,12 @@ export function createWorkSessions(
   /** Resolves once the channel list shows `id` with the expected membership.
    * Admission never comes from the command's acknowledgment: the list must
    * carry a relay-signed roster. When discovery has already made the list
-   * ready, that evidence arrives by an exact one-channel read first; otherwise,
-   * or when that read leaves the gate unsatisfied, the full viewer-roster
-   * discovery runs. Both apply through the same discovery path. */
+   * ready, that evidence arrives by an exact one-channel read first: the
+   * store's `resolve` (metadata and roster) for a channel the list lacks, or
+   * its `refreshRoster` (roster only) for a channel it already carries, such
+   * as one an agent was just added to. Otherwise, or when that read leaves the
+   * gate unsatisfied, the full viewer-roster discovery runs. All three apply
+   * through the same discovery path. */
   async function refresh(
     id: string,
     expected: {
@@ -230,24 +233,34 @@ export function createWorkSessions(
     const gate = wait.catch(() => {});
     // The exact read extends a list discovery has already made ready. Any other
     // status (idle, loading, error) needs the full pass to become ready at all,
-    // and that pass carries the new channel; the store's resolve would otherwise
-    // commit a ready list holding only this channel and, after a failed initial
-    // discovery, hide the error the user still needs to retry. The store also
-    // skips ids it already authorizes, so agent additions to a joined channel
-    // go straight to the full discovery below.
-    if (!settled && channels.list().status === "ready")
+    // and that pass carries the new channel; the store's exact reads would
+    // otherwise commit a ready list holding only this channel and, after a
+    // failed initial discovery, hide the error the user still needs to retry.
+    if (!settled && channels.list().status === "ready") {
+      // A channel the ready list carries is one the store authorizes. Its
+      // `resolve` skips such ids (they carry cached-denial semantics), so a
+      // member addition re-reads that one roster through `refreshRoster`; a
+      // channel the list lacks (just created) is admitted by `resolve`'s exact
+      // metadata-and-roster read.
+      const listed = channels
+        .list()
+        .channels.some((channel) => channel.id === id);
       await Promise.race([
         gate,
         (async () => {
           try {
-            await channels.resolve?.([id], {
+            const options = {
               signal: AbortSignal.any([signal, exact.signal]),
-            });
+            };
+            await (listed
+              ? channels.refreshRoster?.(id, options)
+              : channels.resolve?.([id], options));
           } catch {
             // A failed or stale exact read leaves the decision to discovery.
           }
         })(),
       ]);
+    }
     if (!settled) channels.refreshList?.();
     await wait;
   }
@@ -362,7 +375,12 @@ export function createWorkSessions(
       throw new Error("Choose an agent from your agent library.");
     // Parent metadata organizes the UI; both channels keep their own rosters.
     const targets = parentId !== id ? [parentId, id] : [parentId];
+    // Each target's additions are published and acknowledged in turn, parent
+    // first. Their roster confirmations then run together: one exact read per
+    // target, concurrently, rather than a serial gate after every command.
+    const confirmations: [string, string[]][] = [];
     for (const targetId of targets) {
+      const added: string[] = [];
       for (const key of unique) {
         if (active?.() === false)
           throw new DOMException("Channel addition cancelled", "AbortError");
@@ -414,9 +432,15 @@ export function createWorkSessions(
         await delivered(operation, active, true);
         if (active?.() === false)
           throw new DOMException("Channel addition cancelled", "AbortError");
-        await refresh(targetId, { member: key }, false);
+        added.push(key);
       }
+      if (added.length) confirmations.push([targetId, added]);
     }
+    await Promise.all(
+      confirmations.map(([targetId, members]) =>
+        refresh(targetId, { members }, false),
+      ),
+    );
     if (original?.channelType === "session")
       await refresh(id, {
         members: unique,

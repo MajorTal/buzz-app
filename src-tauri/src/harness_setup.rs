@@ -131,7 +131,7 @@ fn open_log(path: &Path) -> Result<File, String> {
     std::fs::create_dir_all(path.parent().ok_or("Invalid install log location")?)
         .map_err(|_| "Could not create the Harnesses install log directory")?;
     let mut options = OpenOptions::new();
-    options.write(true).create(true).truncate(true);
+    options.read(true).write(true).create(true).truncate(true);
     #[cfg(unix)]
     {
         use std::os::unix::fs::OpenOptionsExt;

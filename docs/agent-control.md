@@ -203,8 +203,12 @@ The **Harnesses** card lists only **Buzz Agent**, **Goose**, and **Pi**:
   Installation has a private log, re-detects the executables, and restarts only
   enabled Pi agents that previously failed because their executable was missing.
   User-global Pi installations remain untouched. Windows and unsupported
-  architectures retain manual setup. The copyable commands remain the manual
-  fallback (Node.js required):
+  architectures retain manual setup. Settings explains that **Install** supplies
+  Node.js, Pi, and the adapter automatically. Copyable terminal commands are
+  collapsed under **Manual setup** within the Pi row (Node.js 22.19 or newer required).
+  Failed installs show the failed step and a bounded npm error excerpt above
+  the expandable private install log; errors do not assume a registry problem.
+  The manual fallback commands are:
 
   ```sh
   npm install -g '@earendil-works/pi-coding-agent@>=0.99.0'

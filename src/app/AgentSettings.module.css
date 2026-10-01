@@ -27,6 +27,13 @@
   border-top: 1px solid var(--border-standard);
 }
 
+.piSetup {
+  margin-top: var(--space-3);
+  margin-left: var(--space-2);
+  padding-left: var(--space-4);
+  border-left: 1px solid var(--border-standard);
+}
+
 .command {
   overflow-wrap: anywhere;
   user-select: all;

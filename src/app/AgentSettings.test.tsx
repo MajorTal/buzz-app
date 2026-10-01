@@ -131,13 +131,15 @@ function setupHarnesses(
 }
 
 it.each(["cli-needed", "adapter-needed", "ready"] as const)(
-  "shows the three Harnesses and Pi %s with commands only when needed",
+  "shows the three Harnesses and keeps manual Pi commands collapsed until requested (%s)",
   async (piStatus) => {
     const user = userEvent.setup();
     setupHarnesses(piStatus);
     const list = await screen.findByRole("list");
     const rows = within(list).getAllByRole("listitem");
     expect(rows).toHaveLength(3);
+    const pi = rows[2];
+    if (!pi) throw new Error("Missing Pi row");
     expect(rows[0]).toHaveTextContent("Buzz AgentReady");
     expect(rows[1]).toHaveTextContent("GooseReady");
     expect(rows[2]).toHaveTextContent(
@@ -148,7 +150,10 @@ it.each(["cli-needed", "adapter-needed", "ready"] as const)(
       expect(copyPi).not.toBeInTheDocument();
       expect(screen.queryByText(/npm install -g/)).not.toBeInTheDocument();
     } else {
-      expect(copyPi).toBeVisible();
+      expect(screen.getByText("Copy Pi command")).not.toBeVisible();
+      const manual = within(pi).getByText("Manual setup");
+      expect(manual.closest("details")).not.toHaveAttribute("open");
+      await user.click(manual);
       expect(
         screen.getByText(
           "npm install -g '@earendil-works/pi-coding-agent@>=0.99.0'",
@@ -186,6 +191,7 @@ it.each(["cli-needed", "adapter-needed", "ready"] as const)(
 it("offers manual copying when clipboard access fails", async () => {
   const user = userEvent.setup();
   setupHarnesses("cli-needed");
+  await user.click(await screen.findByText("Manual setup"));
   expect(
     await screen.findByRole("button", { name: "Copy Pi command" }),
   ).toBeVisible();
@@ -274,10 +280,19 @@ it.each([
     expect(within(pi).queryByRole("button", { name: "Install" }) !== null).toBe(
       visible,
     );
-    if (status !== "ready")
-      expect(
-        screen.getByRole("button", { name: "Copy Pi command" }),
-      ).toBeVisible();
+    if (status !== "ready") {
+      expect(screen.getByText("Copy Pi command")).not.toBeVisible();
+      if (supported)
+        expect(
+          within(pi).getByText(
+            /Buzz installs Node.js, Pi, and its ACP adapter for you/,
+          ),
+        ).toBeVisible();
+      else
+        expect(
+          within(pi).getByText(/Use Manual setup on this device/),
+        ).toBeVisible();
+    }
   },
 );
 
@@ -398,10 +413,18 @@ it("keeps bundled Goose Ready during a Pi installation", async () => {
     restarted: 0,
     restartFailures: 0,
     logPath: "/fixture/pi-install.log",
-    output: "failed",
-    error: "Pi install failed",
+    output: "Full diagnostic output",
+    error:
+      "Installing Pi failed (exit code 1).\nnpm error code E404\nnpm error 404 No match found for version >=0.99.0",
   });
-  expect(await screen.findByRole("alert")).toHaveTextContent(
-    "Pi install failed",
-  );
+  const alert = await screen.findByRole("alert");
+  expect(rows[2]).toContainElement(alert);
+  expect(within(alert).getByText(/Installing Pi failed/)).toBeVisible();
+  expect(alert).toHaveTextContent("E404");
+  expect(alert).toHaveTextContent("No match found for version >=0.99.0");
+  const log = within(alert).getByText("Pi install log");
+  expect(log.closest("details")).not.toHaveAttribute("open");
+  expect(within(alert).getByText("Full diagnostic output")).not.toBeVisible();
+  await user.click(log);
+  expect(within(alert).getByText("Full diagnostic output")).toBeVisible();
 });

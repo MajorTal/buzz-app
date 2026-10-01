@@ -15,7 +15,6 @@ const MAX_ARCHIVE: u64 = 90 * 1024 * 1024;
 // Native steering needs Pi's steer disposition, added in 0.99.0.
 const PI: &str = "@earendil-works/pi-coding-agent@>=0.99.0";
 const ADAPTER: &str = "git+https://github.com/salman1993/buzz-pi-acp.git#72015de";
-const NPM_FAILED: &str = "npm couldn't install Pi or its adapter; see the install log. If your network blocks the public npm registry, set your mirror in ~/.npmrc or npm_config_registry, then try again, or use the commands below.";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 struct Artifact {
@@ -201,6 +200,10 @@ async fn run_step(
     log: &File,
     failure: &str,
 ) -> Result<(), String> {
+    let start = log
+        .metadata()
+        .map_err(|_| "Could not inspect install log")?
+        .len();
     command
         .stdout(Stdio::from(
             log.try_clone().map_err(|_| "Could not copy install log")?,
@@ -208,17 +211,46 @@ async fn run_step(
         .stderr(Stdio::from(
             log.try_clone().map_err(|_| "Could not copy install log")?,
         ));
-    let mut child = setup.spawn(|| command.spawn())?;
+    let mut child = setup
+        .spawn(|| command.spawn())
+        .map_err(|error| format!("{failure}: {error}"))?;
     let status = tokio::time::timeout(Duration::from_secs(300), child.child.wait())
         .await
-        .map_err(|_| "Pi install step timed out")?
-        .map_err(|_| "Pi install step could not finish")?;
+        .map_err(|_| format!("{failure}: timed out. See the install log."))?
+        .map_err(|_| format!("{failure}: could not finish. See the install log."))?;
     child.reaped = true;
     drop(child);
     if !status.success() {
-        return Err(failure.into());
+        let exit = status.code().map_or_else(
+            || "process terminated".to_owned(),
+            |code| format!("exit code {code}"),
+        );
+        let detail =
+            npm_error(log, start).unwrap_or_else(|| "See the install log for details.".into());
+        return Err(format!("{failure} ({exit}).\n{detail}"));
     }
     Ok(())
+}
+
+// Keep the visible diagnostic short; the private log retains full output.
+// Only read this step's output so an earlier npm invocation cannot supply its error.
+fn npm_error(log: &File, start: u64) -> Option<String> {
+    use std::io::{Read, Seek, SeekFrom};
+    let mut file = log.try_clone().ok()?;
+    let end = file.metadata().ok()?.len();
+    file.seek(SeekFrom::Start(start.max(end.saturating_sub(8192))))
+        .ok()?;
+    let mut tail = Vec::new();
+    file.take(8192).read_to_end(&mut tail).ok()?;
+    let output = String::from_utf8_lossy(&tail);
+    let lines: Vec<_> = output
+        .lines()
+        .filter(|line| line.starts_with("npm error ") || line.starts_with("npm ERR! "))
+        .filter(|line| !line.contains("A complete log of this run"))
+        .take(6)
+        .map(|line| line.chars().take(200).collect::<String>())
+        .collect();
+    (!lines.is_empty()).then(|| lines.join("\n"))
 }
 
 async fn install_node(
@@ -253,13 +285,7 @@ async fn install_node(
             .arg("-C")
             .arg(&stage)
             .arg("--strip-components=1");
-        run_step(
-            setup,
-            &mut tar,
-            log,
-            "Could not unpack managed Node; see the install log",
-        )
-        .await?;
+        run_step(setup, &mut tar, log, "Unpacking Node.js failed").await?;
         std::fs::remove_file(&archive_path).map_err(|_| "Could not remove Node archive")?;
         if !stage.join("bin/node").is_file()
             || !stage.join("lib/node_modules/npm/bin/npm-cli.js").is_file()
@@ -382,11 +408,14 @@ pub(crate) async fn install(
     let prefix = releases.join(&id);
     std::fs::create_dir(&prefix).map_err(|_| "Could not create app-owned npm prefix")?;
     let result = async {
-        for (package, install_links) in [(PI, false), (ADAPTER, true)] {
+        for (package, install_links, failure) in [
+            (PI, false, "Installing Pi failed"),
+            (ADAPTER, true, "Installing the Pi ACP adapter failed"),
+        ] {
             refuse_linked_prefix(&tools)?;
             refuse_linked_prefix(&prefix)?;
             let mut command = npm_command(&node, app_data, &home, &prefix, package, install_links)?;
-            run_step(setup, &mut command, &log, NPM_FAILED).await?;
+            run_step(setup, &mut command, &log, failure).await?;
         }
         Ok::<_, String>(())
     }
@@ -406,6 +435,57 @@ pub(crate) async fn install(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[tokio::test]
+    async fn failed_steps_report_their_own_npm_error_and_preserve_the_log() {
+        use std::io::Write;
+        let setup = HarnessSetup::default();
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("install.log");
+        let mut log = std::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .create(true)
+            .truncate(true)
+            .open(&path)
+            .unwrap();
+        writeln!(
+            log,
+            "npm error code EACCES\nstale output from an earlier step"
+        )
+        .unwrap();
+        for (step, output) in [
+            (
+                "Installing Pi failed",
+                "npm error code E404\nnpm error 404 No match found for version >=0.99.0",
+            ),
+            (
+                "Installing the Pi ACP adapter failed",
+                "npm error code ENOENT\nnpm error spawn git ENOENT",
+            ),
+            ("Installing Pi failed", ""),
+        ] {
+            let mut command = tokio::process::Command::new("/bin/sh");
+            command
+                .args(["-c", "printf '%s\\n' \"$1\" >&2; exit 1", "fixture", output])
+                .process_group(0)
+                .kill_on_drop(true);
+            let error = run_step(&setup, &mut command, &log, step)
+                .await
+                .unwrap_err();
+            assert!(
+                error.starts_with(&format!("{step} (exit code 1).")),
+                "{error}"
+            );
+            if !output.is_empty() {
+                assert!(error.contains(output), "{error}");
+                assert!(std::fs::read_to_string(&path).unwrap().contains(output));
+            }
+            assert!(!error.contains("EACCES"), "{error}");
+            if step.contains("adapter") || output.is_empty() {
+                assert!(!error.contains("E404"), "{error}");
+            }
+        }
+    }
     #[test]
     fn pinned_artifacts_are_platform_specific_and_reject_unsupported_os() {
         for (os, arch, platform) in [

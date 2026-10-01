@@ -131,102 +131,129 @@ export function AgentSettings({
             )}
             <ul className={styles.rows}>
               {harnesses.map((option) => (
-                <li
-                  key={option?.label}
-                  className="flex flex-wrap items-center justify-between gap-2 py-3 text-body-sm"
-                >
-                  <span>{option?.label}</span>
-                  <span className="flex items-center gap-2">
-                    <span className="text-secondary">
-                      {option?.status ? labels[option.status] : "Unknown"}
+                <li key={option?.label} className="py-3 text-body-sm">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span>{option?.label}</span>
+                    <span className="flex items-center gap-2">
+                      <span className="text-secondary">
+                        {option?.status ? labels[option.status] : "Unknown"}
+                      </span>
+                      {option?.label === "Pi" &&
+                        (option.status !== "ready" || option.updateSupported) &&
+                        option.installSupported &&
+                        control.installPi &&
+                        !piResult?.ready && (
+                          <Button
+                            size="sm"
+                            type="button"
+                            loading={installingPi}
+                            disabled={
+                              state.status !== "ready" ||
+                              state.busy ||
+                              installingPi
+                            }
+                            onClick={() => {
+                              void control.installPi?.().catch(() => {});
+                            }}
+                          >
+                            {option.status === "ready"
+                              ? "Update Pi"
+                              : "Install"}
+                          </Button>
+                        )}
                     </span>
-                    {option?.label === "Pi" &&
-                      (option.status !== "ready" || option.updateSupported) &&
-                      option.installSupported &&
-                      control.installPi &&
-                      !piResult?.ready && (
-                        <Button
-                          size="sm"
-                          type="button"
-                          loading={installingPi}
-                          disabled={
-                            state.status !== "ready" ||
-                            state.busy ||
-                            installingPi
-                          }
-                          onClick={() => {
-                            void control.installPi?.().catch(() => {});
-                          }}
-                        >
-                          {option.status === "ready" ? "Update Pi" : "Install"}
-                        </Button>
-                      )}
-                  </span>
+                  </div>
+                  {option?.label === "Pi" &&
+                    (installingPi ||
+                      piResult?.ready ||
+                      piResult?.error ||
+                      piError ||
+                      pi?.status !== "ready") && (
+                      <div className={`${styles.piSetup} space-y-3`}>
+                        {installingPi && (
+                          <p role="status">
+                            Installing Pi and its ACP adapter…
+                          </p>
+                        )}
+                        {!installingPi &&
+                          piResult?.ready &&
+                          pi?.status === "ready" && (
+                            <p role="status">
+                              Pi and its adapter are up to date. Restart running
+                              Pi agents to use them. Restarted{" "}
+                              {piResult.restarted} waiting agents.
+                              {piResult.restartFailures > 0 &&
+                                ` ${piResult.restartFailures} agents could not restart; check Agents.`}
+                            </p>
+                          )}
+                        {!installingPi && (piResult?.error || piError) && (
+                          <div role="alert" className="text-body-sm">
+                            <p className="whitespace-pre-wrap break-words">
+                              {piResult?.error || piError}
+                            </p>
+                            {piResult && (
+                              <details>
+                                <summary>Pi install log</summary>
+                                <p className="break-all">{piResult.logPath}</p>
+                                <pre
+                                  className={`${styles.command} whitespace-pre-wrap break-all`}
+                                >
+                                  {piResult.output || "No output was recorded."}
+                                </pre>
+                              </details>
+                            )}
+                          </div>
+                        )}
+                        {pi?.status !== "ready" && (
+                          <div className="space-y-3 text-body-sm">
+                            <p className="m-0 text-secondary">
+                              {pi?.installSupported && control.installPi
+                                ? "Click Install. Buzz installs Node.js, Pi, and its ACP adapter for you."
+                                : "Use Manual setup on this device, then click Check again."}{" "}
+                              Your existing CLI setup and sign-in are left
+                              untouched.
+                            </p>
+                            <details>
+                              <summary>Manual setup</summary>
+                              <div className="space-y-3 mt-3">
+                                <p className="m-0 text-secondary">
+                                  Install Node.js 22.19 or newer, then run these
+                                  commands in your terminal. Click Check again
+                                  after installing.
+                                </p>
+                                {commands.map(([name, command]) => (
+                                  <div
+                                    key={name}
+                                    className="flex min-w-0 flex-wrap items-center gap-2"
+                                  >
+                                    <code
+                                      className={`${styles.command} min-w-0 flex-1 text-mono`}
+                                    >
+                                      {command}
+                                    </code>
+                                    <Button
+                                      size="sm"
+                                      type="button"
+                                      onClick={() => void copy(name, command)}
+                                    >
+                                      Copy {name} command
+                                    </Button>
+                                  </div>
+                                ))}
+                                {copyMessage && (
+                                  <p role="status" className="m-0">
+                                    {copyMessage}
+                                  </p>
+                                )}
+                              </div>
+                            </details>
+                          </div>
+                        )}
+                      </div>
+                    )}
                 </li>
               ))}
             </ul>
-            {installingPi && (
-              <p role="status">Installing Pi and its ACP adapter…</p>
-            )}
-            {!installingPi && piResult?.ready && pi?.status === "ready" && (
-              <p role="status">
-                Pi and its adapter are up to date. Restart running Pi agents to
-                use them. Restarted {piResult.restarted} waiting agents.
-                {piResult.restartFailures > 0 &&
-                  ` ${piResult.restartFailures} agents could not restart; check Agents.`}
-              </p>
-            )}
-            {!installingPi && (piResult?.error || piError) && (
-              <div role="alert" className="text-body-sm">
-                <p>{piResult?.error || piError}</p>
-                {piResult && (
-                  <details>
-                    <summary>Pi install log</summary>
-                    <p className="break-all">{piResult.logPath}</p>
-                    <pre
-                      className={`${styles.command} whitespace-pre-wrap break-all`}
-                    >
-                      {piResult.output || "No output was recorded."}
-                    </pre>
-                  </details>
-                )}
-              </div>
-            )}
-            {pi?.status !== "ready" && (
-              <div className="space-y-3 text-body-sm">
-                <p className="m-0 text-secondary">
-                  {pi?.status === "cli-needed"
-                    ? "Install Pi and Node.js (22 or newer), then the ACP adapter."
-                    : "Install the Pi ACP adapter. Node.js is also required."}{" "}
-                  Your existing sign-in is left untouched. Click Check again
-                  after installing.
-                </p>
-                {commands.map(([name, command]) => (
-                  <div
-                    key={name}
-                    className="flex min-w-0 flex-wrap items-center gap-2"
-                  >
-                    <code
-                      className={`${styles.command} min-w-0 flex-1 text-mono`}
-                    >
-                      {command}
-                    </code>
-                    <Button
-                      size="sm"
-                      type="button"
-                      onClick={() => void copy(name, command)}
-                    >
-                      Copy {name} command
-                    </Button>
-                  </div>
-                ))}
-                {copyMessage && (
-                  <p role="status" className="m-0">
-                    {copyMessage}
-                  </p>
-                )}
-              </div>
-            )}
           </>
         )}
       </section>

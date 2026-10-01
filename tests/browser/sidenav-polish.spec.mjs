@@ -375,9 +375,129 @@ test("shell toggle restores the shared sidebar for Channels and Agents", async (
     expect(help.overflow).toBe("visible");
   }
   const sidebarNode = await sidebar.elementHandle();
-  const expandedWidth = await sidebar.evaluate(
-    (node) => node.closest(".shell-sidebar").getBoundingClientRect().width,
-  );
+  let expandedWidth;
+  for (const viewportWidth of [1440, 800]) {
+    if (viewportWidth === 800) await handle.press("End");
+    await page.setViewportSize({ width: viewportWidth, height: 950 });
+    expandedWidth = await sidebar.evaluate(
+      (node) => node.closest(".shell-sidebar").getBoundingClientRect().width,
+    );
+    const gutterWidth = await handle.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return (
+        element.getBoundingClientRect().width +
+        Number.parseFloat(style.marginLeft) +
+        Number.parseFloat(style.marginRight)
+      );
+    });
+    const track = await shellNavigation.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return {
+        width: node.getBoundingClientRect().width,
+        property: style.transitionProperty,
+        duration: style.transitionDuration,
+      };
+    });
+    expect(track.width).toBe(expandedWidth + gutterWidth);
+    expect(track.property).toContain("grid-template-columns");
+    expect(parseFloat(track.duration)).toBeGreaterThan(0);
+    const openGap = await page.evaluate(() => {
+      const sidebar = document.querySelector(".shell-sidebar");
+      const main = document.querySelector("#main-content");
+      if (!(sidebar instanceof HTMLElement) || !(main instanceof HTMLElement))
+        throw new Error("Missing shell panels");
+      return (
+        main.getBoundingClientRect().left -
+        sidebar.getBoundingClientRect().right
+      );
+    });
+    expect(openGap).toBe(gutterWidth);
+    // Seek paused real transitions so runner speed cannot hide an immediate jump.
+    // Pause them when the toggle commits, before any frame: transitionrun arrives
+    // in a later frame, and a stalled WebKit frame can finish the 220ms transition
+    // first. Only the track and the sidebar it holds are seeked; the resize help's
+    // own descendant transitions are unrelated.
+    for (const label of ["Hide Channel sidebar", "Show Channel sidebar"]) {
+      const samples = await page.evaluate(async (label) => {
+        const nav = document.querySelector("#shell-navigation");
+        const sidebar = nav.querySelector(".shell-sidebar");
+        const button = document.querySelector(`button[aria-label="${label}"]`);
+        const committed = new Promise((resolve) => {
+          const observer = new MutationObserver(() => {
+            observer.disconnect();
+            // getAnimations() flushes style, so the toggle's transitions exist.
+            const transitions = [
+              ...nav.getAnimations(),
+              ...sidebar.getAnimations(),
+            ];
+            for (const transition of transitions) transition.pause();
+            resolve(transitions);
+          });
+          observer.observe(nav, {
+            attributes: true,
+            attributeFilter: ["aria-hidden"],
+          });
+        });
+        button.click();
+        const transitions = await committed;
+        try {
+          const properties = transitions.map(
+            (transition) => transition.transitionProperty,
+          );
+          for (const property of ["grid-template-columns", "clip-path"])
+            if (!properties.includes(property))
+              throw new Error(`Missing ${property} transition`);
+          return [0, 0.1, 0.25, 0.5, 0.75, 1].map((progress) => {
+            for (const transition of transitions)
+              transition.currentTime =
+                transition.effect.getTiming().duration * progress;
+            return {
+              width: nav.getBoundingClientRect().width,
+              sidebar: sidebar.getBoundingClientRect().width,
+              clip: getComputedStyle(nav).clipPath,
+            };
+          });
+        } finally {
+          for (const transition of transitions) transition.finish();
+          await Promise.all(
+            transitions.map((transition) => transition.finished),
+          );
+        }
+      }, label);
+      const width = expandedWidth + gutterWidth;
+      const hiding = label.startsWith("Hide");
+      // The track leaves its real extent on the first sampled step and crosses
+      // the midpoint halfway through, instead of stalling behind a larger
+      // ceiling; the sidebar itself keeps its width and is only clipped.
+      expect(samples[0].width).toBe(hiding ? width : 0);
+      expect(samples[1].width).toBeGreaterThan(0);
+      expect(samples[1].width).toBeLessThan(width);
+      expect(Math.abs(samples[3].width - width / 2)).toBeLessThan(1);
+      for (let index = 1; index < samples.length; index++) {
+        const step = samples[index].width - samples[index - 1].width;
+        expect(hiding ? -step : step).toBeGreaterThan(0);
+      }
+      expect(samples.at(-1).width).toBe(hiding ? 0 : width);
+      for (const sample of samples) expect(sample.sidebar).toBe(expandedWidth);
+      for (const sample of samples.slice(1, -1))
+        expect(sample.clip).toBe("inset(0px)");
+      expect(samples.at(-1).clip).toBe(hiding ? "inset(0px)" : "none");
+    }
+
+    if (viewportWidth === 800) {
+      expect(expandedWidth).toBeGreaterThan(220);
+      expect(expandedWidth).toBeLessThan(520);
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 950 });
+  await expect
+    .poll(() =>
+      sidebar.evaluate(
+        (node) => node.closest(".shell-sidebar").getBoundingClientRect().width,
+      ),
+    )
+    .toBe(520);
+  expandedWidth = 520;
   const gutterWidth = await handle.evaluate((element) => {
     const style = getComputedStyle(element);
     return (
@@ -386,90 +506,6 @@ test("shell toggle restores the shared sidebar for Channels and Agents", async (
       Number.parseFloat(style.marginRight)
     );
   });
-  const track = await shellNavigation.evaluate((node) => {
-    const style = getComputedStyle(node);
-    return {
-      width: node.getBoundingClientRect().width,
-      property: style.transitionProperty,
-      duration: style.transitionDuration,
-    };
-  });
-  expect(track.width).toBe(expandedWidth + gutterWidth);
-  expect(track.property).toContain("width");
-  expect(parseFloat(track.duration)).toBeGreaterThan(0);
-  const openGap = await page.evaluate(() => {
-    const sidebar = document.querySelector(".shell-sidebar");
-    const main = document.querySelector("#main-content");
-    if (!(sidebar instanceof HTMLElement) || !(main instanceof HTMLElement))
-      throw new Error("Missing shell panels");
-    return (
-      main.getBoundingClientRect().left - sidebar.getBoundingClientRect().right
-    );
-  });
-  expect(openGap).toBe(gutterWidth);
-  // Seek a paused real transition so runner speed cannot hide an immediate jump.
-  // Pause it when the toggle commits, before any frame: transitionrun arrives in
-  // a later frame, and a stalled WebKit frame can finish the 220ms transition
-  // first. Descendant transitions (the resize help) also bubble transitionrun.
-  for (const label of ["Hide Channel sidebar", "Show Channel sidebar"]) {
-    const samples = await page.evaluate(async (label) => {
-      const nav = document.querySelector("#shell-navigation");
-      const button = document.querySelector(`button[aria-label="${label}"]`);
-      const committed = new Promise((resolve) => {
-        const observer = new MutationObserver(() => {
-          observer.disconnect();
-          // getAnimations() flushes style, so the toggle's transitions exist.
-          const transitions = nav.getAnimations();
-          for (const transition of transitions) transition.pause();
-          resolve(transitions);
-        });
-        observer.observe(nav, {
-          attributes: true,
-          attributeFilter: ["aria-hidden"],
-        });
-      });
-      button.click();
-      const transitions = await committed;
-      const animation = transitions.find(
-        (animation) => animation.transitionProperty === "max-width",
-      );
-      if (!animation) throw new Error("Missing sidebar transition");
-      try {
-        const duration = animation.effect.getTiming().duration;
-        const clipping = transitions.find(
-          (animation) => animation.transitionProperty === "clip-path",
-        );
-        if (!clipping) throw new Error("Missing containment transition");
-        try {
-          return [0, 0.25, 0.5, 0.75, 1].map((progress) => {
-            animation.currentTime = duration * progress;
-            clipping.currentTime = duration * progress;
-            return {
-              width: nav.getBoundingClientRect().width,
-              clip: getComputedStyle(nav).clipPath,
-            };
-          });
-        } finally {
-          clipping.finish();
-          await clipping.finished;
-        }
-      } finally {
-        animation.finish();
-        await animation.finished;
-      }
-    }, label);
-    const width = expandedWidth + gutterWidth;
-    expect(
-      samples.some((sample) => sample.width > 0 && sample.width < width),
-    ).toBe(true);
-    expect(samples[0].width).toBe(label.startsWith("Hide") ? width : 0);
-    expect(samples.at(-1).width).toBe(label.startsWith("Hide") ? 0 : width);
-    for (const sample of samples.slice(1, -1))
-      expect(sample.clip).toBe("inset(0px)");
-    expect(samples.at(-1).clip).toBe(
-      label.startsWith("Hide") ? "inset(0px)" : "none",
-    );
-  }
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect

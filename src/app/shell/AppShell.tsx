@@ -1,5 +1,5 @@
 import { NavigationItem } from "../../shared/design-system/ui/NavigationItem";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
 import { SidebarIcon } from "../../shared/design-system/icons";
 import { Panel } from "../../shared/design-system/ui/Panel";
@@ -88,36 +88,50 @@ export function AppShell({
     }
     setNavigationOpen(false);
   }, [navigationAttempt]);
-  // Only primary pages get a row; search below still lists every active page.
-  // Every primary page comes from an optional plugin, so an empty list is
-  // reachable; skip the landmark rather than announce an empty region.
-  const primaryPages = orderPages(pages.filter((page) => page.primary));
-  const pageNavigation = primaryPages.length ? (
-    <nav aria-label="Pages" className="shell-pages">
-      {primaryPages.map((page) => {
-        const { label, icon: Icon } = pagePresentation(page);
-        return (
-          <NavigationItem
-            type="button"
-            key={page.key}
-            onClick={() => {
-              onSelect(page.key);
-              document
-                .getElementById("main-content")
-                ?.focus({ preventScroll: true });
-            }}
-            selected={selected === page.key}
-            label={label}
-            icon={
-              <span className="shell-page-icon">
-                <Icon aria-hidden="true" weight="bold" size={15} />
-              </span>
-            }
-          />
-        );
-      })}
-    </nav>
-  ) : null;
+  // Toggling the sidebar changes only this shell's own state. Keep the
+  // navigation element stable across those renders so React skips the whole
+  // sidebar subtree instead of re-rendering every row on each click.
+  const navigation = useMemo(() => {
+    // Only primary pages get a row; search below still lists every active page.
+    // Every primary page comes from an optional plugin, so an empty list is
+    // reachable; skip the landmark rather than announce an empty region.
+    const primaryPages = orderPages(pages.filter((page) => page.primary));
+    const pageNavigation = primaryPages.length ? (
+      <nav aria-label="Pages" className="shell-pages">
+        {primaryPages.map((page) => {
+          const { label, icon: Icon } = pagePresentation(page);
+          return (
+            <NavigationItem
+              type="button"
+              key={page.key}
+              onClick={() => {
+                onSelect(page.key);
+                document
+                  .getElementById("main-content")
+                  ?.focus({ preventScroll: true });
+              }}
+              selected={selected === page.key}
+              label={label}
+              icon={
+                <span className="shell-page-icon">
+                  <Icon aria-hidden="true" weight="bold" size={15} />
+                </span>
+              }
+            />
+          );
+        })}
+      </nav>
+    ) : null;
+    return sidebar ? (
+      sidebar(pageNavigation)
+    ) : (
+      <div className="shell-sidebar-default">
+        <Panel as="aside" aria-label="Page sidebar">
+          <div className="p-2">{pageNavigation}</div>
+        </Panel>
+      </div>
+    );
+  }, [pages, selected, onSelect, sidebar]);
   return (
     <div
       data-shell-tone={tone}
@@ -218,15 +232,7 @@ export function AppShell({
                   }
                 }}
               >
-                {sidebar ? (
-                  sidebar(pageNavigation)
-                ) : (
-                  <div className="shell-sidebar-default">
-                    <Panel as="aside" aria-label="Page sidebar">
-                      <div className="p-2">{pageNavigation}</div>
-                    </Panel>
-                  </div>
-                )}
+                <div className="shell-navigation-content">{navigation}</div>
               </div>
               <main
                 id="main-content"

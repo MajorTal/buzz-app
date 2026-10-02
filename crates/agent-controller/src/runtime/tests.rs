@@ -1092,6 +1092,9 @@ fn launch_path_puts_bundled_tools_before_platform_tools() {
             expected.push("/usr/local/bin".into());
         }
         expected.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(Into::into));
+        if cfg!(target_os = "macos") {
+            expected.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(Into::into));
+        }
     }
     assert_eq!(std::env::split_paths(path).collect::<Vec<_>>(), expected);
 }
@@ -3244,6 +3247,38 @@ while :; do /bin/sleep 0.1; done
             .count(),
         10
     );
+}
+
+#[test]
+#[cfg(unix)]
+fn harness_path_adds_each_unix_platforms_user_install_locations() {
+    let dirs = |os: &str, home: Option<&str>| {
+        unix_tools_dirs(os, home.map(PathBuf::from))
+            .into_iter()
+            .map(|p| p.to_string_lossy().into_owned())
+            .collect::<Vec<_>>()
+    };
+    let floor = ["/usr/bin", "/bin", "/usr/sbin", "/sbin"];
+    // Homebrew's npm installs `#!/usr/bin/env node` scripts beside node itself;
+    // the prefixes come after the system directories, which keep precedence.
+    assert_eq!(
+        dirs("macos", Some("/Users/me")),
+        [&floor[..], &["/opt/homebrew/bin", "/usr/local/bin"]].concat()
+    );
+    assert_eq!(
+        dirs("linux", Some("/home/me")),
+        [&["/home/me/.local/bin", "/usr/local/bin"][..], &floor].concat()
+    );
+    // A relative or missing HOME never adds a working-directory-relative entry.
+    assert_eq!(
+        dirs("linux", Some("relative")),
+        [&["/usr/local/bin"][..], &floor].concat()
+    );
+    assert_eq!(
+        dirs("linux", None),
+        [&["/usr/local/bin"][..], &floor].concat()
+    );
+    assert_eq!(dirs("freebsd", Some("/home/me")), floor);
 }
 
 #[cfg(target_os = "macos")]

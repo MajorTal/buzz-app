@@ -293,14 +293,22 @@ fn databricks_with_defaults(
 }
 /// PATH after the runtime bundle for non-Pi harnesses. Windows keeps its native
 /// PATH, where Git Bash and user tools are installed; Unix uses a fixed floor
-/// plus, on Linux, common user-level install locations.
+/// plus common user-level install locations.
 fn tools_path() -> Result<std::ffi::OsString> {
     if cfg!(windows) {
         return Ok(std::env::var_os("PATH").unwrap_or_default());
     }
+    let home = std::env::var_os("HOME").map(PathBuf::from);
+    std::env::join_paths(unix_tools_dirs(std::env::consts::OS, home))
+        .map_err(|_| "Invalid runtime tools path".into())
+}
+/// Linux puts `~/.local/bin` and `/usr/local/bin` first. macOS appends the
+/// Homebrew prefixes (Apple Silicon, then Intel) after the system directories, as
+/// host commands do, so a harness run by Homebrew's node (`#!/usr/bin/env node`)
+/// starts while system tools keep precedence.
+fn unix_tools_dirs(os: &str, home: Option<PathBuf>) -> Vec<PathBuf> {
     let mut dirs = Vec::new();
-    if cfg!(target_os = "linux") {
-        let home = std::env::var_os("HOME").map(PathBuf::from);
+    if os == "linux" {
         dirs.extend(
             home.filter(|h| h.is_absolute())
                 .map(|h| h.join(".local/bin")),
@@ -308,7 +316,10 @@ fn tools_path() -> Result<std::ffi::OsString> {
         dirs.push(PathBuf::from("/usr/local/bin"));
     }
     dirs.extend(["/usr/bin", "/bin", "/usr/sbin", "/sbin"].map(PathBuf::from));
-    std::env::join_paths(dirs).map_err(|_| "Invalid runtime tools path".into())
+    if os == "macos" {
+        dirs.extend(["/opt/homebrew/bin", "/usr/local/bin"].map(PathBuf::from));
+    }
+    dirs
 }
 /// App-owned npm shims and the pinned Node binary are separate from user-global tools.
 /// `app_data` is Tauri's resolved app-data directory, never browser input.

@@ -456,8 +456,10 @@ be ended by an enclosing kill-on-close launcher job. Profile, config and tempora
 directories inherit Windows ACLs; they are not verified to match Unix 0700/0600 modes.
 
 Non-Pi harnesses get the bundled tools first on PATH, then Windows' native PATH;
-on Linux `~/.local/bin` and `/usr/local/bin` precede the system directories, which
-are macOS's only entries. On Windows the shell tool needs Git Bash from Git for
+on Linux `~/.local/bin` and `/usr/local/bin` precede the system directories; on
+macOS the Homebrew prefixes `/opt/homebrew/bin` and `/usr/local/bin` follow them,
+so a harness run by Homebrew's node (`#!/usr/bin/env node`) starts. Node from a
+version manager such as nvm is not on this PATH; use its absolute path. On Windows the shell tool needs Git Bash from Git for
 Windows, or a `BUZZ_SHELL`/`GIT_BASH` override under Advanced → Environment.
 Settings says **Shell setup not verified**; Buzz does not check it before Start.
 

@@ -176,7 +176,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   ).toHaveCount(0);
   const tabIndicator = picker.locator(".buzz-tabs-indicator");
   await expect(tabIndicator).toHaveCSS("height", "2px");
-  await expect(tabIndicator).toHaveCSS("background-color", "rgb(0, 0, 0)");
+  await expect(tabIndicator).toHaveCSS("background-color", "rgb(15, 15, 15)");
   const search = page.getByRole("searchbox", { name: "Search GIFs" });
   await expect(search).toBeFocused();
   await expect(search).toHaveValue("hello");
@@ -231,7 +231,7 @@ test("relay-backed GIF tab searches KLIPY and inserts URL-only media", async ({
   await expect(searchFrame).toHaveClass(/search-field/);
   await expect(searchFrame).toHaveCSS("background-color", "rgb(255, 255, 255)");
   await expect(searchFrame).toHaveCSS("border-top-color", "rgb(128, 128, 128)");
-  await expect(search).toHaveCSS("color", "rgb(0, 0, 0)");
+  await expect(search).toHaveCSS("color", "rgb(15, 15, 15)");
   await expect(search).toHaveCSS("font-family", /Inter Variable/);
   const gifSearchPosition = await searchFrame.boundingBox();
   const tabListBox = await picker.getByRole("tablist").boundingBox();

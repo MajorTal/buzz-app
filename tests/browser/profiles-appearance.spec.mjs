@@ -52,7 +52,7 @@ for (const mode of ["light", "dark"]) {
     );
     await expect(region).toHaveCSS(
       "color",
-      mode === "light" ? "rgb(0, 0, 0)" : "rgb(255, 255, 255)",
+      mode === "light" ? "rgb(15, 15, 15)" : "rgb(255, 255, 255)",
     );
     await expect(region).toHaveCSS("font-size", "14px");
     await expect(

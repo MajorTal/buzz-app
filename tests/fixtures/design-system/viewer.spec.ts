@@ -1,7 +1,7 @@
 import { expect, test, type Locator } from "@playwright/test";
 import { watchPageErrors } from "../../browser/page-errors.mjs";
 import { COMPONENTS } from "../../../src/shared/design-system/ui/registry";
-import { PHOSPHOR_ICONS } from "../../../src/shared/design-system/icons/inventory";
+import { TABLER_ICONS } from "../../../src/shared/design-system/icons/inventory";
 
 const viewer = "/tests/fixtures/design-system.html";
 
@@ -483,11 +483,11 @@ test("icon inventory is routed, complete, decorative, and responsive", async ({
   ).toBeVisible();
   await expect(page).toHaveURL(/#\/design\/icons$/);
 
-  const phosphorList = page.getByRole("list", {
-    name: "Available Phosphor icons",
+  const tablerList = page.getByRole("list", {
+    name: "Available Tabler icons",
   });
-  await expect(phosphorList.getByRole("listitem")).toHaveCount(
-    PHOSPHOR_ICONS.length,
+  await expect(tablerList.getByRole("listitem")).toHaveCount(
+    TABLER_ICONS.length,
   );
   await expect(page.getByRole("img")).toHaveCount(0);
   await expect(page.locator("main svg:not([aria-hidden='true'])")).toHaveCount(
@@ -522,7 +522,7 @@ test("icon inventory is routed, complete, decorative, and responsive", async ({
         () => document.documentElement.scrollWidth <= window.innerWidth,
       ),
     ).toBe(true);
-    await expect(phosphorList.getByRole("listitem").first()).toBeVisible();
+    await expect(tablerList.getByRole("listitem").first()).toBeVisible();
   }
 });
 

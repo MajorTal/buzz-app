@@ -298,7 +298,7 @@ export const ROLE_GROUPS: RoleGroup[] = [
       {
         token: "text-standard",
         variable: "--text-standard",
-        pointsAt: "neutral-12 light / neutral-12 dark",
+        pointsAt: "neutral-standard-text light / neutral-12 dark",
         use: "Normal reading text.",
         status: "core",
       },
@@ -761,7 +761,7 @@ export const ROLE_GROUPS: RoleGroup[] = [
       {
         token: "text-primary",
         variable: "--text-primary",
-        pointsAt: "neutral 12",
+        pointsAt: "text-standard",
         use: "Normal reading text.",
         status: "core",
       },

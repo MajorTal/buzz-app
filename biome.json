@@ -58,7 +58,7 @@
                   "phosphor-react/**",
                   "@phosphor-icons/**"
                 ],
-                "message": "Use the shared design-system/icons gateway; Phosphor only."
+                "message": "Use the shared design-system/icons gateway; Tabler only."
               }
             ]
           }
@@ -102,8 +102,6 @@
                       "lucide*",
                       "lucide*/**",
                       "@lucide/**",
-                      "@tabler/icons*",
-                      "@tabler/icons*/**",
                       "react-icons",
                       "react-icons/**",
                       "@heroicons/**",
@@ -116,9 +114,10 @@
                       "@radix-ui/react-icons",
                       "@radix-ui/react-icons/**",
                       "phosphor-react",
-                      "phosphor-react/**"
+                      "phosphor-react/**",
+                      "@phosphor-icons/**"
                     ],
-                    "message": "Phosphor only."
+                    "message": "Tabler only."
                   }
                 ]
               }

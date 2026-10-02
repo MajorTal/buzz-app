@@ -2,7 +2,7 @@
 
 First visual experiment for link rendering, activated as a page plugin in the
 isolated `/tests/fixtures/link-lab.html` preview. Add `?theme=dark` for dark mode.
-Uses the design system's blue 11 text, blue 4 hover fill and Phosphor icons.
+Uses the design system's blue 11 text, blue 4 hover fill and Tabler icons.
 Links are transparent by default. Padding stays 2px on every side, including
 wrapped line fragments, with -2px inline margins so it adds no horizontal gap
 to surrounding text. Hovering does not move the surrounding text.

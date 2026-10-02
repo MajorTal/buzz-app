@@ -70,6 +70,13 @@ test("bundled pages get their own icons and Bestie's row shows its artwork", () 
   expect(pagePresentation(inbox).icon).toBe(BellIcon);
   expect(
     renderToStaticMarkup(
+      createElement(
+        pagePresentation(page("buzz.agents/agents", "Agents")).icon,
+      ),
+    ),
+  ).toContain("tabler-icon-robot-face");
+  expect(
+    renderToStaticMarkup(
       createElement(pagePresentation(bestie).icon, { size: 15 }),
     ),
   ).toContain("/bestie.png");

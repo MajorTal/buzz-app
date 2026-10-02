@@ -1,17 +1,17 @@
-// Static Phosphor assets for widgets that accept SVG strings rather than React.
-import clock from "@phosphor-icons/core/assets/regular/clock.svg?raw";
-import smiley from "@phosphor-icons/core/assets/regular/smiley.svg?raw";
-import paw_print from "@phosphor-icons/core/assets/regular/paw-print.svg?raw";
-import orange from "@phosphor-icons/core/assets/regular/orange.svg?raw";
-import barbell from "@phosphor-icons/core/assets/regular/barbell.svg?raw";
-import car from "@phosphor-icons/core/assets/regular/car.svg?raw";
-import lightbulb from "@phosphor-icons/core/assets/regular/lightbulb.svg?raw";
-import shapes from "@phosphor-icons/core/assets/regular/shapes.svg?raw";
-import flag from "@phosphor-icons/core/assets/regular/flag.svg?raw";
-import asterisk from "@phosphor-icons/core/assets/regular/asterisk.svg?raw";
-import x from "@phosphor-icons/core/assets/regular/x.svg?raw";
+// Static Tabler assets for widgets that accept SVG strings rather than React.
+import clock from "@tabler/icons/outline/clock.svg?raw";
+import smiley from "@tabler/icons/outline/mood-smile.svg?raw";
+import paw_print from "@tabler/icons/outline/paw.svg?raw";
+import orange from "@tabler/icons/outline/lemon-2.svg?raw";
+import barbell from "@tabler/icons/outline/barbell.svg?raw";
+import car from "@tabler/icons/outline/car.svg?raw";
+import lightbulb from "@tabler/icons/outline/bulb.svg?raw";
+import shapes from "@tabler/icons/outline/category.svg?raw";
+import flag from "@tabler/icons/outline/flag.svg?raw";
+import asterisk from "@tabler/icons/outline/asterisk.svg?raw";
+import x from "@tabler/icons/outline/x.svg?raw";
 
-import magnifying_glass from "@phosphor-icons/core/assets/regular/magnifying-glass.svg?raw";
+import magnifying_glass from "@tabler/icons/outline/search.svg?raw";
 
 export const pickerIcons = {
   x,

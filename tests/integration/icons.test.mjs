@@ -11,7 +11,8 @@ import {
 test("icon dependency policy rejects retired families and aliases", () => {
   for (const name of [
     "lucide-react",
-    "@tabler/icons-react",
+    "@phosphor-icons/react",
+    "@phosphor-icons/core",
     "react-icons",
     "@heroicons/react",
     "@mui/icons-material",
@@ -29,8 +30,8 @@ test("icon dependency policy rejects retired families and aliases", () => {
   assert.deepEqual(
     checkIconManifest({
       dependencies: {
-        "@phosphor-icons/react": "2.1.10",
-        "@phosphor-icons/core": "2.1.1",
+        "@tabler/icons-react": "3.46.0",
+        "@tabler/icons": "3.46.0",
       },
     }),
     [],
@@ -61,12 +62,12 @@ test("gateway allows individual exports, never the whole catalog", () => {
   assert.deepEqual(
     checkIconSource(
       path,
-      'export { HouseIcon } from "@phosphor-icons/react/dist/csr/House";',
+      'export { default as HouseIcon } from "@tabler/icons-react/dist/esm/icons/IconHome.mjs";',
     ),
     [],
   );
   assert.ok(
-    checkIconSource(path, 'export * from "@phosphor-icons/react";').length,
+    checkIconSource(path, 'export * from "@tabler/icons-react";').length,
   );
 });
 test("real local linter rejects upstream imports outside the gateway", () => {
@@ -74,7 +75,8 @@ test("real local linter rejects upstream imports outside the gateway", () => {
     "lucide-react",
     "lucide-react/dist/esm/icons/x.js",
     "@tabler/icons-react",
-    "@tabler/icons-react/dist/esm/icons/IconX.js",
+    "@tabler/icons-react/dist/esm/icons/IconX.mjs",
+    "@tabler/icons/outline/x.svg?raw",
     "iconoir-react",
     "iconsax-react",
     "@radix-ui/react-icons",
@@ -112,7 +114,8 @@ test("icon checks are part of the normal design gate", () => {
 test("all import forms and subpaths obey the shared gateway", () => {
   const families = [
     "lucide-react/dist/esm/icons/x.js",
-    "@tabler/icons-react/dist/esm/icons/IconX.js",
+    "@tabler/icons-react/dist/esm/icons/IconX.mjs",
+    "@tabler/icons/outline/x.svg?raw",
     "iconoir-react",
     "iconsax-react",
     "@radix-ui/react-icons",
@@ -137,8 +140,8 @@ test("all import forms and subpaths obey the shared gateway", () => {
     "src/shared/design-system/icons/legacy.cjs",
   ]) {
     for (const source of [
-      'const icons = require("@phosphor-icons/react");',
-      'const icons = import("@phosphor-icons/react");',
+      'const icons = require("@tabler/icons-react");',
+      'const icons = import("@tabler/icons-react");',
       'export * from "./other";',
     ])
       assert.ok(checkIconSource(path, source).length, source);
@@ -161,7 +164,7 @@ test("other known families and aliases cannot reintroduce a second catalog", () 
     assert.ok(checkIconManifest({ dependencies: { [name]: "1.0.0" } }).length);
   assert.ok(
     checkIconManifest({
-      dependencies: { "@phosphor-icons/react": "npm:lucide-react@1.0.0" },
+      dependencies: { "@tabler/icons-react": "npm:lucide-react@1.0.0" },
     }).length,
   );
 });
@@ -182,4 +185,26 @@ test("syntax-aware inspection handles templates, JSX and regexes", () => {
     'const label = `from "lucide-react" ${name}`;',
   ])
     assert.deepEqual(checkIconSource("src/probe.tsx", source), [], source);
+});
+
+test("gateway permits asset modules and type-only barrel imports, not runtime catalogs", () => {
+  const path = "src/shared/design-system/icons/probe.ts";
+  assert.deepEqual(
+    checkIconSource(
+      path,
+      'import type { TablerIcon } from "@tabler/icons-react";',
+    ),
+    [],
+  );
+  assert.deepEqual(
+    checkIconSource(path, 'import x from "@tabler/icons/outline/x.svg?raw";'),
+    [],
+  );
+  for (const source of [
+    'import { IconHome } from "@tabler/icons-react";',
+    'import * as icons from "@tabler/icons-react";',
+    'import icons from "@tabler/icons/tabler-nodes-outline.json";',
+    'import { HouseIcon } from "@phosphor-icons/react/dist/csr/House";',
+  ])
+    assert.ok(checkIconSource(path, source).length, source);
 });

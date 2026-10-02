@@ -381,7 +381,7 @@ function useLandingDefinitions(
 
 function WorkflowIcon({ kind }: { kind: WorkflowCardIcon }) {
   const Icon = ICONS[kind];
-  return <Icon size={20} weight="bold" aria-hidden="true" />;
+  return <Icon size={20} strokeWidth={2.5} aria-hidden="true" />;
 }
 
 function WorkflowCard({
@@ -812,7 +812,7 @@ export function WorkflowLanding({
           onClick={onCreate}
           variant="ghost"
         >
-          <PlusIcon size={28} weight="bold" aria-hidden="true" />
+          <PlusIcon size={28} strokeWidth={2.5} aria-hidden="true" />
         </Button>
         {channels.map((channel) => (
           <WorkflowChannelCards

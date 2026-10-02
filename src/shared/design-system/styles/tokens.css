@@ -285,6 +285,7 @@
      Keep these current. A step whose comment disagrees with its
      use is worse than no comment, because it reads as a decision
      someone made. `pnpm census` lists the real readers. */
+  --neutral-standard-text: #0f0f0f; /* Designer-requested light primary text and inherited icons. */
   --neutral-navigation-text: #404040; /* Tailwind neutral-700. */
   --neutral-navigation-unread: #262626; /* Tailwind neutral-800. */
   --neutral-navigation-quiet: #f7f7f7; /* Designer-requested gentle sidenav states. */
@@ -307,7 +308,7 @@
   --neutral-10: #525252; /* text-secondary                         */
   --neutral-11: #191919; /* inverse fill, paired with neutral-1    */
   --neutral-action-pressed: #525252;
-  --neutral-12: #000000; /* text-primary                           */
+  --neutral-12: #000000; /* prominent controls and focus boundary   */
 
   /* --- Glass. A translucency ramp of fills. ---------------- */
   --glass-1: #ffffff5c; /* barely there   */
@@ -511,7 +512,7 @@
   --surface-inverse: var(--neutral-11);
   --text-navigation: var(--neutral-navigation-text);
   --text-navigation-unread: var(--neutral-navigation-unread);
-  --text-standard: var(--neutral-12);
+  --text-standard: var(--neutral-standard-text);
   --text-subtle: var(--neutral-10);
   --text-metadata: var(--neutral-9);
   --text-inverse: var(--neutral-1);

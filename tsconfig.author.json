@@ -7,5 +7,9 @@
     "rootDir": "src",
     "outDir": "dist-author/types"
   },
-  "include": ["src/plugins/author.ts", "src/vite-env.d.ts"]
+  "include": [
+    "src/plugins/author.ts",
+    "src/vite-env.d.ts",
+    "src/shared/design-system/icons/tabler.d.ts"
+  ]
 }

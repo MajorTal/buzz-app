@@ -5,19 +5,18 @@ import {
   type RefAttributes,
 } from "react";
 
-export type IconProps = ComponentPropsWithoutRef<"svg"> &
+export type IconProps = Omit<ComponentPropsWithoutRef<"svg">, "stroke"> &
   RefAttributes<SVGSVGElement> & {
-    alt?: string;
+    stroke?: string;
     color?: string;
     size?: string | number;
-    weight?: "thin" | "light" | "regular" | "bold" | "fill" | "duotone";
-    mirrored?: boolean;
+    title?: string;
   };
 type Icon = ForwardRefExoticComponent<IconProps>;
 
 type IntendedSize = Readonly<{ width: number; height: number }>;
 export type IconDefinition =
-  | Readonly<{ source: "phosphor" }>
+  | Readonly<{ source: "tabler" }>
   | Readonly<{
       source: "custom";
       meaning: string;
@@ -30,10 +29,7 @@ const ICON_DEFINITION = Symbol("buzz.iconDefinition");
 export type DefinedIcon = Icon & { readonly [ICON_DEFINITION]: IconDefinition };
 
 /** Defines every public icon's source and decorative-by-default behavior together. */
-export function defineIcon(
-  source: "phosphor",
-  IconComponent: Icon,
-): DefinedIcon;
+export function defineIcon(source: "tabler", IconComponent: Icon): DefinedIcon;
 export function defineIcon(
   source: "custom",
   IconComponent: Icon,
@@ -45,23 +41,21 @@ export function defineIcon(
   detail?: Omit<Extract<IconDefinition, { source: "custom" }>, "source">,
 ): DefinedIcon {
   const Defined = forwardRef<SVGSVGElement, IconProps>(function DefinedIcon(
-    { "aria-hidden": ariaHidden = true, size, ...props },
+    { "aria-hidden": ariaHidden = true, size = "1em", ...props },
     ref,
   ) {
     return (
       <IconComponent
         ref={ref}
         aria-hidden={ariaHidden}
-        {...(size === undefined
-          ? {}
-          : { size: typeof size === "number" ? `${size / 16}rem` : size })}
+        size={typeof size === "number" ? `${size / 16}rem` : size}
         {...props}
       />
     );
   }) as DefinedIcon;
 
   Object.defineProperty(Defined, ICON_DEFINITION, {
-    value: source === "phosphor" ? { source } : { source, ...detail },
+    value: source === "tabler" ? { source } : { source, ...detail },
   });
   return Defined;
 }

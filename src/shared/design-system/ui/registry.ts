@@ -116,7 +116,7 @@ export const COMPONENTS: readonly ComponentDefinition[] = [
     name: "Calendar",
     purpose: "Choose a date using a month grid.",
     behavior:
-      "React DayPicker owns calendar arithmetic and keyboard navigation; Buzz owns styling and Phosphor navigation icons.",
+      "React DayPicker owns calendar arithmetic and keyboard navigation; Buzz owns styling and Tabler navigation icons.",
     variants: ["single date", "selected", "today", "disabled dates"],
     status: "proposed",
     collection: "components",

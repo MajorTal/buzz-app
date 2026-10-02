@@ -16,6 +16,10 @@ Tailwind utilities include `bg-surface-panel`, `text-standard`,
 `border-prominent` and `bg-affordance-subtle-hover`. Text and border registrations
 stay in separate namespaces so they cannot accidentally share a value.
 
+Primary reading text and icons inheriting its color use `text-standard`: #0F0F0F
+in light mode and #FFFFFF in dark mode. Secondary and disabled roles keep their
+existing colors; prominent control fills and focus boundaries remain unchanged.
+
 Components choose roles, not palette steps. The palette is an implementation
 detail, even when a role uses the same step in both themes. Add a role only for
 an actual use, document it in the registry and measure its intended pairings.
@@ -528,7 +532,8 @@ Tabs with content use renderPanel, which lets Base UI connect each tab and panel
 Route navigation uses NavigationItem with aria-current instead. Tabs can also
 compose NavigationItem through the `navigation` variant: these retain tab
 semantics, use 12rem widths with ellipsis and a subtle selected fill, accept avatars/icons, and place a sibling close
-button over reserved trailing space. Close buttons stay visible on the active tab; inactive tabs reveal them on hover or keyboard focus. Touch devices keep close buttons visible. Navigation tab strips scroll only horizontally. Their rounded thumb uses the sidebar’s quiet scrollbar role, with a 3px visible thumb in the header’s 4px bottom inset. The tab row keeps its vertical position as overflow starts or stops. It appears only while the strip is hovered; touch devices retain the thumb without requiring hover. The main
+button over reserved trailing space. Tab close icons use 1rem artwork to match
+container header actions while retaining their compact hit areas. Close buttons stay visible on the active tab; inactive tabs reveal them on hover or keyboard focus. Touch devices keep close buttons visible. Navigation tab strips scroll only horizontally. Their rounded thumb uses the sidebar’s quiet scrollbar role, with a 3px visible thumb in the header’s 4px bottom inset. The tab row keeps its vertical position as overflow starts or stops. It appears only while the strip is hovered; touch devices retain the thumb without requiring hover. The main
 channel header uses the same control with a single non-closable tab with `showSelection={false}` (no selection or hover fill); channel
 actions remain in the header action slot. The settings launcher uses
 `data-highlight-expanded="false"` to preserve disclosure semantics without a
@@ -860,15 +865,17 @@ around it locally.
 
 ## Icons
 
-Phosphor is the only general icon family. Import named icons from `icons/index.ts`,
+Tabler is the only general icon family. Import named icons from `icons/index.ts`,
 which re-exports individual upstream modules. Add exports as needed; no approval list.
 SVG-only widgets use individual assets through `icons/svg.ts`. Do not import the
-upstream packages elsewhere or reintroduce other icon libraries. All six native weights
-remain designer choices: no size-to-weight or selection-to-fill rules. For chat and
-conversation metaphors, prefer the rounded `ChatCircle` family (including `ChatsCircle`)
-over square or teardrop variants; choose the matching dots, text, or slash variant when
-the meaning requires it. Keep accessible names on controls and decorative artwork hidden
-from assistive technology.
+upstream packages elsewhere or reintroduce other icon libraries. Outline icons use
+Tabler’s default stroke width of 2; explicit `strokeWidth` and filled exports remain
+designer choices, with no size-to-stroke or selection-to-fill rules. Existing bold
+uses have `strokeWidth={2.5}`; video play/pause controls use explicit filled icons.
+Keep the public gateway names stable. For chat and conversation metaphors, use
+`ChatCircleIcon` / `ChatsCircleIcon` (Tabler’s MessageCircle / Messages), choosing
+the variant that matches the meaning. Keep accessible names on controls and
+decorative artwork hidden from assistive technology.
 
 OneDrive is a designer-approved custom brand mark: its complete outline is recreated on
 Phosphor’s square canvas, uses the same current-color and sizing behavior, and stays in
@@ -878,7 +885,7 @@ the shared icon gateway. It does not permit another general icon library.
 
 Mention and media pickers opt into `SearchField variant="capsule"`. Its shared
 `search-field.css` recipe also styles Emoji Mart inside its shadow root: body-sm
-typography, pill radius, standard panel fill, Phosphor icons, and a 32px clear
+typography, pill radius, standard panel fill, Tabler icons, and a 32px clear
 action. Other SearchField callers retain the default field treatment. Scrolling
 picker results use the opt-in `buzz-thin-scrollbar` native scrollbar recipe.
 

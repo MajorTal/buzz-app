@@ -1,6 +1,11 @@
 @import "./composer.css" layer(components);
 
 @layer components {
+  /* Optical alignment: lift Robot face artwork without moving its layout box. */
+  .tabler-icon-robot-face {
+    translate: 0 -1px;
+  }
+
   .buzz-button {
     position: relative;
     display: inline-flex;
@@ -511,6 +516,11 @@
 
   .buzz-tabs-item {
     display: contents;
+  }
+  /* Match header artwork without changing compact tab-close hit areas. */
+  .buzz-tabs-item > .buzz-button[data-icon-size="xs"] .buzz-button-label svg {
+    width: var(--space-4);
+    height: var(--space-4);
   }
   .buzz-tabs-item[data-closable] {
     display: inline-flex;

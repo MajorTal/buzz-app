@@ -11,6 +11,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createRelaySession } from "../../features/relay/session";
 import { keypair } from "../../features/relay/testing";
 import { EmojiPicker } from "./EmojiPicker";
+import { createReactionPicker } from "./ReactionPicker";
 
 const owners: ReturnType<typeof createRelaySession>[] = [];
 beforeEach(() => {
@@ -61,7 +62,9 @@ it.each(["dark", undefined] as const)(
         />
       </section>,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Add reaction" }));
+    const trigger = screen.getByRole("button", { name: "Add reaction" });
+    expect(trigger.querySelector("svg")).toHaveClass("tabler-icon-mood-plus");
+    fireEvent.click(trigger);
     const popup = await screen.findByRole("dialog", { name: "Emoji picker" });
     if (mode) {
       expect(popup).toHaveAttribute("data-color-mode", mode);
@@ -78,3 +81,36 @@ it.each(["dark", undefined] as const)(
     );
   },
 );
+
+it("uses smiley-plus for message reactions while leaving composer emoji unchanged", () => {
+  const owner = createRelaySession({
+    viewer: keypair().pubkey,
+    relayAuthor: keypair().pubkey,
+    media: (url) => url,
+    query: async () => [],
+  });
+  owners.push(owner);
+  const ReactionPicker = createReactionPicker();
+  render(
+    <>
+      <ReactionPicker
+        session={owner.session}
+        scope="fixture"
+        disabled={false}
+        select={() => true}
+      />
+      <EmojiPicker
+        session={owner.session}
+        scope="fixture"
+        disabled={false}
+        insert={() => {}}
+      />
+    </>,
+  );
+  expect(
+    screen.getByRole("button", { name: "Add reaction" }).querySelector("svg"),
+  ).toHaveClass("tabler-icon-mood-plus");
+  expect(
+    screen.getByRole("button", { name: "Insert emoji" }).querySelector("svg"),
+  ).toHaveClass("tabler-icon-mood-smile");
+});

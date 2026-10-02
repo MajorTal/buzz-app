@@ -114,7 +114,7 @@ export function AppShell({
               label={label}
               icon={
                 <span className="shell-page-icon">
-                  <Icon aria-hidden="true" weight="bold" size={15} />
+                  <Icon aria-hidden="true" strokeWidth={2.5} size={15} />
                 </span>
               }
             />

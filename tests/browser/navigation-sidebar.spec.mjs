@@ -1,7 +1,7 @@
 import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { open } from "./timeline.mjs";
-import { expectPhosphor } from "./phosphor.mjs";
+import { expectTabler } from "./tabler.mjs";
 const button = (page, name) => page.getByRole("button", { name, exact: true });
 test.use({
   largeSidebar: true,
@@ -218,7 +218,7 @@ sessionSidebar(
     await expect(parent).toBeVisible();
     await expect(child).toBeVisible();
     await expect(regular).toBeVisible();
-    await expectPhosphor(regular.locator("svg").first(), "hash");
+    await expectTabler(regular.locator("svg").first(), "hash");
     const regularIconX = await centerX(regular.locator("svg").first());
     const parentIconX = await centerX(disclosure.locator("svg:visible"));
     expect(parentIconX).toBeCloseTo(regularIconX, 0);
@@ -266,7 +266,7 @@ sessionSidebar(
     ).toBeVisible();
 
     await child.click();
-    await expectPhosphor(
+    await expectTabler(
       page
         .getByRole("article", { name: "Conversation" })
         .locator(".panel-header-title > svg"),

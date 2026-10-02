@@ -1,7 +1,7 @@
 import { useLayoutEffect, useId, useRef, useState } from "react";
 import type { ReactionToolProps } from "../../features/conversation/contracts";
 import { IconButton } from "../../shared/design-system/ui/IconButton";
-import { SmileyStickerIcon } from "../../shared/design-system/icons";
+import { SmileyPlusIcon } from "../../shared/design-system/icons";
 import { EmojiPicker } from "./EmojiPicker";
 
 /** Plugin-owned coordination; inactive rows keep only their accessible trigger. */
@@ -44,7 +44,7 @@ export function createReactionPicker() {
           aria-expanded={open && !disabled}
           aria-controls={open && !disabled ? id : undefined}
           disabled={disabled}
-          icon={<SmileyStickerIcon size={16} aria-hidden="true" />}
+          icon={<SmileyPlusIcon size={16} aria-hidden="true" />}
           onClick={() => {
             if (open) {
               close();

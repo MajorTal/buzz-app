@@ -124,7 +124,7 @@ export function Tabs<Value extends string>({
                 size="xs"
                 aria-label={`Close ${item.label} tab`}
                 onClick={item.onClose}
-                icon={<XIcon size="0.875rem" aria-hidden="true" />}
+                icon={<XIcon size="1rem" aria-hidden="true" />}
               />
             )}
           </span>

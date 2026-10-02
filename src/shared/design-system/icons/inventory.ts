@@ -15,10 +15,10 @@ type CustomInventoryEntry = InventoryEntry &
   Omit<Extract<IconDefinition, { source: "custom" }>, "source">;
 
 export function createIconInventory(exports: GatewayExports): {
-  phosphor: InventoryEntry[];
+  tabler: InventoryEntry[];
   custom: CustomInventoryEntry[];
 } {
-  const phosphor: InventoryEntry[] = [];
+  const tabler: InventoryEntry[] = [];
   const custom: CustomInventoryEntry[] = [];
 
   for (const [name, value] of Object.entries(exports)) {
@@ -27,18 +27,18 @@ export function createIconInventory(exports: GatewayExports): {
       throw new Error(`Unclassified icon gateway export: ${name}`);
 
     const component = value as GatewayIcon;
-    if (definition.source === "phosphor") phosphor.push({ name, component });
+    if (definition.source === "tabler") tabler.push({ name, component });
     else {
       const { source: _, ...detail } = definition;
       custom.push({ name, component, ...detail });
     }
   }
 
-  phosphor.sort((a, b) => a.name.localeCompare(b.name));
+  tabler.sort((a, b) => a.name.localeCompare(b.name));
   custom.sort((a, b) => a.name.localeCompare(b.name));
-  return { phosphor, custom };
+  return { tabler, custom };
 }
 
 const inventory = createIconInventory(gatewayIcons);
-export const PHOSPHOR_ICONS = inventory.phosphor;
+export const TABLER_ICONS = inventory.tabler;
 export const CUSTOM_ICONS = inventory.custom;

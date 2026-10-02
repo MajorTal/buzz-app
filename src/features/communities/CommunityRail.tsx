@@ -180,7 +180,7 @@ export function CommunityRail({
             aria-label="Personal space"
             aria-current={client.selected === null ? "true" : undefined}
             data-selected={client.selected === null || undefined}
-            icon={<GlobeIcon size={22} aria-hidden="true" />}
+            icon={<GlobeIcon size={22} strokeWidth={1.5} aria-hidden="true" />}
             onClick={() => select(null)}
           />
         </Tooltip>

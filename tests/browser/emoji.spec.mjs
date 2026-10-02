@@ -1,4 +1,4 @@
-import { expectPhosphor } from "./phosphor.mjs";
+import { expectTabler } from "./tabler.mjs";
 import { test, expect } from "@playwright/test";
 import { createServer } from "vite";
 import react from "@vitejs/plugin-react";
@@ -370,7 +370,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(skinTone).toBeFocused();
     await search.focus();
     const searchIcon = page.locator("em-emoji-picker .search .loupe svg");
-    await expectPhosphor(searchIcon, "magnifying-glass");
+    await expectTabler(searchIcon, "search");
     await expect(
       page.locator("em-emoji-picker .search .loupe svg:visible"),
     ).toHaveCount(1);
@@ -388,7 +388,7 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
       "background-color",
       "rgb(255, 255, 255)",
     );
-    await expect(search).toHaveCSS("color", "rgb(0, 0, 0)");
+    await expect(search).toHaveCSS("color", "rgb(15, 15, 15)");
     await expect(search).toHaveCSS("outline-style", "none");
     await expect(search).toHaveCSS("box-shadow", "none");
     const expectSearchAlignment = async () => {
@@ -471,14 +471,14 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(emojiClear).toHaveCSS("height", "32px");
     await expect(emojiClear.locator("svg")).toHaveAttribute(
       "viewBox",
-      "0 0 256 256",
+      "0 0 24 24",
     );
     await expect(emojiClear.locator("svg")).toHaveCSS("width", "16px");
     await expect(emojiClear.locator("svg")).toHaveCSS("height", "16px");
     await expect(emojiClear).toHaveCSS("color", "rgb(95, 95, 95)");
-    await expectPhosphor(emojiClear.locator("svg"), "x");
-    await expect(emojiClear.locator("svg path")).toHaveCSS(
-      "fill",
+    await expectTabler(emojiClear.locator("svg"), "x");
+    await expect(emojiClear.locator("svg")).toHaveCSS(
+      "stroke",
       "rgb(95, 95, 95)",
     );
     const clearBox = await emojiClear.boundingBox();
@@ -491,12 +491,12 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await search.fill("");
     await expect(emojiClear).toHaveCount(0);
     await search.fill("party");
-    await expectPhosphor(emojiClear.locator("svg"), "x");
+    await expectTabler(emojiClear.locator("svg"), "x");
     await picker.click();
     await expect(page.locator("em-emoji-picker")).toHaveCount(0);
     await picker.click();
     await search.fill("party");
-    await expectPhosphor(emojiClear.locator("svg"), "x");
+    await expectTabler(emojiClear.locator("svg"), "x");
     await expect(
       page.locator("em-emoji-picker .search .loupe svg:visible"),
     ).toHaveCount(1);
@@ -598,20 +598,20 @@ test("community picker uses keyboard, proxy thumbnails, event-local history and 
     await expect(navigation).toBeVisible();
     for (const [category, icon] of Object.entries({
       "Frequently used": "clock",
-      "Smileys & People": "smiley",
-      "Animals & Nature": "paw-print",
-      "Food & Drink": "orange",
+      "Smileys & People": "mood-smile",
+      "Animals & Nature": "paw",
+      "Food & Drink": "lemon-2",
       Activity: "barbell",
       "Travel & Places": "car",
-      Objects: "lightbulb",
-      Symbols: "shapes",
+      Objects: "bulb",
+      Symbols: "category",
       Flags: "flag",
       Custom: "asterisk",
     })) {
       const categoryIcon = navigation
         .getByRole("button", { name: category, exact: true })
         .locator("svg");
-      await expectPhosphor(categoryIcon, icon);
+      await expectTabler(categoryIcon, icon);
     }
     const selectedCategory = navigation.locator("button[aria-selected]");
     const expectSelectionPaint = async () => {

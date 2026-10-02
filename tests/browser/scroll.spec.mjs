@@ -44,6 +44,7 @@ async function observeWork(page) {
       maxRows: 0,
       maxDomNodes: 0,
       maxTimelineNodes: 0,
+      maxTimelineStructureNodes: 0,
       active: true,
       frame: 0,
     };
@@ -63,11 +64,16 @@ async function observeWork(page) {
       );
       for (const timeline of document.querySelectorAll(
         "[data-message-scroller]",
-      ))
-        sample.maxTimelineNodes = Math.max(
-          sample.maxTimelineNodes,
-          timeline.getElementsByTagName("*").length,
+      )) {
+        const nodes = timeline.getElementsByTagName("*").length;
+        sample.maxTimelineNodes = Math.max(sample.maxTimelineNodes, nodes);
+        // Keep SVG roots (icon instances), but separate library-owned artwork
+        // primitives from the row/control structure's growth budget.
+        sample.maxTimelineStructureNodes = Math.max(
+          sample.maxTimelineStructureNodes,
+          nodes - timeline.querySelectorAll("svg *").length,
         );
+      }
       sample.frame = requestAnimationFrame(tick);
     };
     sample.frame = requestAnimationFrame(tick);
@@ -99,6 +105,7 @@ async function workSample(page) {
       maxMountedRows: sample.maxRows,
       maxDomNodes: sample.maxDomNodes,
       maxTimelineNodes: sample.maxTimelineNodes,
+      maxTimelineStructureNodes: sample.maxTimelineStructureNodes,
     };
   });
 }
@@ -415,9 +422,9 @@ test("cursor paging preserves visible anchors and keeps a large history virtuali
   // Structural growth guard, not a heap-leak claim. 640 unvirtualized rows
   // would exceed both limits; bounded rows must hold during movement too.
   // Count only the timeline, so sidebar growth cannot mask or trip it.
-  // Main counted 1792 document and 1573 timeline nodes under its original
-  // 1800 document ceiling; 1581 keeps that same timeline budget.
-  expect(sample.maxTimelineNodes).toBeLessThan(1581);
+  // Main at 69a9af23 has 1573 raw / 1410 structure nodes in both engines.
+  // Preserve its eight-node allowance; retain the raw count in the report.
+  expect(sample.maxTimelineStructureNodes).toBeLessThan(1418);
   app.report.measurements.push({
     scenario: "640-row-paging-and-switches",
     retainedRows: loaded,

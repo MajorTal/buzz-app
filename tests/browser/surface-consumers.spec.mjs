@@ -100,7 +100,7 @@ for (const mode of ["light", "dark"]) {
         page.getByRole("menuitemradio", { name: status, exact: true }),
       ).toHaveCSS(
         "color",
-        mode === "dark" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)",
+        mode === "dark" ? "rgb(255, 255, 255)" : "rgb(15, 15, 15)",
       );
       await page.mouse.move(1, 1);
       await expect(availability).toHaveCSS(

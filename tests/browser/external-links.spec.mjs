@@ -1,3 +1,4 @@
+import { expectTabler } from "./tabler.mjs";
 import { openPage } from "./navigation.mjs";
 import { test, expect } from "./fixture.mjs";
 import { end, settle } from "./timeline.mjs";
@@ -91,15 +92,19 @@ test("unhandled links open externally and disabling GitHub restores the fallback
   expect(context.pages()).toHaveLength(1);
 });
 
-test("GitHub object identities have comparable visible artwork at one size", async ({
+test("GitHub object identities use their intended artwork at one size", async ({
   page,
   app,
 }, testInfo) => {
   const targets = [
-    ["Repository", "https://github.com/block/buzz"],
-    ["Pull request", "https://github.com/block/buzz/pull/1"],
+    ["Repository", "https://github.com/block/buzz", "folder"],
+    [
+      "Pull request",
+      "https://github.com/block/buzz/pull/1",
+      "git-pull-request",
+    ],
     ["Issue", "https://github.com/block/buzz/issues/2"],
-    ["Commit", "https://github.com/block/buzz/commit/abcdef1"],
+    ["Commit", "https://github.com/block/buzz/commit/abcdef1", "git-commit"],
   ];
   await page.route("https://api.github.com/repos/block/buzz**", (route) =>
     route.fulfill({ json: { title: "GitHub object", state: "open" } }),
@@ -110,7 +115,7 @@ test("GitHub object identities have comparable visible artwork at one size", asy
 
   const dimensions = [];
   const icons = [];
-  for (const [kind, target] of targets) {
+  for (const [kind, target, glyph] of targets) {
     await expect(link(page, target)).toBeVisible();
     await link(page, target).click();
     const identity = page
@@ -120,21 +125,33 @@ test("GitHub object identities have comparable visible artwork at one size", asy
     const svg = identity.locator("svg");
     await expect(svg).toHaveCSS("width", "22px");
     await expect(svg).toHaveCSS("height", "22px");
+    if (glyph) await expectTabler(svg, glyph);
     icons.push(await svg.evaluate((node) => node.outerHTML));
     dimensions.push(
       await svg.evaluate((node) => {
         const { width, height } = node.getBBox();
-        return { width, height };
+        // Compare rendered extents, not library-specific SVG coordinate units.
+        const canvas = node.viewBox.baseVal;
+        const box = node.getBoundingClientRect();
+        return {
+          width: (width / canvas.width) * box.width,
+          height: (height / canvas.height) * box.height,
+        };
       }),
     );
   }
 
-  for (const { width, height } of dimensions) {
-    expect(width).toBeGreaterThanOrEqual(184);
-    expect(height).toBeGreaterThanOrEqual(111);
+  // Pinned Tabler extents at 22px; the custom issue mark stays unchanged.
+  const expected = [
+    { width: 16.5, height: 13.75 },
+    { width: (16 / 24) * 22, height: (17 / 24) * 22 },
+    { width: (208 / 256) * 22, height: (208 / 256) * 22 },
+    { width: 5.5, height: 16.5 },
+  ];
+  for (const [index, { width, height }] of dimensions.entries()) {
+    expect(width).toBeCloseTo(expected[index].width, 3);
+    expect(height).toBeCloseTo(expected[index].height, 3);
   }
-  expect(dimensions[2].width).toBeCloseTo(208, 3);
-  expect(dimensions[2].height).toBeCloseTo(208, 3);
   await page.setContent(`
     <main style="display:flex;gap:16px;align-items:center;color:#111">
       ${icons.map((icon, index) => `<figure style="margin:0;display:grid;justify-items:center;gap:8px">${icon}<figcaption>${targets[index][0]}</figcaption></figure>`).join("")}

@@ -38,7 +38,7 @@ onto shared UI roles; xterm's minimum-contrast adjustment keeps ordinary text re
 Appearance updates the existing emulator in place, preserving shell and scrollback.
 Applications that emit true-color escape sequences still select their palette;
 xterm may adjust foreground lightness for contrast. The launcher and drawer use
-the shared design system: Base UI-backed buttons, Phosphor icons, `PanelHeader`,
+the shared design system: Base UI-backed buttons, Tabler icons, `PanelHeader`,
 named text roles and the system mono face. The drawer is a precise `data-buzz-ui`
 boundary inside the otherwise legacy channel screen, not a second rounded Panel.
 Xterm reads `bg-panel`, `text-primary` and the purple selection tint; its mono

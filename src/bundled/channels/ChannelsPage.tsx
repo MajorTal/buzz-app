@@ -57,9 +57,7 @@ import {
   type ReactNode,
 } from "react";
 import {
-  SlidersHorizontalIcon,
-  ArrowSquareLeftIcon,
-  ArrowSquareRightIcon,
+  SidebarRightIcon,
   PlugIcon,
   ChatCircleIcon,
   GearIcon,
@@ -1520,12 +1518,7 @@ function ChannelWorkspace({
                             });
                           }
                         }}
-                        icon={
-                          <SlidersHorizontalIcon
-                            size="1rem"
-                            aria-hidden="true"
-                          />
-                        }
+                        icon={<GearIcon size="1rem" aria-hidden="true" />}
                       />
                       {current && (
                         <IconButton
@@ -1545,17 +1538,7 @@ function ChannelWorkspace({
                               addTab();
                           }}
                           icon={
-                            showingChannelPanel ? (
-                              <ArrowSquareRightIcon
-                                size="1rem"
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <ArrowSquareLeftIcon
-                                size="1rem"
-                                aria-hidden="true"
-                              />
-                            )
+                            <SidebarRightIcon size="1rem" aria-hidden="true" />
                           }
                         />
                       )}

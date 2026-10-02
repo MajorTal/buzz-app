@@ -5,7 +5,7 @@ import { parseSync } from "rolldown/utils";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const gateway = "src/shared/design-system/icons/";
-const approved = new Set(["@phosphor-icons/react", "@phosphor-icons/core"]);
+const approved = new Set(["@tabler/icons-react", "@tabler/icons"]);
 // A closed policy needs an explicit non-icon side as well as approved icon catalogs.
 // Version changes remain ordinary; adding a package requires classifying it here.
 const nonIconDependencies = new Set([
@@ -59,7 +59,7 @@ const nonIconDependencies = new Set([
   "prosemirror-state",
   "prosemirror-view",
   "react",
-  "react-day-picker", // Calendar behavior; navigation icons use our Phosphor gateway.
+  "react-day-picker", // Calendar behavior; navigation icons use our Tabler gateway.
   "react-diff-view", // Patch tables/parser, not an icon library.
   "react-dom",
   "react-markdown",
@@ -97,7 +97,7 @@ export function checkIconManifest(manifest) {
       if (allowedDependencies.has(name) && target === name) return [];
       if (!alias && nonIconDependencies.has(target)) return [];
       return [
-        `Unclassified dependency: ${name}. Approve non-icon packages explicitly; use only Phosphor for icons.`,
+        `Unclassified dependency: ${name}. Approve non-icon packages explicitly; use only Tabler for icons.`,
       ];
     });
 }
@@ -164,12 +164,17 @@ export function checkIconSource(path, source) {
             `Use shared/design-system/icons instead of ${specifier}.`,
           );
         else if (
-          !/^@phosphor-icons\/(?:react\/dist\/csr\/[A-Z][A-Za-z0-9]*|core\/assets\/(?:thin|light|regular|bold|fill|duotone)\/[a-z0-9-]+\.svg\?raw)$/.test(
+          !(
+            node.type === "ImportDeclaration" &&
+            node.importKind === "type" &&
+            specifier === "@tabler/icons-react"
+          ) &&
+          !/^@tabler\/(?:icons-react\/dist\/esm\/icons\/Icon[A-Z][A-Za-z0-9]*\.mjs|icons\/(?:outline|filled)\/[a-z0-9-]+\.svg\?raw)$/.test(
             specifier,
           )
         )
           errors.push(
-            `Import individual Phosphor modules/assets, not the full catalog: ${specifier}`,
+            `Import individual Tabler modules/assets, not the full catalog: ${specifier}`,
           );
       } else if (inside && dependency !== "react")
         errors.push(`The icon gateway cannot depend on ${specifier}.`);

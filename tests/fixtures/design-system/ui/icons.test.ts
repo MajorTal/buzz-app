@@ -5,11 +5,11 @@ import * as gatewayIcons from "../../../../src/shared/design-system/icons/index"
 import {
   createIconInventory,
   CUSTOM_ICONS,
-  PHOSPHOR_ICONS,
+  TABLER_ICONS,
 } from "../../../../src/shared/design-system/icons/inventory";
 
 it("derives the complete categorized inventory from the public gateway", () => {
-  const phosphorNames = PHOSPHOR_ICONS.map(({ name }) => name);
+  const tablerNames = TABLER_ICONS.map(({ name }) => name);
   const customNames = CUSTOM_ICONS.map(({ name }) => name);
 
   expect(customNames).toEqual([
@@ -17,11 +17,11 @@ it("derives the complete categorized inventory from the public gateway", () => {
     "GitHubIssueIcon",
     "OneDriveLogoIcon",
   ]);
-  expect([...phosphorNames, ...customNames].sort()).toEqual(
+  expect([...tablerNames, ...customNames].sort()).toEqual(
     Object.keys(gatewayIcons).sort(),
   );
-  expect(phosphorNames).toEqual(
-    [...phosphorNames].sort((a, b) => a.localeCompare(b)),
+  expect(tablerNames).toEqual(
+    [...tablerNames].sort((a, b) => a.localeCompare(b)),
   );
   expect(CUSTOM_ICONS).toEqual([
     expect.objectContaining({
@@ -62,4 +62,42 @@ it("keeps every classified gateway icon decorative by default", () => {
       'aria-hidden="true"',
     );
   }
+});
+
+it("renders every Tabler glyph with the existing size and color contract", () => {
+  for (const { component: Icon } of TABLER_ICONS) {
+    const markup = renderToStaticMarkup(
+      createElement(Icon, { size: 18, color: "red", className: "test-icon" }),
+    );
+    expect(markup).toContain('viewBox="0 0 24 24"');
+    expect(markup).toContain('width="1.125rem"');
+    expect(markup).toContain('height="1.125rem"');
+    expect(markup).toContain("test-icon");
+    expect(markup).toMatch(
+      /<(path|circle|rect|line|polyline|polygon|ellipse)\b/,
+    );
+    expect(markup).toMatch(/(?:stroke|fill)="red"/);
+  }
+  expect(renderToStaticMarkup(createElement(gatewayIcons.PlusIcon))).toContain(
+    'width="1em"',
+  );
+  expect(
+    renderToStaticMarkup(
+      createElement(gatewayIcons.PlusIcon, { strokeWidth: 2.5 }),
+    ),
+  ).toContain('stroke-width="2.5"');
+  for (const Icon of [
+    gatewayIcons.PlayFilledIcon,
+    gatewayIcons.PauseFilledIcon,
+  ]) {
+    const markup = renderToStaticMarkup(createElement(Icon));
+    expect(markup).toContain('fill="currentColor"');
+    expect(markup).not.toContain("weight=");
+  }
+});
+
+it("renders the formatting icon as Tabler letter-case Aa", () => {
+  expect(
+    renderToStaticMarkup(createElement(gatewayIcons.TextAaIcon)),
+  ).toContain("tabler-icon-letter-case");
 });

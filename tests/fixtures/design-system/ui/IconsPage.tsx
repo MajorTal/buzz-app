@@ -1,6 +1,6 @@
 import {
   CUSTOM_ICONS,
-  PHOSPHOR_ICONS,
+  TABLER_ICONS,
 } from "../../../../src/shared/design-system/icons/inventory";
 import { PageHeader, Section } from "./primitives";
 
@@ -13,18 +13,15 @@ export function IconsPage() {
     <>
       <PageHeader
         title="Icons"
-        intro="Use Phosphor icons through the shared design-system gateway. Add individual exports there as needed; icon and weight choices belong to the designer."
+        intro="Use Tabler icons through the shared design-system gateway. Add individual exports there as needed; icon and stroke choices belong to the designer."
       />
 
       <Section
-        title="Available Phosphor icons"
-        description="This inventory follows the gateway’s exports. Adding an icon there updates this page without loading the full Phosphor catalog."
+        title="Available Tabler icons"
+        description="This inventory follows the gateway’s exports. Adding an icon there updates this page without loading the full Tabler catalog."
       >
-        <ul
-          className="icon-inventory-grid"
-          aria-label="Available Phosphor icons"
-        >
-          {PHOSPHOR_ICONS.map(({ name, component: Icon }) => (
+        <ul className="icon-inventory-grid" aria-label="Available Tabler icons">
+          {TABLER_ICONS.map(({ name, component: Icon }) => (
             <li className="icon-inventory-item" key={name}>
               <Icon size={24} />
               <span className="text-body-sm text-secondary">

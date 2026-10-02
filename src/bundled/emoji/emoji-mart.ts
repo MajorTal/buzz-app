@@ -218,9 +218,15 @@ export function mountEmojiMart({
       opacity: 1;
       pointer-events: none;
     }
+    /* Emoji Mart fills every SVG; Tabler outline assets must stay unfilled. */
+    svg.icons-tabler-outline {
+      fill: none;
+    }
     .search .icon svg {
+      position: static;
       width: 1rem;
       height: 1rem;
+      color: inherit;
     }
 
     .spacer {

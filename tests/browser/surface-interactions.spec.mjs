@@ -91,7 +91,7 @@ for (const mode of ["light", "dark"]) {
       await expect(row).toHaveCSS("background-color", color.row);
       await expect(row.locator(".text-metadata")).toHaveCSS(
         "color",
-        mode === "dark" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)",
+        mode === "dark" ? "rgb(255, 255, 255)" : "rgb(15, 15, 15)",
       );
       await expect(selected).toHaveCSS("background-color", color.selected);
       await selected.hover();
@@ -166,7 +166,7 @@ for (const mode of ["light", "dark"]) {
         radio.locator("..").locator(".buzz-choice-description"),
       ).toHaveCSS(
         "color",
-        mode === "dark" ? "rgb(255, 255, 255)" : "rgb(0, 0, 0)",
+        mode === "dark" ? "rgb(255, 255, 255)" : "rgb(15, 15, 15)",
       );
       await surface
         .getByRole("radio", { name: "Invited", exact: true })

@@ -30,6 +30,24 @@ test("channel tab sets restore conversations and keep replies and sends scoped",
   await expect(
     workspace.getByRole("searchbox", { name: "Find a channel or person" }),
   ).toBeFocused();
+  // Browser-only: compact-button CSS must not shrink tab close artwork below header icons.
+  const tabClose = workspace.getByRole("button", {
+    name: "Close New tab tab",
+    exact: true,
+  });
+  await expect(tabClose.locator("svg")).toHaveCSS("width", "16px");
+  await expect(tabClose.locator("svg")).toHaveCSS("height", "16px");
+  await expect(tabClose).toHaveCSS("width", "20px");
+  await expect(tabClose).toHaveCSS("height", "20px");
+  await expect(
+    main
+      .getByRole("button", { name: "Channel settings", exact: true })
+      .locator("svg"),
+  ).toHaveClass(/tabler-icon-settings/);
+  await expect(split.locator("svg")).toHaveClass(
+    /tabler-icon-layout-sidebar-right/,
+  );
+  await expect(split.locator("svg")).toHaveCSS("width", "16px");
   await workspace
     .getByRole("searchbox", { name: "Find a channel or person" })
     .fill("Beta");

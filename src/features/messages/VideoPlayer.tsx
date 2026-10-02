@@ -10,8 +10,8 @@ import {
   type RefObject,
 } from "react";
 import {
-  PauseIcon,
-  PlayIcon,
+  PauseFilledIcon,
+  PlayFilledIcon,
   ArrowClockwiseIcon,
   ArrowCounterClockwiseIcon,
   SpeakerHighIcon,
@@ -173,9 +173,7 @@ export function VideoControls({
         variant={inline ? "media" : "ghost"}
         aria-label={playing ? "Pause video" : "Play video"}
         onClick={toggle}
-        icon={
-          playing ? <PauseIcon weight="fill" /> : <PlayIcon weight="fill" />
-        }
+        icon={playing ? <PauseFilledIcon /> : <PlayFilledIcon />}
       />
     </span>
   );
@@ -488,9 +486,9 @@ export function VideoPlayer({
           aria-hidden="true"
         >
           {feedback.kind === "play" ? (
-            <PlayIcon size={24} weight="fill" />
+            <PlayFilledIcon size={24} />
           ) : feedback.kind === "pause" ? (
-            <PauseIcon size={24} weight="fill" />
+            <PauseFilledIcon size={24} />
           ) : feedback.kind === "speed" ? (
             <span>2×</span>
           ) : (

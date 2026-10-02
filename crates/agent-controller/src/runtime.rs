@@ -147,7 +147,7 @@ impl RuntimeBundle {
             std::iter::once(self.directory.clone()).chain(std::env::split_paths(&tools_path)),
         )
         .map_err(|_| "Invalid runtime tools path")?;
-        command.envs(environment).env("PATH", path);
+        command.envs(environment).env("PATH", &path);
         let key_hex = key.hex();
         command
             .env("BUZZ_PRIVATE_KEY", &*key_hex)
@@ -228,6 +228,17 @@ impl RuntimeBundle {
         }
         if let Some(effort) = crate::agent_defaults::effort(agent) {
             command.env("BUZZ_ACP_EFFORT_LEVEL", effort);
+        }
+        if matches!(
+            crate::agent_defaults::harness_kind(&harness.command),
+            Some("pi" | "goose")
+        ) {
+            // Validated user behavior overrides win over saved/imported fields.
+            // Tool discovery remains host-owned, including Pi's pinned Node.
+            command.envs(environment).env("PATH", path);
+        } else if let Some(workers) = environment.get("BUZZ_ACP_AGENTS") {
+            // The editable worker count wins over imported parallelism for every harness.
+            command.env("BUZZ_ACP_AGENTS", workers);
         }
         Ok(command)
     }
@@ -569,7 +580,7 @@ impl Controller {
         workspace: &str,
         environment: &BTreeMap<String, String>,
     ) -> Result<GooseModelContext> {
-        crate::config::validate_environment(environment)?;
+        crate::config::validate_environment(environment, &harness.command)?;
         let command = if matches!(harness.command.as_str(), "goose" | "goose-acp") {
             self.bundle
                 .as_ref()

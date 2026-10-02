@@ -2230,22 +2230,29 @@ fn pi_connection_test_prompts_the_draft_selection() {
             &file,
             r#"#!/bin/sh
 if [ "$1" = --version ]; then printf '0.99.1\n'; exit 0; fi
+[ "$BUZZ_ACP_AGENTS" = "10" ] || exit 1
 case "$*" in
-    *'--model databricks/model-a'*) model=model-a; stop=stop; error='';;
-    *'--model databricks/model-b'*) model=model-b; stop=error; error=401;;
+    *'--model databricks/'*) provider=databricks;;
+    *'--model openai/'*) provider=openai; [ "$OPENAI_API_KEY" = "draft-openai-key" ] || exit 1;;
+    *'--model anthropic/'*) provider=anthropic; [ "$ANTHROPIC_API_KEY" = "draft-anthropic-key" ] || exit 1;;
+    *) exit 1;;
+esac
+case "$*" in
+    *'/model-a'*) model=model-a; stop=stop; error='';;
+    *'/model-b'*) model=model-b; stop=error; error=401;;
     *) exit 1;;
 esac
 read request
 case "$request" in *get_state*) ;; *) exit 1;; esac
-printf '{"id":"selection","type":"response","command":"get_state","success":true,"data":{"model":{"provider":"databricks","id":"%s"}}}\n' "$model"
+printf '{"id":"selection","type":"response","command":"get_state","success":true,"data":{"model":{"provider":"%s","id":"%s"}}}\n' "$provider" "$model"
 read request
 case "$request" in *prompt*) ;; *) exit 1;; esac
-printf '{"type":"message_end","message":{"role":"assistant","provider":"databricks","model":"%s","content":[{"type":"text","text":"OK"}],"stopReason":"%s","errorMessage":"%s"}}\n' "$model" "$stop" "$error"
+printf '{"type":"message_end","message":{"role":"assistant","provider":"%s","model":"%s","content":[{"type":"text","text":"OK"}],"stopReason":"%s","errorMessage":"%s"}}\n' "$provider" "$model" "$stop" "$error"
 "#,
         ).unwrap();
         std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
     }
-    let test = |model: &str| {
+    let test = |provider: &str, model: &str| {
         let ticket = invoke(&view, "agent_models_begin", json!({})).unwrap();
         invoke(
             &view,
@@ -2253,20 +2260,22 @@ printf '{"type":"message_end","message":{"role":"assistant","provider":"databric
             json!({"ticket":ticket,"request":{
                 "host":"","filter":"","action":"test","edit":{
                     "name":"Pi draft","systemPrompt":"","workspace":dir.path(),
-                    "harness":{"command":tools.join("buzz-pi-acp"),"args":[],"provider":"databricks","model":model},
-                    "environment":{}
+                    "harness":{"command":tools.join("buzz-pi-acp"),"args":[],"provider":provider,"model":model},
+                    "environment":{"BUZZ_ACP_AGENTS":"10","OPENAI_API_KEY":"draft-openai-key","ANTHROPIC_API_KEY":"draft-anthropic-key"}
                 }
             }}),
         )
     };
-    let result = test("model-a").unwrap();
-    assert_eq!(result["models"], json!([]));
-    assert_eq!(result["testedModel"], "databricks/model-a");
-    let error = test("model-b").unwrap_err();
-    assert!(
-        error.as_str().unwrap().contains("rejected the API key"),
-        "{error}"
-    );
+    for provider in ["databricks", "openai", "anthropic"] {
+        let result = test(provider, "model-a").unwrap();
+        assert_eq!(result["models"], json!([]));
+        assert_eq!(result["testedModel"], format!("{provider}/model-a"));
+        let error = test(provider, "model-b").unwrap_err();
+        assert!(
+            error.as_str().unwrap().contains("rejected the API key"),
+            "{error}"
+        );
+    }
 }
 
 async fn assert_pending<F: std::future::Future>(mut future: std::pin::Pin<&mut F>) {

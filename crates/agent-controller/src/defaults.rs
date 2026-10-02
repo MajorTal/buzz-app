@@ -65,8 +65,14 @@ impl BuildDefaults {
         let set = |key: &'static str| env.contains_key(key).then_some(key);
         let (model_key, provider_key) = selected.keys.unzip();
         let provider_env = provider_key.and_then(set);
-        // A blank buzz-agent model follows the provider, which may be hidden.
-        let model_env = model_key.and_then(set).or_else(|| {
+        let acp_model = matches!(
+            crate::agent_defaults::harness_kind(&saved.command),
+            Some("pi" | "goose")
+        )
+        .then_some("BUZZ_ACP_MODEL")
+        .and_then(set);
+        let model_env = acp_model.or_else(|| model_key.and_then(set)).or_else(|| {
+            // A blank buzz-agent model follows the provider, which may be hidden.
             if model_key != Some("BUZZ_AGENT_MODEL") || !saved.model.is_empty() {
                 None
             } else if provider_env.is_some() {

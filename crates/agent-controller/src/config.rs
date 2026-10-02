@@ -286,8 +286,8 @@ impl Agent {
         self.workspace = edit.workspace;
         self.harness = edit.harness;
         for (key, value) in edit.environment {
-            validate_env_key(&key)?;
             if let Some(value) = value {
+                validate_env_key(&key, &self.harness.command)?;
                 text(&value, 32 * 1024, "Environment value")?;
                 self.environment.insert(key, value);
             } else {
@@ -342,7 +342,7 @@ impl Agent {
         if let Some(settings) = &self.harness.databricks {
             settings.validate()?;
         }
-        validate_environment(&self.environment)
+        validate_environment(&self.environment, &self.harness.command)
     }
 }
 pub(crate) fn canonical_key(key: &str) -> bool {
@@ -385,26 +385,44 @@ fn text(value: &str, limit: usize, label: &str) -> Result<()> {
         Ok(())
     }
 }
-pub(crate) fn validate_environment(environment: &BTreeMap<String, String>) -> Result<()> {
+pub(crate) fn validate_environment(
+    environment: &BTreeMap<String, String>,
+    command: &str,
+) -> Result<()> {
     if environment.len() > 128 {
         return Err("Too many environment entries".into());
     }
     for (key, value) in environment {
-        validate_env_key(key)?;
+        validate_env_key(key, command)?;
         text(value, 32 * 1024, "Environment value")?;
+        if key == "BUZZ_ACP_AGENTS"
+            && !value
+                .parse::<u32>()
+                .is_ok_and(|count| (1..=32).contains(&count))
+        {
+            return Err("Agent worker count must be an integer from 1 to 32".into());
+        }
     }
     Ok(())
 }
-fn validate_env_key(key: &str) -> Result<()> {
+pub(crate) fn validate_env_key(key: &str, command: &str) -> Result<()> {
     let upper = key.to_ascii_uppercase();
+    let behavior_overrides = matches!(
+        crate::agent_defaults::harness_kind(command),
+        Some("pi" | "goose")
+    );
     if key.is_empty()
         || key.len() > 128
         || !key
             .bytes()
             .enumerate()
             .all(|(i, c)| c == b'_' || c.is_ascii_alphabetic() || (i > 0 && c.is_ascii_digit()))
-        || upper.starts_with("BUZZ_ACP_")
-        || upper.starts_with("BUZZ_MANAGED_")
+        // Pi/Goose retain old Buzz's behavior overrides. Other harnesses keep
+        // their namespace restrictions; Create's worker count is editable.
+        || (!behavior_overrides
+            && ((upper.starts_with("BUZZ_ACP_") && key != "BUZZ_ACP_AGENTS")
+                || upper.starts_with("BUZZ_MANAGED_")))
+        || (upper == "BUZZ_ACP_AGENTS" && key != "BUZZ_ACP_AGENTS")
         || upper.starts_with("BUZZ_APP_")
         || upper.starts_with("GIT_CONFIG_")
         || matches!(
@@ -416,6 +434,28 @@ fn validate_env_key(key: &str) -> Result<()> {
                 | "BUZZ_API_TOKEN"
                 | "BUZZ_AGENT_CONFIG_DIR"
                 | "PI_ACP_PI_COMMAND"
+                // Identity, routing, execution and saved response policy.
+                | "BUZZ_ACP_PRIVATE_KEY"
+                | "BUZZ_ACP_API_TOKEN"
+                | "BUZZ_ACP_AGENT_COMMAND"
+                | "BUZZ_ACP_AGENT_ARGS"
+                | "BUZZ_ACP_MCP_COMMAND"
+                | "BUZZ_ACP_LAUNCH_PREFIX"
+                | "BUZZ_ACP_RESPOND_TO"
+                | "BUZZ_ACP_RESPOND_TO_ALLOWLIST"
+                | "BUZZ_ACP_ALLOWED_RESPOND_TO"
+                | "BUZZ_ACP_AGENT_OWNER"
+                | "BUZZ_ACP_DISPLAY_NAME"
+                | "BUZZ_ACP_TEAM_INSTRUCTIONS"
+                // Host-owned lifetime, readiness and per-send replay policy.
+                | "BUZZ_ACP_EXIT_AFTER_INACTIVITY"
+                | "BUZZ_ACP_IDLE_POOL_SLEEP"
+                | "BUZZ_ACP_SESSION_POLICY"
+                | "BUZZ_ACP_NO_PRESENCE"
+                | "BUZZ_ACP_SETUP_PAYLOAD"
+                | "BUZZ_ACP_REPLAY_FLOOR"
+                | "BUZZ_MANAGED_AGENT"
+                | "BUZZ_MANAGED_AGENT_START_NONCE"
         )
     {
         // Do not interpolate arbitrary user text into diagnostics.

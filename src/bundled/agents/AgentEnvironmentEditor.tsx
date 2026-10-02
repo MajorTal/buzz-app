@@ -34,6 +34,7 @@ export function AgentEnvironmentEditor({
       {names.map((key) => {
         const changed = Object.hasOwn(patch, key);
         const removed = changed && patch[key] === null;
+        const masked = key !== "BUZZ_ACP_AGENTS";
         return (
           <div key={key} className="flex flex-wrap items-end gap-2">
             <div className="min-w-0 flex-1">
@@ -46,8 +47,8 @@ export function AgentEnvironmentEditor({
                 }
               >
                 <Input
-                  type="password"
-                  autoComplete="new-password"
+                  type={masked ? "password" : "text"}
+                  autoComplete={masked ? "new-password" : "off"}
                   spellCheck={false}
                   disabled={disabled || removed}
                   value={patch[key] ?? ""}

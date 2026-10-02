@@ -101,6 +101,21 @@ fn snapshot_withholds_model_and_provider_environment_values() {
                     ("DATABRICKS_MODEL", "synthetic-combined-model"),
                 ],
             ),
+            agent(
+                "f6",
+                "/opt/tools/buzz-pi-acp",
+                "custom",
+                &[("BUZZ_ACP_MODEL", "synthetic-acp-pi-model")],
+            ),
+            agent(
+                "a7",
+                "goose-acp",
+                "custom",
+                &[
+                    ("BUZZ_ACP_MODEL", "synthetic-acp-goose-model"),
+                    ("GOOSE_MODEL", "synthetic-worker-goose-model"),
+                ],
+            ),
         ])
         .unwrap();
     let snapshot = store.snapshot().unwrap();
@@ -113,6 +128,9 @@ fn snapshot_withholds_model_and_provider_environment_values() {
         "synthetic-databricks-model",
         "synthetic-combined-provider",
         "synthetic-combined-model",
+        "synthetic-acp-pi-model",
+        "synthetic-acp-goose-model",
+        "synthetic-worker-goose-model",
     ] {
         assert!(!wire.contains(value), "projected {value}");
     }
@@ -130,6 +148,8 @@ fn snapshot_withholds_model_and_provider_environment_values() {
             Some("BUZZ_AGENT_PROVIDER"),
             Some("BUZZ_AGENT_PROVIDER"),
         ),
+        ("f6", Some("BUZZ_ACP_MODEL"), None),
+        ("a7", Some("BUZZ_ACP_MODEL"), None),
     ] {
         let view = snapshot
             .agents
@@ -287,21 +307,141 @@ fn environment_patch_preserves_deletes_and_rejects_host_overrides_without_writin
     for key in [
         "BUZZ_PRIVATE_KEY",
         "buzz_auth_tag",
-        "BUZZ_ACP_LAZY_POOL",
+        "BUZZ_ACP_AGENT_COMMAND",
+        "BUZZ_ACP_AGENT_ARGS",
+        "BUZZ_ACP_MCP_COMMAND",
+        "buzz_acp_launch_prefix",
+        "BUZZ_ACP_RESPOND_TO",
+        "BUZZ_ACP_RESPOND_TO_ALLOWLIST",
+        "BUZZ_ACP_ALLOWED_RESPOND_TO",
+        "BUZZ_ACP_AGENT_OWNER",
+        "BUZZ_ACP_DISPLAY_NAME",
+        "BUZZ_ACP_TEAM_INSTRUCTIONS",
+        "BUZZ_ACP_PRIVATE_KEY",
+        "BUZZ_ACP_API_TOKEN",
+        "BUZZ_RELAY_URL",
+        "BUZZ_ACP_SESSION_POLICY",
+        "BUZZ_ACP_IDLE_POOL_SLEEP",
+        "BUZZ_ACP_EXIT_AFTER_INACTIVITY",
+        "BUZZ_ACP_NO_PRESENCE",
+        "BUZZ_ACP_SETUP_PAYLOAD",
+        "BUZZ_ACP_REPLAY_FLOOR",
+        "buzz_acp_agents",
+        "PI_ACP_PI_COMMAND",
+        "BUZZ_AGENT_CONFIG_DIR",
         "BUZZ_MANAGED_AGENT",
+        "buzz_managed_agent_start_nonce",
+        "BUZZ_APP_PROFILE",
         "GIT_CONFIG_COUNT",
         "NOSTR_PRIVATE_KEY",
         "bad=key",
+    ] {
+        for command in ["buzz-agent", "goose-acp", "/opt/tools/buzz-pi-acp"] {
+            let mut update = edit();
+            update.harness.command = command.into();
+            update
+                .environment
+                .insert(key.into(), Some("do-not-echo".into()));
+            let error = store.save(&a.id, 2, update).unwrap_err();
+            assert!(!error.contains("do-not-echo"));
+            assert_eq!(fs::read(store.path()).unwrap(), before);
+        }
+    }
+    // The broader policy is scoped to Pi/Goose; Buzz Agent is unchanged.
+    for key in [
+        "BUZZ_ACP_MODEL",
+        "BUZZ_ACP_SYSTEM_PROMPT",
+        "BUZZ_ACP_LAZY_POOL",
+        "BUZZ_MANAGED_CUSTOM",
     ] {
         let mut update = edit();
         update
             .environment
             .insert(key.into(), Some("do-not-echo".into()));
-        let error = store.save(&a.id, 2, update).unwrap_err();
-        assert!(!error.contains("do-not-echo"));
+        assert!(store.save(&a.id, 2, update).is_err());
         assert_eq!(fs::read(store.path()).unwrap(), before);
     }
 }
+#[test]
+fn environment_override_removal_allows_a_harness_switch_without_weakening_validation() {
+    for command in ["goose-acp", "/opt/tools/buzz-pi-acp"] {
+        let dir = tempfile::tempdir().unwrap();
+        let mut store = Store::open(dir.path().to_owned()).unwrap();
+        let mut a = fixture();
+        a.harness.command = command.into();
+        a.environment
+            .insert("BUZZ_ACP_MODEL".into(), "private-model".into());
+        store.insert(vec![a.clone()]).unwrap();
+        let before = fs::read(store.path()).unwrap();
+
+        // Keeping or replacing the override is invalid for Buzz Agent.
+        for value in [None, Some("replacement")] {
+            let mut update = edit();
+            if let Some(value) = value {
+                update
+                    .environment
+                    .insert("BUZZ_ACP_MODEL".into(), Some(value.into()));
+            }
+            assert!(store.save(&a.id, a.revision, update).is_err());
+            assert_eq!(fs::read(store.path()).unwrap(), before);
+        }
+        let mut update = edit();
+        update.environment.insert("BUZZ_ACP_MODEL".into(), None);
+        store.save(&a.id, a.revision, update).unwrap();
+        drop(store);
+        let saved = Store::open(dir.path().to_owned())
+            .unwrap()
+            .agents()
+            .unwrap()
+            .remove(0);
+        assert_eq!(saved.harness.command, "buzz-agent");
+        assert!(!saved.environment.contains_key("BUZZ_ACP_MODEL"));
+        assert_eq!(saved.environment["TEST_TOKEN"], "secret-env-value");
+    }
+}
+
+#[test]
+fn worker_count_override_persists_only_within_runtime_limits() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut store = Store::open(dir.path().to_owned()).unwrap();
+    let a = fixture();
+    store.insert(vec![a.clone()]).unwrap();
+    for count in ["1", "10", "32"] {
+        let revision = store.agents().unwrap()[0].revision;
+        let mut update = edit();
+        update
+            .environment
+            .insert("BUZZ_ACP_AGENTS".into(), Some(count.into()));
+        store.save(&a.id, revision, update).unwrap();
+        assert_eq!(
+            store.agents().unwrap()[0].environment["BUZZ_ACP_AGENTS"],
+            count
+        );
+    }
+    let revision = store.agents().unwrap()[0].revision;
+    let before = fs::read(store.path()).unwrap();
+    for count in ["", "0", "33", "-1", "1.5", "invalid", "4294967296"] {
+        let mut update = edit();
+        update
+            .environment
+            .insert("BUZZ_ACP_AGENTS".into(), Some(count.into()));
+        assert!(store.save(&a.id, revision, update).is_err());
+        assert_eq!(fs::read(store.path()).unwrap(), before);
+    }
+    drop(store);
+    let mut store = Store::open(dir.path().to_owned()).unwrap();
+    assert_eq!(
+        store.agents().unwrap()[0].environment["BUZZ_ACP_AGENTS"],
+        "32"
+    );
+    let mut update = edit();
+    update.environment.insert("BUZZ_ACP_AGENTS".into(), None);
+    store.save(&a.id, revision, update).unwrap();
+    assert!(!store.agents().unwrap()[0]
+        .environment
+        .contains_key("BUZZ_ACP_AGENTS"));
+}
+
 #[test]
 fn malformed_store_never_becomes_empty_or_overwritten() {
     let dir = tempfile::tempdir().unwrap();

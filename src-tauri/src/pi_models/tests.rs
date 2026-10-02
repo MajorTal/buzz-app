@@ -282,7 +282,7 @@ async fn installed_pi_catalog_uses_production_context() {
             provider: String::new(),
             databricks: None,
         },
-        environment: BTreeMap::new(),
+        environment: BTreeMap::from([("BUZZ_ACP_AGENTS".into(), Some("10".into()))]),
     })
     .unwrap();
     let models = fetch(verify(context).await.unwrap().into_context())
@@ -308,7 +308,8 @@ async fn installed_pi_connection_test_uses_production_context() {
     let provider = std::env::var("BUZZ_TEST_PI_PROVIDER").expect("set BUZZ_TEST_PI_PROVIDER");
     let model = std::env::var("BUZZ_TEST_PI_MODEL").expect("set BUZZ_TEST_PI_MODEL");
     let dir = tempfile::tempdir().unwrap();
-    let context = |environment| {
+    let context = |mut environment: std::collections::BTreeMap<String, Option<String>>| {
+        environment.insert("BUZZ_ACP_AGENTS".into(), Some("10".into()));
         Controller::draft_pi_model_context(AgentEdit {
             name: "Probe".into(),
             picture: None,

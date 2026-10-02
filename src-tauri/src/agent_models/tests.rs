@@ -867,6 +867,7 @@ fn pi_catalog_uses_native_ticket_and_draft_configuration_without_saving() {
 if [ "$1" = --version ]; then printf '0.99.1\n'; exit 0; fi
 read request
 [ "$PI_CODING_AGENT_DIR" -ef "./local-config" ] || exit 1
+[ "$BUZZ_ACP_AGENTS" = "10" ] || exit 1
 printf '%s\n' '{"id":"catalog","type":"response","command":"get_available_models","success":true,"data":{"models":[{"provider":"extension","id":"namespace/model.v1"}]}}'
 "#).unwrap();
         std::fs::set_permissions(file, std::fs::Permissions::from_mode(0o700)).unwrap();
@@ -876,7 +877,7 @@ printf '%s\n' '{"id":"catalog","type":"response","command":"get_available_models
         "host":"","filter":"","action":"connect","edit":{
             "name":"Pi draft","systemPrompt":"","workspace":dir.path(),
             "harness":{"command":tools.join("buzz-pi-acp"),"args":[],"provider":"extension","model":"invalid-old-id"},
-            "environment":{"PI_CODING_AGENT_DIR":dir.path().join("local-config")}
+            "environment":{"PI_CODING_AGENT_DIR":dir.path().join("local-config"),"BUZZ_ACP_AGENTS":"10"}
         }
     }})).unwrap();
     assert_eq!(

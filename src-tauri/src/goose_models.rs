@@ -556,9 +556,12 @@ mod tests {
             } else {
                 json!({"sessionCapabilities":{"delete":{}}})
             };
+            if case == "no-delete" {
+                // The reply lets the controller kill this child; notify first.
+                gate.write_all(b"I").unwrap();
+            }
             writeln!(output, "{}", json!({"jsonrpc":"2.0","id":initialize["id"],"result":{"protocolVersion":1,"agentCapabilities":capabilities}})).unwrap();
             if case == "no-delete" {
-                gate.write_all(b"I").unwrap();
                 // The parent must return without creating a session.
                 let mut line = String::new();
                 assert_eq!(input.read_line(&mut line).unwrap(), 0);
@@ -651,10 +654,14 @@ mod tests {
             }
             assert_eq!(next["method"], "session/delete");
             assert_eq!(next["params"]["sessionId"], "test-session");
+            if case != "cleanup-error" {
+                std::fs::remove_file(session_file).unwrap();
+            }
+            // Notify before the terminal reply permits child teardown.
+            gate.write_all(b"D").unwrap();
             if case == "cleanup-error" {
                 writeln!(output, "{}", json!({"jsonrpc":"2.0","id":next["id"],"error":{"code":-32603,"message":"DO_NOT_PROJECT_SECRET"}})).unwrap();
             } else {
-                std::fs::remove_file(session_file).unwrap();
                 writeln!(
                     output,
                     "{}",
@@ -662,7 +669,6 @@ mod tests {
                 )
                 .unwrap();
             }
-            gate.write_all(b"D").unwrap();
             return;
         }
         let dir = tempfile::Builder::new()

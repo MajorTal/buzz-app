@@ -7,6 +7,38 @@ import { afterEach, expect, test } from "vitest";
 import { AgentEnvironmentEditor } from "./AgentEnvironmentEditor";
 
 afterEach(cleanup);
+test("worker counts are readable while credentials and unknown values stay masked", async () => {
+  const user = userEvent.setup();
+  function Example() {
+    const [patch, setPatch] = useState<Record<string, string | null>>({
+      BUZZ_ACP_AGENTS: "10",
+      OPENAI_API_KEY: "test-api-key",
+      TOKEN: "test-token",
+      CUSTOM_VALUE: "test-value",
+    });
+    return (
+      <AgentEnvironmentEditor
+        keys={[]}
+        patch={patch}
+        disabled={false}
+        onChange={setPatch}
+      />
+    );
+  }
+  render(<Example />);
+  const workers = screen.getByLabelText("Replacement for BUZZ_ACP_AGENTS");
+  expect(workers).toHaveAttribute("type", "text");
+  expect(workers).toHaveValue("10");
+  await user.clear(workers);
+  await user.type(workers, "12");
+  expect(workers).toHaveValue("12");
+  for (const key of ["OPENAI_API_KEY", "TOKEN", "CUSTOM_VALUE"]) {
+    expect(screen.getByLabelText(`Replacement for ${key}`)).toHaveAttribute(
+      "type",
+      "password",
+    );
+  }
+});
 test("variable errors belong to the name field and recover without exposing saved values", async () => {
   const user = userEvent.setup();
   function Example() {

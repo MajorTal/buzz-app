@@ -36,7 +36,7 @@ impl PiContext {
         if !Path::new(workspace).is_absolute() || !Path::new(workspace).is_dir() {
             return Err("Choose an existing absolute workspace before browsing Pi models".into());
         }
-        crate::config::validate_environment(environment)?;
+        crate::config::validate_environment(environment, &harness.command)?;
         // The adapter owns its supported runtime flags. Discovery applies its
         // narrower, prompt-free contract separately.
         let args = &harness.args;

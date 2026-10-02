@@ -21,9 +21,13 @@ env:
 jobs:
   javascript:
     if: github.event_name != 'workflow_dispatch'
-    name: JavaScript
+    name: JavaScript (${{ matrix.shard }}/2)
     runs-on: ubuntu-24.04
     timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -34,16 +38,16 @@ jobs:
       # check already ran TypeScript; do not repeat pnpm build's typecheck.
       - name: Frontend build
         run: ./bin/pnpm exec vite build
-      - name: All Vitest tests
+      - name: Vitest shard
         env:
           # Bound contention between suites that sign and verify large fixtures.
           BUZZ_TEST_WORKERS: "2"
-        run: ./bin/node scripts/ci-test-report.mjs kind=vitest report=test-results/ci/vitest.json evidence=test-results/ci/vitest-timing.json title="Vitest tests" -- ./bin/pnpm exec vitest run --reporter=default --reporter=json --outputFile=test-results/ci/vitest.json
+        run: ./bin/node scripts/ci-test-report.mjs kind=vitest report=test-results/ci/vitest.json evidence=test-results/ci/vitest-timing.json title="Vitest shard ${{ matrix.shard }}/2" -- ./bin/pnpm exec vitest run --shard=${{ matrix.shard }}/2 --reporter=default --reporter=json --outputFile=test-results/ci/vitest.json
       - name: Vitest timing evidence
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: vitest-timing
+          name: vitest-timing-${{ matrix.shard }}
           path: test-results/ci
           retention-days: 7
 

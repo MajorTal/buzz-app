@@ -809,6 +809,20 @@ export const ROLE_GROUPS: RoleGroup[] = [
         status: "core",
       },
       {
+        token: "border-image",
+        variable: "--border-image",
+        pointsAt: "black 10% in light; white 10% in dark",
+        use: "A 1px outer hairline that separates message images and videos from their surroundings.",
+        status: "core",
+      },
+      {
+        token: "media-canvas",
+        variable: "--bg-media-canvas",
+        pointsAt: "#000000 in both modes",
+        use: "Pure-black canvas behind fullscreen images and videos, separate from viewer chrome.",
+        status: "core",
+      },
+      {
         token: "media-track",
         variable: "--bg-media-track",
         pointsAt: "white 16%",

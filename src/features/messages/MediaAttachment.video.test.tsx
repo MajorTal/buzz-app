@@ -45,7 +45,7 @@ it("tracks received video play, pause, time updates, and review handoff", () => 
   if (!video) throw new Error("Missing video element");
   const playback = mockPlayback(video);
 
-  const preview = video.closest("div");
+  const preview = video.closest("[data-video-preview]");
   expect(preview).not.toHaveAttribute("data-playing");
 
   fireEvent.click(screen.getByRole("button", { name: "Play video" }));

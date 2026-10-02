@@ -15,6 +15,10 @@ for (const kind of ["image", "video"]) {
       exact: true,
     });
     await expect(heading).toBeVisible();
+    await expect(dialog.locator("[data-review-stage]")).toHaveCSS(
+      "background-color",
+      "rgb(0, 0, 0)",
+    );
     await expect(heading).toHaveCSS("color", "rgb(255, 255, 255)");
     await expect(heading).toHaveCSS("font-size", "14px");
     const header = heading.locator("xpath=ancestor::header");
@@ -115,6 +119,12 @@ test("narrow video thumbnails keep play clear of the progress controls", async (
   await page.setViewportSize({ width: 320, height: 720 });
   await page.goto("/tests/fixtures/media-review.html");
   const preview = page.locator("[data-video-preview]");
+  await expect(preview.locator("video")).toHaveCSS("object-fit", "cover");
+  await expect(preview).toHaveCSS("clip-path", "none");
+  await expect(preview.locator("[data-image-outline]")).toHaveCSS(
+    "overflow",
+    "visible",
+  );
   const play = preview.getByRole("button", { name: "Play video", exact: true });
   // Metadata enables the timeline; do not tab past its initial disabled state.
   await expect(

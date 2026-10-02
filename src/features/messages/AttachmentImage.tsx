@@ -85,6 +85,13 @@ export function AttachmentImage({
           blurhash={attachment.blurhash}
         />
       </span>
+      <svg
+        className={styles.imageOutline}
+        data-image-outline=""
+        aria-hidden="true"
+      >
+        <path />
+      </svg>
     </a>
   );
 }

@@ -1177,11 +1177,20 @@ and OS notifications are not enabled by this feature.
 
 ### Attachment layout and scrolling
 
+Message rows show images as fixed square thumbnails with centered `cover` cropping:
+small images scale up and wide or tall images crop to fill the tile without stretching.
+Inline video previews and their posters also fill their bounded frames with `cover`.
+Image and video thumbnails share smoothed corners and a 1px outer hairline, black at
+10% in light mode and white at 10% in dark mode. The expanded viewer shows the full
+media against a pure-black canvas; thumbnail cropping does not change the original.
+
+For non-thumbnail attachment surfaces, the following reserved-layout contract applies.
 Image attachments reserve their preview geometry before loading and across virtualized
 row remounts. Valid `imeta dim` metadata supplies the aspect ratio, bounded to 360px wide
-and 320px tall without upscaling. Missing/invalid dimensions use a stable 360:320 frame
-that shrinks with the available width; the image is contained without cropping or
-upscaling. Unknown-size images may therefore have empty space in the frame. Loading,
+and 320px tall without enlarging the frame beyond the original dimensions.
+Missing/invalid dimensions use a stable 360:320 frame that shrinks with the available
+width. Images scale proportionally and crop centrally to fill their reserved frame,
+including when their dimensions were initially unknown. Loading,
 failure, or retry does not resize it or force an above-bottom reader to the newest row.
 Valid message-carried `imeta blurhash` is decoded locally into a 32×32 canvas in
 that same frame when it intersects the viewport. No thumbnail is fetched. The

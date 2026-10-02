@@ -318,6 +318,8 @@
 
   /* Media glass stays dark over video pixels in either app mode. */
   --media-glass-fill: rgb(0 0 0 / 35%);
+  --image-rim: oklch(0 0 0 / 0.1);
+  --media-canvas-fill: #000000;
   --media-glass-rim: rgb(255 255 255 / 10%);
   --media-glass-foreground: #ffffff;
   --media-track-fill: rgb(255 255 255 / 16%);
@@ -394,6 +396,7 @@
      if these ever want to be palette steps, the palette's gray ramp is what
      should change. */
   --neutral-navigation-quiet: #232323;
+  --image-rim: oklch(1 0 0 / 0.1);
   --neutral-raised: #282828;
   --neutral-quiet-hover: #2e2e2e;
   --neutral-1: #000000;
@@ -677,6 +680,8 @@
   /* Media controls use one dark material in both app modes so video remains
      visible through a stable fill and its paired icons remain white. */
   --bg-media-glass: var(--media-glass-fill);
+  --border-image: var(--image-rim);
+  --bg-media-canvas: var(--media-canvas-fill);
   --bg-media-track: var(--media-track-fill);
   --border-media-glass: var(--media-glass-rim);
   --text-on-media: var(--media-glass-foreground);
@@ -774,6 +779,7 @@
 :root[data-color-mode="dark"],
 .dark {
   --bg-panel: var(--surface-panel);
+  --border-image: var(--image-rim);
   --bg-float: var(--surface-popover);
   --bg-scrim: #000000a6;
   /* Rebind material aliases locally: a scoped .dark surface otherwise inherits
@@ -818,6 +824,7 @@
   --color-surface-inverse: var(--surface-inverse);
   --text-color-on-media: var(--text-on-media);
   --border-color-media-glass: var(--border-media-glass);
+  --border-color-image: var(--border-image);
   --text-color-standard: var(--text-standard);
   --text-color-subtle: var(--text-subtle);
   --text-color-metadata: var(--text-metadata);

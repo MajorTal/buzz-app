@@ -380,6 +380,7 @@
 }
 .attachmentImage {
   --media-preview-radius: 16px;
+  isolation: isolate;
   cursor: zoom-in;
   /* Reserve geometry even across virtualizer remounts and failed/lazy loads.
      imeta dimensions override this bounded fallback without waiting for decode. */
@@ -392,24 +393,19 @@
   border-radius: var(--media-preview-radius);
 }
 /* Clip the pixels, not the focusable link's outside keyboard outline. */
-.attachmentImagePixels {
+.attachmentImagePixels,
+.mediaPreviewPixels {
   position: absolute;
   inset: 0;
+  z-index: 1;
 }
 .attachmentImagePixels,
+.mediaPreviewPixels,
 .attachmentImage.mediaPlaceholder {
   overflow: hidden;
   border-radius: inherit;
   clip-path: var(--media-corner-clip, none);
   background: var(--surface-inset);
-}
-.attachmentImagePixels::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border: 1px solid var(--border-subtle);
-  border-radius: inherit;
-  pointer-events: none;
 }
 .attachmentImage.mediaPlaceholder {
   border-radius: var(--media-preview-radius);
@@ -424,7 +420,7 @@
   height: 100%;
 }
 .attachmentImage img {
-  object-fit: var(--attachment-image-fit, scale-down);
+  object-fit: cover;
 }
 /* Fixed tiles keep lazy loading from moving the reading position. */
 .imageGroup {
@@ -445,9 +441,6 @@
   width: calc(var(--space-16) + var(--space-2));
   aspect-ratio: 1;
   margin: 0;
-}
-.attachmentImage[data-thumbnail] {
-  --attachment-image-fit: cover;
 }
 html[data-keyboard-navigation] .attachmentImage:focus-visible {
   outline: 2px solid var(--border-focus);
@@ -861,13 +854,12 @@ html[data-keyboard-navigation] .audioSeek:focus-visible {
   width: min(32rem, 100%, calc(min(28rem, 56vh) * var(--media-ratio, 16 / 9)));
   max-width: 100%;
   aspect-ratio: var(--media-ratio, 16 / 9);
-  overflow: hidden;
+  overflow: visible;
   margin-block: var(--space-1);
   padding: 0;
   border: 0;
   border-radius: var(--media-preview-radius);
-  clip-path: var(--media-corner-clip, none);
-  background: var(--affordance-subtle);
+  background: transparent;
   color: var(--text-inverse);
   isolation: isolate;
 }
@@ -877,14 +869,14 @@ button.mediaPreview {
 .mediaPreviewThread {
   width: min(32rem, 100%, calc(min(22rem, 45vh) * var(--media-ratio, 16 / 9)));
 }
-.mediaPreview > img:not(.mediaPoster),
+.mediaPreviewPixels > img:not(.mediaPoster),
 .mediaVideo {
   position: absolute;
   inset: 0;
   display: block;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   background: var(--surface-inverse);
 }
 .mediaPoster {
@@ -893,7 +885,7 @@ button.mediaPreview {
   z-index: 1;
   width: 100%;
   height: 100%;
-  object-fit: contain;
+  object-fit: cover;
   pointer-events: none;
 }
 .mediaPlay,
@@ -1919,11 +1911,6 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
 .mediaPreview[data-video-preview] {
   width: min(24rem, 100%, calc(var(--media-ratio, 16 / 9) * 11.25rem));
   max-height: 16rem;
-  box-shadow: inset 0 0 0 1px var(--border-subtle);
-}
-.mediaPreview[data-video-preview] .mediaVideo,
-.mediaPreview[data-video-preview] .mediaPoster {
-  object-fit: contain;
 }
 .mediaPreview[data-video-preview] .mediaExpand {
   top: 0.5rem;
@@ -1947,7 +1934,7 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
   background: var(--surface-panel);
 }
 .mediaReviewViewer[data-color-mode="dark"] .mediaReviewStage {
-  background: var(--surface-panel);
+  background: var(--bg-media-canvas);
   padding: 0;
 }
 .mediaReviewViewer[data-color-mode="dark"] .mediaReviewConversation {
@@ -2157,6 +2144,37 @@ html[data-keyboard-navigation] .rawDiff:focus-visible {
 
 .mediaPreview[data-image-preview] {
   cursor: zoom-in;
+}
+.imageOutline {
+  position: absolute;
+  /* The opaque, clipped pixels cover the inner half of this stroke. */
+  z-index: 0;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  border-radius: inherit;
+  box-shadow: 0 0 0 1px var(--border-image);
+}
+.mediaPreview[data-smooth-corners] .imageOutline,
+.attachmentImage[data-smooth-corners] .imageOutline {
+  border-radius: 0;
+  box-shadow: none;
+}
+.mediaPreview[data-smooth-corners] .mediaPreviewPixels,
+.attachmentImage[data-smooth-corners] .attachmentImagePixels {
+  border-radius: 0;
+}
+.imageOutline > path {
+  fill: none;
+  stroke: var(--border-image);
+  /* Only the outer 1px remains visible, against the message surface. */
+  stroke-width: 2px;
+}
+.mediaViewerImage,
+.mediaViewerVideo {
+  background: var(--bg-media-canvas);
 }
 
 .imageReviewStage > img[data-gallery-departing] {

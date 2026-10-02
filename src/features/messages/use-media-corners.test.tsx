@@ -29,15 +29,24 @@ it("updates the media silhouette after resize and releases its observer on unmou
   vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(180);
   function Surface() {
     const corners = useMediaCorners();
-    return <div ref={corners} style={{ borderTopLeftRadius: 16 }} />;
+    return (
+      <div ref={corners} style={{ borderTopLeftRadius: 16 }}>
+        <svg data-image-outline="" aria-hidden="true">
+          <path />
+        </svg>
+      </div>
+    );
   }
   const { container, unmount } = render(<Surface />);
   const surface = container.firstElementChild as HTMLElement;
+  const outline = surface.querySelector("path");
+  expect(outline?.getAttribute("d")).toContain("M 25.6 0 L 294.4 0");
   expect(surface.style.getPropertyValue("--media-corner-clip")).toContain(
     "M 25.6 0 L 294.4 0",
   );
   width = 240;
   resize();
+  expect(outline?.getAttribute("d")).toContain("M 25.6 0 L 214.4 0");
   expect(surface.style.getPropertyValue("--media-corner-clip")).toContain(
     "M 25.6 0 L 214.4 0",
   );

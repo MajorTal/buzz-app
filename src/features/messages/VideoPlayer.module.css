@@ -9,7 +9,7 @@
   height: 100%;
   min-width: 0;
   min-height: 0;
-  background: var(--surface-panel);
+  background: var(--bg-media-canvas);
   color: var(--text-standard);
   container: video-player / inline-size;
 }

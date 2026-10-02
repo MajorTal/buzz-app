@@ -1,5 +1,5 @@
 import { useCallback } from "react";
-import { mediaCornerClip } from "./media-corners";
+import { mediaCornerPath } from "./media-corners";
 
 /** CSS chooses where to clip, so floating menus can escape the media surface. */
 export function useMediaCorners() {
@@ -11,9 +11,14 @@ export function useMediaCorners() {
       const radius = Number.parseFloat(
         getComputedStyle(element).borderTopLeftRadius,
       );
-      const clip = mediaCornerClip(width, height, radius || 0);
+      const path = mediaCornerPath(width, height, radius || 0);
+      const clip = `path("${path}")`;
       if (element.style.getPropertyValue("--media-corner-clip") !== clip)
         element.style.setProperty("--media-corner-clip", clip);
+      // Set the SVG attribute so the outline does not depend on CSS d support.
+      element
+        .querySelector("[data-image-outline] path")
+        ?.setAttribute("d", path);
       element.dataset.smoothCorners = "";
     };
     sync();

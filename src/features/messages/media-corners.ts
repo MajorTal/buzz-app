@@ -6,6 +6,16 @@ export function mediaCornerClip(
   x = 0,
   y = 0,
 ) {
+  return `path("${mediaCornerPath(width, height, radius, x, y)}")`;
+}
+
+export function mediaCornerPath(
+  width: number,
+  height: number,
+  radius: number,
+  x = 0,
+  y = 0,
+) {
   const budget = Math.min(width, height) / 2;
   const r = Math.max(0, Math.min(radius, budget));
   const p = Math.min(1.6 * r, budget);
@@ -38,5 +48,5 @@ export function mediaCornerClip(
     c 0 ${-a} 0 ${-(a + b)} ${d} ${-(a + b + c)}
     a ${r} ${r} 0 0 1 ${arc} ${-arc}
     c ${c} ${-d} ${b + c} ${-d} ${a + b + c} ${-d} Z`;
-  return `path("${path.replace(/\s+/g, " ")}")`;
+  return path.replace(/\s+/g, " ");
 }
